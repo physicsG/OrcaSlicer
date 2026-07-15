@@ -10,6 +10,13 @@ permissions:
 env:
   BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
   HEAD_SHA: ${{ github.sha }}
+  LEGACY_FAILURE_REGEX: >-
+    (^libslic3r_tests$|Scenario: init_print functionality|Scenario: Extrusion width specifics|
+    Scenario: lift\(\) is not ignored after unlift\(\) at normal values of Z|Scenario: Model construction|
+    Scenario: PrintObject: Perimeter generation|Scenario: Print: Skirt generation|Scenario: Print: Brim generation|
+    Scenario: PrintGCode basic functionality|Scenario: PrintObject: object layer heights|Skirt height is honored|
+    Scenario: Original Slic3r Skirt/Brim tests|SupportMaterial: Three raft layers created|
+    Scenario: SupportMaterial: support_layers_z and contact_distance)
 
 jobs:
   linux-tests:
@@ -171,23 +178,41 @@ jobs:
           mapfile -t sources < /tmp/changed-multiace-sources.txt
           clang-tidy -p build-ci "${sources[@]}"
 
-      - name: Run full legacy CTest suite for diagnostics
-        id: legacy-ctest
+      - name: Run non-quarantined legacy CTest baseline
+        run: |
+          ctest \
+            --test-dir build-ci \
+            --build-config Release \
+            --exclude-regex "(_NOT_BUILT-|${LEGACY_FAILURE_REGEX})" \
+            --output-on-failure \
+            --no-tests=error \
+            --output-junit "$GITHUB_WORKSPACE/test-results/ctest-baseline.xml"
+
+      - name: Run quarantined legacy tests for diagnostics
+        id: quarantined-ctest
         continue-on-error: true
         run: |
           ctest \
             --test-dir build-ci \
             --build-config Release \
+            --tests-regex "$LEGACY_FAILURE_REGEX" \
             --exclude-regex '_NOT_BUILT-' \
             --output-on-failure \
             --no-tests=error \
-            --output-junit "$GITHUB_WORKSPACE/test-results/ctest-legacy.xml"
+            --output-junit "$GITHUB_WORKSPACE/test-results/ctest-quarantined.xml"
 
-      - name: Report legacy test baseline failures
-        if: steps.legacy-ctest.outcome == 'failure'
-        run: >-
-          echo "::warning title=Legacy CTest baseline::The existing full test suite has known stale failures.
-          Results are uploaded for diagnosis and will become blocking as issue #6 modernizes the tests."
+      - name: Summarize legacy test quarantine
+        if: always()
+        run: |
+          {
+            echo "### Legacy CTest quarantine"
+            echo
+            if [[ "${{ steps.quarantined-ctest.outcome }}" == "failure" ]]; then
+              echo "Known legacy failures remain quarantined under issue #6."
+            else
+              echo "All quarantined legacy tests passed; remove their quarantine entries."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build representative profile-validator target
         run: >-
