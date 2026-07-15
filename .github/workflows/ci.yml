@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release/**'
+  push:
+    branches:
+      - main
+      - 'release/**'
+      - 'Research/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: detect changes
+    runs-on: ubuntu-24.04
+    outputs:
+      run_tests: ${{ steps.filter.outputs.run_tests }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed files
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: >-
+          python scripts/ci/detect_changes.py
+          --base "$BASE_SHA"
+          --head "$HEAD_SHA"
+          >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: quality
+    needs: changes
+    uses: ./.github/workflows/ci_quality.yml
+
+  tests:
+    name: tests and build smoke
+    needs:
+      - changes
+      - quality
+    if: needs.changes.outputs.run_tests == 'true'
+    uses: ./.github/workflows/ci_tests.yml
+
+  required:
+    name: required
+    runs-on: ubuntu-24.04
+    if: always()
+    needs:
+      - quality
+      - tests
+    steps:
+      - name: Check required CI results
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          TEST_RESULT: ${{ needs.tests.result }}
+        run: |
+          echo "quality: ${QUALITY_RESULT}"
+          echo "tests:   ${TEST_RESULT}"
+
+          if [[ "${QUALITY_RESULT}" != "success" ]]; then
+            echo "Quality checks did not succeed."
+            exit 1
+          fi
+
+          if [[ "${TEST_RESULT}" != "success" && "${TEST_RESULT}" != "skipped" ]]; then
+            echo "Tests/build smoke did not succeed."
+            exit 1
+          fi
