@@ -1,0 +1,150 @@
+name: CI Tests
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+  HEAD_SHA: ${{ github.sha }}
+
+jobs:
+  linux-tests:
+    name: linux-tests-and-smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Install system build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            autoconf \
+            build-essential \
+            ccache \
+            clang-tidy \
+            cmake \
+            curl \
+            extra-cmake-modules \
+            git \
+            gstreamer1.0-plugins-bad \
+            libcairo2-dev \
+            libcurl4-openssl-dev \
+            libdbus-1-dev \
+            libglew-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-good1.0-dev \
+            libgtk-3-dev \
+            libsecret-1-dev \
+            libsoup2.4-dev \
+            libssl-dev \
+            libudev-dev \
+            libunwind-dev \
+            libwayland-dev \
+            libwebkit2gtk-4.1-dev \
+            libxkbcommon-dev \
+            m4 \
+            ninja-build \
+            pkgconf \
+            texinfo \
+            wayland-protocols \
+            wget
+
+      - name: Restore dependency build
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: deps/build/destdir
+          key: ubuntu-24.04-cache-orcaslicer_deps-build-${{ hashFiles('deps/**') }}
+
+      - name: Build project dependencies
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        run: ./build_linux.sh -d -r -j 2
+
+      - name: Restore compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ubuntu-24.04-ccache-ci-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ubuntu-24.04-ccache-ci-${{ github.ref_name }}-
+            ubuntu-24.04-ccache-ci-
+
+      - name: Configure tests
+        run: |
+          cmake -S . -B build-ci -G "Ninja Multi-Config" \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/deps/build/destdir/usr/local" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DBUILD_TESTS=ON \
+            -DORCA_TOOLS=ON \
+            -DSLIC3R_PCH=OFF \
+            -DSLIC3R_SENTRY=OFF \
+            -DSLIC3R_STATIC=ON
+
+      - name: Build unit and integration test targets
+        run: >-
+          cmake --build build-ci
+          --config Release
+          --target libslic3r_tests fff_print_tests
+          --parallel 2
+
+      - name: Run clang-tidy on changed multiACE implementation files
+        run: |
+          python scripts/ci/changed_files.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --include-regex '^(src/libslic3r/(FilamentRoutingPlan|FilamentPlacementOptimizer).*|src/slic3r/GUI/multiace/.*)\.(cc|cpp|cxx)$' \
+            > /tmp/changed-multiace-sources.txt
+
+          if [[ ! -s /tmp/changed-multiace-sources.txt ]]; then
+            echo "No changed multiACE implementation files require clang-tidy."
+            exit 0
+          fi
+
+          mapfile -t sources < /tmp/changed-multiace-sources.txt
+          clang-tidy -p build-ci "${sources[@]}"
+
+      - name: Run CTest
+        run: |
+          mkdir -p test-results
+          ctest \
+            --test-dir build-ci \
+            --build-config Release \
+            --output-on-failure \
+            --no-tests=error \
+            --output-junit "$GITHUB_WORKSPACE/test-results/ctest.xml"
+
+      - name: Build representative profile-validator target
+        run: >-
+          cmake --build build-ci
+          --config Release
+          --target Snapmaker_Orca_profile_validator
+          --parallel 2
+
+      - name: Show ccache statistics
+        if: always()
+        run: ccache --show-stats
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-ctest-results
+          path: |
+            test-results/ctest.xml
+            build-ci/Testing/Temporary/LastTest.log
+          if-no-files-found: warn
+          retention-days: 14
