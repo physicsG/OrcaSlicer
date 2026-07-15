@@ -1,0 +1,164 @@
+name: CI Quality
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+  HEAD_SHA: ${{ github.sha }}
+
+jobs:
+  format:
+    name: format
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang-format
+
+      - name: Check changed C and C++ files
+        run: |
+          python scripts/ci/changed_files.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --suffix .c --suffix .cc --suffix .cpp --suffix .cxx \
+            --suffix .h --suffix .hh --suffix .hpp --suffix .hxx \
+            --suffix .m --suffix .mm \
+            > /tmp/changed-cpp-files.txt
+
+          if [[ ! -s /tmp/changed-cpp-files.txt ]]; then
+            echo "No changed C/C++ files require formatting checks."
+            exit 0
+          fi
+
+          mapfile -t files < /tmp/changed-cpp-files.txt
+          printf 'Checking formatting for %s files.\n' "${#files[@]}"
+          clang-format --dry-run --Werror "${files[@]}"
+
+  static-analysis:
+    name: static-analysis
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install clang-tidy
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang-tidy
+
+      - name: Validate clang-tidy configuration
+        run: clang-tidy --verify-config
+
+  workflow-validation:
+    name: workflow-validation
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Find changed workflow files
+        run: |
+          python scripts/ci/changed_files.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --prefix .github/workflows/ \
+            --suffix .yml --suffix .yaml \
+            > /tmp/changed-workflows.txt
+
+      - name: Run actionlint 1.7.12
+        run: |
+          if [[ ! -s /tmp/changed-workflows.txt ]]; then
+            echo "No changed GitHub Actions workflows."
+            exit 0
+          fi
+
+          mapfile -t workflows < /tmp/changed-workflows.txt
+          docker run --rm \
+            --volume "$PWD:/repo" \
+            --workdir /repo \
+            rhysd/actionlint:1.7.12 \
+            -color "${workflows[@]}"
+
+      - name: Run yamllint 1.38.0
+        run: |
+          if [[ ! -s /tmp/changed-workflows.txt ]]; then
+            exit 0
+          fi
+
+          python -m pip install --disable-pip-version-check yamllint==1.38.0
+          mapfile -t workflows < /tmp/changed-workflows.txt
+          yamllint --config-file .yamllint.yml "${workflows[@]}"
+
+  documentation:
+    name: documentation
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check changed Markdown files
+        run: |
+          python scripts/ci/changed_files.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --suffix .md \
+            > /tmp/changed-markdown.txt
+
+          if [[ ! -s /tmp/changed-markdown.txt ]]; then
+            echo "No changed Markdown files."
+            exit 0
+          fi
+
+          mapfile -t markdown_files < /tmp/changed-markdown.txt
+          npx --yes markdownlint-cli@0.49.0 "${markdown_files[@]}"
+
+      - name: Parse changed JSON files
+        run: |
+          python scripts/ci/changed_files.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --suffix .json \
+            > /tmp/changed-json.txt
+
+          if [[ ! -s /tmp/changed-json.txt ]]; then
+            echo "No changed JSON files."
+            exit 0
+          fi
+
+          while IFS= read -r path; do
+            python -m json.tool "$path" > /dev/null
+          done < /tmp/changed-json.txt
+
+  hygiene:
+    name: hygiene
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check changed files
+        run: >-
+          python scripts/ci/check_repository_hygiene.py
+          --base "$BASE_SHA"
+          --head "$HEAD_SHA"
