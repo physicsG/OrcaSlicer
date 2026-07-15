@@ -33,12 +33,15 @@ jobs:
             clang-tidy \
             cmake \
             curl \
+            eglexternalplatform-dev \
             extra-cmake-modules \
+            file \
             git \
             gstreamer1.0-plugins-bad \
             libcairo2-dev \
             libcurl4-openssl-dev \
             libdbus-1-dev \
+            libfuse2t64 \
             libglew-dev \
             libgl1-mesa-dev \
             libglu1-mesa-dev \
@@ -46,6 +49,7 @@ jobs:
             libgstreamer-plugins-base1.0-dev \
             libgstreamer-plugins-good1.0-dev \
             libgtk-3-dev \
+            libmspack-dev \
             libsecret-1-dev \
             libsoup2.4-dev \
             libssl-dev \
@@ -54,12 +58,19 @@ jobs:
             libwayland-dev \
             libwebkit2gtk-4.1-dev \
             libxkbcommon-dev \
+            locales \
+            locales-all \
             m4 \
             ninja-build \
             pkgconf \
             texinfo \
             wayland-protocols \
             wget
+
+      - name: Validate Linux dependency setup
+        run: |
+          sudo ./build_linux.sh -u -r
+          sudo chown "$USER" -R ./
 
       - name: Restore dependency build
         id: deps-cache
@@ -83,16 +94,22 @@ jobs:
 
       - name: Configure tests
         run: |
+          mkdir -p test-results
+          set -o pipefail
           cmake -S . -B build-ci -G "Ninja Multi-Config" \
             -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/deps/build/destdir/usr/local" \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DBBL_INTERNAL_TESTING=0 \
+            -DBBL_RELEASE_TO_PUBLIC=1 \
             -DBUILD_TESTS=ON \
             -DORCA_TOOLS=ON \
+            -DSLIC3R_GTK=3 \
             -DSLIC3R_PCH=OFF \
             -DSLIC3R_SENTRY=OFF \
-            -DSLIC3R_STATIC=ON
+            -DSLIC3R_STATIC=ON \
+            2>&1 | tee test-results/cmake-configure.log
 
       - name: Build unit and integration test targets
         run: >-
@@ -119,7 +136,6 @@ jobs:
 
       - name: Run CTest
         run: |
-          mkdir -p test-results
           ctest \
             --test-dir build-ci \
             --build-config Release \
@@ -138,13 +154,15 @@ jobs:
         if: always()
         run: ccache --show-stats
 
-      - name: Upload test results
+      - name: Upload test and configure results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: linux-ctest-results
+          name: linux-ci-results
           path: |
+            test-results/cmake-configure.log
             test-results/ctest.xml
+            build-ci/CMakeFiles/CMakeConfigureLog.yaml
             build-ci/Testing/Temporary/LastTest.log
           if-no-files-found: warn
           retention-days: 14
