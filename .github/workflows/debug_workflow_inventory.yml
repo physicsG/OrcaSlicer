@@ -1,0 +1,17 @@
+name: Workflow Inventory
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/debug_workflow_inventory.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: List workflow files
+        run: find .github/workflows -maxdepth 1 -type f -printf '%f\n' | sort
