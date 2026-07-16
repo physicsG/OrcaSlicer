@@ -41,7 +41,7 @@ jobs:
 
   flatpak:
     name: Flatpak
-    if: ${{ !inputs.build-deps-only }}
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.build-deps-only }}
     concurrency:
       group: flatpak-${{ matrix.variant.arch }}-${{ github.ref }}
       cancel-in-progress: false
@@ -69,7 +69,7 @@ jobs:
       - name: Remove unneeded files to free disk space
         run: >-
           rm -rf /usr/local/lib/android/* /usr/share/dotnet/* /opt/ghc1/*
-          "/usr/local/share/boost1/*"
+          /usr/local/share/boost1/*
 
       - uses: actions/checkout@v5
         with:
@@ -79,9 +79,11 @@ jobs:
         run: |
           ver_pure=$(grep 'set(Snapmaker_VERSION' version.inc | cut -d '"' -f2)
           ver="V$ver_pure"
-          echo "ver=$ver" >> "$GITHUB_ENV"
-          echo "ver_pure=$ver_pure" >> "$GITHUB_ENV"
-          echo "date=$(date +'%Y%m%d')" >> "$GITHUB_ENV"
+          {
+            echo "ver=$ver"
+            echo "ver_pure=$ver_pure"
+            echo "date=$(date +'%Y%m%d')"
+          } >> "$GITHUB_ENV"
         shell: bash
 
       - uses: flathub-infra/flatpak-github-actions/flatpak-builder@master
