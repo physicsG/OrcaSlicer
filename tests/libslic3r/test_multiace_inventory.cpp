@@ -16,19 +16,15 @@ TEST_CASE("multiACE source IDs are stable and structured", "[multiace][inventory
     CHECK(source.str() == "multiace:2:3");
     CHECK(parse_source_id(source.str()) == source);
 
-    CHECK_THROWS_WITH(
-        parse_source_id("multiace:2"),
-        "multiACE source ID must use provider:unit:slot format");
-    CHECK_THROWS_WITH(
-        (SourceId{"multiace", "2:invalid", "3"}.str()),
-        "multiACE source ID components must not contain ':'");
+    CHECK_THROWS_WITH(parse_source_id("multiace:2"), "multiACE source ID must use provider:unit:slot format");
+    CHECK_THROWS_WITH((SourceId{"multiace", "2:invalid", "3"}.str()), "multiACE source ID components must not contain ':'");
 }
 
 TEST_CASE("multiACE capabilities degrade cleanly when optional fields are absent", "[multiace][inventory]")
 {
     const nlohmann::json payload = {
         {"schema_version", 1},
-        {"capabilities", { {"inventory", true}, {"live_events", true}, {"rfid_refresh", true} }},
+        {"capabilities", {{"inventory", true}, {"live_events", true}, {"rfid_refresh", true}}},
     };
 
     const ProviderCapabilities capabilities = parse_capabilities(payload);
@@ -88,7 +84,7 @@ TEST_CASE("multiACE inventory parses multiple units and optional telemetry", "[m
     REQUIRE(inventory.revision == "inventory-42");
     REQUIRE(inventory.sources.size() == 2);
 
-    const FilamentSource &first = inventory.sources[0];
+    const FilamentSource& first = inventory.sources[0];
     CHECK(first.id.str() == "multiace:0:0");
     CHECK(first.rfid_uid == "rfid-a");
     CHECK(first.material == "PLA");
@@ -111,7 +107,7 @@ TEST_CASE("multiACE inventory parses multiple units and optional telemetry", "[m
     REQUIRE(first.dryer_remaining_minutes.has_value());
     CHECK(*first.dryer_remaining_minutes == 45);
 
-    const FilamentSource &second = inventory.sources[1];
+    const FilamentSource& second = inventory.sources[1];
     CHECK(second.id.str() == "multiace:1:3");
     CHECK(second.rfid_uid == "manual-tag");
     CHECK(second.metadata_origin == SourceMetadataOrigin::Manual);
@@ -138,10 +134,9 @@ TEST_CASE("multiACE inventory rejects malformed and inconsistent payloads", "[mu
         const nlohmann::json payload = {
             {"schema_version", 1},
             {"revision", "r1"},
-            {"sources",
-             nlohmann::json::array({
-                 { {"source_id", "multiace:0:1"}, {"unit_id", 0}, {"slot_id", 0} },
-             })},
+            {"sources", nlohmann::json::array({
+                            {{"source_id", "multiace:0:1"}, {"unit_id", 0}, {"slot_id", 0}},
+                        })},
         };
         CHECK_THROWS_WITH(parse_inventory(payload), "source_id does not match unit_id and slot_id");
     }
@@ -151,11 +146,10 @@ TEST_CASE("multiACE inventory rejects malformed and inconsistent payloads", "[mu
         const nlohmann::json payload = {
             {"schema_version", 1},
             {"revision", "r1"},
-            {"sources",
-             nlohmann::json::array({
-                 { {"unit_id", 0}, {"slot_id", 0} },
-                 { {"unit_id", "0"}, {"slot_id", "0"} },
-             })},
+            {"sources", nlohmann::json::array({
+                            {{"unit_id", 0}, {"slot_id", 0}},
+                            {{"unit_id", "0"}, {"slot_id", "0"}},
+                        })},
         };
         CHECK_THROWS_WITH(parse_inventory(payload), "duplicate multiACE source_id: multiace:0:0");
     }
@@ -165,10 +159,9 @@ TEST_CASE("multiACE inventory rejects malformed and inconsistent payloads", "[mu
         const nlohmann::json payload = {
             {"schema_version", 1},
             {"revision", "r1"},
-            {"sources",
-             nlohmann::json::array({
-                 { {"unit_id", 0}, {"slot_id", 0}, {"reachable_toolheads", {4}} },
-             })},
+            {"sources", nlohmann::json::array({
+                            {{"unit_id", 0}, {"slot_id", 0}, {"reachable_toolheads", {4}}},
+                        })},
         };
         CHECK_THROWS_WITH(parse_inventory(payload), "reachable_toolheads contains an invalid U1 toolhead");
     }
@@ -179,16 +172,15 @@ TEST_CASE("multiACE parser preserves forward compatibility for unknown states", 
     const nlohmann::json payload = {
         {"schema_version", 1},
         {"revision", "r1"},
-        {"sources",
-         nlohmann::json::array({
-             {
-                 {"unit_id", 0},
-                 {"slot_id", 0},
-                 {"state", "future-state"},
-                 {"metadata_origin", "future-origin"},
-                 {"dryer_state", "future-dryer-state"},
-             },
-         })},
+        {"sources", nlohmann::json::array({
+                        {
+                            {"unit_id", 0},
+                            {"slot_id", 0},
+                            {"state", "future-state"},
+                            {"metadata_origin", "future-origin"},
+                            {"dryer_state", "future-dryer-state"},
+                        },
+                    })},
     };
 
     const InventorySnapshot inventory = parse_inventory(payload);
@@ -207,7 +199,7 @@ TEST_CASE("manual filament source provider supports offline snapshots and callba
     ManualFilamentSourceProvider provider(capabilities);
 
     int callback_count = 0;
-    provider.subscribe([&callback_count](const InventorySnapshot &snapshot) {
+    provider.subscribe([&callback_count](const InventorySnapshot& snapshot) {
         ++callback_count;
         CHECK(snapshot.revision == "manual-1");
         REQUIRE(snapshot.sources.size() == 1);
@@ -215,7 +207,7 @@ TEST_CASE("manual filament source provider supports offline snapshots and callba
     });
 
     SourceId refresh_source;
-    provider.set_refresh_callback([&refresh_source](const SourceId &source) { refresh_source = source; });
+    provider.set_refresh_callback([&refresh_source](const SourceId& source) { refresh_source = source; });
 
     InventorySnapshot snapshot;
     snapshot.revision = "manual-1";
