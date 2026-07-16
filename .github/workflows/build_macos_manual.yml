@@ -1,0 +1,50 @@
+name: Build macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch, tag, or commit SHA to build
+        required: true
+        type: string
+        default: main
+      run_full_tests:
+        description: Run the Linux CI test gate before packaging
+        required: true
+        type: boolean
+        default: false
+      version_label:
+        description: Optional artifact label
+        required: false
+        type: string
+        default: macos-manual
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-macos-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    name: Full test gate
+    if: inputs.run_full_tests
+    uses: ./.github/workflows/ci_tests.yml
+    with:
+      source_ref: ${{ inputs.source_ref }}
+      run_changed_tidy: false
+
+  build:
+    name: macOS release bundle
+    needs: tests
+    if: >-
+      ${{ always() &&
+          (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
+    uses: ./.github/workflows/build_platform.yml
+    with:
+      platform: macos
+      source_ref: ${{ inputs.source_ref }}
+      version_label: ${{ inputs.version_label }}
+      tests_passed: ${{ inputs.run_full_tests && needs.tests.result == 'success' }}
+      sign_artifacts: false

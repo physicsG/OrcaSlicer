@@ -1,0 +1,451 @@
+name: Build Platform
+
+on:
+  workflow_call:
+    inputs:
+      platform:
+        description: linux, windows, or macos
+        required: true
+        type: string
+      source_ref:
+        description: Branch, tag, or commit SHA to build
+        required: true
+        type: string
+      version_label:
+        description: Optional validated artifact label
+        required: false
+        default: ''
+        type: string
+      tests_passed:
+        description: Whether the selected-ref test gate passed
+        required: true
+        type: boolean
+      sign_artifacts:
+        description: Sign and notarize the macOS artifact
+        required: false
+        default: false
+        type: boolean
+      package_artifact:
+        description: Compile and package the application after dependencies
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      release:
+        description: Resolved release artifact label
+        value: ${{ jobs.build.outputs.version_label }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ inputs.platform }}
+    runs-on: ${{ inputs.platform == 'linux' && 'ubuntu-24.04' || inputs.platform == 'windows' && 'windows-2022' || 'macos-14' }}
+    timeout-minutes: 360
+    env:
+      PLATFORM_INPUT: ${{ inputs.platform }}
+      SOURCE_REF_INPUT: ${{ inputs.source_ref }}
+      VERSION_LABEL_INPUT: ${{ inputs.version_label }}
+      TESTS_PASSED_INPUT: ${{ inputs.tests_passed }}
+      WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    outputs:
+      commit: ${{ steps.metadata.outputs.commit }}
+      version: ${{ steps.metadata.outputs.version }}
+      version_label: ${{ steps.metadata.outputs.version_label }}
+      cache_key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+    steps:
+      - name: Validate platform input
+        shell: bash
+        run: |
+          case "$PLATFORM_INPUT" in
+            linux|windows|macos) ;;
+            *) echo "Unsupported platform: $PLATFORM_INPUT" >&2; exit 1 ;;
+          esac
+
+      - name: Checkout trusted release tooling
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: _release_control
+          sparse-checkout: scripts/release
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Checkout selected source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_ref }}
+          path: source
+          fetch-depth: 0
+          lfs: true
+          persist-credentials: false
+
+      - name: Set up CMake 3.28
+        uses: lukka/get-cmake@4.3.4
+        with:
+          cmakeVersion: '~3.28.0'
+
+      - name: Resolve build metadata
+        id: metadata
+        working-directory: source
+        shell: bash
+        run: |
+          python ../_release_control/scripts/release/resolve_release_metadata.py \
+            --source-ref "$SOURCE_REF_INPUT" \
+            --version-label "$VERSION_LABEL_INPUT"
+
+      - name: Install Ubuntu build prerequisites
+        if: inputs.platform == 'linux'
+        working-directory: source
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            autoconf build-essential cmake curl eglexternalplatform-dev \
+            extra-cmake-modules file git libcairo2-dev libcurl4-openssl-dev \
+            libdbus-1-dev libfuse2t64 libglew-dev libgl1-mesa-dev \
+            libglu1-mesa-dev libgstreamer1.0-dev libgstreamerd-3-dev \
+            libgstreamer-plugins-base1.0-dev libgstreamer-plugins-good1.0-dev \
+            libgtk-3-dev libmspack-dev libsecret-1-dev libsoup2.4-dev \
+            libssl-dev libudev-dev libunwind-dev libwayland-dev \
+            libwebkit2gtk-4.1-dev libxkbcommon-dev locales locales-all m4 \
+            ninja-build pkgconf sudo texinfo wayland-protocols wget
+          sudo ./build_linux.sh -u -r
+          sudo chown "$USER" -R ./
+
+      - name: Install Windows build prerequisites
+        if: inputs.platform == 'windows'
+        shell: pwsh
+        run: choco install strawberryperl nsis --yes --no-progress
+
+      - name: Set up MSBuild
+        if: inputs.platform == 'windows'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install macOS build prerequisites
+        if: inputs.platform == 'macos'
+        shell: bash
+        run: brew install automake libtool texinfo
+
+      - name: Restore dependency build
+        id: deps-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ inputs.platform == 'linux' && 'source/deps/build/destdir' || inputs.platform == 'windows' && 'source/deps/build/OrcaSlicer_dep' || 'source/deps/build' }}
+          key: release-deps-${{ inputs.platform }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('source/deps/**') }}
+
+      - name: Build Linux dependencies
+        if: inputs.platform == 'linux' && steps.deps-cache.outputs.cache-hit != 'true'
+        working-directory: source
+        shell: bash
+        run: |
+          mkdir -p release-diagnostics
+          set -o pipefail
+          ./build_linux.sh -d -r -j 2 \
+            2>&1 | tee release-diagnostics/linux-dependencies.log
+
+      - name: Build Windows dependencies
+        if: inputs.platform == 'windows' && steps.deps-cache.outputs.cache-hit != 'true'
+        working-directory: source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-diagnostics | Out-Null
+          .\build_release_vs2022.bat deps *>&1 |
+            Tee-Object -FilePath release-diagnostics/windows-dependencies.log
+          if ($LASTEXITCODE -ne 0) { throw 'Windows dependency build failed' }
+          .\build_release_vs2022.bat pack *>&1 |
+            Tee-Object -FilePath release-diagnostics/windows-dependency-pack.log
+          if ($LASTEXITCODE -ne 0) { throw 'Windows dependency packaging failed' }
+
+      - name: Build macOS dependencies
+        if: inputs.platform == 'macos' && steps.deps-cache.outputs.cache-hit != 'true'
+        working-directory: source
+        shell: bash
+        run: |
+          mkdir -p release-diagnostics
+          set -o pipefail
+          {
+            brew uninstall --ignore-dependencies zstd || true
+            ./build_release_macos.sh -dx -a universal -t 10.15 -1
+            for arch in arm64 x86_64; do
+              if [[ -d "deps/build/${arch}" ]]; then
+                find "deps/build/${arch}" -mindepth 1 -maxdepth 1 \
+                  ! -name OrcaSlicer_dep -exec rm -rf {} +
+              fi
+            done
+            brew install zstd
+          } 2>&1 | tee release-diagnostics/macos-dependencies.log
+
+      - name: Save dependency build
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ inputs.platform == 'linux' && 'source/deps/build/destdir' || inputs.platform == 'windows' && 'source/deps/build/OrcaSlicer_dep' || 'source/deps/build' }}
+          key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+      - name: Build and package Linux AppImage
+        if: inputs.platform == 'linux' && inputs.package_artifact
+        working-directory: source
+        shell: bash
+        env:
+          RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
+        run: |
+          mkdir -p release-output release-diagnostics
+          set -o pipefail
+          ./build_linux.sh -i -s -r \
+            2>&1 | tee release-diagnostics/linux-application.log
+          source_appimage=$(find build -maxdepth 1 -type f \
+            -name 'Snapmaker_Orca_Linux_V*.AppImage' -print -quit)
+          test -n "$source_appimage"
+          output="release-output/Snapmaker_Orca_Linux_AppImage_Ubuntu2404_${RESOLVED_VERSION_LABEL}.AppImage"
+          cp "$source_appimage" "$output"
+          chmod +x "$output"
+
+      - name: Build and package Windows artifacts
+        if: inputs.platform == 'windows' && inputs.package_artifact
+        working-directory: source
+        shell: pwsh
+        env:
+          WindowsSdkDir: 'C:\Program Files (x86)\Windows Kits\10\'
+          WindowsSDKVersion: '10.0.26100.0\'
+          RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
+        run: |
+          New-Item -ItemType Directory -Force release-output | Out-Null
+          New-Item -ItemType Directory -Force release-diagnostics | Out-Null
+          .\build_release_vs2022.bat slicer *>&1 |
+            Tee-Object -FilePath release-diagnostics/windows-application.log
+          if ($LASTEXITCODE -ne 0) { throw 'Windows application build failed' }
+          Push-Location build
+          cpack -G NSIS *>&1 |
+            Tee-Object -FilePath ../release-diagnostics/windows-cpack.log
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS packaging failed' }
+          Pop-Location
+
+          $label = $env:RESOLVED_VERSION_LABEL
+          $installer = Get-ChildItem build -Filter 'Snapmaker_Orca*.exe' -File |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $installer) { throw 'NSIS installer was not produced' }
+          Copy-Item $installer.FullName "release-output/Snapmaker_Orca_Windows_Installer_${label}.exe"
+
+          & 'C:/Program Files/7-Zip/7z.exe' a -tzip "release-output/Snapmaker_Orca_Windows_${label}_portable.zip" "$env:GITHUB_WORKSPACE/source/build/Snapmaker_Orca/*"
+          if ($LASTEXITCODE -ne 0) { throw 'Portable archive creation failed' }
+
+          $pdbFiles = Get-ChildItem build/src/Release -Filter '*.pdb' -File -ErrorAction SilentlyContinue
+          if ($pdbFiles) {
+            & 'C:/Program Files/7-Zip/7z.exe' a -t7z -m0=lzma2 -mx9 "release-output/Debug_PDB_${label}_for_developers_only.7z" "$env:GITHUB_WORKSPACE/source/build/src/Release/*.pdb"
+            if ($LASTEXITCODE -ne 0) { throw 'PDB archive creation failed' }
+          }
+
+      - name: Build macOS universal application
+        if: inputs.platform == 'macos' && inputs.package_artifact
+        working-directory: source
+        shell: bash
+        run: |
+          mkdir -p release-diagnostics
+          set -o pipefail
+          ./build_release_macos.sh -s -n -x -a universal -t 10.15 -1 \
+            2>&1 | tee release-diagnostics/macos-application.log
+
+      - name: Package unsigned macOS DMG
+        if: inputs.platform == 'macos' && inputs.package_artifact && !inputs.sign_artifacts
+        working-directory: source
+        shell: bash
+        env:
+          RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
+        run: |
+          mkdir -p release-output dmg-root
+          cp -R "build/universal/Snapmaker_Orca/Snapmaker Orca.app" dmg-root/
+          ln -sfn /Applications dmg-root/Applications
+          hdiutil create \
+            -volname 'Snapmaker Orca' \
+            -srcfolder dmg-root \
+            -ov -format UDZO \
+            "release-output/Snapmaker_Orca_Mac_universal_${RESOLVED_VERSION_LABEL}_unsigned.dmg"
+
+      - name: Prepare macOS signing input
+        if: inputs.platform == 'macos' && inputs.package_artifact && inputs.sign_artifacts
+        working-directory: source
+        shell: bash
+        env:
+          RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
+        run: |
+          mkdir -p signing-input
+          tar -czf \
+            "signing-input/Snapmaker_Orca_Mac_app_${RESOLVED_VERSION_LABEL}.tar.gz" \
+            -C build/universal/Snapmaker_Orca \
+            'Snapmaker Orca.app'
+
+      - name: Upload macOS signing input
+        if: inputs.platform == 'macos' && inputs.package_artifact && inputs.sign_artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: signing-input-macos-${{ steps.metadata.outputs.version_label }}
+          path: source/signing-input/*.tar.gz
+          if-no-files-found: error
+          retention-days: 2
+
+      - name: Create checksums and build manifest
+        if: inputs.package_artifact && (inputs.platform != 'macos' || !inputs.sign_artifacts)
+        working-directory: source
+        shell: bash
+        env:
+          RESOLVED_COMMIT: ${{ steps.metadata.outputs.commit }}
+          RESOLVED_VERSION: ${{ steps.metadata.outputs.version }}
+          RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
+          DEPENDENCY_CACHE_KEY: ${{ steps.deps-cache.outputs.cache-primary-key }}
+          BUILD_ARCHITECTURE: ${{ inputs.platform == 'macos' && 'universal' || runner.arch }}
+        run: |
+          python ../_release_control/scripts/release/create_build_manifest.py \
+            --artifact-dir release-output \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit "$RESOLVED_COMMIT" \
+            --source-ref "$SOURCE_REF_INPUT" \
+            --version "$RESOLVED_VERSION" \
+            --version-label "$RESOLVED_VERSION_LABEL" \
+            --platform "$PLATFORM_INPUT" \
+            --architecture "$BUILD_ARCHITECTURE" \
+            --dependency-cache-key "$DEPENDENCY_CACHE_KEY" \
+            --workflow-run "$WORKFLOW_RUN_URL" \
+            --tests-passed "$TESTS_PASSED_INPUT" \
+            --signed false
+
+      - name: Upload platform release bundle
+        if: inputs.package_artifact && (inputs.platform != 'macos' || !inputs.sign_artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ inputs.platform }}-${{ steps.metadata.outputs.version_label }}
+          path: source/release-output/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload platform build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-diagnostics-${{ inputs.platform }}-${{ steps.metadata.outputs.version_label || github.run_id }}
+          path: |
+            source/release-diagnostics/**
+            source/deps/build/**/CMakeFiles/CMakeConfigureLog.yaml
+            source/deps/build/**/CMakeFiles/CMakeError.log
+            source/deps/build/**/CMakeFiles/CMakeOutput.log
+            source/build/**/CMakeFiles/CMakeConfigureLog.yaml
+            source/build/**/CMakeFiles/CMakeError.log
+            source/build/**/CMakeFiles/CMakeOutput.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  sign-macos:
+    name: Sign and notarize macOS
+    if: inputs.platform == 'macos' && inputs.package_artifact && inputs.sign_artifacts
+    needs: build
+    runs-on: macos-14
+    timeout-minutes: 120
+    environment: release-signing
+    env:
+      SOURCE_REF_INPUT: ${{ inputs.source_ref }}
+      TESTS_PASSED_INPUT: ${{ inputs.tests_passed }}
+      RESOLVED_COMMIT: ${{ needs.build.outputs.commit }}
+      RESOLVED_VERSION: ${{ needs.build.outputs.version }}
+      RESOLVED_VERSION_LABEL: ${{ needs.build.outputs.version_label }}
+      DEPENDENCY_CACHE_KEY: ${{ needs.build.outputs.cache_key }}
+      WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout trusted signing tooling
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: _release_control
+          sparse-checkout: |
+            scripts/release
+            scripts/disable_validation.entitlements
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Download application bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: signing-input-macos-${{ needs.build.outputs.version_label }}
+          path: signing-input
+
+      - name: Import signing certificate
+        shell: bash
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          test -n "$BUILD_CERTIFICATE_BASE64"
+          test -n "$P12_PASSWORD"
+          test -n "$KEYCHAIN_PASSWORD"
+          certificate_path="$RUNNER_TEMP/build_certificate.p12"
+          keychain_path="$RUNNER_TEMP/app-signing.keychain-db"
+          printf '%s' "$BUILD_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security import "$certificate_path" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security list-keychain -d user -s "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$keychain_path"
+
+      - name: Sign, package, and notarize
+        shell: bash
+        env:
+          CERTIFICATE_ID: ${{ secrets.MACOS_CERTIFICATE_ID }}
+          APPLE_DEV_ACCOUNT: ${{ secrets.APPLE_DEV_ACCOUNT }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          APP_PWD: ${{ secrets.APP_PWD }}
+        run: |
+          test -n "$CERTIFICATE_ID"
+          test -n "$APPLE_DEV_ACCOUNT"
+          test -n "$TEAM_ID"
+          test -n "$APP_PWD"
+          mkdir -p app-root dmg-root release-output
+          tar -xzf signing-input/*.tar.gz -C app-root
+          app_path="$PWD/app-root/Snapmaker Orca.app"
+          dmg_path="$PWD/release-output/Snapmaker_Orca_Mac_universal_${RESOLVED_VERSION_LABEL}.dmg"
+
+          codesign --deep --force --verbose --options runtime --timestamp \
+            --entitlements _release_control/scripts/disable_validation.entitlements \
+            --sign "$CERTIFICATE_ID" "$app_path"
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+
+          cp -R "$app_path" dmg-root/
+          ln -sfn /Applications dmg-root/Applications
+          hdiutil create -volname 'Snapmaker Orca' -srcfolder dmg-root -ov -format UDZO "$dmg_path"
+          codesign --force --verbose --timestamp --sign "$CERTIFICATE_ID" "$dmg_path"
+
+          xcrun notarytool store-credentials release-notary \
+            --apple-id "$APPLE_DEV_ACCOUNT" \
+            --team-id "$TEAM_ID" \
+            --password "$APP_PWD"
+          xcrun notarytool submit "$dmg_path" --keychain-profile release-notary --wait
+          xcrun stapler staple "$dmg_path"
+          xcrun stapler validate "$dmg_path"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg_path"
+
+      - name: Create signed checksums and build manifest
+        shell: bash
+        run: |
+          python _release_control/scripts/release/create_build_manifest.py \
+            --artifact-dir release-output \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit "$RESOLVED_COMMIT" \
+            --source-ref "$SOURCE_REF_INPUT" \
+            --version "$RESOLVED_VERSION" \
+            --version-label "$RESOLVED_VERSION_LABEL" \
+            --platform macos \
+            --architecture universal \
+            --dependency-cache-key "$DEPENDENCY_CACHE_KEY" \
+            --workflow-run "$WORKFLOW_RUN_URL" \
+            --tests-passed "$TESTS_PASSED_INPUT" \
+            --signed true
+
+      - name: Upload signed macOS release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-${{ needs.build.outputs.version_label }}
+          path: release-output/*
+          if-no-files-found: error
+          retention-days: 14

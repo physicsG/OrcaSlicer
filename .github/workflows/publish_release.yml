@@ -1,0 +1,182 @@
+name: Publish Release
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        required: true
+        type: string
+      version_label:
+        required: true
+        type: string
+      publish_mode:
+        required: true
+        type: string
+      build_linux:
+        required: true
+        type: boolean
+      build_windows:
+        required: true
+        type: boolean
+      build_macos:
+        required: true
+        type: boolean
+      run_full_tests:
+        required: true
+        type: boolean
+      sign_artifacts:
+        required: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish ${{ inputs.publish_mode }}
+    if: inputs.publish_mode != 'artifacts-only'
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.publish_mode == 'production-release' && 'production-release' || 'release-publication' }}
+    timeout-minutes: 30
+    env:
+      SOURCE_REF_INPUT: ${{ inputs.source_ref }}
+      VERSION_LABEL_INPUT: ${{ inputs.version_label }}
+      PUBLISH_MODE_INPUT: ${{ inputs.publish_mode }}
+      BUILD_LINUX_INPUT: ${{ inputs.build_linux }}
+      BUILD_WINDOWS_INPUT: ${{ inputs.build_windows }}
+      BUILD_MACOS_INPUT: ${{ inputs.build_macos }}
+      RUN_FULL_TESTS_INPUT: ${{ inputs.run_full_tests }}
+      SIGN_ARTIFACTS_INPUT: ${{ inputs.sign_artifacts }}
+      WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout trusted publication tooling
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: _release_control
+          sparse-checkout: scripts/release
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Checkout selected source metadata
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_ref }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download platform release bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-bundle
+          merge-multiple: true
+
+      - name: Revalidate publication request
+        working-directory: source
+        shell: bash
+        run: |
+          python ../_release_control/scripts/release/validate_release_request.py \
+            --source-ref "$SOURCE_REF_INPUT" \
+            --version-label "$VERSION_LABEL_INPUT" \
+            --publish-mode "$PUBLISH_MODE_INPUT" \
+            --build-linux "$BUILD_LINUX_INPUT" \
+            --build-windows "$BUILD_WINDOWS_INPUT" \
+            --build-macos "$BUILD_MACOS_INPUT" \
+            --run-full-tests "$RUN_FULL_TESTS_INPUT" \
+            --sign-artifacts "$SIGN_ARTIFACTS_INPUT"
+
+      - name: Verify checksums, manifests, and platform set
+        shell: bash
+        run: |
+          args=()
+          if [[ "$BUILD_LINUX_INPUT" == "true" ]]; then
+            args+=(--require-platform linux)
+          fi
+          if [[ "$BUILD_WINDOWS_INPUT" == "true" ]]; then
+            args+=(--require-platform windows)
+          fi
+          if [[ "$BUILD_MACOS_INPUT" == "true" ]]; then
+            args+=(--require-platform macos)
+          fi
+          if [[ "$RUN_FULL_TESTS_INPUT" == "true" ]]; then
+            args+=(--require-tests)
+          fi
+          if [[ "$PUBLISH_MODE_INPUT" == "production-release" && \
+                "$SIGN_ARTIFACTS_INPUT" == "true" ]]; then
+            args+=(--require-signed-macos)
+          fi
+
+          python _release_control/scripts/release/verify_release_bundle.py \
+            --bundle-dir release-bundle \
+            "${args[@]}"
+
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_tag="$VERSION_LABEL_INPUT"
+          target_commit=$(git -C source rev-parse HEAD)
+
+          if ! git -C source show-ref --verify --quiet "refs/tags/$release_tag"; then
+            echo "Tag $release_tag does not exist; refusing to create it implicitly." >&2
+            exit 1
+          fi
+
+          tag_commit=$(git -C source rev-list -n 1 "$release_tag")
+          if [[ "$tag_commit" != "$target_commit" ]]; then
+            echo "Tag $release_tag resolves to $tag_commit, not selected commit $target_commit." >&2
+            exit 1
+          fi
+
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            echo "A GitHub release already exists for $release_tag; refusing to overwrite it." >&2
+            exit 1
+          fi
+
+          mapfile -d '' assets < <(find release-bundle -type f -print0 | sort -z)
+          if [[ ${#assets[@]} -eq 0 ]]; then
+            echo "No release assets were downloaded." >&2
+            exit 1
+          fi
+
+          notes_file=$(mktemp)
+          {
+            echo 'Manual Snapmaker Orca release build.'
+            echo
+            echo "- Source ref: $SOURCE_REF_INPUT"
+            echo "- Commit: $target_commit"
+            echo "- Workflow run: $WORKFLOW_RUN_URL"
+            echo "- Linux selected: $BUILD_LINUX_INPUT"
+            echo "- Windows selected: $BUILD_WINDOWS_INPUT"
+            echo "- macOS selected: $BUILD_MACOS_INPUT"
+            echo "- Full tests: $RUN_FULL_TESTS_INPUT"
+            echo "- macOS signing requested: $SIGN_ARTIFACTS_INPUT"
+          } > "$notes_file"
+
+          common_args=(
+            "$release_tag"
+            "${assets[@]}"
+            --repo "$GITHUB_REPOSITORY"
+            --title "Snapmaker Orca $release_tag"
+            --notes-file "$notes_file"
+            --verify-tag
+          )
+
+          case "$PUBLISH_MODE_INPUT" in
+            draft-release)
+              gh release create "${common_args[@]}" --draft
+              ;;
+            prerelease)
+              gh release create "${common_args[@]}" --prerelease
+              ;;
+            production-release)
+              gh release create "${common_args[@]}"
+              ;;
+            *)
+              echo "Unsupported publication mode: $PUBLISH_MODE_INPUT" >&2
+              exit 1
+              ;;
+          esac

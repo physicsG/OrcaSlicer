@@ -78,18 +78,31 @@ jobs:
             > /tmp/changed-workflows.txt
 
       - name: Run actionlint 1.7.12
+        id: actionlint
+        continue-on-error: true
         run: |
           if [[ ! -s /tmp/changed-workflows.txt ]]; then
             echo "No changed GitHub Actions workflows."
             exit 0
           fi
 
+          set -o pipefail
           mapfile -t workflows < /tmp/changed-workflows.txt
           docker run --rm \
             --volume "$PWD:/repo" \
             --workdir /repo \
             rhysd/actionlint:1.7.12 \
-            -color "${workflows[@]}"
+            -color "${workflows[@]}" \
+            2>&1 | tee actionlint.log
+
+      - name: Upload actionlint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actionlint-${{ github.run_id }}
+          path: actionlint.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Run yamllint 1.38.0
         run: |
@@ -100,6 +113,30 @@ jobs:
           python -m pip install --disable-pip-version-check yamllint==1.38.0
           mapfile -t workflows < /tmp/changed-workflows.txt
           yamllint --config-file .yamllint.yml "${workflows[@]}"
+
+      - name: Enforce actionlint result
+        if: steps.actionlint.outcome == 'failure'
+        run: |
+          cat actionlint.log
+          exit 1
+
+  release-tooling:
+    name: release-tooling
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Compile release helper scripts
+        run: python -m py_compile scripts/release/*.py
+
+      - name: Run release helper smoke tests
+        run: python scripts/release/test_release_tools.py
+
+      - name: Reject builder publication side effects
+        run: python scripts/release/check_builder_side_effects.py
 
   documentation:
     name: documentation

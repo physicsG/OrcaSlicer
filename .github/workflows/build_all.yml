@@ -1,134 +1,162 @@
-name: Build all
+name: Manual Build Verification
 
 on:
-  schedule:
-    - cron: '0 18 * * *' # everyday 2:00(beijing time UTC+8)
-
   workflow_dispatch:
     inputs:
-      build-deps-only:
-        description: 'Only build dependencies (bypasses caching)'
+      source_ref:
+        description: Branch, tag, or commit SHA to package
+        required: true
+        type: string
+        default: main
+      build_linux:
+        description: Build Ubuntu 24.04 AppImage
+        required: true
+        type: boolean
+        default: true
+      build_windows:
+        description: Build Windows installer and portable archive
+        required: true
         type: boolean
         default: false
-      force-build:
-        description: 'Force full rebuild (bypass dependency cache)'
+      build_macos:
+        description: Build macOS universal DMG
+        required: true
         type: boolean
         default: false
+      run_full_tests:
+        description: Run the Linux CI test gate before packaging
+        required: true
+        type: boolean
+        default: false
+      version_label:
+        description: Artifact label for the verification build
+        required: false
+        type: string
+        default: branch-verification
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-  
+  group: manual-build-verification-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
-  build_all:
-    name: Build All
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Deprecate 20.04appimage
-          # - os: ubuntu-20.04
-          - os: ubuntu-24.04
-          - os: windows-2022
-          - os: macos-14
-            arch: arm64
-    uses: ./.github/workflows/build_check_cache.yml
-    with:
-      os: ${{ matrix.os }}
-      arch: ${{ matrix.arch }}
-      build-deps-only: ${{ inputs.build-deps-only || false }}
-    secrets: inherit
-  flatpak:
-    name: "Flatpak"
-    concurrency:
-      group: flatpak-${{ matrix.variant.arch }}-${{ github.ref }}
-      cancel-in-progress: false
-    container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-49
-      options: --privileged
-      volumes:
-        - /usr/local/lib/android:/usr/local/lib/android
-        - /usr/share/dotnet:/usr/share/dotnet
-        - /opt/ghc:/opt/ghc1
-        - /usr/local/share/boost:/usr/local/share/boost1
-    strategy:
-      matrix:
-        variant:
-          - arch: x86_64
-            runner: ubuntu-24.04
-          - arch: aarch64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.variant.runner }}
-    env:
-      date:
-      ver:
-      ver_pure:
+  validate-request:
+    name: Validate manual request
+    runs-on: ubuntu-24.04
     steps:
-    - name: "Remove unneeded stuff to free disk space"
-      run:
-        rm -rf /usr/local/lib/android/* /usr/share/dotnet/* /opt/ghc1/* "/usr/local/share/boost1/*"
-    - uses: actions/checkout@v5
-    - name: Get the version and date
-      run: |
-        ver_pure=$(grep 'set(Snapmaker_VERSION' version.inc | cut -d '"' -f2)
-        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          ver="PR-${{ github.event.number }}"
-        else
-          ver=V$ver_pure
-        fi
-        echo "ver=$ver" >> $GITHUB_ENV
-        echo "ver_pure=$ver_pure" >> $GITHUB_ENV
-        echo "date=$(date +'%Y%m%d')" >> $GITHUB_ENV
-      shell: bash
-    - uses: flathub-infra/flatpak-github-actions/flatpak-builder@master
-      with:
-        bundle: Snapmaker_Orca-Linux-flatpak_${{ env.ver }}_${{ matrix.variant.arch }}.flatpak
-        manifest-path: scripts/flatpak/io.github.Snapmaker.Snapmaker_Orca.yml
-        cache: true
-        arch: ${{ matrix.variant.arch }}
-        upload-artifact: false
-    - name: Find Flatpak bundle file
-      id: find_bundle
-      working-directory: ${{ github.workspace }}
-      run: |
-        BUNDLE_NAME="Snapmaker_Orca-Linux-flatpak_${{ env.ver }}_${{ matrix.variant.arch }}.flatpak"
-        # Try multiple possible locations
-        if [ -f "$BUNDLE_NAME" ]; then
-          BUNDLE_PATH="$(pwd)/$BUNDLE_NAME"
-        elif [ -f "/__w/Snapmaker_Orca/Snapmaker_Orca/$BUNDLE_NAME" ]; then
-          BUNDLE_PATH="/__w/Snapmaker_Orca/Snapmaker_Orca/$BUNDLE_NAME"
-        else
-          # Search in current directory and subdirectories
-          FOUND=$(find . -name "$BUNDLE_NAME" -type f | head -1)
-          if [ -z "$FOUND" ]; then
-            echo "Error: Could not find $BUNDLE_NAME"
-            echo "Searching for any .flatpak files:"
-            find . -name "*.flatpak" -type f || true
+      - name: Require at least one platform
+        env:
+          BUILD_LINUX: ${{ inputs.build_linux }}
+          BUILD_WINDOWS: ${{ inputs.build_windows }}
+          BUILD_MACOS: ${{ inputs.build_macos }}
+        run: |
+          if [[ "$BUILD_LINUX" != 'true' && "$BUILD_WINDOWS" != 'true' && "$BUILD_MACOS" != 'true' ]]; then
+            echo 'Select at least one platform.' >&2
             exit 1
           fi
-          # Convert relative path to absolute
-          BUNDLE_PATH="$(cd "$(dirname "$FOUND")" && pwd)/$(basename "$FOUND")"
-        fi
-        echo "path=$BUNDLE_PATH" >> $GITHUB_OUTPUT
-        echo "Found bundle at: $BUNDLE_PATH"
-        ls -lh "$BUNDLE_PATH" || true
-      shell: bash
 
-    - name: Upload artifacts Flatpak
-      uses: actions/upload-artifact@v4
-      with:
-        name: Snapmaker_Orca-Linux-flatpak_${{ env.ver }}_${{ matrix.variant.arch }}.flatpak
-        path: ${{ steps.find_bundle.outputs.path }}
-        if-no-files-found: error
+  tests:
+    name: Release verification tests
+    needs: validate-request
+    if: inputs.run_full_tests
+    uses: ./.github/workflows/ci_tests.yml
+    with:
+      source_ref: ${{ inputs.source_ref }}
+      run_changed_tidy: false
 
-    - name: Deploy Flatpak to nightly release
-      if: ${{github.ref == 'refs/heads/main' || github.ref == 'refs/heads/2.3.0-final'}}
-      uses: WebFreak001/deploy-nightly@v3.2.0
-      with:
-        upload_url: https://uploads.github.com/repos/Snapmaker/OrcaSlicer/releases/169912305/assets{?name,label}
-        release_id: 169912305
-        asset_path: ${{ steps.find_bundle.outputs.path }}
-        asset_name: Snapmaker_Orca-Linux-flatpak_${{ env.ver }}_${{ matrix.variant.arch }}_Beta.flatpak
-        asset_content_type: application/octet-stream
-        max_releases: 1 # optional, if there are more releases than this matching the asset_name, the oldest ones are going to be deleted
+  linux:
+    name: Verify Linux release bundle
+    needs:
+      - validate-request
+      - tests
+    if: >-
+      ${{ always() && inputs.build_linux && needs.validate-request.result == 'success' &&
+          (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
+    uses: ./.github/workflows/build_platform.yml
+    with:
+      platform: linux
+      source_ref: ${{ inputs.source_ref }}
+      version_label: ${{ inputs.version_label }}
+      tests_passed: ${{ inputs.run_full_tests && needs.tests.result == 'success' }}
+      sign_artifacts: false
+
+  windows:
+    name: Verify Windows release bundle
+    needs:
+      - validate-request
+      - tests
+    if: >-
+      ${{ always() && inputs.build_windows && needs.validate-request.result == 'success' &&
+          (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
+    uses: ./.github/workflows/build_platform.yml
+    with:
+      platform: windows
+      source_ref: ${{ inputs.source_ref }}
+      version_label: ${{ inputs.version_label }}
+      tests_passed: ${{ inputs.run_full_tests && needs.tests.result == 'success' }}
+      sign_artifacts: false
+
+  macos:
+    name: Verify macOS release bundle
+    needs:
+      - validate-request
+      - tests
+    if: >-
+      ${{ always() && inputs.build_macos && needs.validate-request.result == 'success' &&
+          (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
+    uses: ./.github/workflows/build_platform.yml
+    with:
+      platform: macos
+      source_ref: ${{ inputs.source_ref }}
+      version_label: ${{ inputs.version_label }}
+      tests_passed: ${{ inputs.run_full_tests && needs.tests.result == 'success' }}
+      sign_artifacts: false
+
+  summary:
+    name: Manual build summary
+    runs-on: ubuntu-24.04
+    if: always()
+    needs:
+      - validate-request
+      - tests
+      - linux
+      - windows
+      - macos
+    steps:
+      - name: Report verification results
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+          VERSION_LABEL: ${{ inputs.version_label }}
+          VALIDATION_RESULT: ${{ needs.validate-request.result }}
+          TESTS_RESULT: ${{ needs.tests.result }}
+          LINUX_RESULT: ${{ needs.linux.result }}
+          WINDOWS_RESULT: ${{ needs.windows.result }}
+          MACOS_RESULT: ${{ needs.macos.result }}
+        run: |
+          {
+            echo '### Manual build verification'
+            echo
+            echo "- Source ref: $SOURCE_REF"
+            echo "- Version label: $VERSION_LABEL"
+            echo "- Request validation: $VALIDATION_RESULT"
+            echo "- Tests: $TESTS_RESULT"
+            echo "- Linux: $LINUX_RESULT"
+            echo "- Windows: $WINDOWS_RESULT"
+            echo "- macOS: $MACOS_RESULT"
+            echo
+            echo 'This workflow is manual, unsigned, artifacts-only, and cannot publish a GitHub release.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$VALIDATION_RESULT" != 'success' ]]; then
+            exit 1
+          fi
+          if [[ "$TESTS_RESULT" != 'success' && "$TESTS_RESULT" != 'skipped' ]]; then
+            exit 1
+          fi
+          for result in "$LINUX_RESULT" "$WINDOWS_RESULT" "$MACOS_RESULT"; do
+            if [[ "$result" != 'success' && "$result" != 'skipped' ]]; then
+              exit 1
+            fi
+          done
