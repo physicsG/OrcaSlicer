@@ -31,6 +31,10 @@ def read_version(path: Path) -> str:
     return match.group(1)
 
 
+def normalize_tag_name(ref: str) -> str:
+    return ref.removeprefix("refs/tags/")
+
+
 def tag_exists(tag: str) -> bool:
     result = subprocess.run(
         ["git", "show-ref", "--verify", "--quiet", f"refs/tags/{tag}"],
@@ -60,12 +64,13 @@ def main() -> int:
     version = read_version(args.version_file)
     commit = run_git("rev-parse", "HEAD")
     short_commit = commit[:12]
+    source_tag = normalize_tag_name(source_ref)
 
     requested_label = args.version_label.strip()
     if requested_label:
         label = requested_label
-    elif tag_exists(source_ref):
-        label = source_ref
+    elif tag_exists(source_tag):
+        label = source_tag
     else:
         label = f"V{version}-{short_commit}"
 
