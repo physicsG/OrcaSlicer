@@ -1,0 +1,239 @@
+name: CI Tests
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+  HEAD_SHA: ${{ github.sha }}
+  LEGACY_FAILURE_REGEX: >-
+    (^libslic3r_tests$|Scenario: init_print functionality|Scenario: Extrusion width specifics|
+    Scenario: lift\(\) is not ignored after unlift\(\) at normal values of Z|Scenario: Model construction|
+    Scenario: PrintObject: Perimeter generation|Scenario: Print: Skirt generation|Scenario: Print: Brim generation|
+    Scenario: PrintGCode basic functionality|Scenario: PrintObject: object layer heights|Skirt height is honored|
+    Scenario: Original Slic3r Skirt/Brim tests|SupportMaterial: Three raft layers created|
+    Scenario: SupportMaterial: support_layers_z and contact_distance)
+
+jobs:
+  linux-tests:
+    name: linux-tests-and-smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Install system build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            autoconf \
+            build-essential \
+            ccache \
+            clang-tidy \
+            cmake \
+            curl \
+            eglexternalplatform-dev \
+            extra-cmake-modules \
+            file \
+            git \
+            gstreamer1.0-plugins-bad \
+            libcairo2-dev \
+            libcurl4-openssl-dev \
+            libdbus-1-dev \
+            libfuse2t64 \
+            libglew-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-good1.0-dev \
+            libgtk-3-dev \
+            libmspack-dev \
+            libsecret-1-dev \
+            libsoup2.4-dev \
+            libssl-dev \
+            libudev-dev \
+            libunwind-dev \
+            libwayland-dev \
+            libwebkit2gtk-4.1-dev \
+            libxkbcommon-dev \
+            locales \
+            locales-all \
+            m4 \
+            ninja-build \
+            pkgconf \
+            texinfo \
+            wayland-protocols \
+            wget
+
+      - name: Validate Linux dependency setup
+        run: |
+          sudo ./build_linux.sh -u -r
+          sudo chown "$USER" -R ./
+
+      - name: Restore dependency build
+        id: deps-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: deps/build/destdir
+          key: ubuntu-24.04-cache-orcaslicer_deps-build-${{ hashFiles('deps/**') }}
+
+      - name: Build project dependencies
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        run: ./build_linux.sh -d -r -j 2
+
+      - name: Save dependency build
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: deps/build/destdir
+          key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+      - name: Report dependency cache result
+        run: |
+          if [[ "${{ steps.deps-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "Restored prebuilt dependencies from the exact cache key."
+          else
+            echo "Built and saved dependencies for reuse by later jobs."
+          fi
+
+      - name: Restore compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ubuntu-24.04-ccache-ci-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ubuntu-24.04-ccache-ci-${{ github.ref_name }}-
+            ubuntu-24.04-ccache-ci-
+
+      - name: Configure tests
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          cmake -S . -B build-ci -G "Ninja Multi-Config" \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/deps/build/destdir/usr/local" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DBBL_INTERNAL_TESTING=0 \
+            -DBBL_RELEASE_TO_PUBLIC=1 \
+            -DBUILD_TESTS=ON \
+            -DORCA_TOOLS=ON \
+            -DSLIC3R_GTK=3 \
+            -DSLIC3R_PCH=OFF \
+            -DSLIC3R_SENTRY=OFF \
+            -DSLIC3R_STATIC=ON \
+            2>&1 | tee test-results/cmake-configure.log
+
+      - name: Build unit and integration test targets
+        run: >-
+          cmake --build build-ci
+          --config Release
+          --target libslic3r_tests fff_print_tests
+          --parallel 2
+
+      - name: Run blocking unit smoke baseline
+        run: |
+          build-ci/tests/libslic3r/Release/libslic3r_tests \
+            "sort_remove_duplicates" \
+            --reporter junit \
+            --out test-results/libslic3r-sort-smoke.xml
+
+          build-ci/tests/libslic3r/Release/libslic3r_tests \
+            "string_printf" \
+            --reporter junit \
+            --out test-results/libslic3r-string-smoke.xml
+
+          build-ci/tests/fff_print/Release/fff_print_tests \
+            "Scenario: Flow: Flow math for non-bridges" \
+            --reporter junit \
+            --out test-results/fff-flow-smoke.xml
+
+          build-ci/tests/fff_print/Release/fff_print_tests \
+            "Scenario: TriangleMesh: Basic mesh statistics" \
+            --reporter junit \
+            --out test-results/fff-mesh-smoke.xml
+
+      - name: Run clang-tidy on changed multiACE implementation files
+        run: |
+          python scripts/ci/changed_files.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --include-regex '^(src/libslic3r/(FilamentRoutingPlan|FilamentPlacementOptimizer).*|src/slic3r/GUI/multiace/.*)\.(cc|cpp|cxx)$' \
+            > /tmp/changed-multiace-sources.txt
+
+          if [[ ! -s /tmp/changed-multiace-sources.txt ]]; then
+            echo "No changed multiACE implementation files require clang-tidy."
+            exit 0
+          fi
+
+          mapfile -t sources < /tmp/changed-multiace-sources.txt
+          clang-tidy -p build-ci "${sources[@]}"
+
+      - name: Run non-quarantined legacy CTest baseline
+        run: |
+          ctest \
+            --test-dir build-ci \
+            --build-config Release \
+            --exclude-regex "(_NOT_BUILT-|${LEGACY_FAILURE_REGEX})" \
+            --output-on-failure \
+            --no-tests=error \
+            --output-junit "$GITHUB_WORKSPACE/test-results/ctest-baseline.xml"
+
+      - name: Run quarantined legacy tests for diagnostics
+        id: quarantined-ctest
+        continue-on-error: true
+        run: |
+          ctest \
+            --test-dir build-ci \
+            --build-config Release \
+            --tests-regex "$LEGACY_FAILURE_REGEX" \
+            --exclude-regex '_NOT_BUILT-' \
+            --output-on-failure \
+            --no-tests=error \
+            --output-junit "$GITHUB_WORKSPACE/test-results/ctest-quarantined.xml"
+
+      - name: Summarize legacy test quarantine
+        if: always()
+        run: |
+          {
+            echo "### Legacy CTest quarantine"
+            echo
+            if [[ "${{ steps.quarantined-ctest.outcome }}" == "failure" ]]; then
+              echo "Known legacy failures remain quarantined under issue #6."
+            else
+              echo "All quarantined legacy tests passed; remove their quarantine entries."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build representative profile-validator target
+        run: >-
+          cmake --build build-ci
+          --config Release
+          --target Snapmaker_Orca_profile_validator
+          --parallel 2
+
+      - name: Show ccache statistics
+        if: always()
+        run: ccache --show-stats
+
+      - name: Upload test and configure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-ci-results
+          path: |
+            test-results/*.xml
+            test-results/cmake-configure.log
+            build-ci/CMakeFiles/CMakeConfigureLog.yaml
+            build-ci/Testing/Temporary/LastTest.log
+          if-no-files-found: warn
+          retention-days: 14
