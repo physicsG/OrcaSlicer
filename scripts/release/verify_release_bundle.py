@@ -73,7 +73,10 @@ def main() -> int:
             sidecar_matches = list(bundle_dir.rglob(f"{name}.sha256"))
             if len(sidecar_matches) != 1:
                 raise ValueError(f"missing or duplicate checksum sidecar for {name}")
-            sidecar_hash = sidecar_matches[0].read_text(encoding="utf-8").split()[0]
+            sidecar_parts = sidecar_matches[0].read_text(encoding="utf-8").split()
+            if not sidecar_parts:
+                raise ValueError(f"checksum sidecar for {name} is empty")
+            sidecar_hash = sidecar_parts[0]
             if sidecar_hash != expected:
                 raise ValueError(f"checksum sidecar mismatch for {name}")
 
