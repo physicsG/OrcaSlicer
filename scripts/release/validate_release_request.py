@@ -9,6 +9,8 @@ import subprocess
 from pathlib import Path
 
 VERSION_PATTERN = re.compile(r'set\(Snapmaker_VERSION\s+"([^"]+)"\)')
+SOURCE_REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@+-]{0,199}$")
+LABEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$")
 VALID_MODES = {"artifacts-only", "draft-release", "prerelease", "production-release"}
 
 
@@ -55,13 +57,26 @@ def main() -> int:
     parser.add_argument("--version-file", type=Path, default=Path("version.inc"))
     args = parser.parse_args()
 
+    source_ref = args.source_ref.strip()
+    version_label = args.version_label.strip()
+
+    if not SOURCE_REF_PATTERN.fullmatch(source_ref):
+        raise ValueError(
+            "source_ref must start with an alphanumeric character and contain only "
+            "letters, numbers, '.', '_', '/', '@', '+', or '-' (maximum 200 characters)"
+        )
+    if version_label and not LABEL_PATTERN.fullmatch(version_label):
+        raise ValueError(
+            "version_label must start with an alphanumeric character and contain only "
+            "letters, numbers, '.', '_', '+', or '-' (maximum 80 characters)"
+        )
     if args.publish_mode not in VALID_MODES:
         raise ValueError(f"unsupported publish mode: {args.publish_mode}")
     if not any((args.build_linux, args.build_windows, args.build_macos)):
         raise ValueError("select at least one platform to build")
     if args.sign_artifacts and not args.build_macos:
         raise ValueError("sign_artifacts currently applies to macOS and requires build_macos")
-    if args.publish_mode != "artifacts-only" and not args.version_label.strip():
+    if args.publish_mode != "artifacts-only" and not version_label:
         raise ValueError("version_label is required when publishing a GitHub release")
 
     if args.publish_mode == "production-release":
@@ -69,8 +84,10 @@ def main() -> int:
             raise ValueError("production releases require run_full_tests")
         if not all((args.build_linux, args.build_windows, args.build_macos)):
             raise ValueError("production releases require Linux, Windows, and macOS builds")
+        if not args.sign_artifacts:
+            raise ValueError("production releases require signed and notarized macOS artifacts")
 
-        source_tag = args.source_ref.removeprefix("refs/tags/")
+        source_tag = source_ref.removeprefix("refs/tags/")
         tag_ref = f"refs/tags/{source_tag}"
         if run_git("show-ref", "--verify", "--quiet", tag_ref, check=False).returncode != 0:
             raise ValueError("production source_ref must resolve to an existing tag")
@@ -82,7 +99,7 @@ def main() -> int:
             raise ValueError(
                 f"production tag {source_tag!r} does not match Snapmaker_VERSION {version!r}"
             )
-        if args.version_label != source_tag:
+        if version_label != source_tag:
             raise ValueError("production version_label must exactly match the selected source tag")
 
     print("Manual release request is valid.")
