@@ -14,11 +14,27 @@ ROOT = Path(__file__).resolve().parents[2]
 PYTHON = sys.executable
 
 
-def run_script(script: str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+def run_script(
+    script: str,
+    *args: str,
+    check: bool = True,
+    cwd: Path = ROOT,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [PYTHON, str(ROOT / "scripts" / "release" / script), *args],
-        cwd=ROOT,
+        cwd=cwd,
         check=check,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+
+def run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -62,7 +78,7 @@ class ReleaseToolTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             artifact_dir = Path(directory) / "bundle"
             artifact_dir.mkdir()
-            artifact = artifact_dir / "Snapmaker_Orca_test.AppImage"
+            artifact = artifact_dir / "Snapmaker_Orca_[test]?.AppImage"
             artifact.write_bytes(b"release-test-artifact\n")
 
             commit = subprocess.run(
@@ -159,6 +175,93 @@ class ReleaseToolTests(unittest.TestCase):
         self.assertIn('tag_commit=$(git -C source rev-list -n 1 "$release_tag")', workflow)
         self.assertIn("--verify-tag", workflow)
         self.assertNotIn('--target "$target_commit"', workflow)
+
+    def test_publishing_requires_tag_matching_selected_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            run_git(repository, "init")
+            run_git(repository, "config", "user.name", "Release Test")
+            run_git(repository, "config", "user.email", "release-test@example.invalid")
+            (repository / "version.inc").write_text(
+                'set(Snapmaker_VERSION "2.3.5")\n',
+                encoding="utf-8",
+            )
+            (repository / "payload.txt").write_text("first\n", encoding="utf-8")
+            run_git(repository, "add", ".")
+            run_git(repository, "commit", "-m", "initial")
+            run_git(repository, "tag", "QA-2.3.5")
+
+            run_script(
+                "validate_release_request.py",
+                "--source-ref",
+                "HEAD",
+                "--version-label",
+                "QA-2.3.5",
+                "--publish-mode",
+                "draft-release",
+                "--build-linux",
+                "true",
+                "--build-windows",
+                "false",
+                "--build-macos",
+                "false",
+                "--run-full-tests",
+                "false",
+                "--sign-artifacts",
+                "false",
+                cwd=repository,
+            )
+
+            missing = run_script(
+                "validate_release_request.py",
+                "--source-ref",
+                "HEAD",
+                "--version-label",
+                "missing-tag",
+                "--publish-mode",
+                "prerelease",
+                "--build-linux",
+                "true",
+                "--build-windows",
+                "false",
+                "--build-macos",
+                "false",
+                "--run-full-tests",
+                "false",
+                "--sign-artifacts",
+                "false",
+                check=False,
+                cwd=repository,
+            )
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("must name an existing tag", missing.stderr)
+
+            (repository / "payload.txt").write_text("second\n", encoding="utf-8")
+            run_git(repository, "add", "payload.txt")
+            run_git(repository, "commit", "-m", "move head")
+            mismatched = run_script(
+                "validate_release_request.py",
+                "--source-ref",
+                "HEAD",
+                "--version-label",
+                "QA-2.3.5",
+                "--publish-mode",
+                "draft-release",
+                "--build-linux",
+                "true",
+                "--build-windows",
+                "false",
+                "--build-macos",
+                "false",
+                "--run-full-tests",
+                "false",
+                "--sign-artifacts",
+                "false",
+                check=False,
+                cwd=repository,
+            )
+            self.assertNotEqual(mismatched.returncode, 0)
+            self.assertIn("not selected commit", mismatched.stderr)
 
     def test_artifacts_only_request_accepts_one_platform(self) -> None:
         run_script(
