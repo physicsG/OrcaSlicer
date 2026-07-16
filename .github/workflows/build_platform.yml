@@ -134,30 +134,43 @@ jobs:
         if: inputs.platform == 'linux' && steps.deps-cache.outputs.cache-hit != 'true'
         working-directory: source
         shell: bash
-        run: ./build_linux.sh -d -r -j 2
+        run: |
+          mkdir -p release-diagnostics
+          set -o pipefail
+          ./build_linux.sh -d -r -j 2 \
+            2>&1 | tee release-diagnostics/linux-dependencies.log
 
       - name: Build Windows dependencies
         if: inputs.platform == 'windows' && steps.deps-cache.outputs.cache-hit != 'true'
         working-directory: source
         shell: pwsh
         run: |
-          .\build_release_vs2022.bat deps
-          .\build_release_vs2022.bat pack
+          New-Item -ItemType Directory -Force release-diagnostics | Out-Null
+          .\build_release_vs2022.bat deps *>&1 |
+            Tee-Object -FilePath release-diagnostics/windows-dependencies.log
+          if ($LASTEXITCODE -ne 0) { throw 'Windows dependency build failed' }
+          .\build_release_vs2022.bat pack *>&1 |
+            Tee-Object -FilePath release-diagnostics/windows-dependency-pack.log
+          if ($LASTEXITCODE -ne 0) { throw 'Windows dependency packaging failed' }
 
       - name: Build macOS dependencies
         if: inputs.platform == 'macos' && steps.deps-cache.outputs.cache-hit != 'true'
         working-directory: source
         shell: bash
         run: |
-          brew uninstall --ignore-dependencies zstd || true
-          ./build_release_macos.sh -dx -a universal -t 10.15 -1
-          for arch in arm64 x86_64; do
-            if [[ -d "deps/build/${arch}" ]]; then
-              find "deps/build/${arch}" -mindepth 1 -maxdepth 1 \
-                ! -name OrcaSlicer_dep -exec rm -rf {} +
-            fi
-          done
-          brew install zstd
+          mkdir -p release-diagnostics
+          set -o pipefail
+          {
+            brew uninstall --ignore-dependencies zstd || true
+            ./build_release_macos.sh -dx -a universal -t 10.15 -1
+            for arch in arm64 x86_64; do
+              if [[ -d "deps/build/${arch}" ]]; then
+                find "deps/build/${arch}" -mindepth 1 -maxdepth 1 \
+                  ! -name OrcaSlicer_dep -exec rm -rf {} +
+              fi
+            done
+            brew install zstd
+          } 2>&1 | tee release-diagnostics/macos-dependencies.log
 
       - name: Save dependency build
         if: steps.deps-cache.outputs.cache-hit != 'true'
@@ -173,8 +186,10 @@ jobs:
         env:
           RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
         run: |
-          mkdir -p release-output
-          ./build_linux.sh -i -s -r
+          mkdir -p release-output release-diagnostics
+          set -o pipefail
+          ./build_linux.sh -i -s -r \
+            2>&1 | tee release-diagnostics/linux-application.log
           source_appimage=$(find build -maxdepth 1 -type f \
             -name 'Snapmaker_Orca_Linux_V*.AppImage' -print -quit)
           test -n "$source_appimage"
@@ -192,9 +207,14 @@ jobs:
           RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
         run: |
           New-Item -ItemType Directory -Force release-output | Out-Null
-          .\build_release_vs2022.bat slicer
+          New-Item -ItemType Directory -Force release-diagnostics | Out-Null
+          .\build_release_vs2022.bat slicer *>&1 |
+            Tee-Object -FilePath release-diagnostics/windows-application.log
+          if ($LASTEXITCODE -ne 0) { throw 'Windows application build failed' }
           Push-Location build
-          cpack -G NSIS
+          cpack -G NSIS *>&1 |
+            Tee-Object -FilePath ../release-diagnostics/windows-cpack.log
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS packaging failed' }
           Pop-Location
 
           $label = $env:RESOLVED_VERSION_LABEL
@@ -217,7 +237,11 @@ jobs:
         if: inputs.platform == 'macos' && inputs.package_artifact
         working-directory: source
         shell: bash
-        run: ./build_release_macos.sh -s -n -x -a universal -t 10.15 -1
+        run: |
+          mkdir -p release-diagnostics
+          set -o pipefail
+          ./build_release_macos.sh -s -n -x -a universal -t 10.15 -1 \
+            2>&1 | tee release-diagnostics/macos-application.log
 
       - name: Package unsigned macOS DMG
         if: inputs.platform == 'macos' && inputs.package_artifact && !inputs.sign_artifacts
@@ -290,6 +314,22 @@ jobs:
           path: source/release-output/*
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload platform build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-diagnostics-${{ inputs.platform }}-${{ steps.metadata.outputs.version_label || github.run_id }}
+          path: |
+            source/release-diagnostics/**
+            source/deps/build/**/CMakeFiles/CMakeConfigureLog.yaml
+            source/deps/build/**/CMakeFiles/CMakeError.log
+            source/deps/build/**/CMakeFiles/CMakeOutput.log
+            source/build/**/CMakeFiles/CMakeConfigureLog.yaml
+            source/build/**/CMakeFiles/CMakeError.log
+            source/build/**/CMakeFiles/CMakeOutput.log
+          if-no-files-found: warn
+          retention-days: 7
 
   sign-macos:
     name: Sign and notarize macOS
