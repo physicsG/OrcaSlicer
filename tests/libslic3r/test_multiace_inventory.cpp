@@ -6,6 +6,7 @@
 #include "nlohmann/json.hpp"
 
 #include <string>
+#include <vector>
 
 using namespace Slic3r::MultiAce;
 
@@ -19,7 +20,7 @@ TEST_CASE("multiACE source IDs are stable and structured", "[multiace][inventory
         parse_source_id("multiace:2"),
         "multiACE source ID must use provider:unit:slot format");
     CHECK_THROWS_WITH(
-        SourceId{"multiace", "2:invalid", "3"}.str(),
+        (SourceId{"multiace", "2:invalid", "3"}.str()),
         "multiACE source ID components must not contain ':'");
 }
 
@@ -27,7 +28,7 @@ TEST_CASE("multiACE capabilities degrade cleanly when optional fields are absent
 {
     const nlohmann::json payload = {
         {"schema_version", 1},
-        {"capabilities", {{"inventory", true}, {"live_events", true}, {"rfid_refresh", true}}},
+        {"capabilities", { {"inventory", true}, {"live_events", true}, {"rfid_refresh", true} }},
     };
 
     const ProviderCapabilities capabilities = parse_capabilities(payload);
@@ -98,7 +99,8 @@ TEST_CASE("multiACE inventory parses multiple units and optional telemetry", "[m
     CHECK(*first.remaining_percent == 72);
     CHECK(first.metadata_origin == SourceMetadataOrigin::RFID);
     CHECK(first.state == SourceState::Ready);
-    CHECK(first.reachable_toolheads == std::vector<int>{0, 2});
+    const std::vector<int> expected_toolheads{0, 2};
+    CHECK(first.reachable_toolheads == expected_toolheads);
     REQUIRE(first.loaded_toolhead.has_value());
     CHECK(*first.loaded_toolhead == 0);
     REQUIRE(first.humidity_percent.has_value());
@@ -123,7 +125,11 @@ TEST_CASE("multiACE inventory rejects malformed and inconsistent payloads", "[mu
 {
     SECTION("unsupported schema")
     {
-        const nlohmann::json payload = {{"schema_version", 2}, {"revision", "r1"}, {"sources", nlohmann::json::array()}};
+        const nlohmann::json payload = {
+            {"schema_version", 2},
+            {"revision", "r1"},
+            {"sources", nlohmann::json::array()},
+        };
         CHECK_THROWS_WITH(parse_inventory(payload), "unsupported multiACE schema_version: 2");
     }
 
@@ -132,7 +138,10 @@ TEST_CASE("multiACE inventory rejects malformed and inconsistent payloads", "[mu
         const nlohmann::json payload = {
             {"schema_version", 1},
             {"revision", "r1"},
-            {"sources", {{{"source_id", "multiace:0:1"}, {"unit_id", 0}, {"slot_id", 0}}}},
+            {"sources",
+             nlohmann::json::array({
+                 { {"source_id", "multiace:0:1"}, {"unit_id", 0}, {"slot_id", 0} },
+             })},
         };
         CHECK_THROWS_WITH(parse_inventory(payload), "source_id does not match unit_id and slot_id");
     }
@@ -142,7 +151,11 @@ TEST_CASE("multiACE inventory rejects malformed and inconsistent payloads", "[mu
         const nlohmann::json payload = {
             {"schema_version", 1},
             {"revision", "r1"},
-            {"sources", {{{"unit_id", 0}, {"slot_id", 0}}, {{"unit_id", "0"}, {"slot_id", "0"}}}},
+            {"sources",
+             nlohmann::json::array({
+                 { {"unit_id", 0}, {"slot_id", 0} },
+                 { {"unit_id", "0"}, {"slot_id", "0"} },
+             })},
         };
         CHECK_THROWS_WITH(parse_inventory(payload), "duplicate multiACE source_id: multiace:0:0");
     }
@@ -152,7 +165,10 @@ TEST_CASE("multiACE inventory rejects malformed and inconsistent payloads", "[mu
         const nlohmann::json payload = {
             {"schema_version", 1},
             {"revision", "r1"},
-            {"sources", {{{"unit_id", 0}, {"slot_id", 0}, {"reachable_toolheads", {4}}}}},
+            {"sources",
+             nlohmann::json::array({
+                 { {"unit_id", 0}, {"slot_id", 0}, {"reachable_toolheads", {4}} },
+             })},
         };
         CHECK_THROWS_WITH(parse_inventory(payload), "reachable_toolheads contains an invalid U1 toolhead");
     }
@@ -163,11 +179,16 @@ TEST_CASE("multiACE parser preserves forward compatibility for unknown states", 
     const nlohmann::json payload = {
         {"schema_version", 1},
         {"revision", "r1"},
-        {"sources", {{{"unit_id", 0},
-                       {"slot_id", 0},
-                       {"state", "future-state"},
-                       {"metadata_origin", "future-origin"},
-                       {"dryer_state", "future-dryer-state"}}}},
+        {"sources",
+         nlohmann::json::array({
+             {
+                 {"unit_id", 0},
+                 {"slot_id", 0},
+                 {"state", "future-state"},
+                 {"metadata_origin", "future-origin"},
+                 {"dryer_state", "future-dryer-state"},
+             },
+         })},
     };
 
     const InventorySnapshot inventory = parse_inventory(payload);
