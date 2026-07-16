@@ -38,6 +38,16 @@ jobs:
     runs-on: ubuntu-24.04
     environment: ${{ inputs.publish_mode == 'production-release' && 'production-release' || 'release-publication' }}
     timeout-minutes: 30
+    env:
+      SOURCE_REF_INPUT: ${{ inputs.source_ref }}
+      VERSION_LABEL_INPUT: ${{ inputs.version_label }}
+      PUBLISH_MODE_INPUT: ${{ inputs.publish_mode }}
+      BUILD_LINUX_INPUT: ${{ inputs.build_linux }}
+      BUILD_WINDOWS_INPUT: ${{ inputs.build_windows }}
+      BUILD_MACOS_INPUT: ${{ inputs.build_macos }}
+      RUN_FULL_TESTS_INPUT: ${{ inputs.run_full_tests }}
+      SIGN_ARTIFACTS_INPUT: ${{ inputs.sign_artifacts }}
+      WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Checkout selected source
         uses: actions/checkout@v5
@@ -56,33 +66,33 @@ jobs:
         shell: bash
         run: |
           python scripts/release/validate_release_request.py \
-            --source-ref "${{ inputs.source_ref }}" \
-            --version-label "${{ inputs.version_label }}" \
-            --publish-mode "${{ inputs.publish_mode }}" \
-            --build-linux "${{ inputs.build_linux }}" \
-            --build-windows "${{ inputs.build_windows }}" \
-            --build-macos "${{ inputs.build_macos }}" \
-            --run-full-tests "${{ inputs.run_full_tests }}" \
-            --sign-artifacts "${{ inputs.sign_artifacts }}"
+            --source-ref "$SOURCE_REF_INPUT" \
+            --version-label "$VERSION_LABEL_INPUT" \
+            --publish-mode "$PUBLISH_MODE_INPUT" \
+            --build-linux "$BUILD_LINUX_INPUT" \
+            --build-windows "$BUILD_WINDOWS_INPUT" \
+            --build-macos "$BUILD_MACOS_INPUT" \
+            --run-full-tests "$RUN_FULL_TESTS_INPUT" \
+            --sign-artifacts "$SIGN_ARTIFACTS_INPUT"
 
       - name: Verify checksums, manifests, and platform set
         shell: bash
         run: |
           args=()
-          if [[ "${{ inputs.build_linux }}" == "true" ]]; then
+          if [[ "$BUILD_LINUX_INPUT" == "true" ]]; then
             args+=(--require-platform linux)
           fi
-          if [[ "${{ inputs.build_windows }}" == "true" ]]; then
+          if [[ "$BUILD_WINDOWS_INPUT" == "true" ]]; then
             args+=(--require-platform windows)
           fi
-          if [[ "${{ inputs.build_macos }}" == "true" ]]; then
+          if [[ "$BUILD_MACOS_INPUT" == "true" ]]; then
             args+=(--require-platform macos)
           fi
-          if [[ "${{ inputs.run_full_tests }}" == "true" ]]; then
+          if [[ "$RUN_FULL_TESTS_INPUT" == "true" ]]; then
             args+=(--require-tests)
           fi
-          if [[ "${{ inputs.publish_mode }}" == "production-release" && \
-                "${{ inputs.sign_artifacts }}" == "true" ]]; then
+          if [[ "$PUBLISH_MODE_INPUT" == "production-release" && \
+                "$SIGN_ARTIFACTS_INPUT" == "true" ]]; then
             args+=(--require-signed-macos)
           fi
 
@@ -95,7 +105,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          release_tag="${{ inputs.version_label }}"
+          release_tag="$VERSION_LABEL_INPUT"
           target_commit=$(git rev-parse HEAD)
 
           if gh release view "$release_tag" >/dev/null 2>&1; then
@@ -113,25 +123,25 @@ jobs:
           {
             echo 'Manual Snapmaker Orca release build.'
             echo
-            echo '- Source ref: ${{ inputs.source_ref }}'
+            echo "- Source ref: $SOURCE_REF_INPUT"
             echo "- Commit: $target_commit"
-            echo '- Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
-            echo '- Linux selected: ${{ inputs.build_linux }}'
-            echo '- Windows selected: ${{ inputs.build_windows }}'
-            echo '- macOS selected: ${{ inputs.build_macos }}'
-            echo '- Full tests: ${{ inputs.run_full_tests }}'
-            echo '- macOS signing requested: ${{ inputs.sign_artifacts }}'
+            echo "- Workflow run: $WORKFLOW_RUN_URL"
+            echo "- Linux selected: $BUILD_LINUX_INPUT"
+            echo "- Windows selected: $BUILD_WINDOWS_INPUT"
+            echo "- macOS selected: $BUILD_MACOS_INPUT"
+            echo "- Full tests: $RUN_FULL_TESTS_INPUT"
+            echo "- macOS signing requested: $SIGN_ARTIFACTS_INPUT"
           } > "$notes_file"
 
           common_args=(
             "$release_tag"
             "${assets[@]}"
-            --repo "${{ github.repository }}"
+            --repo "$GITHUB_REPOSITORY"
             --title "Snapmaker Orca $release_tag"
             --notes-file "$notes_file"
           )
 
-          case "${{ inputs.publish_mode }}" in
+          case "$PUBLISH_MODE_INPUT" in
             draft-release)
               gh release create "${common_args[@]}" --draft --target "$target_commit"
               ;;
@@ -142,7 +152,7 @@ jobs:
               gh release create "${common_args[@]}" --verify-tag
               ;;
             *)
-              echo "Unsupported publication mode: ${{ inputs.publish_mode }}" >&2
+              echo "Unsupported publication mode: $PUBLISH_MODE_INPUT" >&2
               exit 1
               ;;
           esac
