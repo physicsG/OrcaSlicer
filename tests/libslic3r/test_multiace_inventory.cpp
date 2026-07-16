@@ -5,6 +5,7 @@
 
 #include "nlohmann/json.hpp"
 
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,26 @@ TEST_CASE("multiACE capabilities degrade cleanly when optional fields are absent
     CHECK_FALSE(capabilities.dryer_state);
     CHECK_FALSE(capabilities.per_source_routing);
     CHECK_FALSE(capabilities.measured_change_timing);
+}
+
+TEST_CASE("multiACE capabilities require a supported schema version", "[multiace][inventory]")
+{
+    SECTION("missing schema version")
+    {
+        const nlohmann::json payload = {
+            {"capabilities", {{"inventory", true}}},
+        };
+        CHECK_THROWS_WITH(parse_capabilities(payload), "schema_version must be an integer");
+    }
+
+    SECTION("unsupported schema version")
+    {
+        const nlohmann::json payload = {
+            {"schema_version", 2},
+            {"capabilities", {{"inventory", true}}},
+        };
+        CHECK_THROWS_WITH(parse_capabilities(payload), "unsupported multiACE schema_version: 2");
+    }
 }
 
 TEST_CASE("multiACE inventory parses multiple units and optional telemetry", "[multiace][inventory]")
@@ -165,6 +186,22 @@ TEST_CASE("multiACE inventory rejects malformed and inconsistent payloads", "[mu
         };
         CHECK_THROWS_WITH(parse_inventory(payload), "reachable_toolheads contains an invalid U1 toolhead");
     }
+
+    SECTION("oversized bounded integer")
+    {
+        const nlohmann::json payload = {
+            {"schema_version", 1},
+            {"revision", "r1"},
+            {"sources", nlohmann::json::array({
+                            {
+                                {"unit_id", 0},
+                                {"slot_id", 0},
+                                {"remaining_percent", std::numeric_limits<unsigned long long>::max()},
+                            },
+                        })},
+        };
+        CHECK_THROWS_WITH(parse_inventory(payload), "remaining_percent is outside the supported range");
+    }
 }
 
 TEST_CASE("multiACE parser preserves forward compatibility for unknown states", "[multiace][inventory]")
@@ -198,10 +235,9 @@ TEST_CASE("manual filament source provider supports offline snapshots and callba
 
     ManualFilamentSourceProvider provider(capabilities);
 
-    int callback_count = 0;
-    provider.subscribe([&callback_count](const InventorySnapshot& snapshot) {
-        ++callback_count;
-        CHECK(snapshot.revision == "manual-1");
+    std::vector<std::string> callback_revisions;
+    provider.subscribe([&callback_revisions](const InventorySnapshot& snapshot) {
+        callback_revisions.emplace_back(snapshot.revision);
         REQUIRE(snapshot.sources.size() == 1);
         CHECK(snapshot.sources[0].id.str() == "multiace:0:2");
     });
@@ -217,8 +253,13 @@ TEST_CASE("manual filament source provider supports offline snapshots and callba
     snapshot.sources.emplace_back(source);
 
     provider.set_inventory(snapshot);
-    CHECK(callback_count == 1);
-    CHECK(provider.inventory().revision == "manual-1");
+    snapshot.revision = "manual-2";
+    provider.set_inventory(snapshot);
+
+    REQUIRE(callback_revisions.size() == 2);
+    CHECK(callback_revisions[0] == "manual-1");
+    CHECK(callback_revisions[1] == "manual-2");
+    CHECK(provider.inventory().revision == "manual-2");
     CHECK(provider.capabilities().rfid_refresh);
 
     provider.request_metadata_refresh(source.id);
