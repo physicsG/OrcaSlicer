@@ -53,7 +53,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: manual-release-${{ inputs.source_ref }}-${{ inputs.version_label || github.run_id }}
+  group: manual-release-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -73,38 +73,61 @@ jobs:
 
       - name: Resolve source and version metadata
         id: metadata
+        env:
+          SOURCE_REF_INPUT: ${{ inputs.source_ref }}
+          VERSION_LABEL_INPUT: ${{ inputs.version_label }}
         run: |
           python scripts/release/resolve_release_metadata.py \
-            --source-ref "${{ inputs.source_ref }}" \
-            --version-label "${{ inputs.version_label }}"
+            --source-ref "$SOURCE_REF_INPUT" \
+            --version-label "$VERSION_LABEL_INPUT"
 
       - name: Validate release request
+        env:
+          SOURCE_REF_INPUT: ${{ inputs.source_ref }}
+          VERSION_LABEL_INPUT: ${{ steps.metadata.outputs.version_label }}
+          PUBLISH_MODE_INPUT: ${{ inputs.publish_mode }}
+          BUILD_LINUX_INPUT: ${{ inputs.build_linux }}
+          BUILD_WINDOWS_INPUT: ${{ inputs.build_windows }}
+          BUILD_MACOS_INPUT: ${{ inputs.build_macos }}
+          RUN_FULL_TESTS_INPUT: ${{ inputs.run_full_tests }}
+          SIGN_ARTIFACTS_INPUT: ${{ inputs.sign_artifacts }}
         run: |
           python scripts/release/validate_release_request.py \
-            --source-ref "${{ inputs.source_ref }}" \
-            --version-label "${{ steps.metadata.outputs.version_label }}" \
-            --publish-mode "${{ inputs.publish_mode }}" \
-            --build-linux "${{ inputs.build_linux }}" \
-            --build-windows "${{ inputs.build_windows }}" \
-            --build-macos "${{ inputs.build_macos }}" \
-            --run-full-tests "${{ inputs.run_full_tests }}" \
-            --sign-artifacts "${{ inputs.sign_artifacts }}"
+            --source-ref "$SOURCE_REF_INPUT" \
+            --version-label "$VERSION_LABEL_INPUT" \
+            --publish-mode "$PUBLISH_MODE_INPUT" \
+            --build-linux "$BUILD_LINUX_INPUT" \
+            --build-windows "$BUILD_WINDOWS_INPUT" \
+            --build-macos "$BUILD_MACOS_INPUT" \
+            --run-full-tests "$RUN_FULL_TESTS_INPUT" \
+            --sign-artifacts "$SIGN_ARTIFACTS_INPUT"
 
       - name: Summarize request
+        env:
+          SOURCE_REF_INPUT: ${{ inputs.source_ref }}
+          COMMIT_OUTPUT: ${{ steps.metadata.outputs.commit }}
+          VERSION_OUTPUT: ${{ steps.metadata.outputs.version }}
+          VERSION_LABEL_OUTPUT: ${{ steps.metadata.outputs.version_label }}
+          PUBLISH_MODE_INPUT: ${{ inputs.publish_mode }}
+          BUILD_LINUX_INPUT: ${{ inputs.build_linux }}
+          BUILD_WINDOWS_INPUT: ${{ inputs.build_windows }}
+          BUILD_MACOS_INPUT: ${{ inputs.build_macos }}
+          RUN_FULL_TESTS_INPUT: ${{ inputs.run_full_tests }}
+          SIGN_ARTIFACTS_INPUT: ${{ inputs.sign_artifacts }}
         run: |
           {
             echo '### Manual release request'
             echo
-            echo "- Source ref: ${{ inputs.source_ref }}"
-            echo "- Commit: ${{ steps.metadata.outputs.commit }}"
-            echo "- Version: ${{ steps.metadata.outputs.version }}"
-            echo "- Artifact label: ${{ steps.metadata.outputs.version_label }}"
-            echo "- Publish mode: ${{ inputs.publish_mode }}"
-            echo "- Linux: ${{ inputs.build_linux }}"
-            echo "- Windows: ${{ inputs.build_windows }}"
-            echo "- macOS: ${{ inputs.build_macos }}"
-            echo "- Full tests: ${{ inputs.run_full_tests }}"
-            echo "- Signing: ${{ inputs.sign_artifacts }}"
+            echo "- Source ref: $SOURCE_REF_INPUT"
+            echo "- Commit: $COMMIT_OUTPUT"
+            echo "- Version: $VERSION_OUTPUT"
+            echo "- Artifact label: $VERSION_LABEL_OUTPUT"
+            echo "- Publish mode: $PUBLISH_MODE_INPUT"
+            echo "- Linux: $BUILD_LINUX_INPUT"
+            echo "- Windows: $BUILD_WINDOWS_INPUT"
+            echo "- macOS: $BUILD_MACOS_INPUT"
+            echo "- Full tests: $RUN_FULL_TESTS_INPUT"
+            echo "- Signing: $SIGN_ARTIFACTS_INPUT"
           } >> "$GITHUB_STEP_SUMMARY"
 
   tests:
@@ -206,36 +229,41 @@ jobs:
       - publish
     steps:
       - name: Report results
+        env:
+          PUBLISH_MODE_INPUT: ${{ inputs.publish_mode }}
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          TESTS_RESULT: ${{ needs.tests.result }}
+          LINUX_RESULT: ${{ needs.build-linux.result }}
+          WINDOWS_RESULT: ${{ needs.build-windows.result }}
+          MACOS_RESULT: ${{ needs.build-macos.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
         run: |
           {
             echo '### Manual release results'
             echo
-            echo "- Request validation: ${{ needs.prepare.result }}"
-            echo "- Tests: ${{ needs.tests.result }}"
-            echo "- Linux: ${{ needs.build-linux.result }}"
-            echo "- Windows: ${{ needs.build-windows.result }}"
-            echo "- macOS: ${{ needs.build-macos.result }}"
-            echo "- Publication: ${{ needs.publish.result }}"
+            echo "- Request validation: $PREPARE_RESULT"
+            echo "- Tests: $TESTS_RESULT"
+            echo "- Linux: $LINUX_RESULT"
+            echo "- Windows: $WINDOWS_RESULT"
+            echo "- macOS: $MACOS_RESULT"
+            echo "- Publication: $PUBLISH_RESULT"
             echo
-            if [[ "${{ inputs.publish_mode }}" == 'artifacts-only' ]]; then
+            if [[ "$PUBLISH_MODE_INPUT" == 'artifacts-only' ]]; then
               echo 'No GitHub release was created. Download the selected bundles from this workflow run.'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [[ "${{ needs.prepare.result }}" != 'success' ]]; then
+          if [[ "$PREPARE_RESULT" != 'success' ]]; then
             exit 1
           fi
-          if [[ "${{ needs.tests.result }}" != 'success' && "${{ needs.tests.result }}" != 'skipped' ]]; then
+          if [[ "$TESTS_RESULT" != 'success' && "$TESTS_RESULT" != 'skipped' ]]; then
             exit 1
           fi
-          for result in \
-            "${{ needs.build-linux.result }}" \
-            "${{ needs.build-windows.result }}" \
-            "${{ needs.build-macos.result }}"; do
+          for result in "$LINUX_RESULT" "$WINDOWS_RESULT" "$MACOS_RESULT"; do
             if [[ "$result" != 'success' && "$result" != 'skipped' ]]; then
               exit 1
             fi
           done
-          if [[ "${{ inputs.publish_mode }}" != 'artifacts-only' && "${{ needs.publish.result }}" != 'success' ]]; then
+          if [[ "$PUBLISH_MODE_INPUT" != 'artifacts-only' && "$PUBLISH_RESULT" != 'success' ]]; then
             exit 1
           fi
