@@ -167,16 +167,12 @@ jobs:
           if (-not $installer) { throw 'NSIS installer was not produced' }
           Copy-Item $installer.FullName "release-output/Snapmaker_Orca_Windows_Installer_${label}.exe"
 
-          & 'C:/Program Files/7-Zip/7z.exe' a -tzip \
-            "release-output/Snapmaker_Orca_Windows_${label}_portable.zip" \
-            "$env:GITHUB_WORKSPACE/build/Snapmaker_Orca/*"
+          & 'C:/Program Files/7-Zip/7z.exe' a -tzip "release-output/Snapmaker_Orca_Windows_${label}_portable.zip" "$env:GITHUB_WORKSPACE/build/Snapmaker_Orca/*"
           if ($LASTEXITCODE -ne 0) { throw 'Portable archive creation failed' }
 
           $pdbFiles = Get-ChildItem build/src/Release -Filter '*.pdb' -File -ErrorAction SilentlyContinue
           if ($pdbFiles) {
-            & 'C:/Program Files/7-Zip/7z.exe' a -t7z -m0=lzma2 -mx9 \
-              "release-output/Debug_PDB_${label}_for_developers_only.7z" \
-              "$env:GITHUB_WORKSPACE/build/src/Release/*.pdb"
+            & 'C:/Program Files/7-Zip/7z.exe' a -t7z -m0=lzma2 -mx9 "release-output/Debug_PDB_${label}_for_developers_only.7z" "$env:GITHUB_WORKSPACE/build/src/Release/*.pdb"
             if ($LASTEXITCODE -ne 0) { throw 'PDB archive creation failed' }
           }
 
