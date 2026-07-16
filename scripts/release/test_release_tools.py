@@ -46,6 +46,18 @@ class ReleaseToolTests(unittest.TestCase):
             self.assertRegex(values["version"], r"^\d+\.\d+\.\d+")
             self.assertRegex(values["commit"], r"^[0-9a-f]{40}$")
 
+    def test_resolve_metadata_rejects_shell_like_ref(self) -> None:
+        failed = run_script(
+            "resolve_release_metadata.py",
+            "--source-ref",
+            "main$(touch-pwned)",
+            "--version-label",
+            "QA-2.3.5",
+            check=False,
+        )
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("source_ref must start with an alphanumeric", failed.stderr)
+
     def test_manifest_and_bundle_verification(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             artifact_dir = Path(directory) / "bundle"
