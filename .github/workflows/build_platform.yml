@@ -33,6 +33,12 @@ jobs:
     name: Build ${{ inputs.platform }}
     runs-on: ${{ inputs.platform == 'linux' && 'ubuntu-24.04' || inputs.platform == 'windows' && 'windows-2022' || 'macos-14' }}
     timeout-minutes: 360
+    env:
+      PLATFORM_INPUT: ${{ inputs.platform }}
+      SOURCE_REF_INPUT: ${{ inputs.source_ref }}
+      VERSION_LABEL_INPUT: ${{ inputs.version_label }}
+      TESTS_PASSED_INPUT: ${{ inputs.tests_passed }}
+      WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     outputs:
       commit: ${{ steps.metadata.outputs.commit }}
       version: ${{ steps.metadata.outputs.version }}
@@ -42,9 +48,9 @@ jobs:
       - name: Validate platform input
         shell: bash
         run: |
-          case "${{ inputs.platform }}" in
+          case "$PLATFORM_INPUT" in
             linux|windows|macos) ;;
-            *) echo "Unsupported platform: ${{ inputs.platform }}" >&2; exit 1 ;;
+            *) echo "Unsupported platform: $PLATFORM_INPUT" >&2; exit 1 ;;
           esac
 
       - name: Checkout selected source
@@ -59,8 +65,8 @@ jobs:
         shell: bash
         run: |
           python scripts/release/resolve_release_metadata.py \
-            --source-ref "${{ inputs.source_ref }}" \
-            --version-label "${{ inputs.version_label }}"
+            --source-ref "$SOURCE_REF_INPUT" \
+            --version-label "$VERSION_LABEL_INPUT"
 
       - name: Install Ubuntu build prerequisites
         if: inputs.platform == 'linux'
@@ -137,13 +143,15 @@ jobs:
       - name: Build and package Linux AppImage
         if: inputs.platform == 'linux'
         shell: bash
+        env:
+          RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
         run: |
           mkdir -p release-output
           ./build_linux.sh -i -s -r
           source_appimage=$(find build -maxdepth 1 -type f \
             -name 'Snapmaker_Orca_Linux_V*.AppImage' -print -quit)
           test -n "$source_appimage"
-          output="release-output/Snapmaker_Orca_Linux_AppImage_Ubuntu2404_${{ steps.metadata.outputs.version_label }}.AppImage"
+          output="release-output/Snapmaker_Orca_Linux_AppImage_Ubuntu2404_${RESOLVED_VERSION_LABEL}.AppImage"
           cp "$source_appimage" "$output"
           chmod +x "$output"
 
@@ -153,6 +161,7 @@ jobs:
         env:
           WindowsSdkDir: 'C:\Program Files (x86)\Windows Kits\10\'
           WindowsSDKVersion: '10.0.26100.0\'
+          RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
         run: |
           New-Item -ItemType Directory -Force release-output | Out-Null
           .\build_release_vs2022.bat slicer
@@ -160,7 +169,7 @@ jobs:
           cpack -G NSIS
           Pop-Location
 
-          $label = '${{ steps.metadata.outputs.version_label }}'
+          $label = $env:RESOLVED_VERSION_LABEL
           $installer = Get-ChildItem build -Filter 'Snapmaker_Orca*.exe' -File |
             Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
@@ -184,6 +193,8 @@ jobs:
       - name: Package unsigned macOS DMG
         if: inputs.platform == 'macos' && !inputs.sign_artifacts
         shell: bash
+        env:
+          RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
         run: |
           mkdir -p release-output dmg-root
           cp -R "build/universal/Snapmaker_Orca/Snapmaker Orca.app" dmg-root/
@@ -192,15 +203,17 @@ jobs:
             -volname 'Snapmaker Orca' \
             -srcfolder dmg-root \
             -ov -format UDZO \
-            "release-output/Snapmaker_Orca_Mac_universal_${{ steps.metadata.outputs.version_label }}_unsigned.dmg"
+            "release-output/Snapmaker_Orca_Mac_universal_${RESOLVED_VERSION_LABEL}_unsigned.dmg"
 
       - name: Prepare macOS signing input
         if: inputs.platform == 'macos' && inputs.sign_artifacts
         shell: bash
+        env:
+          RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
         run: |
           mkdir -p signing-input
           tar -czf \
-            "signing-input/Snapmaker_Orca_Mac_app_${{ steps.metadata.outputs.version_label }}.tar.gz" \
+            "signing-input/Snapmaker_Orca_Mac_app_${RESOLVED_VERSION_LABEL}.tar.gz" \
             -C build/universal/Snapmaker_Orca \
             'Snapmaker Orca.app'
 
@@ -216,19 +229,25 @@ jobs:
       - name: Create checksums and build manifest
         if: inputs.platform != 'macos' || !inputs.sign_artifacts
         shell: bash
+        env:
+          RESOLVED_COMMIT: ${{ steps.metadata.outputs.commit }}
+          RESOLVED_VERSION: ${{ steps.metadata.outputs.version }}
+          RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
+          DEPENDENCY_CACHE_KEY: ${{ steps.deps-cache.outputs.cache-primary-key }}
+          BUILD_ARCHITECTURE: ${{ inputs.platform == 'macos' && 'universal' || runner.arch }}
         run: |
           python scripts/release/create_build_manifest.py \
             --artifact-dir release-output \
-            --repository "${{ github.repository }}" \
-            --commit "${{ steps.metadata.outputs.commit }}" \
-            --source-ref "${{ inputs.source_ref }}" \
-            --version "${{ steps.metadata.outputs.version }}" \
-            --version-label "${{ steps.metadata.outputs.version_label }}" \
-            --platform "${{ inputs.platform }}" \
-            --architecture "${{ inputs.platform == 'macos' && 'universal' || runner.arch }}" \
-            --dependency-cache-key "${{ steps.deps-cache.outputs.cache-primary-key }}" \
-            --workflow-run "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --tests-passed "${{ inputs.tests_passed }}" \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit "$RESOLVED_COMMIT" \
+            --source-ref "$SOURCE_REF_INPUT" \
+            --version "$RESOLVED_VERSION" \
+            --version-label "$RESOLVED_VERSION_LABEL" \
+            --platform "$PLATFORM_INPUT" \
+            --architecture "$BUILD_ARCHITECTURE" \
+            --dependency-cache-key "$DEPENDENCY_CACHE_KEY" \
+            --workflow-run "$WORKFLOW_RUN_URL" \
+            --tests-passed "$TESTS_PASSED_INPUT" \
             --signed false
 
       - name: Upload platform release bundle
@@ -247,6 +266,14 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 120
     environment: release-signing
+    env:
+      SOURCE_REF_INPUT: ${{ inputs.source_ref }}
+      TESTS_PASSED_INPUT: ${{ inputs.tests_passed }}
+      RESOLVED_COMMIT: ${{ needs.build.outputs.commit }}
+      RESOLVED_VERSION: ${{ needs.build.outputs.version }}
+      RESOLVED_VERSION_LABEL: ${{ needs.build.outputs.version_label }}
+      DEPENDENCY_CACHE_KEY: ${{ needs.build.outputs.cache_key }}
+      WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Checkout selected source
         uses: actions/checkout@v5
@@ -295,7 +322,7 @@ jobs:
           mkdir -p app-root dmg-root release-output
           tar -xzf signing-input/*.tar.gz -C app-root
           app_path="$PWD/app-root/Snapmaker Orca.app"
-          dmg_path="$PWD/release-output/Snapmaker_Orca_Mac_universal_${{ needs.build.outputs.version_label }}.dmg"
+          dmg_path="$PWD/release-output/Snapmaker_Orca_Mac_universal_${RESOLVED_VERSION_LABEL}.dmg"
 
           codesign --deep --force --verbose --options runtime --timestamp \
             --entitlements scripts/disable_validation.entitlements \
@@ -321,16 +348,16 @@ jobs:
         run: |
           python scripts/release/create_build_manifest.py \
             --artifact-dir release-output \
-            --repository "${{ github.repository }}" \
-            --commit "${{ needs.build.outputs.commit }}" \
-            --source-ref "${{ inputs.source_ref }}" \
-            --version "${{ needs.build.outputs.version }}" \
-            --version-label "${{ needs.build.outputs.version_label }}" \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit "$RESOLVED_COMMIT" \
+            --source-ref "$SOURCE_REF_INPUT" \
+            --version "$RESOLVED_VERSION" \
+            --version-label "$RESOLVED_VERSION_LABEL" \
             --platform macos \
             --architecture universal \
-            --dependency-cache-key "${{ needs.build.outputs.cache_key }}" \
-            --workflow-run "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --tests-passed "${{ inputs.tests_passed }}" \
+            --dependency-cache-key "$DEPENDENCY_CACHE_KEY" \
+            --workflow-run "$WORKFLOW_RUN_URL" \
+            --tests-passed "$TESTS_PASSED_INPUT" \
             --signed true
 
       - name: Upload signed macOS release bundle
