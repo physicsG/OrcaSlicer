@@ -107,7 +107,8 @@ class ReleaseToolTests(unittest.TestCase):
             self.assertEqual(manifest["platform"], "linux")
             self.assertTrue(manifest["tests_passed"])
             self.assertEqual(len(manifest["artifacts"]), 1)
-            self.assertTrue((artifact_dir / f"{artifact.name}.sha256").is_file())
+            sidecar = artifact_dir / f"{artifact.name}.sha256"
+            self.assertTrue(sidecar.is_file())
 
             run_script(
                 "verify_release_bundle.py",
@@ -117,6 +118,23 @@ class ReleaseToolTests(unittest.TestCase):
                 "linux",
                 "--require-tests",
             )
+
+            original_sidecar = sidecar.read_text(encoding="utf-8")
+            sidecar.write_text(" \n", encoding="utf-8")
+            failed = run_script(
+                "verify_release_bundle.py",
+                "--bundle-dir",
+                str(artifact_dir),
+                "--require-platform",
+                "linux",
+                check=False,
+            )
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn(
+                f"checksum sidecar for {artifact.name} is empty",
+                failed.stderr,
+            )
+            sidecar.write_text(original_sidecar, encoding="utf-8")
 
             artifact.write_bytes(b"tampered\n")
             failed = run_script(
@@ -129,6 +147,18 @@ class ReleaseToolTests(unittest.TestCase):
             )
             self.assertNotEqual(failed.returncode, 0)
             self.assertIn("SHA-256 mismatch", failed.stderr)
+
+    def test_publish_workflow_requires_existing_matching_tag(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "publish_release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'show-ref --verify --quiet "refs/tags/$release_tag"',
+            workflow,
+        )
+        self.assertIn('tag_commit=$(git -C source rev-list -n 1 "$release_tag")', workflow)
+        self.assertIn("--verify-tag", workflow)
+        self.assertNotIn('--target "$target_commit"', workflow)
 
     def test_artifacts_only_request_accepts_one_platform(self) -> None:
         run_script(
