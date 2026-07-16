@@ -53,23 +53,36 @@ jobs:
             *) echo "Unsupported platform: $PLATFORM_INPUT" >&2; exit 1 ;;
           esac
 
+      - name: Checkout trusted release tooling
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: _release_control
+          sparse-checkout: scripts/release
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Checkout selected source
         uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source_ref }}
+          path: source
           fetch-depth: 0
           lfs: true
+          persist-credentials: false
 
       - name: Resolve build metadata
         id: metadata
+        working-directory: source
         shell: bash
         run: |
-          python scripts/release/resolve_release_metadata.py \
+          python ../_release_control/scripts/release/resolve_release_metadata.py \
             --source-ref "$SOURCE_REF_INPUT" \
             --version-label "$VERSION_LABEL_INPUT"
 
       - name: Install Ubuntu build prerequisites
         if: inputs.platform == 'linux'
+        working-directory: source
         shell: bash
         run: |
           sudo apt-get update
@@ -104,16 +117,18 @@ jobs:
         id: deps-cache
         uses: actions/cache/restore@v4
         with:
-          path: ${{ inputs.platform == 'linux' && 'deps/build/destdir' || inputs.platform == 'windows' && 'deps/build/OrcaSlicer_dep' || 'deps/build' }}
-          key: release-deps-${{ inputs.platform }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('deps/**') }}
+          path: ${{ inputs.platform == 'linux' && 'source/deps/build/destdir' || inputs.platform == 'windows' && 'source/deps/build/OrcaSlicer_dep' || 'source/deps/build' }}
+          key: release-deps-${{ inputs.platform }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('source/deps/**') }}
 
       - name: Build Linux dependencies
         if: inputs.platform == 'linux' && steps.deps-cache.outputs.cache-hit != 'true'
+        working-directory: source
         shell: bash
         run: ./build_linux.sh -d -r -j 2
 
       - name: Build Windows dependencies
         if: inputs.platform == 'windows' && steps.deps-cache.outputs.cache-hit != 'true'
+        working-directory: source
         shell: pwsh
         run: |
           .\build_release_vs2022.bat deps
@@ -121,6 +136,7 @@ jobs:
 
       - name: Build macOS dependencies
         if: inputs.platform == 'macos' && steps.deps-cache.outputs.cache-hit != 'true'
+        working-directory: source
         shell: bash
         run: |
           brew uninstall --ignore-dependencies zstd || true
@@ -137,11 +153,12 @@ jobs:
         if: steps.deps-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: ${{ inputs.platform == 'linux' && 'deps/build/destdir' || inputs.platform == 'windows' && 'deps/build/OrcaSlicer_dep' || 'deps/build' }}
+          path: ${{ inputs.platform == 'linux' && 'source/deps/build/destdir' || inputs.platform == 'windows' && 'source/deps/build/OrcaSlicer_dep' || 'source/deps/build' }}
           key: ${{ steps.deps-cache.outputs.cache-primary-key }}
 
       - name: Build and package Linux AppImage
         if: inputs.platform == 'linux'
+        working-directory: source
         shell: bash
         env:
           RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
@@ -157,6 +174,7 @@ jobs:
 
       - name: Build and package Windows artifacts
         if: inputs.platform == 'windows'
+        working-directory: source
         shell: pwsh
         env:
           WindowsSdkDir: 'C:\Program Files (x86)\Windows Kits\10\'
@@ -176,22 +194,24 @@ jobs:
           if (-not $installer) { throw 'NSIS installer was not produced' }
           Copy-Item $installer.FullName "release-output/Snapmaker_Orca_Windows_Installer_${label}.exe"
 
-          & 'C:/Program Files/7-Zip/7z.exe' a -tzip "release-output/Snapmaker_Orca_Windows_${label}_portable.zip" "$env:GITHUB_WORKSPACE/build/Snapmaker_Orca/*"
+          & 'C:/Program Files/7-Zip/7z.exe' a -tzip "release-output/Snapmaker_Orca_Windows_${label}_portable.zip" "$env:GITHUB_WORKSPACE/source/build/Snapmaker_Orca/*"
           if ($LASTEXITCODE -ne 0) { throw 'Portable archive creation failed' }
 
           $pdbFiles = Get-ChildItem build/src/Release -Filter '*.pdb' -File -ErrorAction SilentlyContinue
           if ($pdbFiles) {
-            & 'C:/Program Files/7-Zip/7z.exe' a -t7z -m0=lzma2 -mx9 "release-output/Debug_PDB_${label}_for_developers_only.7z" "$env:GITHUB_WORKSPACE/build/src/Release/*.pdb"
+            & 'C:/Program Files/7-Zip/7z.exe' a -t7z -m0=lzma2 -mx9 "release-output/Debug_PDB_${label}_for_developers_only.7z" "$env:GITHUB_WORKSPACE/source/build/src/Release/*.pdb"
             if ($LASTEXITCODE -ne 0) { throw 'PDB archive creation failed' }
           }
 
       - name: Build macOS universal application
         if: inputs.platform == 'macos'
+        working-directory: source
         shell: bash
         run: ./build_release_macos.sh -s -n -x -a universal -t 10.15 -1
 
       - name: Package unsigned macOS DMG
         if: inputs.platform == 'macos' && !inputs.sign_artifacts
+        working-directory: source
         shell: bash
         env:
           RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
@@ -207,6 +227,7 @@ jobs:
 
       - name: Prepare macOS signing input
         if: inputs.platform == 'macos' && inputs.sign_artifacts
+        working-directory: source
         shell: bash
         env:
           RESOLVED_VERSION_LABEL: ${{ steps.metadata.outputs.version_label }}
@@ -222,12 +243,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: signing-input-macos-${{ steps.metadata.outputs.version_label }}
-          path: signing-input/*.tar.gz
+          path: source/signing-input/*.tar.gz
           if-no-files-found: error
           retention-days: 2
 
       - name: Create checksums and build manifest
         if: inputs.platform != 'macos' || !inputs.sign_artifacts
+        working-directory: source
         shell: bash
         env:
           RESOLVED_COMMIT: ${{ steps.metadata.outputs.commit }}
@@ -236,7 +258,7 @@ jobs:
           DEPENDENCY_CACHE_KEY: ${{ steps.deps-cache.outputs.cache-primary-key }}
           BUILD_ARCHITECTURE: ${{ inputs.platform == 'macos' && 'universal' || runner.arch }}
         run: |
-          python scripts/release/create_build_manifest.py \
+          python ../_release_control/scripts/release/create_build_manifest.py \
             --artifact-dir release-output \
             --repository "$GITHUB_REPOSITORY" \
             --commit "$RESOLVED_COMMIT" \
@@ -255,7 +277,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ inputs.platform }}-${{ steps.metadata.outputs.version_label }}
-          path: release-output/*
+          path: source/release-output/*
           if-no-files-found: error
           retention-days: 14
 
@@ -275,11 +297,16 @@ jobs:
       DEPENDENCY_CACHE_KEY: ${{ needs.build.outputs.cache_key }}
       WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
-      - name: Checkout selected source
+      - name: Checkout trusted signing tooling
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.source_ref }}
-          fetch-depth: 0
+          ref: ${{ github.sha }}
+          path: _release_control
+          sparse-checkout: |
+            scripts/release
+            scripts/disable_validation.entitlements
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       - name: Download application bundle
         uses: actions/download-artifact@v4
@@ -325,7 +352,7 @@ jobs:
           dmg_path="$PWD/release-output/Snapmaker_Orca_Mac_universal_${RESOLVED_VERSION_LABEL}.dmg"
 
           codesign --deep --force --verbose --options runtime --timestamp \
-            --entitlements scripts/disable_validation.entitlements \
+            --entitlements _release_control/scripts/disable_validation.entitlements \
             --sign "$CERTIFICATE_ID" "$app_path"
           codesign --verify --deep --strict --verbose=2 "$app_path"
 
@@ -346,7 +373,7 @@ jobs:
       - name: Create signed checksums and build manifest
         shell: bash
         run: |
-          python scripts/release/create_build_manifest.py \
+          python _release_control/scripts/release/create_build_manifest.py \
             --artifact-dir release-output \
             --repository "$GITHUB_REPOSITORY" \
             --commit "$RESOLVED_COMMIT" \
