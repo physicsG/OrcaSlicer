@@ -116,6 +116,9 @@ jobs:
       - name: Run release helper smoke tests
         run: python scripts/release/test_release_tools.py
 
+      - name: Reject builder publication side effects
+        run: python scripts/release/check_builder_side_effects.py
+
   documentation:
     name: documentation
     runs-on: ubuntu-24.04
