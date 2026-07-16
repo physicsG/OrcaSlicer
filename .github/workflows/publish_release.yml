@@ -49,11 +49,22 @@ jobs:
       SIGN_ARTIFACTS_INPUT: ${{ inputs.sign_artifacts }}
       WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
-      - name: Checkout selected source
+      - name: Checkout trusted publication tooling
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: _release_control
+          sparse-checkout: scripts/release
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Checkout selected source metadata
         uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source_ref }}
+          path: source
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Download platform release bundles
         uses: actions/download-artifact@v4
@@ -63,9 +74,10 @@ jobs:
           merge-multiple: true
 
       - name: Revalidate publication request
+        working-directory: source
         shell: bash
         run: |
-          python scripts/release/validate_release_request.py \
+          python ../_release_control/scripts/release/validate_release_request.py \
             --source-ref "$SOURCE_REF_INPUT" \
             --version-label "$VERSION_LABEL_INPUT" \
             --publish-mode "$PUBLISH_MODE_INPUT" \
@@ -96,7 +108,7 @@ jobs:
             args+=(--require-signed-macos)
           fi
 
-          python scripts/release/verify_release_bundle.py \
+          python _release_control/scripts/release/verify_release_bundle.py \
             --bundle-dir release-bundle \
             "${args[@]}"
 
@@ -106,7 +118,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           release_tag="$VERSION_LABEL_INPUT"
-          target_commit=$(git rev-parse HEAD)
+          target_commit=$(git -C source rev-parse HEAD)
 
           if gh release view "$release_tag" >/dev/null 2>&1; then
             echo "A GitHub release already exists for $release_tag; refusing to overwrite it." >&2
