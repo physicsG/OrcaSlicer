@@ -131,10 +131,19 @@ inline int parse_schema_version(const nlohmann::json& value)
 {
     if (!value.contains("schema_version") || !value.at("schema_version").is_number_integer())
         throw std::invalid_argument("schema_version must be an integer");
-    const int schema_version = value.at("schema_version").get<int>();
+
+    const nlohmann::json& schema_version_json = value.at("schema_version");
+    if (schema_version_json.is_number_unsigned()) {
+        const unsigned long long schema_version = schema_version_json.get<unsigned long long>();
+        if (schema_version != static_cast<unsigned long long>(SUPPORTED_SCHEMA_VERSION))
+            throw std::invalid_argument("unsupported multiACE schema_version: " + std::to_string(schema_version));
+        return SUPPORTED_SCHEMA_VERSION;
+    }
+
+    const long long schema_version = schema_version_json.get<long long>();
     if (schema_version != SUPPORTED_SCHEMA_VERSION)
         throw std::invalid_argument("unsupported multiACE schema_version: " + std::to_string(schema_version));
-    return schema_version;
+    return SUPPORTED_SCHEMA_VERSION;
 }
 
 inline std::string required_id_component(const nlohmann::json& source, const char* field)
@@ -146,6 +155,8 @@ inline std::string required_id_component(const nlohmann::json& source, const cha
     std::string           result;
     if (value.is_string())
         result = value.get<std::string>();
+    else if (value.is_number_unsigned())
+        result = std::to_string(value.get<unsigned long long>());
     else if (value.is_number_integer())
         result = std::to_string(value.get<long long>());
     else
@@ -171,12 +182,22 @@ inline std::optional<int> optional_bounded_integer(const nlohmann::json& object,
 {
     if (!object.contains(field) || object.at(field).is_null())
         return std::nullopt;
-    if (!object.at(field).is_number_integer())
+
+    const nlohmann::json& value_json = object.at(field);
+    if (!value_json.is_number_integer())
         throw std::invalid_argument(std::string(field) + " must be an integer or null");
-    const int value = object.at(field).get<int>();
-    if (value < minimum || value > maximum)
+
+    if (value_json.is_number_unsigned()) {
+        const unsigned long long value = value_json.get<unsigned long long>();
+        if (value > static_cast<unsigned long long>(maximum))
+            throw std::invalid_argument(std::string(field) + " is outside the supported range");
+        return static_cast<int>(value);
+    }
+
+    const long long value = value_json.get<long long>();
+    if (value < static_cast<long long>(minimum) || value > static_cast<long long>(maximum))
         throw std::invalid_argument(std::string(field) + " is outside the supported range");
-    return value;
+    return static_cast<int>(value);
 }
 
 inline std::optional<double> optional_number(const nlohmann::json& object, const char* field)
@@ -261,12 +282,22 @@ inline std::vector<int> parse_reachable_toolheads(const nlohmann::json& source)
         throw std::invalid_argument("reachable_toolheads must be an array");
 
     std::set<int> unique;
-    for (const nlohmann::json& value : source.at("reachable_toolheads")) {
-        if (!value.is_number_integer())
+    for (const nlohmann::json& value_json : source.at("reachable_toolheads")) {
+        if (!value_json.is_number_integer())
             throw std::invalid_argument("reachable_toolheads entries must be integers");
-        const int toolhead = value.get<int>();
-        if (toolhead < 0 || toolhead >= PHYSICAL_TOOLHEAD_COUNT)
-            throw std::invalid_argument("reachable_toolheads contains an invalid U1 toolhead");
+
+        int toolhead = 0;
+        if (value_json.is_number_unsigned()) {
+            const unsigned long long value = value_json.get<unsigned long long>();
+            if (value >= static_cast<unsigned long long>(PHYSICAL_TOOLHEAD_COUNT))
+                throw std::invalid_argument("reachable_toolheads contains an invalid U1 toolhead");
+            toolhead = static_cast<int>(value);
+        } else {
+            const long long value = value_json.get<long long>();
+            if (value < 0 || value >= PHYSICAL_TOOLHEAD_COUNT)
+                throw std::invalid_argument("reachable_toolheads contains an invalid U1 toolhead");
+            toolhead = static_cast<int>(value);
+        }
         unique.insert(toolhead);
     }
     return {unique.begin(), unique.end()};
@@ -278,10 +309,10 @@ inline ProviderCapabilities parse_capabilities(const nlohmann::json& payload)
 {
     detail::require_object(payload, "multiACE capabilities payload");
 
-    ProviderCapabilities  result;
+    ProviderCapabilities result;
+    result.schema_version = detail::parse_schema_version(payload);
+
     const nlohmann::json* capabilities = &payload;
-    if (payload.contains("schema_version"))
-        result.schema_version = detail::parse_schema_version(payload);
     if (payload.contains("capabilities")) {
         if (!payload.at("capabilities").is_object())
             throw std::invalid_argument("capabilities must be a JSON object");
