@@ -38,7 +38,9 @@ At least one platform must be selected. Signing currently applies to macOS and
 requires `build_macos`.
 
 When `version_label` is empty, the workflow derives a label from the selected
-tag or from the project version and commit SHA.
+tag or from the project version and commit SHA. Any publication mode requires
+that the resolved `version_label` already exists as a Git tag and points to the
+selected commit. The workflow never creates tags implicitly.
 
 ## Publication modes
 
@@ -54,14 +56,19 @@ Use this mode for development, QA, branch snapshots, and unsigned builds.
 `draft-release` creates a draft GitHub release after all selected build jobs
 succeed. Publication runs through the `release-publication` environment.
 
-The workflow refuses to overwrite an existing release with the same tag.
+`version_label` must match an existing Git tag that resolves to the selected
+commit. The workflow refuses to create a missing tag or overwrite an existing
+release with the same tag.
 
 ### Prerelease
 
 `prerelease` creates a published GitHub prerelease through the
 `release-publication` environment.
 
-Enable `run_full_tests` for externally distributed prereleases.
+`version_label` must match an existing Git tag that resolves to the selected
+commit. Branch or commit snapshots without a matching tag must use
+`artifacts-only`. Enable `run_full_tests` for externally distributed
+prereleases.
 
 ### Production release
 
@@ -195,9 +202,9 @@ Reusable build workflows have read-only repository permissions and are checked
 by CI for prohibited publication, tag mutation, Sentry upload, and direct push
 behavior.
 
-## Legacy scheduled builds
+## Manual compatibility builds
 
-The existing `Build all` schedule remains available as a compatibility build.
-It now uploads workflow artifacts only. It no longer deploys nightly release
-assets, force-pushes tags, uploads symbols, signs automatically, or inherits
+The former `Build all` scheduled workflow is now a manual compatibility and
+verification entry point. It uploads workflow artifacts only and does not deploy
+nightly assets, force-push tags, upload symbols, sign automatically, or inherit
 release credentials.
