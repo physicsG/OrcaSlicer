@@ -81,6 +81,11 @@ jobs:
           lfs: true
           persist-credentials: false
 
+      - name: Set up CMake 3.28
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: '~3.28.0'
+
       - name: Resolve build metadata
         id: metadata
         working-directory: source
