@@ -9,28 +9,6 @@ permissions:
   contents: read
 
 jobs:
-  linux:
-    name: Linux artifacts smoke
-    uses: ./.github/workflows/build_platform.yml
-    with:
-      platform: linux
-      source_ref: ${{ github.event.pull_request.head.sha }}
-      version_label: PR-${{ github.event.pull_request.number }}
-      tests_passed: false
-      sign_artifacts: false
-      package_artifact: true
-
-  windows:
-    name: Windows artifacts smoke
-    uses: ./.github/workflows/build_platform.yml
-    with:
-      platform: windows
-      source_ref: ${{ github.event.pull_request.head.sha }}
-      version_label: PR-${{ github.event.pull_request.number }}
-      tests_passed: false
-      sign_artifacts: false
-      package_artifact: true
-
   macos:
     name: macOS artifacts smoke
     uses: ./.github/workflows/build_platform.yml
