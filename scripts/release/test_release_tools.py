@@ -151,6 +151,30 @@ class ReleaseToolTests(unittest.TestCase):
             "false",
         )
 
+    def test_request_validator_rejects_shell_like_ref(self) -> None:
+        failed = run_script(
+            "validate_release_request.py",
+            "--source-ref",
+            "main;echo-pwned",
+            "--version-label",
+            "QA-2.3.5",
+            "--publish-mode",
+            "artifacts-only",
+            "--build-linux",
+            "true",
+            "--build-windows",
+            "false",
+            "--build-macos",
+            "false",
+            "--run-full-tests",
+            "false",
+            "--sign-artifacts",
+            "false",
+            check=False,
+        )
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("source_ref must start with an alphanumeric", failed.stderr)
+
     def test_signing_requires_macos(self) -> None:
         failed = run_script(
             "validate_release_request.py",
@@ -174,6 +198,30 @@ class ReleaseToolTests(unittest.TestCase):
         )
         self.assertNotEqual(failed.returncode, 0)
         self.assertIn("requires build_macos", failed.stderr)
+
+    def test_production_requires_macos_signing(self) -> None:
+        failed = run_script(
+            "validate_release_request.py",
+            "--source-ref",
+            "main",
+            "--version-label",
+            "V2.3.5",
+            "--publish-mode",
+            "production-release",
+            "--build-linux",
+            "true",
+            "--build-windows",
+            "true",
+            "--build-macos",
+            "true",
+            "--run-full-tests",
+            "true",
+            "--sign-artifacts",
+            "false",
+            check=False,
+        )
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("require signed and notarized macOS", failed.stderr)
 
 
 if __name__ == "__main__":
