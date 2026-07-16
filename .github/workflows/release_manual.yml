@@ -65,23 +65,36 @@ jobs:
       version: ${{ steps.metadata.outputs.version }}
       version_label: ${{ steps.metadata.outputs.version_label }}
     steps:
+      - name: Checkout trusted release tooling
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: _release_control
+          sparse-checkout: scripts/release
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Checkout selected source
         uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source_ref }}
+          path: source
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Resolve source and version metadata
         id: metadata
+        working-directory: source
         env:
           SOURCE_REF_INPUT: ${{ inputs.source_ref }}
           VERSION_LABEL_INPUT: ${{ inputs.version_label }}
         run: |
-          python scripts/release/resolve_release_metadata.py \
+          python ../_release_control/scripts/release/resolve_release_metadata.py \
             --source-ref "$SOURCE_REF_INPUT" \
             --version-label "$VERSION_LABEL_INPUT"
 
       - name: Validate release request
+        working-directory: source
         env:
           SOURCE_REF_INPUT: ${{ inputs.source_ref }}
           VERSION_LABEL_INPUT: ${{ steps.metadata.outputs.version_label }}
@@ -92,7 +105,7 @@ jobs:
           RUN_FULL_TESTS_INPUT: ${{ inputs.run_full_tests }}
           SIGN_ARTIFACTS_INPUT: ${{ inputs.sign_artifacts }}
         run: |
-          python scripts/release/validate_release_request.py \
+          python ../_release_control/scripts/release/validate_release_request.py \
             --source-ref "$SOURCE_REF_INPUT" \
             --version-label "$VERSION_LABEL_INPUT" \
             --publish-mode "$PUBLISH_MODE_INPUT" \
