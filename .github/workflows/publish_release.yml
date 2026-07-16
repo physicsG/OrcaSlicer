@@ -1,0 +1,148 @@
+name: Publish Release
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        required: true
+        type: string
+      version_label:
+        required: true
+        type: string
+      publish_mode:
+        required: true
+        type: string
+      build_linux:
+        required: true
+        type: boolean
+      build_windows:
+        required: true
+        type: boolean
+      build_macos:
+        required: true
+        type: boolean
+      run_full_tests:
+        required: true
+        type: boolean
+      sign_artifacts:
+        required: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish ${{ inputs.publish_mode }}
+    if: inputs.publish_mode != 'artifacts-only'
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.publish_mode == 'production-release' && 'production-release' || 'release-publication' }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout selected source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 0
+
+      - name: Download platform release bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-bundle
+          merge-multiple: true
+
+      - name: Revalidate publication request
+        shell: bash
+        run: |
+          python scripts/release/validate_release_request.py \
+            --source-ref "${{ inputs.source_ref }}" \
+            --version-label "${{ inputs.version_label }}" \
+            --publish-mode "${{ inputs.publish_mode }}" \
+            --build-linux "${{ inputs.build_linux }}" \
+            --build-windows "${{ inputs.build_windows }}" \
+            --build-macos "${{ inputs.build_macos }}" \
+            --run-full-tests "${{ inputs.run_full_tests }}" \
+            --sign-artifacts "${{ inputs.sign_artifacts }}"
+
+      - name: Verify checksums, manifests, and platform set
+        shell: bash
+        run: |
+          args=()
+          if [[ "${{ inputs.build_linux }}" == "true" ]]; then
+            args+=(--require-platform linux)
+          fi
+          if [[ "${{ inputs.build_windows }}" == "true" ]]; then
+            args+=(--require-platform windows)
+          fi
+          if [[ "${{ inputs.build_macos }}" == "true" ]]; then
+            args+=(--require-platform macos)
+          fi
+          if [[ "${{ inputs.run_full_tests }}" == "true" ]]; then
+            args+=(--require-tests)
+          fi
+          if [[ "${{ inputs.publish_mode }}" == "production-release" && \
+                "${{ inputs.sign_artifacts }}" == "true" ]]; then
+            args+=(--require-signed-macos)
+          fi
+
+          python scripts/release/verify_release_bundle.py \
+            --bundle-dir release-bundle \
+            "${args[@]}"
+
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_tag="${{ inputs.version_label }}"
+          target_commit=$(git rev-parse HEAD)
+
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            echo "A GitHub release already exists for $release_tag; refusing to overwrite it." >&2
+            exit 1
+          fi
+
+          mapfile -d '' assets < <(find release-bundle -type f -print0 | sort -z)
+          if [[ ${#assets[@]} -eq 0 ]]; then
+            echo "No release assets were downloaded." >&2
+            exit 1
+          fi
+
+          notes_file=$(mktemp)
+          cat > "$notes_file" <<EOF
+          Manual Snapmaker Orca release build.
+
+          - Source ref: `${{ inputs.source_ref }}`
+          - Commit: `$target_commit`
+          - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Linux selected: `${{ inputs.build_linux }}`
+          - Windows selected: `${{ inputs.build_windows }}`
+          - macOS selected: `${{ inputs.build_macos }}`
+          - Full tests: `${{ inputs.run_full_tests }}`
+          - macOS signing requested: `${{ inputs.sign_artifacts }}`
+          EOF
+
+          common_args=(
+            "$release_tag"
+            "${assets[@]}"
+            --repo "${{ github.repository }}"
+            --title "Snapmaker Orca $release_tag"
+            --notes-file "$notes_file"
+          )
+
+          case "${{ inputs.publish_mode }}" in
+            draft-release)
+              gh release create "${common_args[@]}" --draft --target "$target_commit"
+              ;;
+            prerelease)
+              gh release create "${common_args[@]}" --prerelease --target "$target_commit"
+              ;;
+            production-release)
+              gh release create "${common_args[@]}" --verify-tag --generate-notes
+              ;;
+            *)
+              echo "Unsupported publication mode: ${{ inputs.publish_mode }}" >&2
+              exit 1
+              ;;
+          esac
