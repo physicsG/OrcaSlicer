@@ -14,6 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          sparse-checkout: .github/workflows
+          sparse-checkout-cone-mode: false
           show-progress: false
       - name: List workflow files
         run: find .github/workflows -maxdepth 1 -type f -printf '%f\n' | sort
