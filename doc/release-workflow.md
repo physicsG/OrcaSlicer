@@ -69,6 +69,7 @@ Enable `run_full_tests` for externally distributed prereleases.
 
 - Linux, Windows, and macOS are selected.
 - The full Linux CI test gate succeeds.
+- `sign_artifacts` is enabled for the macOS build.
 - `source_ref` resolves to an annotated Git tag.
 - The tag version matches `Snapmaker_VERSION` in `version.inc`.
 - `version_label` matches the selected tag.
