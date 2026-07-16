@@ -14,6 +14,34 @@ on:
         description: Force full rebuild
         type: boolean
         default: false
+      release_verification:
+        description: Run the side-effect-free release builders from this branch
+        type: boolean
+        default: false
+      release_source_ref:
+        description: Branch, tag, or commit SHA to package
+        type: string
+        default: main
+      release_build_linux:
+        description: Build Ubuntu 24.04 AppImage
+        type: boolean
+        default: true
+      release_build_windows:
+        description: Build Windows installer and portable archive
+        type: boolean
+        default: false
+      release_build_macos:
+        description: Build macOS universal DMG
+        type: boolean
+        default: false
+      release_run_full_tests:
+        description: Run the Linux CI test gate before packaging
+        type: boolean
+        default: false
+      release_version_label:
+        description: Artifact label for the verification build
+        type: string
+        default: branch-verification
 
 permissions:
   contents: read
@@ -25,6 +53,7 @@ concurrency:
 jobs:
   build_all:
     name: Build All
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.release_verification }}
     strategy:
       fail-fast: false
       matrix:
@@ -41,7 +70,9 @@ jobs:
 
   flatpak:
     name: Flatpak
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.build-deps-only }}
+    if: >-
+      ${{ github.event_name != 'workflow_dispatch' ||
+          (!inputs.build-deps-only && !inputs.release_verification) }}
     concurrency:
       group: flatpak-${{ matrix.variant.arch }}-${{ github.ref }}
       cancel-in-progress: false
@@ -122,3 +153,101 @@ jobs:
           name: Snapmaker_Orca-Linux-flatpak_${{ env.ver }}_${{ matrix.variant.arch }}.flatpak
           path: ${{ steps.find_bundle.outputs.path }}
           if-no-files-found: error
+
+  release-tests:
+    name: Release verification tests
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' && inputs.release_verification &&
+          inputs.release_run_full_tests }}
+    uses: ./.github/workflows/ci_tests.yml
+    with:
+      source_ref: ${{ inputs.release_source_ref || github.ref_name }}
+      run_changed_tidy: false
+
+  release-linux:
+    name: Verify Linux release bundle
+    needs: release-tests
+    if: >-
+      ${{ always() && github.event_name == 'workflow_dispatch' &&
+          inputs.release_verification && inputs.release_build_linux &&
+          (needs.release-tests.result == 'success' || needs.release-tests.result == 'skipped') }}
+    uses: ./.github/workflows/build_platform.yml
+    with:
+      platform: linux
+      source_ref: ${{ inputs.release_source_ref || github.ref_name }}
+      version_label: ${{ inputs.release_version_label }}
+      tests_passed: ${{ inputs.release_run_full_tests && needs.release-tests.result == 'success' }}
+      sign_artifacts: false
+
+  release-windows:
+    name: Verify Windows release bundle
+    needs: release-tests
+    if: >-
+      ${{ always() && github.event_name == 'workflow_dispatch' &&
+          inputs.release_verification && inputs.release_build_windows &&
+          (needs.release-tests.result == 'success' || needs.release-tests.result == 'skipped') }}
+    uses: ./.github/workflows/build_platform.yml
+    with:
+      platform: windows
+      source_ref: ${{ inputs.release_source_ref || github.ref_name }}
+      version_label: ${{ inputs.release_version_label }}
+      tests_passed: ${{ inputs.release_run_full_tests && needs.release-tests.result == 'success' }}
+      sign_artifacts: false
+
+  release-macos:
+    name: Verify macOS release bundle
+    needs: release-tests
+    if: >-
+      ${{ always() && github.event_name == 'workflow_dispatch' &&
+          inputs.release_verification && inputs.release_build_macos &&
+          (needs.release-tests.result == 'success' || needs.release-tests.result == 'skipped') }}
+    uses: ./.github/workflows/build_platform.yml
+    with:
+      platform: macos
+      source_ref: ${{ inputs.release_source_ref || github.ref_name }}
+      version_label: ${{ inputs.release_version_label }}
+      tests_passed: ${{ inputs.release_run_full_tests && needs.release-tests.result == 'success' }}
+      sign_artifacts: false
+
+  release-verification-summary:
+    name: Release verification summary
+    runs-on: ubuntu-24.04
+    needs:
+      - release-tests
+      - release-linux
+      - release-windows
+      - release-macos
+    if: >-
+      ${{ always() && github.event_name == 'workflow_dispatch' &&
+          inputs.release_verification }}
+    steps:
+      - name: Report verification results
+        env:
+          SOURCE_REF_INPUT: ${{ inputs.release_source_ref || github.ref_name }}
+          VERSION_LABEL_INPUT: ${{ inputs.release_version_label }}
+          TESTS_RESULT: ${{ needs.release-tests.result }}
+          LINUX_RESULT: ${{ needs.release-linux.result }}
+          WINDOWS_RESULT: ${{ needs.release-windows.result }}
+          MACOS_RESULT: ${{ needs.release-macos.result }}
+        run: |
+          {
+            echo '### Branch release verification'
+            echo
+            echo "- Source ref: $SOURCE_REF_INPUT"
+            echo "- Version label: $VERSION_LABEL_INPUT"
+            echo "- Tests: $TESTS_RESULT"
+            echo "- Linux: $LINUX_RESULT"
+            echo "- Windows: $WINDOWS_RESULT"
+            echo "- macOS: $MACOS_RESULT"
+            echo
+            echo 'Verification is artifacts-only, unsigned, and cannot create a GitHub release.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$TESTS_RESULT" != 'success' && "$TESTS_RESULT" != 'skipped' ]]; then
+            exit 1
+          fi
+          for result in "$LINUX_RESULT" "$WINDOWS_RESULT" "$MACOS_RESULT"; do
+            if [[ "$result" != 'success' && "$result" != 'skipped' ]]; then
+              exit 1
+            fi
+          done
