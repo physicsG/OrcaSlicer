@@ -120,6 +120,17 @@ jobs:
           release_tag="$VERSION_LABEL_INPUT"
           target_commit=$(git -C source rev-parse HEAD)
 
+          if ! git -C source show-ref --verify --quiet "refs/tags/$release_tag"; then
+            echo "Tag $release_tag does not exist; refusing to create it implicitly." >&2
+            exit 1
+          fi
+
+          tag_commit=$(git -C source rev-list -n 1 "$release_tag")
+          if [[ "$tag_commit" != "$target_commit" ]]; then
+            echo "Tag $release_tag resolves to $tag_commit, not selected commit $target_commit." >&2
+            exit 1
+          fi
+
           if gh release view "$release_tag" >/dev/null 2>&1; then
             echo "A GitHub release already exists for $release_tag; refusing to overwrite it." >&2
             exit 1
@@ -151,17 +162,18 @@ jobs:
             --repo "$GITHUB_REPOSITORY"
             --title "Snapmaker Orca $release_tag"
             --notes-file "$notes_file"
+            --verify-tag
           )
 
           case "$PUBLISH_MODE_INPUT" in
             draft-release)
-              gh release create "${common_args[@]}" --draft --target "$target_commit"
+              gh release create "${common_args[@]}" --draft
               ;;
             prerelease)
-              gh release create "${common_args[@]}" --prerelease --target "$target_commit"
+              gh release create "${common_args[@]}" --prerelease
               ;;
             production-release)
-              gh release create "${common_args[@]}" --verify-tag
+              gh release create "${common_args[@]}"
               ;;
             *)
               echo "Unsupported publication mode: $PUBLISH_MODE_INPUT" >&2
