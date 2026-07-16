@@ -13,14 +13,14 @@ namespace Slic3r::MultiAce {
 class FilamentSourceProvider
 {
 public:
-    using InventoryCallback = std::function<void(const InventorySnapshot &)>;
+    using InventoryCallback = std::function<void(const InventorySnapshot&)>;
 
     virtual ~FilamentSourceProvider() = default;
 
-    virtual ProviderCapabilities capabilities() const = 0;
-    virtual InventorySnapshot    inventory() const    = 0;
-    virtual void                 subscribe(InventoryCallback callback) = 0;
-    virtual void                 request_metadata_refresh(const SourceId &source) = 0;
+    virtual ProviderCapabilities capabilities() const                             = 0;
+    virtual InventorySnapshot    inventory() const                                = 0;
+    virtual void                 subscribe(InventoryCallback callback)            = 0;
+    virtual void                 request_metadata_refresh(const SourceId& source) = 0;
 };
 
 // Transport-independent provider used for offline/manual operation, tests, and
@@ -29,13 +29,10 @@ public:
 class ManualFilamentSourceProvider final : public FilamentSourceProvider
 {
 public:
-    using RefreshCallback = std::function<void(const SourceId &)>;
+    using RefreshCallback = std::function<void(const SourceId&)>;
 
-    explicit ManualFilamentSourceProvider(
-        ProviderCapabilities capabilities = {},
-        InventorySnapshot inventory = {})
-        : m_capabilities(std::move(capabilities))
-        , m_inventory(std::move(inventory))
+    explicit ManualFilamentSourceProvider(ProviderCapabilities capabilities = {}, InventorySnapshot inventory = {})
+        : m_capabilities(std::move(capabilities)), m_inventory(std::move(inventory))
     {}
 
     ProviderCapabilities capabilities() const override
@@ -58,7 +55,7 @@ public:
         m_inventory_callbacks.emplace_back(std::move(callback));
     }
 
-    void request_metadata_refresh(const SourceId &source) override
+    void request_metadata_refresh(const SourceId& source) override
     {
         RefreshCallback callback;
         {
@@ -85,7 +82,7 @@ public:
         }
 
         const InventorySnapshot snapshot = this->inventory();
-        for (const InventoryCallback &callback : callbacks)
+        for (const InventoryCallback& callback : callbacks)
             callback(snapshot);
     }
 
