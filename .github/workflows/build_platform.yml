@@ -12,8 +12,9 @@ on:
         required: true
         type: string
       version_label:
-        description: Validated artifact label
-        required: true
+        description: Optional validated artifact label
+        required: false
+        default: ''
         type: string
       tests_passed:
         description: Whether the selected-ref test gate passed
@@ -24,6 +25,15 @@ on:
         required: false
         default: false
         type: boolean
+      package_artifact:
+        description: Compile and package the application after dependencies
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      release:
+        description: Resolved release artifact label
+        value: ${{ jobs.build.outputs.version_label }}
 
 permissions:
   contents: read
@@ -140,7 +150,7 @@ jobs:
         shell: bash
         run: |
           brew uninstall --ignore-dependencies zstd || true
-          ./build_release_macos.sh -d -x -a universal -t 10.15 -1
+          ./build_release_macos.sh -dx -a universal -t 10.15 -1
           for arch in arm64 x86_64; do
             if [[ -d "deps/build/${arch}" ]]; then
               find "deps/build/${arch}" -mindepth 1 -maxdepth 1 \
@@ -157,7 +167,7 @@ jobs:
           key: ${{ steps.deps-cache.outputs.cache-primary-key }}
 
       - name: Build and package Linux AppImage
-        if: inputs.platform == 'linux'
+        if: inputs.platform == 'linux' && inputs.package_artifact
         working-directory: source
         shell: bash
         env:
@@ -173,7 +183,7 @@ jobs:
           chmod +x "$output"
 
       - name: Build and package Windows artifacts
-        if: inputs.platform == 'windows'
+        if: inputs.platform == 'windows' && inputs.package_artifact
         working-directory: source
         shell: pwsh
         env:
@@ -204,13 +214,13 @@ jobs:
           }
 
       - name: Build macOS universal application
-        if: inputs.platform == 'macos'
+        if: inputs.platform == 'macos' && inputs.package_artifact
         working-directory: source
         shell: bash
         run: ./build_release_macos.sh -s -n -x -a universal -t 10.15 -1
 
       - name: Package unsigned macOS DMG
-        if: inputs.platform == 'macos' && !inputs.sign_artifacts
+        if: inputs.platform == 'macos' && inputs.package_artifact && !inputs.sign_artifacts
         working-directory: source
         shell: bash
         env:
@@ -226,7 +236,7 @@ jobs:
             "release-output/Snapmaker_Orca_Mac_universal_${RESOLVED_VERSION_LABEL}_unsigned.dmg"
 
       - name: Prepare macOS signing input
-        if: inputs.platform == 'macos' && inputs.sign_artifacts
+        if: inputs.platform == 'macos' && inputs.package_artifact && inputs.sign_artifacts
         working-directory: source
         shell: bash
         env:
@@ -239,7 +249,7 @@ jobs:
             'Snapmaker Orca.app'
 
       - name: Upload macOS signing input
-        if: inputs.platform == 'macos' && inputs.sign_artifacts
+        if: inputs.platform == 'macos' && inputs.package_artifact && inputs.sign_artifacts
         uses: actions/upload-artifact@v4
         with:
           name: signing-input-macos-${{ steps.metadata.outputs.version_label }}
@@ -248,7 +258,7 @@ jobs:
           retention-days: 2
 
       - name: Create checksums and build manifest
-        if: inputs.platform != 'macos' || !inputs.sign_artifacts
+        if: inputs.package_artifact && (inputs.platform != 'macos' || !inputs.sign_artifacts)
         working-directory: source
         shell: bash
         env:
@@ -273,7 +283,7 @@ jobs:
             --signed false
 
       - name: Upload platform release bundle
-        if: inputs.platform != 'macos' || !inputs.sign_artifacts
+        if: inputs.package_artifact && (inputs.platform != 'macos' || !inputs.sign_artifacts)
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ inputs.platform }}-${{ steps.metadata.outputs.version_label }}
@@ -283,7 +293,7 @@ jobs:
 
   sign-macos:
     name: Sign and notarize macOS
-    if: inputs.platform == 'macos' && inputs.sign_artifacts
+    if: inputs.platform == 'macos' && inputs.package_artifact && inputs.sign_artifacts
     needs: build
     runs-on: macos-14
     timeout-minutes: 120
