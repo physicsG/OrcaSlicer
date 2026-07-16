@@ -17,6 +17,11 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def find_literal_files(root: Path, filename: str) -> list[Path]:
+    """Find regular files by literal basename, without interpreting glob syntax."""
+    return [path for path in root.rglob("*") if path.is_file() and path.name == filename]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bundle-dir", type=Path, required=True)
@@ -63,14 +68,14 @@ def main() -> int:
         for artifact in manifest.get("artifacts", []):
             name = str(artifact["name"])
             expected = str(artifact["sha256"])
-            matches = list(bundle_dir.rglob(name))
+            matches = find_literal_files(bundle_dir, name)
             if len(matches) != 1:
                 raise ValueError(f"expected exactly one artifact named {name}, found {len(matches)}")
             actual = sha256(matches[0])
             if actual != expected:
                 raise ValueError(f"SHA-256 mismatch for {name}: expected {expected}, got {actual}")
 
-            sidecar_matches = list(bundle_dir.rglob(f"{name}.sha256"))
+            sidecar_matches = find_literal_files(bundle_dir, f"{name}.sha256")
             if len(sidecar_matches) != 1:
                 raise ValueError(f"missing or duplicate checksum sidecar for {name}")
             sidecar_parts = sidecar_matches[0].read_text(encoding="utf-8").split()
