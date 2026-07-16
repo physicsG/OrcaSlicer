@@ -44,7 +44,7 @@ on:
           - prerelease
           - production-release
       version_label:
-        description: Optional artifact label; required for publication
+        description: Optional artifact and release label
         required: false
         default: ''
         type: string
@@ -95,16 +95,16 @@ jobs:
           {
             echo '### Manual release request'
             echo
-            echo "- Source ref: `${{ inputs.source_ref }}`"
-            echo "- Commit: `${{ steps.metadata.outputs.commit }}`"
-            echo "- Version: `${{ steps.metadata.outputs.version }}`"
-            echo "- Artifact label: `${{ steps.metadata.outputs.version_label }}`"
-            echo "- Publish mode: `${{ inputs.publish_mode }}`"
-            echo "- Linux: `${{ inputs.build_linux }}`"
-            echo "- Windows: `${{ inputs.build_windows }}`"
-            echo "- macOS: `${{ inputs.build_macos }}`"
-            echo "- Full tests: `${{ inputs.run_full_tests }}`"
-            echo "- Signing: `${{ inputs.sign_artifacts }}`"
+            echo "- Source ref: ${{ inputs.source_ref }}"
+            echo "- Commit: ${{ steps.metadata.outputs.commit }}"
+            echo "- Version: ${{ steps.metadata.outputs.version }}"
+            echo "- Artifact label: ${{ steps.metadata.outputs.version_label }}"
+            echo "- Publish mode: ${{ inputs.publish_mode }}"
+            echo "- Linux: ${{ inputs.build_linux }}"
+            echo "- Windows: ${{ inputs.build_windows }}"
+            echo "- macOS: ${{ inputs.build_macos }}"
+            echo "- Full tests: ${{ inputs.run_full_tests }}"
+            echo "- Signing: ${{ inputs.sign_artifacts }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
   tests:
@@ -210,12 +210,12 @@ jobs:
           {
             echo '### Manual release results'
             echo
-            echo "- Request validation: `${{ needs.prepare.result }}`"
-            echo "- Tests: `${{ needs.tests.result }}`"
-            echo "- Linux: `${{ needs.build-linux.result }}`"
-            echo "- Windows: `${{ needs.build-windows.result }}`"
-            echo "- macOS: `${{ needs.build-macos.result }}`"
-            echo "- Publication: `${{ needs.publish.result }}`"
+            echo "- Request validation: ${{ needs.prepare.result }}"
+            echo "- Tests: ${{ needs.tests.result }}"
+            echo "- Linux: ${{ needs.build-linux.result }}"
+            echo "- Windows: ${{ needs.build-windows.result }}"
+            echo "- macOS: ${{ needs.build-macos.result }}"
+            echo "- Publication: ${{ needs.publish.result }}"
             echo
             if [[ "${{ inputs.publish_mode }}" == 'artifacts-only' ]]; then
               echo 'No GitHub release was created. Download the selected bundles from this workflow run.'
