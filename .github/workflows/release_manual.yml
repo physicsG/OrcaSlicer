@@ -1,0 +1,241 @@
+name: Manual Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch, tag, or commit SHA to build
+        required: true
+        default: main
+        type: string
+      build_linux:
+        description: Build Ubuntu 24.04 AppImage
+        required: true
+        default: true
+        type: boolean
+      build_windows:
+        description: Build Windows installer and portable archive
+        required: true
+        default: true
+        type: boolean
+      build_macos:
+        description: Build macOS 14 universal DMG
+        required: true
+        default: true
+        type: boolean
+      run_full_tests:
+        description: Run the Linux CI test gate before packaging
+        required: true
+        default: true
+        type: boolean
+      sign_artifacts:
+        description: Sign and notarize the macOS artifact
+        required: true
+        default: false
+        type: boolean
+      publish_mode:
+        description: What to do with successful artifacts
+        required: true
+        default: artifacts-only
+        type: choice
+        options:
+          - artifacts-only
+          - draft-release
+          - prerelease
+          - production-release
+      version_label:
+        description: Optional artifact label; required for publication
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-release-${{ inputs.source_ref }}-${{ inputs.version_label || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Validate request
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.metadata.outputs.commit }}
+      version: ${{ steps.metadata.outputs.version }}
+      version_label: ${{ steps.metadata.outputs.version_label }}
+    steps:
+      - name: Checkout selected source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 0
+
+      - name: Resolve source and version metadata
+        id: metadata
+        run: |
+          python scripts/release/resolve_release_metadata.py \
+            --source-ref "${{ inputs.source_ref }}" \
+            --version-label "${{ inputs.version_label }}"
+
+      - name: Validate release request
+        run: |
+          python scripts/release/validate_release_request.py \
+            --source-ref "${{ inputs.source_ref }}" \
+            --version-label "${{ steps.metadata.outputs.version_label }}" \
+            --publish-mode "${{ inputs.publish_mode }}" \
+            --build-linux "${{ inputs.build_linux }}" \
+            --build-windows "${{ inputs.build_windows }}" \
+            --build-macos "${{ inputs.build_macos }}" \
+            --run-full-tests "${{ inputs.run_full_tests }}" \
+            --sign-artifacts "${{ inputs.sign_artifacts }}"
+
+      - name: Summarize request
+        run: |
+          {
+            echo '### Manual release request'
+            echo
+            echo "- Source ref: `${{ inputs.source_ref }}`"
+            echo "- Commit: `${{ steps.metadata.outputs.commit }}`"
+            echo "- Version: `${{ steps.metadata.outputs.version }}`"
+            echo "- Artifact label: `${{ steps.metadata.outputs.version_label }}`"
+            echo "- Publish mode: `${{ inputs.publish_mode }}`"
+            echo "- Linux: `${{ inputs.build_linux }}`"
+            echo "- Windows: `${{ inputs.build_windows }}`"
+            echo "- macOS: `${{ inputs.build_macos }}`"
+            echo "- Full tests: `${{ inputs.run_full_tests }}`"
+            echo "- Signing: `${{ inputs.sign_artifacts }}`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  tests:
+    name: Full test gate
+    needs: prepare
+    if: inputs.run_full_tests
+    uses: ./.github/workflows/ci_tests.yml
+    with:
+      source_ref: ${{ inputs.source_ref }}
+      run_changed_tidy: false
+
+  build-linux:
+    name: Linux release bundle
+    needs:
+      - prepare
+      - tests
+    if: >-
+      ${{ always() && inputs.build_linux && needs.prepare.result == 'success' &&
+          (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
+    uses: ./.github/workflows/build_platform.yml
+    with:
+      platform: linux
+      source_ref: ${{ inputs.source_ref }}
+      version_label: ${{ needs.prepare.outputs.version_label }}
+      tests_passed: ${{ inputs.run_full_tests && needs.tests.result == 'success' }}
+      sign_artifacts: false
+
+  build-windows:
+    name: Windows release bundle
+    needs:
+      - prepare
+      - tests
+    if: >-
+      ${{ always() && inputs.build_windows && needs.prepare.result == 'success' &&
+          (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
+    uses: ./.github/workflows/build_platform.yml
+    with:
+      platform: windows
+      source_ref: ${{ inputs.source_ref }}
+      version_label: ${{ needs.prepare.outputs.version_label }}
+      tests_passed: ${{ inputs.run_full_tests && needs.tests.result == 'success' }}
+      sign_artifacts: false
+
+  build-macos:
+    name: macOS release bundle
+    needs:
+      - prepare
+      - tests
+    if: >-
+      ${{ always() && inputs.build_macos && needs.prepare.result == 'success' &&
+          (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
+    uses: ./.github/workflows/build_platform.yml
+    with:
+      platform: macos
+      source_ref: ${{ inputs.source_ref }}
+      version_label: ${{ needs.prepare.outputs.version_label }}
+      tests_passed: ${{ inputs.run_full_tests && needs.tests.result == 'success' }}
+      sign_artifacts: ${{ inputs.sign_artifacts }}
+    secrets: inherit
+
+  publish:
+    name: Publish selected release mode
+    needs:
+      - prepare
+      - tests
+      - build-linux
+      - build-windows
+      - build-macos
+    if: >-
+      ${{ always() && inputs.publish_mode != 'artifacts-only' &&
+          needs.prepare.result == 'success' &&
+          (needs.tests.result == 'success' || needs.tests.result == 'skipped') &&
+          (needs.build-linux.result == 'success' || needs.build-linux.result == 'skipped') &&
+          (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped') &&
+          (needs.build-macos.result == 'success' || needs.build-macos.result == 'skipped') }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/publish_release.yml
+    with:
+      source_ref: ${{ inputs.source_ref }}
+      version_label: ${{ needs.prepare.outputs.version_label }}
+      publish_mode: ${{ inputs.publish_mode }}
+      build_linux: ${{ inputs.build_linux }}
+      build_windows: ${{ inputs.build_windows }}
+      build_macos: ${{ inputs.build_macos }}
+      run_full_tests: ${{ inputs.run_full_tests }}
+      sign_artifacts: ${{ inputs.sign_artifacts }}
+
+  summary:
+    name: Release summary
+    runs-on: ubuntu-24.04
+    if: always()
+    needs:
+      - prepare
+      - tests
+      - build-linux
+      - build-windows
+      - build-macos
+      - publish
+    steps:
+      - name: Report results
+        run: |
+          {
+            echo '### Manual release results'
+            echo
+            echo "- Request validation: `${{ needs.prepare.result }}`"
+            echo "- Tests: `${{ needs.tests.result }}`"
+            echo "- Linux: `${{ needs.build-linux.result }}`"
+            echo "- Windows: `${{ needs.build-windows.result }}`"
+            echo "- macOS: `${{ needs.build-macos.result }}`"
+            echo "- Publication: `${{ needs.publish.result }}`"
+            echo
+            if [[ "${{ inputs.publish_mode }}" == 'artifacts-only' ]]; then
+              echo 'No GitHub release was created. Download the selected bundles from this workflow run.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "${{ needs.prepare.result }}" != 'success' ]]; then
+            exit 1
+          fi
+          if [[ "${{ needs.tests.result }}" != 'success' && "${{ needs.tests.result }}" != 'skipped' ]]; then
+            exit 1
+          fi
+          for result in \
+            "${{ needs.build-linux.result }}" \
+            "${{ needs.build-windows.result }}" \
+            "${{ needs.build-macos.result }}"; do
+            if [[ "$result" != 'success' && "$result" != 'skipped' ]]; then
+              exit 1
+            fi
+          done
+          if [[ "${{ inputs.publish_mode }}" != 'artifacts-only' && "${{ needs.publish.result }}" != 'success' ]]; then
+            exit 1
+          fi
