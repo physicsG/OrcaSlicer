@@ -8,12 +8,13 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Slic3r::MultiAce {
 
 inline constexpr int SUPPORTED_SCHEMA_VERSION = 1;
-inline constexpr int PHYSICAL_TOOLHEAD_COUNT   = 4;
+inline constexpr int PHYSICAL_TOOLHEAD_COUNT  = 4;
 
 struct SourceId
 {
@@ -25,21 +26,20 @@ struct SourceId
     {
         if (provider.empty() || unit_id.empty() || slot_id.empty())
             throw std::invalid_argument("multiACE source ID components must not be empty");
-        if (provider.find(':') != std::string::npos || unit_id.find(':') != std::string::npos ||
-            slot_id.find(':') != std::string::npos)
+        if (provider.find(':') != std::string::npos || unit_id.find(':') != std::string::npos || slot_id.find(':') != std::string::npos)
             throw std::invalid_argument("multiACE source ID components must not contain ':'");
         return provider + ':' + unit_id + ':' + slot_id;
     }
 
-    friend bool operator==(const SourceId &lhs, const SourceId &rhs)
+    friend bool operator==(const SourceId& lhs, const SourceId& rhs)
     {
         return lhs.provider == rhs.provider && lhs.unit_id == rhs.unit_id && lhs.slot_id == rhs.slot_id;
     }
 
-    friend bool operator!=(const SourceId &lhs, const SourceId &rhs) { return !(lhs == rhs); }
+    friend bool operator!=(const SourceId& lhs, const SourceId& rhs) { return !(lhs == rhs); }
 };
 
-inline SourceId parse_source_id(const std::string &value)
+inline SourceId parse_source_id(const std::string& value)
 {
     const size_t first  = value.find(':');
     const size_t second = first == std::string::npos ? std::string::npos : value.find(':', first + 1);
@@ -79,13 +79,13 @@ enum class DryerState {
 
 struct ProviderCapabilities
 {
-    int  schema_version        = SUPPORTED_SCHEMA_VERSION;
-    bool inventory             = false;
-    bool live_events           = false;
-    bool rfid_refresh          = false;
-    bool remaining_percent     = false;
-    bool dryer_state           = false;
-    bool per_source_routing    = false;
+    int  schema_version         = SUPPORTED_SCHEMA_VERSION;
+    bool inventory              = false;
+    bool live_events            = false;
+    bool rfid_refresh           = false;
+    bool remaining_percent      = false;
+    bool dryer_state            = false;
+    bool per_source_routing     = false;
     bool measured_change_timing = false;
 };
 
@@ -99,11 +99,11 @@ struct FilamentSource
     std::string brand;
     std::string color;
 
-    std::optional<int> remaining_percent;
+    std::optional<int>   remaining_percent;
     SourceMetadataOrigin metadata_origin = SourceMetadataOrigin::Unknown;
     SourceState          state           = SourceState::Unknown;
 
-    std::vector<int> reachable_toolheads;
+    std::vector<int>   reachable_toolheads;
     std::optional<int> loaded_toolhead;
 
     std::optional<int>    humidity_percent;
@@ -121,13 +121,13 @@ struct InventorySnapshot
 
 namespace detail {
 
-inline void require_object(const nlohmann::json &value, const std::string &name)
+inline void require_object(const nlohmann::json& value, const std::string& name)
 {
     if (!value.is_object())
         throw std::invalid_argument(name + " must be a JSON object");
 }
 
-inline int parse_schema_version(const nlohmann::json &value)
+inline int parse_schema_version(const nlohmann::json& value)
 {
     if (!value.contains("schema_version") || !value.at("schema_version").is_number_integer())
         throw std::invalid_argument("schema_version must be an integer");
@@ -137,13 +137,13 @@ inline int parse_schema_version(const nlohmann::json &value)
     return schema_version;
 }
 
-inline std::string required_id_component(const nlohmann::json &source, const char *field)
+inline std::string required_id_component(const nlohmann::json& source, const char* field)
 {
     if (!source.contains(field))
         throw std::invalid_argument(std::string("source.") + field + " is required");
 
-    const nlohmann::json &value = source.at(field);
-    std::string result;
+    const nlohmann::json& value = source.at(field);
+    std::string           result;
     if (value.is_string())
         result = value.get<std::string>();
     else if (value.is_number_integer())
@@ -158,7 +158,7 @@ inline std::string required_id_component(const nlohmann::json &source, const cha
     return result;
 }
 
-inline std::string optional_string(const nlohmann::json &object, const char *field)
+inline std::string optional_string(const nlohmann::json& object, const char* field)
 {
     if (!object.contains(field) || object.at(field).is_null())
         return {};
@@ -167,11 +167,7 @@ inline std::string optional_string(const nlohmann::json &object, const char *fie
     return object.at(field).get<std::string>();
 }
 
-inline std::optional<int> optional_bounded_integer(
-    const nlohmann::json &object,
-    const char *field,
-    int minimum,
-    int maximum)
+inline std::optional<int> optional_bounded_integer(const nlohmann::json& object, const char* field, int minimum, int maximum)
 {
     if (!object.contains(field) || object.at(field).is_null())
         return std::nullopt;
@@ -183,7 +179,7 @@ inline std::optional<int> optional_bounded_integer(
     return value;
 }
 
-inline std::optional<double> optional_number(const nlohmann::json &object, const char *field)
+inline std::optional<double> optional_number(const nlohmann::json& object, const char* field)
 {
     if (!object.contains(field) || object.at(field).is_null())
         return std::nullopt;
@@ -192,7 +188,7 @@ inline std::optional<double> optional_number(const nlohmann::json &object, const
     return object.at(field).get<double>();
 }
 
-inline bool optional_bool(const nlohmann::json &object, const char *field)
+inline bool optional_bool(const nlohmann::json& object, const char* field)
 {
     if (!object.contains(field) || object.at(field).is_null())
         return false;
@@ -201,7 +197,7 @@ inline bool optional_bool(const nlohmann::json &object, const char *field)
     return object.at(field).get<bool>();
 }
 
-inline SourceMetadataOrigin parse_metadata_origin(const std::string &value)
+inline SourceMetadataOrigin parse_metadata_origin(const std::string& value)
 {
     if (value == "rfid")
         return SourceMetadataOrigin::RFID;
@@ -214,7 +210,7 @@ inline SourceMetadataOrigin parse_metadata_origin(const std::string &value)
     return SourceMetadataOrigin::Unknown;
 }
 
-inline SourceState parse_source_state(const std::string &value)
+inline SourceState parse_source_state(const std::string& value)
 {
     if (value == "empty")
         return SourceState::Empty;
@@ -231,7 +227,7 @@ inline SourceState parse_source_state(const std::string &value)
     return SourceState::Unknown;
 }
 
-inline DryerState parse_dryer_state(const nlohmann::json &source)
+inline DryerState parse_dryer_state(const nlohmann::json& source)
 {
     if (source.contains("dryer_state") && !source.at("dryer_state").is_null()) {
         if (!source.at("dryer_state").is_string())
@@ -257,7 +253,7 @@ inline DryerState parse_dryer_state(const nlohmann::json &source)
     return DryerState::Unknown;
 }
 
-inline std::vector<int> parse_reachable_toolheads(const nlohmann::json &source)
+inline std::vector<int> parse_reachable_toolheads(const nlohmann::json& source)
 {
     if (!source.contains("reachable_toolheads") || source.at("reachable_toolheads").is_null())
         return {};
@@ -265,7 +261,7 @@ inline std::vector<int> parse_reachable_toolheads(const nlohmann::json &source)
         throw std::invalid_argument("reachable_toolheads must be an array");
 
     std::set<int> unique;
-    for (const nlohmann::json &value : source.at("reachable_toolheads")) {
+    for (const nlohmann::json& value : source.at("reachable_toolheads")) {
         if (!value.is_number_integer())
             throw std::invalid_argument("reachable_toolheads entries must be integers");
         const int toolhead = value.get<int>();
@@ -278,12 +274,12 @@ inline std::vector<int> parse_reachable_toolheads(const nlohmann::json &source)
 
 } // namespace detail
 
-inline ProviderCapabilities parse_capabilities(const nlohmann::json &payload)
+inline ProviderCapabilities parse_capabilities(const nlohmann::json& payload)
 {
     detail::require_object(payload, "multiACE capabilities payload");
 
-    ProviderCapabilities result;
-    const nlohmann::json *capabilities = &payload;
+    ProviderCapabilities  result;
+    const nlohmann::json* capabilities = &payload;
     if (payload.contains("schema_version"))
         result.schema_version = detail::parse_schema_version(payload);
     if (payload.contains("capabilities")) {
@@ -302,7 +298,7 @@ inline ProviderCapabilities parse_capabilities(const nlohmann::json &payload)
     return result;
 }
 
-inline InventorySnapshot parse_inventory(const nlohmann::json &payload)
+inline InventorySnapshot parse_inventory(const nlohmann::json& payload)
 {
     detail::require_object(payload, "multiACE inventory payload");
 
@@ -315,12 +311,12 @@ inline InventorySnapshot parse_inventory(const nlohmann::json &payload)
         throw std::invalid_argument("sources must be an array");
 
     std::set<std::string> seen_ids;
-    for (const nlohmann::json &source_json : payload.at("sources")) {
+    for (const nlohmann::json& source_json : payload.at("sources")) {
         detail::require_object(source_json, "multiACE inventory source");
 
         const std::string unit_id = detail::required_id_component(source_json, "unit_id");
         const std::string slot_id = detail::required_id_component(source_json, "slot_id");
-        const SourceId canonical_id{"multiace", unit_id, slot_id};
+        const SourceId    canonical_id{"multiace", unit_id, slot_id};
 
         SourceId source_id = canonical_id;
         if (source_json.contains("source_id") && !source_json.at("source_id").is_null()) {
@@ -340,27 +336,19 @@ inline InventorySnapshot parse_inventory(const nlohmann::json &payload)
         source.rfid_uid = detail::optional_string(source_json, "rfid_uid");
         if (source.rfid_uid.empty())
             source.rfid_uid = detail::optional_string(source_json, "tag_uid");
-        source.material  = detail::optional_string(source_json, "material");
-        source.subtype   = detail::optional_string(source_json, "subtype");
-        source.brand     = detail::optional_string(source_json, "brand");
-        source.color     = detail::optional_string(source_json, "color");
-        source.remaining_percent = detail::optional_bounded_integer(source_json, "remaining_percent", 0, 100);
-        source.metadata_origin   = detail::parse_metadata_origin(detail::optional_string(source_json, "metadata_origin"));
-        source.state             = detail::parse_source_state(detail::optional_string(source_json, "state"));
-        source.reachable_toolheads = detail::parse_reachable_toolheads(source_json);
-        source.loaded_toolhead = detail::optional_bounded_integer(
-            source_json,
-            "loaded_toolhead",
-            0,
-            PHYSICAL_TOOLHEAD_COUNT - 1);
-        source.humidity_percent = detail::optional_bounded_integer(source_json, "humidity_percent", 0, 100);
-        source.temperature_c    = detail::optional_number(source_json, "temperature_c");
-        source.dryer_state      = detail::parse_dryer_state(source_json);
-        source.dryer_remaining_minutes = detail::optional_bounded_integer(
-            source_json,
-            "dryer_remaining_minutes",
-            0,
-            24 * 60);
+        source.material                = detail::optional_string(source_json, "material");
+        source.subtype                 = detail::optional_string(source_json, "subtype");
+        source.brand                   = detail::optional_string(source_json, "brand");
+        source.color                   = detail::optional_string(source_json, "color");
+        source.remaining_percent       = detail::optional_bounded_integer(source_json, "remaining_percent", 0, 100);
+        source.metadata_origin         = detail::parse_metadata_origin(detail::optional_string(source_json, "metadata_origin"));
+        source.state                   = detail::parse_source_state(detail::optional_string(source_json, "state"));
+        source.reachable_toolheads     = detail::parse_reachable_toolheads(source_json);
+        source.loaded_toolhead         = detail::optional_bounded_integer(source_json, "loaded_toolhead", 0, PHYSICAL_TOOLHEAD_COUNT - 1);
+        source.humidity_percent        = detail::optional_bounded_integer(source_json, "humidity_percent", 0, 100);
+        source.temperature_c           = detail::optional_number(source_json, "temperature_c");
+        source.dryer_state             = detail::parse_dryer_state(source_json);
+        source.dryer_remaining_minutes = detail::optional_bounded_integer(source_json, "dryer_remaining_minutes", 0, 24 * 60);
 
         result.sources.emplace_back(std::move(source));
     }
