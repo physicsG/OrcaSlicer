@@ -1,0 +1,13 @@
+name: Build macOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  placeholder:
+    runs-on: macos-14
+    steps:
+      - run: echo 'macOS build action is being configured.'
