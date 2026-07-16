@@ -101,6 +101,21 @@ jobs:
           mapfile -t workflows < /tmp/changed-workflows.txt
           yamllint --config-file .yamllint.yml "${workflows[@]}"
 
+  release-tooling:
+    name: release-tooling
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Compile release helper scripts
+        run: python -m py_compile scripts/release/*.py
+
+      - name: Run release helper smoke tests
+        run: python scripts/release/test_release_tools.py
+
   documentation:
     name: documentation
     runs-on: ubuntu-24.04
