@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate manual release inputs and production tag/version requirements."""
+"""Validate manual release inputs and publication tag/version requirements."""
 
 from __future__ import annotations
 
@@ -44,6 +44,22 @@ def normalize_tag_version(tag: str) -> str:
     return tag.removeprefix("refs/tags/").removeprefix("v").removeprefix("V")
 
 
+def validate_publication_tag(version_label: str) -> None:
+    tag_ref = f"refs/tags/{version_label}"
+    if run_git("show-ref", "--verify", "--quiet", tag_ref, check=False).returncode != 0:
+        raise ValueError(
+            "version_label must name an existing tag when publishing a GitHub release"
+        )
+
+    selected_commit = run_git("rev-parse", "HEAD").stdout.strip()
+    tag_commit = run_git("rev-list", "-n", "1", version_label).stdout.strip()
+    if tag_commit != selected_commit:
+        raise ValueError(
+            f"publication tag {version_label!r} resolves to {tag_commit}, "
+            f"not selected commit {selected_commit}"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-ref", required=True)
@@ -76,8 +92,10 @@ def main() -> int:
         raise ValueError("select at least one platform to build")
     if args.sign_artifacts and not args.build_macos:
         raise ValueError("sign_artifacts currently applies to macOS and requires build_macos")
-    if args.publish_mode != "artifacts-only" and not version_label:
-        raise ValueError("version_label is required when publishing a GitHub release")
+    if args.publish_mode != "artifacts-only":
+        if not version_label:
+            raise ValueError("version_label is required when publishing a GitHub release")
+        validate_publication_tag(version_label)
 
     if args.publish_mode == "production-release":
         if not args.run_full_tests:
