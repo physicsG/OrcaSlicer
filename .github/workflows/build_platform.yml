@@ -82,7 +82,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up CMake 3.28
-        uses: lukka/get-cmake@latest
+        uses: lukka/get-cmake@4.3.4
         with:
           cmakeVersion: '~3.28.0'
 
