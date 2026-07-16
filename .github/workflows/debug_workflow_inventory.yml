@@ -18,4 +18,9 @@ jobs:
           sparse-checkout-cone-mode: false
           show-progress: false
       - name: List workflow files
-        run: find .github/workflows -maxdepth 1 -type f -printf '%f\n' | sort
+        run: find .github/workflows -maxdepth 1 -type f -printf '%f\n' | sort > workflow-files.txt
+      - name: Upload workflow inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-files
+          path: workflow-files.txt
