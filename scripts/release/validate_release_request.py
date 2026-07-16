@@ -92,10 +92,6 @@ def main() -> int:
         raise ValueError("select at least one platform to build")
     if args.sign_artifacts and not args.build_macos:
         raise ValueError("sign_artifacts currently applies to macOS and requires build_macos")
-    if args.publish_mode != "artifacts-only":
-        if not version_label:
-            raise ValueError("version_label is required when publishing a GitHub release")
-        validate_publication_tag(version_label)
 
     if args.publish_mode == "production-release":
         if not args.run_full_tests:
@@ -105,6 +101,12 @@ def main() -> int:
         if not args.sign_artifacts:
             raise ValueError("production releases require signed and notarized macOS artifacts")
 
+    if args.publish_mode != "artifacts-only":
+        if not version_label:
+            raise ValueError("version_label is required when publishing a GitHub release")
+        validate_publication_tag(version_label)
+
+    if args.publish_mode == "production-release":
         source_tag = source_ref.removeprefix("refs/tags/")
         tag_ref = f"refs/tags/{source_tag}"
         if run_git("show-ref", "--verify", "--quiet", tag_ref, check=False).returncode != 0:
