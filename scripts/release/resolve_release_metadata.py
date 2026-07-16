@@ -11,6 +11,7 @@ from pathlib import Path
 
 VERSION_PATTERN = re.compile(r'set\(Snapmaker_VERSION\s+"([^"]+)"\)')
 LABEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$")
+SOURCE_REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@+-]{0,199}$")
 
 
 def run_git(*args: str) -> str:
@@ -58,8 +59,11 @@ def main() -> int:
     args = parser.parse_args()
 
     source_ref = args.source_ref.strip()
-    if not source_ref or any(ord(character) < 32 for character in source_ref):
-        raise ValueError("source_ref must be a non-empty printable value")
+    if not SOURCE_REF_PATTERN.fullmatch(source_ref):
+        raise ValueError(
+            "source_ref must start with an alphanumeric character and contain only "
+            "letters, numbers, '.', '_', '/', '@', '+', or '-' (maximum 200 characters)"
+        )
 
     version = read_version(args.version_file)
     commit = run_git("rev-parse", "HEAD")
