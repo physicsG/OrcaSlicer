@@ -110,18 +110,18 @@ jobs:
           fi
 
           notes_file=$(mktemp)
-          cat > "$notes_file" <<EOF
-          Manual Snapmaker Orca release build.
-
-          - Source ref: `${{ inputs.source_ref }}`
-          - Commit: `$target_commit`
-          - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          - Linux selected: `${{ inputs.build_linux }}`
-          - Windows selected: `${{ inputs.build_windows }}`
-          - macOS selected: `${{ inputs.build_macos }}`
-          - Full tests: `${{ inputs.run_full_tests }}`
-          - macOS signing requested: `${{ inputs.sign_artifacts }}`
-          EOF
+          {
+            echo 'Manual Snapmaker Orca release build.'
+            echo
+            echo '- Source ref: ${{ inputs.source_ref }}'
+            echo "- Commit: $target_commit"
+            echo '- Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+            echo '- Linux selected: ${{ inputs.build_linux }}'
+            echo '- Windows selected: ${{ inputs.build_windows }}'
+            echo '- macOS selected: ${{ inputs.build_macos }}'
+            echo '- Full tests: ${{ inputs.run_full_tests }}'
+            echo '- macOS signing requested: ${{ inputs.sign_artifacts }}'
+          } > "$notes_file"
 
           common_args=(
             "$release_tag"
@@ -139,7 +139,7 @@ jobs:
               gh release create "${common_args[@]}" --prerelease --target "$target_commit"
               ;;
             production-release)
-              gh release create "${common_args[@]}" --verify-tag --generate-notes
+              gh release create "${common_args[@]}" --verify-tag
               ;;
             *)
               echo "Unsupported publication mode: ${{ inputs.publish_mode }}" >&2
