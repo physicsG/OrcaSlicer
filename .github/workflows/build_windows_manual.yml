@@ -1,0 +1,13 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  placeholder:
+    runs-on: windows-2022
+    steps:
+      - run: Write-Host 'Windows build action is being configured.'
