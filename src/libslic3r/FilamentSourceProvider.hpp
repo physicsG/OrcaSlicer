@@ -74,14 +74,15 @@ public:
 
     void set_inventory(InventorySnapshot inventory)
     {
+        InventorySnapshot              snapshot;
         std::vector<InventoryCallback> callbacks;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             m_inventory = std::move(inventory);
+            snapshot    = m_inventory;
             callbacks   = m_inventory_callbacks;
         }
 
-        const InventorySnapshot snapshot = this->inventory();
         for (const InventoryCallback& callback : callbacks)
             callback(snapshot);
     }
