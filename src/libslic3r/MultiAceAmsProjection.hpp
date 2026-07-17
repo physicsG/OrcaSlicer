@@ -108,9 +108,8 @@ inline std::string normalize_color_rgba(std::string color)
     if (!std::all_of(color.begin(), color.end(), [](unsigned char character) { return is_hex_digit(character); }))
         return {};
 
-    std::transform(color.begin(), color.end(), color.begin(), [](unsigned char character) {
-        return static_cast<char>(std::toupper(character));
-    });
+    std::transform(color.begin(), color.end(), color.begin(),
+                   [](unsigned char character) { return static_cast<char>(std::toupper(character)); });
     if (color.size() == 6)
         color += "FF";
     return color;
@@ -139,14 +138,14 @@ inline AmsInventoryProjection project_inventory_to_ams(const InventorySnapshot& 
 
     struct UnitAccumulator
     {
-        AmsUnitProjection projection;
-        double            temperature_sum    = 0.0;
-        int               temperature_count  = 0;
+        AmsUnitProjection  projection;
+        double             temperature_sum   = 0.0;
+        int                temperature_count = 0;
         std::optional<int> common_nozzle;
-        bool              nozzle_is_ambiguous = false;
+        bool               nozzle_is_ambiguous = false;
     };
 
-    AmsInventoryProjection        result;
+    AmsInventoryProjection         result;
     std::map<int, UnitAccumulator> units;
     std::set<std::pair<int, int>>  occupied_slots;
     const int                      usable_mask_bits = std::numeric_limits<long>::digits;
@@ -175,18 +174,18 @@ inline AmsInventoryProjection project_inventory_to_ams(const InventorySnapshot& 
             throw std::invalid_argument("multiACE loaded_toolhead is not reachable from its source");
         }
 
-        UnitAccumulator& accumulator = units[unit_index];
+        UnitAccumulator& accumulator      = units[unit_index];
         accumulator.projection.unit_index = unit_index;
         accumulator.projection.ams_id     = std::to_string(unit_index);
 
         AmsTrayProjection tray;
-        tray.unit_index = unit_index;
-        tray.slot_index = slot_index;
-        tray.ams_id     = accumulator.projection.ams_id;
-        tray.tray_id    = std::to_string(slot_index);
-        tray.source_id  = source.id.str();
-        tray.color_rgba = projection_detail::normalize_color_rgba(source.color);
-        tray.exists     = source.state != SourceState::Empty;
+        tray.unit_index     = unit_index;
+        tray.slot_index     = slot_index;
+        tray.ams_id         = accumulator.projection.ams_id;
+        tray.tray_id        = std::to_string(slot_index);
+        tray.source_id      = source.id.str();
+        tray.color_rgba     = projection_detail::normalize_color_rgba(source.color);
+        tray.exists         = source.state != SourceState::Empty;
         tray.rfid_read_done = tray.exists && source.metadata_origin == SourceMetadataOrigin::RFID && !source.rfid_uid.empty();
         tray.source         = source;
 
@@ -207,9 +206,9 @@ inline AmsInventoryProjection project_inventory_to_ams(const InventorySnapshot& 
             ++accumulator.temperature_count;
         }
         if (source.dryer_remaining_minutes.has_value()) {
-            const int seconds = *source.dryer_remaining_minutes > std::numeric_limits<int>::max() / 60
-                                    ? std::numeric_limits<int>::max()
-                                    : *source.dryer_remaining_minutes * 60;
+            const int seconds                              = *source.dryer_remaining_minutes > std::numeric_limits<int>::max() / 60 ?
+                                                                 std::numeric_limits<int>::max() :
+                                                                 *source.dryer_remaining_minutes * 60;
             accumulator.projection.dryer_remaining_seconds = std::max(accumulator.projection.dryer_remaining_seconds, seconds);
         }
 
