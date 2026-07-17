@@ -2,6 +2,13 @@
 
 The existing OrcaSlicer machine UI is built around `MachineObject::amsList`, `Ams`, and `AmsTray`. The multiACE bridge projects the provider inventory into those inherited objects without representing spool slots as physical extruders.
 
+The implementation has two layers:
+
+- `BasicMultiAceAmsModel<Traits>` owns lifecycle, pointer stability, masks, source metadata, and thread-affinity rules without including wxWidgets or GUI classes.
+- `MultiAceMachineModel` is a thin GUI adapter whose traits create and populate OrcaSlicer's concrete `Ams` and `AmsTray` objects.
+
+This split lets the full ownership engine run in the existing libslic3r unit-test target while keeping GUI field mapping close to `DeviceManager`.
+
 ## Topology rules
 
 The first bridge version intentionally accepts the inherited topology that existing AMS UI code understands:
@@ -33,13 +40,13 @@ Unit-level humidity, temperature, dryer time, and unambiguous nozzle routing are
 
 ## Full source metadata
 
-The inherited tray object cannot represent every multiACE field. `MultiAceMachineModel` therefore retains a sidecar record keyed by `(ams_id, tray_id)` containing the complete `FilamentSource` and inventory revision. It also provides a reverse lookup from stable `SourceId` to the projected AMS slot.
+The inherited tray object cannot represent every multiACE field. `BasicMultiAceAmsModel` therefore retains a sidecar record keyed by `(ams_id, tray_id)` containing the complete `FilamentSource` and inventory revision. It also provides a reverse lookup from stable `SourceId` to the projected AMS slot.
 
 The inherited filament profile and UUID fields remain untouched. Callers that require stable source identity, routing, metadata origin, dryer state, or loaded-toolhead information must use the sidecar lookup.
 
 ## Ownership and pointer stability
 
-`MultiAceMachineModel` owns only the units and trays it inserts. It:
+The model owns only the units and trays it inserts. It:
 
 - preserves unrelated/native `amsList` entries;
 - rejects unit-ID collisions rather than replacing an existing AMS;
