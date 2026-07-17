@@ -4,11 +4,14 @@
 
 #include "nlohmann/json.hpp"
 
+#include <condition_variable>
 #include <deque>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -26,19 +29,57 @@ struct RecordedRequest
 class FakeRestTransport final : public RestTransport
 {
 public:
-    void queue_get(const std::string& path, TransportResponse response) { m_get_responses[path].emplace_back(std::move(response)); }
-    void queue_post(const std::string& path, TransportResponse response) { m_post_responses[path].emplace_back(std::move(response)); }
+    void queue_get(const std::string& path, TransportResponse response)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_get_responses[path].emplace_back(std::move(response));
+    }
+
+    void queue_post(const std::string& path, TransportResponse response)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_post_responses[path].emplace_back(std::move(response));
+    }
 
     TransportResponse get(const std::string& path) override
     {
+        std::unique_lock<std::mutex> lock(m_mutex);
         requests.push_back({"GET", path, {}});
+        if (path == "/api/v1/inventory" && m_block_next_inventory) {
+            m_inventory_blocked = true;
+            m_block_condition.notify_all();
+            m_block_condition.wait(lock, [this] { return m_release_inventory; });
+            m_block_next_inventory = false;
+            m_inventory_blocked    = false;
+            m_release_inventory    = false;
+        }
         return pop_response(m_get_responses, path);
     }
 
     TransportResponse post(const std::string& path, const std::string& body) override
     {
+        std::lock_guard<std::mutex> lock(m_mutex);
         requests.push_back({"POST", path, body});
         return pop_response(m_post_responses, path);
+    }
+
+    void block_next_inventory_request()
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_block_next_inventory = true;
+    }
+
+    void wait_until_inventory_blocked()
+    {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_block_condition.wait(lock, [this] { return m_inventory_blocked; });
+    }
+
+    void release_inventory_request()
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_release_inventory = true;
+        m_block_condition.notify_all();
     }
 
     std::vector<RecordedRequest> requests;
@@ -54,8 +95,13 @@ private:
         return response;
     }
 
+    std::mutex                                            m_mutex;
+    std::condition_variable                               m_block_condition;
     std::map<std::string, std::deque<TransportResponse>> m_get_responses;
     std::map<std::string, std::deque<TransportResponse>> m_post_responses;
+    bool                                                  m_block_next_inventory = false;
+    bool                                                  m_inventory_blocked    = false;
+    bool                                                  m_release_inventory    = false;
 };
 
 class FakeEventTransport final : public EventTransport
@@ -161,12 +207,12 @@ std::shared_ptr<FakeRestTransport> configured_rest(const nlohmann::json& invento
 
 TEST_CASE("Moonraker multiACE provider loads capabilities and inventory", "[multiace][moonraker]")
 {
-    const auto rest   = configured_rest();
-    const auto events = std::make_shared<FakeEventTransport>();
-    MoonrakerFilamentSourceProvider provider(rest, events);
-
+    const auto               rest   = configured_rest();
+    const auto               events = std::make_shared<FakeEventTransport>();
     std::vector<std::string> revisions;
-    provider.subscribe([&revisions](const InventorySnapshot& inventory) { revisions.emplace_back(inventory.revision); });
+    MoonrakerFilamentSourceProvider provider(rest, events);
+    const auto subscription = provider.subscribe(
+        [&revisions](const InventorySnapshot& inventory) { revisions.emplace_back(inventory.revision); });
 
     REQUIRE(provider.start());
     CHECK(provider.is_started());
@@ -179,6 +225,7 @@ TEST_CASE("Moonraker multiACE provider loads capabilities and inventory", "[mult
     CHECK(events->connect_count == 1);
     CHECK(events->connected_path == "/api/v1/events");
     CHECK(provider.last_error().empty());
+    CHECK(provider.unsubscribe(subscription));
 }
 
 TEST_CASE("Moonraker multiACE provider applies full inventory events", "[multiace][moonraker]")
@@ -216,6 +263,43 @@ TEST_CASE("Moonraker multiACE provider refreshes inventory for change notificati
     REQUIRE(rest->requests.size() == 3);
     CHECK(rest->requests.back().method == "GET");
     CHECK(rest->requests.back().path == "/api/v1/inventory");
+}
+
+TEST_CASE("Moonraker multiACE provider rejects unversioned trigger events", "[multiace][moonraker]")
+{
+    const auto rest   = configured_rest();
+    const auto events = std::make_shared<FakeEventTransport>();
+    MoonrakerFilamentSourceProvider provider(rest, events);
+    REQUIRE(provider.start());
+
+    events->emit(R"json({"event":"inventory_changed"})json");
+
+    CHECK(provider.inventory().revision == "r1");
+    CHECK(rest->requests.size() == 2);
+    CHECK(provider.last_error().find("schema_version") != std::string::npos);
+}
+
+TEST_CASE("Moonraker multiACE provider preserves newer events over stale REST refreshes", "[multiace][moonraker]")
+{
+    const auto rest   = configured_rest();
+    const auto events = std::make_shared<FakeEventTransport>();
+    MoonrakerFilamentSourceProvider provider(rest, events);
+    REQUIRE(provider.start());
+
+    rest->queue_get("/api/v1/inventory", json_response(inventory_payload("r2", "loading")));
+    rest->block_next_inventory_request();
+    std::thread stale_refresh([&events] { events->emit(R"json({"schema_version":1,"event":"inventory_changed"})json"); });
+    rest->wait_until_inventory_blocked();
+
+    events->emit(inventory_payload("r3", "ready", "PETG", 44).dump());
+    rest->release_inventory_request();
+    stale_refresh.join();
+
+    const InventorySnapshot inventory = provider.inventory();
+    CHECK(inventory.revision == "r3");
+    CHECK(inventory.sources[0].material == "PETG");
+    REQUIRE(inventory.sources[0].remaining_percent.has_value());
+    CHECK(*inventory.sources[0].remaining_percent == 44);
 }
 
 TEST_CASE("Moonraker multiACE provider preserves metadata across disconnect and reconnect", "[multiace][moonraker]")
@@ -258,6 +342,24 @@ TEST_CASE("Moonraker multiACE provider ignores malformed events without corrupti
     events->emit(inventory_payload("r2").dump());
     CHECK(provider.inventory().revision == "r2");
     CHECK(provider.last_error().empty());
+}
+
+TEST_CASE("Moonraker multiACE provider contains inventory subscriber failures", "[multiace][moonraker]")
+{
+    const auto rest   = configured_rest();
+    const auto events = std::make_shared<FakeEventTransport>();
+    MoonrakerFilamentSourceProvider provider(rest, events);
+    REQUIRE(provider.start());
+
+    const auto subscription = provider.subscribe([](const InventorySnapshot& inventory) {
+        if (inventory.revision == "r2")
+            throw std::runtime_error("subscriber failed");
+    });
+
+    CHECK_NOTHROW(events->emit(inventory_payload("r2").dump()));
+    CHECK(provider.inventory().revision == "r2");
+    CHECK(provider.last_error().find("subscriber failed") != std::string::npos);
+    CHECK(provider.unsubscribe(subscription));
 }
 
 TEST_CASE("Moonraker multiACE provider posts RFID refresh and reloads inventory", "[multiace][moonraker]")
@@ -310,7 +412,7 @@ TEST_CASE("Moonraker multiACE provider validates refresh source providers", "[mu
     MoonrakerFilamentSourceProvider provider(rest);
     REQUIRE(provider.start());
 
-    CHECK_THROWS_WITH(provider.request_metadata_refresh(SourceId{"other", "1", "2"}),
+    CHECK_THROWS_WITH((provider.request_metadata_refresh(SourceId{"other", "1", "2"})),
                       "metadata refresh requires a multiace source ID");
 }
 
@@ -321,6 +423,7 @@ TEST_CASE("Moonraker multiACE provider marks inventory offline when stopped", "[
     MoonrakerFilamentSourceProvider provider(rest, events);
     REQUIRE(provider.start());
 
+    provider.stop();
     provider.stop();
 
     CHECK_FALSE(provider.is_started());
