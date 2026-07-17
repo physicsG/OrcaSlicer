@@ -214,7 +214,7 @@ private:
         tray.nozzle_temp_max.clear();
         tray.nozzle_temp_min.clear();
         tray.xcam_info.clear();
-        tray.uuid          = projection.source_id;
+        tray.uuid.clear();
         tray.ctype         = 0;
         tray.k             = 0.0f;
         tray.n             = 0.0f;
@@ -254,10 +254,13 @@ private:
                 auto     tray = std::make_unique<AmsTray>(tray_projection.tray_id);
                 AmsTray* raw  = tray.get();
                 found         = owned.trays.emplace(tray_projection.tray_id, std::move(tray)).first;
-                const auto tray_inserted = owned.ams->trayList.emplace(tray_projection.tray_id, raw);
-                if (!tray_inserted.second) {
+                try {
+                    const auto tray_inserted = owned.ams->trayList.emplace(tray_projection.tray_id, raw);
+                    if (!tray_inserted.second)
+                        throw std::logic_error("multiACE AMS tray target changed during model update");
+                } catch (...) {
                     owned.trays.erase(found);
-                    throw std::logic_error("multiACE AMS tray target changed during model update");
+                    throw;
                 }
             }
             update_tray(*found->second, tray_projection);
