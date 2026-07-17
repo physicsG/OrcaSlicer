@@ -46,12 +46,12 @@ InventorySnapshot inventory(std::string revision, std::vector<FilamentSource> so
 struct LocalAmsTarget
 {
     std::map<std::string, Ams*> ams_list;
-    long                        ams_exist_bits       = 0;
-    long                        tray_exist_bits      = 0;
-    long                        tray_is_bbl_bits     = 0;
-    long                        tray_read_done_bits  = 0;
-    long                        tray_reading_bits    = 0;
-    bool                        is_ams_need_update   = false;
+    long                        ams_exist_bits      = 0;
+    long                        tray_exist_bits     = 0;
+    long                        tray_is_bbl_bits    = 0;
+    long                        tray_read_done_bits = 0;
+    long                        tray_reading_bits   = 0;
+    bool                        is_ams_need_update  = false;
 
     AmsModelTarget target()
     {
@@ -70,9 +70,9 @@ struct LocalAmsTarget
 TEST_CASE("multiACE inventory projects deterministically into AMS units", "[multiace][ams]")
 {
     FilamentSource unit_two = source("2", "1", SourceState::Loading, "PETG", "11223344", {1, 2});
-    unit_two.humidity_percent         = 63;
-    unit_two.temperature_c            = 31.0;
-    unit_two.dryer_remaining_minutes  = 12;
+    unit_two.humidity_percent        = 63;
+    unit_two.temperature_c           = 31.0;
+    unit_two.dryer_remaining_minutes = 12;
 
     FilamentSource unit_one_loaded = source("1", "1", SourceState::Ready, "PLA", "#abcdef", {0}, 0);
     unit_one_loaded.humidity_percent = 42;
@@ -139,6 +139,12 @@ TEST_CASE("multiACE AMS projection rejects invalid inherited topology", "[multia
                           "multiACE slot_id must be between 0 and 3");
     }
 
+    SECTION("mask capacity")
+    {
+        CHECK_THROWS_WITH(project_inventory_to_ams(inventory("r1", {source("2147483647", "0")})),
+                          "multiACE unit and slot exceed the inherited AMS bit-mask capacity");
+    }
+
     SECTION("loaded head is not reachable")
     {
         CHECK_THROWS_WITH(project_inventory_to_ams(inventory("r1", {source("0", "0", SourceState::Ready, "PLA", "FFFFFF", {1}, 2)})),
@@ -174,6 +180,7 @@ TEST_CASE("multiACE machine model preserves pointers and native AMS entries", "[
         CHECK(unit_pointer->nozzle == -1);
         CHECK(tray_pointer->type == "PLA");
         CHECK(tray_pointer->color == "D52332FF");
+        CHECK(tray_pointer->uuid.empty());
         CHECK(tray_pointer->remain == 75);
         CHECK(tray_pointer->is_exists);
         CHECK(tray_pointer->rfid_state == AMS_REID_DONE);
@@ -215,6 +222,22 @@ TEST_CASE("multiACE machine model preserves pointers and native AMS entries", "[
     }
 }
 
+TEST_CASE("multiACE machine model preserves overlapping external mask ownership", "[multiace][ams]")
+{
+    LocalAmsTarget target;
+    target.ams_exist_bits      = 1L;
+    target.tray_exist_bits     = 1L;
+    target.tray_read_done_bits = 1L;
+
+    MultiAceMachineModel model(target.target());
+    model.apply(inventory("r1", {source("0", "0")}));
+    model.clear();
+
+    CHECK(target.ams_exist_bits == 1L);
+    CHECK(target.tray_exist_bits == 1L);
+    CHECK(target.tray_read_done_bits == 1L);
+}
+
 TEST_CASE("multiACE machine model rejects native AMS collisions", "[multiace][ams]")
 {
     LocalAmsTarget target;
@@ -229,9 +252,9 @@ TEST_CASE("multiACE machine model rejects native AMS collisions", "[multiace][am
 
 TEST_CASE("multiACE machine model enforces owner-thread access", "[multiace][ams]")
 {
-    LocalAmsTarget      target;
+    LocalAmsTarget       target;
     MultiAceMachineModel model(target.target());
-    std::atomic<bool>   rejected{false};
+    std::atomic<bool>    rejected{false};
 
     std::thread worker([&] {
         try {
