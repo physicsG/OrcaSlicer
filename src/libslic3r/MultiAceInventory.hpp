@@ -195,9 +195,9 @@ inline std::optional<int> optional_bounded_integer(const nlohmann::json& object,
         throw std::invalid_argument(std::string(field) + " must be an integer or null");
 
     if (value_json.is_number_unsigned()) {
-        const unsigned long long value = value_json.get<unsigned long long>();
-        const bool below_minimum = minimum > 0 && value < static_cast<unsigned long long>(minimum);
-        const bool above_maximum = maximum < 0 || value > static_cast<unsigned long long>(maximum);
+        const unsigned long long value         = value_json.get<unsigned long long>();
+        const bool               below_minimum = minimum > 0 && value < static_cast<unsigned long long>(minimum);
+        const bool               above_maximum = maximum < 0 || value > static_cast<unsigned long long>(maximum);
         if (below_minimum || above_maximum)
             throw std::invalid_argument(std::string(field) + " is outside the supported range");
         return static_cast<int>(value);
@@ -395,7 +395,8 @@ inline InventorySnapshot parse_inventory(const nlohmann::json& payload)
         source.dryer_remaining_minutes = detail::optional_bounded_integer(source_json, "dryer_remaining_minutes", 0, 24 * 60);
 
         if (source.loaded_toolhead && !source.reachable_toolheads.empty() &&
-            std::find(source.reachable_toolheads.begin(), source.reachable_toolheads.end(), *source.loaded_toolhead) == source.reachable_toolheads.end())
+            std::find(source.reachable_toolheads.begin(), source.reachable_toolheads.end(), *source.loaded_toolhead) ==
+                source.reachable_toolheads.end())
             throw std::invalid_argument("loaded_toolhead must be included in reachable_toolheads");
 
         result.sources.emplace_back(std::move(source));
