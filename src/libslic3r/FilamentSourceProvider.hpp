@@ -3,6 +3,8 @@
 
 #include "MultiAceInventory.hpp"
 
+#include <algorithm>
+#include <cstdint>
 #include <deque>
 #include <exception>
 #include <functional>
@@ -16,12 +18,16 @@ class FilamentSourceProvider
 {
 public:
     using InventoryCallback = std::function<void(const InventorySnapshot&)>;
+    using SubscriptionId    = std::uint64_t;
+
+    static constexpr SubscriptionId INVALID_SUBSCRIPTION_ID = 0;
 
     virtual ~FilamentSourceProvider() = default;
 
     virtual ProviderCapabilities capabilities() const                             = 0;
     virtual InventorySnapshot    inventory() const                                = 0;
-    virtual void                 subscribe(InventoryCallback callback)            = 0;
+    virtual SubscriptionId       subscribe(InventoryCallback callback)            = 0;
+    virtual bool                 unsubscribe(SubscriptionId subscription_id)      = 0;
     virtual void                 request_metadata_refresh(const SourceId& source) = 0;
 };
 
@@ -49,12 +55,30 @@ public:
         return m_inventory;
     }
 
-    void subscribe(InventoryCallback callback) override
+    SubscriptionId subscribe(InventoryCallback callback) override
     {
         if (!callback)
-            return;
+            return INVALID_SUBSCRIPTION_ID;
+
         std::lock_guard<std::mutex> lock(m_mutex);
-        m_inventory_callbacks.emplace_back(std::move(callback));
+        const SubscriptionId       subscription_id = m_next_subscription_id++;
+        m_inventory_callbacks.emplace_back(subscription_id, std::move(callback));
+        return subscription_id;
+    }
+
+    bool unsubscribe(SubscriptionId subscription_id) override
+    {
+        if (subscription_id == INVALID_SUBSCRIPTION_ID)
+            return false;
+
+        std::lock_guard<std::mutex> lock(m_mutex);
+        const auto                  first_removed = std::remove_if(
+            m_inventory_callbacks.begin(),
+            m_inventory_callbacks.end(),
+            [subscription_id](const InventorySubscriber& subscriber) { return subscriber.first == subscription_id; });
+        const bool removed = first_removed != m_inventory_callbacks.end();
+        m_inventory_callbacks.erase(first_removed, m_inventory_callbacks.end());
+        return removed;
     }
 
     void request_metadata_refresh(const SourceId& source) override
@@ -98,6 +122,8 @@ public:
     }
 
 private:
+    using InventorySubscriber = std::pair<SubscriptionId, InventoryCallback>;
+
     void dispatch_inventory_notifications()
     {
         std::exception_ptr first_failure;
@@ -114,7 +140,9 @@ private:
 
                 snapshot = std::move(m_pending_inventory.front());
                 m_pending_inventory.pop_front();
-                callbacks = m_inventory_callbacks;
+                callbacks.reserve(m_inventory_callbacks.size());
+                for (const InventorySubscriber& subscriber : m_inventory_callbacks)
+                    callbacks.emplace_back(subscriber.second);
             }
 
             for (const InventoryCallback& callback : callbacks) {
@@ -131,13 +159,14 @@ private:
             std::rethrow_exception(first_failure);
     }
 
-    mutable std::mutex             m_mutex;
-    ProviderCapabilities           m_capabilities;
-    InventorySnapshot              m_inventory;
-    std::vector<InventoryCallback> m_inventory_callbacks;
-    RefreshCallback                m_refresh_callback;
-    std::deque<InventorySnapshot>  m_pending_inventory;
-    bool                           m_dispatching_inventory = false;
+    mutable std::mutex               m_mutex;
+    ProviderCapabilities             m_capabilities;
+    InventorySnapshot                m_inventory;
+    std::vector<InventorySubscriber> m_inventory_callbacks;
+    RefreshCallback                  m_refresh_callback;
+    std::deque<InventorySnapshot>    m_pending_inventory;
+    SubscriptionId                   m_next_subscription_id = 1;
+    bool                             m_dispatching_inventory = false;
 };
 
 } // namespace Slic3r::MultiAce
