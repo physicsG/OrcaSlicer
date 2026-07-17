@@ -15,13 +15,13 @@ using namespace Slic3r::MultiAce;
 
 namespace {
 
-FilamentSource source(std::string unit,
-                      std::string slot,
-                      SourceState state = SourceState::Ready,
-                      std::string material = "PLA",
-                      std::string color = "#D52332",
-                      std::vector<int> reachable_toolheads = {0},
-                      std::optional<int> loaded_toolhead = std::nullopt)
+FilamentSource source(std::string        unit,
+                      std::string        slot,
+                      SourceState        state               = SourceState::Ready,
+                      std::string        material            = "PLA",
+                      std::string        color               = "#D52332",
+                      std::vector<int>   reachable_toolheads = {0},
+                      std::optional<int> loaded_toolhead     = std::nullopt)
 {
     FilamentSource result;
     result.id                  = SourceId{"multiace", std::move(unit), std::move(slot)};
@@ -55,13 +55,7 @@ struct LocalAmsTarget
 
     AmsModelTarget target()
     {
-        return {ams_list,
-                ams_exist_bits,
-                tray_exist_bits,
-                tray_is_bbl_bits,
-                tray_read_done_bits,
-                tray_reading_bits,
-                is_ams_need_update};
+        return {ams_list, ams_exist_bits, tray_exist_bits, tray_is_bbl_bits, tray_read_done_bits, tray_reading_bits, is_ams_need_update};
     }
 };
 
@@ -69,12 +63,12 @@ struct LocalAmsTarget
 
 TEST_CASE("multiACE inventory projects deterministically into AMS units", "[multiace][ams]")
 {
-    FilamentSource unit_two = source("2", "1", SourceState::Loading, "PETG", "11223344", {1, 2});
+    FilamentSource unit_two          = source("2", "1", SourceState::Loading, "PETG", "11223344", {1, 2});
     unit_two.humidity_percent        = 63;
     unit_two.temperature_c           = 31.0;
     unit_two.dryer_remaining_minutes = 12;
 
-    FilamentSource unit_one_loaded = source("1", "1", SourceState::Ready, "PLA", "#abcdef", {0}, 0);
+    FilamentSource unit_one_loaded   = source("1", "1", SourceState::Ready, "PLA", "#abcdef", {0}, 0);
     unit_one_loaded.humidity_percent = 42;
     unit_one_loaded.temperature_c    = 27.0;
 
@@ -84,8 +78,7 @@ TEST_CASE("multiACE inventory projects deterministically into AMS units", "[mult
     unit_one_empty.remaining_percent.reset();
     unit_one_empty.temperature_c = 29.0;
 
-    const AmsInventoryProjection projection =
-        project_inventory_to_ams(inventory("revision-2", {unit_two, unit_one_loaded, unit_one_empty}));
+    const AmsInventoryProjection projection = project_inventory_to_ams(inventory("revision-2", {unit_two, unit_one_loaded, unit_one_empty}));
 
     REQUIRE(projection.units.size() == 2);
     CHECK(projection.units[0].ams_id == "1");
@@ -135,8 +128,7 @@ TEST_CASE("multiACE AMS projection rejects invalid inherited topology", "[multia
 
     SECTION("slot outside ACE range")
     {
-        CHECK_THROWS_WITH(project_inventory_to_ams(inventory("r1", {source("0", "4")})),
-                          "multiACE slot_id must be between 0 and 3");
+        CHECK_THROWS_WITH(project_inventory_to_ams(inventory("r1", {source("0", "4")})), "multiACE slot_id must be between 0 and 3");
     }
 
     SECTION("mask capacity")
@@ -154,9 +146,8 @@ TEST_CASE("multiACE AMS projection rejects invalid inherited topology", "[multia
     SECTION("other provider")
     {
         FilamentSource other = source("0", "0");
-        other.id.provider     = "other";
-        CHECK_THROWS_WITH(project_inventory_to_ams(inventory("r1", {other})),
-                          "AMS projection only accepts multiace sources");
+        other.id.provider    = "other";
+        CHECK_THROWS_WITH(project_inventory_to_ams(inventory("r1", {other})), "AMS projection only accepts multiace sources");
     }
 }
 
@@ -196,7 +187,7 @@ TEST_CASE("multiACE machine model preserves pointers and native AMS entries", "[
         CHECK(source_slot->tray_id == "1");
 
         model.apply(inventory("r2", {source("0", "0", SourceState::Offline, "ABS", "#010203", {0}),
-                                      source("1", "2", SourceState::Ready, "PLA", "FFFFFF", {2}, 2)}));
+                                     source("1", "2", SourceState::Ready, "PLA", "FFFFFF", {2}, 2)}));
 
         CHECK(target.ams_list.at("0") == unit_pointer);
         CHECK(target.ams_list.at("0")->trayList.at("0") == tray_pointer);
