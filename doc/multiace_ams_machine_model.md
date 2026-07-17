@@ -35,7 +35,7 @@ Unit-level humidity, temperature, dryer time, and unambiguous nozzle routing are
 
 The inherited tray object cannot represent every multiACE field. `MultiAceMachineModel` therefore retains a sidecar record keyed by `(ams_id, tray_id)` containing the complete `FilamentSource` and inventory revision. It also provides a reverse lookup from stable `SourceId` to the projected AMS slot.
 
-The tray `uuid` field carries the stable human-readable source ID for compatibility with existing diagnostics, but callers that require routing, metadata origin, dryer state, or loaded-toolhead information must use the sidecar lookup.
+The inherited filament profile and UUID fields remain untouched. Callers that require stable source identity, routing, metadata origin, dryer state, or loaded-toolhead information must use the sidecar lookup.
 
 ## Ownership and pointer stability
 
