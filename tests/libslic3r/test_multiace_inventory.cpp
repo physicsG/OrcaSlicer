@@ -288,7 +288,7 @@ TEST_CASE("manual filament source provider supports offline snapshots and callba
     ManualFilamentSourceProvider provider(capabilities);
 
     std::vector<std::string> callback_revisions;
-    const auto subscription_id = provider.subscribe([&callback_revisions](const InventorySnapshot& snapshot) {
+    const auto               subscription_id = provider.subscribe([&callback_revisions](const InventorySnapshot& snapshot) {
         callback_revisions.emplace_back(snapshot.revision);
         REQUIRE(snapshot.sources.size() == 1);
         CHECK(snapshot.sources[0].id.str() == "multiace:0:2");
