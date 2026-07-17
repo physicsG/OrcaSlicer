@@ -3,6 +3,8 @@
 
 #include "MultiAceInventory.hpp"
 
+#include <deque>
+#include <exception>
 #include <functional>
 #include <mutex>
 #include <utility>
@@ -74,17 +76,19 @@ public:
 
     void set_inventory(InventorySnapshot inventory)
     {
-        InventorySnapshot              snapshot;
-        std::vector<InventoryCallback> callbacks;
+        bool dispatch_notifications = false;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             m_inventory = std::move(inventory);
-            snapshot    = m_inventory;
-            callbacks   = m_inventory_callbacks;
+            m_pending_inventory.emplace_back(m_inventory);
+            if (!m_dispatching_inventory) {
+                m_dispatching_inventory = true;
+                dispatch_notifications  = true;
+            }
         }
 
-        for (const InventoryCallback& callback : callbacks)
-            callback(snapshot);
+        if (dispatch_notifications)
+            dispatch_inventory_notifications();
     }
 
     void set_refresh_callback(RefreshCallback callback)
@@ -94,11 +98,46 @@ public:
     }
 
 private:
+    void dispatch_inventory_notifications()
+    {
+        std::exception_ptr first_failure;
+
+        for (;;) {
+            InventorySnapshot              snapshot;
+            std::vector<InventoryCallback> callbacks;
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                if (m_pending_inventory.empty()) {
+                    m_dispatching_inventory = false;
+                    break;
+                }
+
+                snapshot = std::move(m_pending_inventory.front());
+                m_pending_inventory.pop_front();
+                callbacks = m_inventory_callbacks;
+            }
+
+            for (const InventoryCallback& callback : callbacks) {
+                try {
+                    callback(snapshot);
+                } catch (...) {
+                    if (!first_failure)
+                        first_failure = std::current_exception();
+                }
+            }
+        }
+
+        if (first_failure)
+            std::rethrow_exception(first_failure);
+    }
+
     mutable std::mutex             m_mutex;
     ProviderCapabilities           m_capabilities;
     InventorySnapshot              m_inventory;
     std::vector<InventoryCallback> m_inventory_callbacks;
     RefreshCallback                m_refresh_callback;
+    std::deque<InventorySnapshot>  m_pending_inventory;
+    bool                           m_dispatching_inventory = false;
 };
 
 } // namespace Slic3r::MultiAce
