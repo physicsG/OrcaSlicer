@@ -95,13 +95,13 @@ private:
         return response;
     }
 
-    std::mutex                                            m_mutex;
-    std::condition_variable                               m_block_condition;
+    std::mutex                                           m_mutex;
+    std::condition_variable                              m_block_condition;
     std::map<std::string, std::deque<TransportResponse>> m_get_responses;
     std::map<std::string, std::deque<TransportResponse>> m_post_responses;
-    bool                                                  m_block_next_inventory = false;
-    bool                                                  m_inventory_blocked    = false;
-    bool                                                  m_release_inventory    = false;
+    bool                                                 m_block_next_inventory = false;
+    bool                                                 m_inventory_blocked    = false;
+    bool                                                 m_release_inventory    = false;
 };
 
 class FakeEventTransport final : public EventTransport
@@ -143,10 +143,7 @@ private:
     ConnectionCallback m_connection_callback;
 };
 
-TransportResponse json_response(const nlohmann::json& body, unsigned status_code = 200)
-{
-    return {status_code, body.dump(), {}};
-}
+TransportResponse json_response(const nlohmann::json& body, unsigned status_code = 200) { return {status_code, body.dump(), {}}; }
 
 nlohmann::json capabilities_payload(bool live_events = true, bool rfid_refresh = true, bool inventory = true)
 {
@@ -166,35 +163,34 @@ nlohmann::json capabilities_payload(bool live_events = true, bool rfid_refresh =
 }
 
 nlohmann::json inventory_payload(const std::string& revision,
-                                 const std::string& state = "ready",
-                                 const std::string& material = "PLA",
-                                 int remaining_percent = 75)
+                                 const std::string& state             = "ready",
+                                 const std::string& material          = "PLA",
+                                 int                remaining_percent = 75)
 {
     return {
         {"schema_version", 1},
         {"revision", revision},
-        {"sources",
-         nlohmann::json::array({
-             {
-                 {"source_id", "multiace:1:2"},
-                 {"unit_id", 1},
-                 {"slot_id", 2},
-                 {"rfid_uid", "rfid-12"},
-                 {"material", material},
-                 {"subtype", material + " Basic"},
-                 {"brand", "Snapmaker"},
-                 {"color", "#D52332"},
-                 {"remaining_percent", remaining_percent},
-                 {"metadata_origin", "rfid"},
-                 {"state", state},
-                 {"reachable_toolheads", {0, 2}},
-                 {"loaded_toolhead", 2},
-             },
-         })},
+        {"sources", nlohmann::json::array({
+                        {
+                            {"source_id", "multiace:1:2"},
+                            {"unit_id", 1},
+                            {"slot_id", 2},
+                            {"rfid_uid", "rfid-12"},
+                            {"material", material},
+                            {"subtype", material + " Basic"},
+                            {"brand", "Snapmaker"},
+                            {"color", "#D52332"},
+                            {"remaining_percent", remaining_percent},
+                            {"metadata_origin", "rfid"},
+                            {"state", state},
+                            {"reachable_toolheads", {0, 2}},
+                            {"loaded_toolhead", 2},
+                        },
+                    })},
     };
 }
 
-std::shared_ptr<FakeRestTransport> configured_rest(const nlohmann::json& inventory = inventory_payload("r1"),
+std::shared_ptr<FakeRestTransport> configured_rest(const nlohmann::json& inventory    = inventory_payload("r1"),
                                                    const nlohmann::json& capabilities = capabilities_payload())
 {
     auto rest = std::make_shared<FakeRestTransport>();
@@ -207,11 +203,11 @@ std::shared_ptr<FakeRestTransport> configured_rest(const nlohmann::json& invento
 
 TEST_CASE("Moonraker multiACE provider loads capabilities and inventory", "[multiace][moonraker]")
 {
-    const auto               rest   = configured_rest();
-    const auto               events = std::make_shared<FakeEventTransport>();
-    std::vector<std::string> revisions;
+    const auto                      rest   = configured_rest();
+    const auto                      events = std::make_shared<FakeEventTransport>();
+    std::vector<std::string>        revisions;
     MoonrakerFilamentSourceProvider provider(rest, events);
-    const auto subscription = provider.subscribe(
+    const auto                      subscription = provider.subscribe(
         [&revisions](const InventorySnapshot& inventory) { revisions.emplace_back(inventory.revision); });
 
     REQUIRE(provider.start());
@@ -230,8 +226,8 @@ TEST_CASE("Moonraker multiACE provider loads capabilities and inventory", "[mult
 
 TEST_CASE("Moonraker multiACE provider applies full inventory events", "[multiace][moonraker]")
 {
-    const auto rest   = configured_rest();
-    const auto events = std::make_shared<FakeEventTransport>();
+    const auto                      rest   = configured_rest();
+    const auto                      events = std::make_shared<FakeEventTransport>();
     MoonrakerFilamentSourceProvider provider(rest, events);
     REQUIRE(provider.start());
 
@@ -250,8 +246,8 @@ TEST_CASE("Moonraker multiACE provider applies full inventory events", "[multiac
 
 TEST_CASE("Moonraker multiACE provider refreshes inventory for change notifications", "[multiace][moonraker]")
 {
-    const auto rest   = configured_rest();
-    const auto events = std::make_shared<FakeEventTransport>();
+    const auto                      rest   = configured_rest();
+    const auto                      events = std::make_shared<FakeEventTransport>();
     MoonrakerFilamentSourceProvider provider(rest, events);
     REQUIRE(provider.start());
 
@@ -267,8 +263,8 @@ TEST_CASE("Moonraker multiACE provider refreshes inventory for change notificati
 
 TEST_CASE("Moonraker multiACE provider rejects unversioned trigger events", "[multiace][moonraker]")
 {
-    const auto rest   = configured_rest();
-    const auto events = std::make_shared<FakeEventTransport>();
+    const auto                      rest   = configured_rest();
+    const auto                      events = std::make_shared<FakeEventTransport>();
     MoonrakerFilamentSourceProvider provider(rest, events);
     REQUIRE(provider.start());
 
@@ -281,8 +277,8 @@ TEST_CASE("Moonraker multiACE provider rejects unversioned trigger events", "[mu
 
 TEST_CASE("Moonraker multiACE provider preserves newer events over stale REST refreshes", "[multiace][moonraker]")
 {
-    const auto rest   = configured_rest();
-    const auto events = std::make_shared<FakeEventTransport>();
+    const auto                      rest   = configured_rest();
+    const auto                      events = std::make_shared<FakeEventTransport>();
     MoonrakerFilamentSourceProvider provider(rest, events);
     REQUIRE(provider.start());
 
@@ -304,8 +300,8 @@ TEST_CASE("Moonraker multiACE provider preserves newer events over stale REST re
 
 TEST_CASE("Moonraker multiACE provider preserves metadata across disconnect and reconnect", "[multiace][moonraker]")
 {
-    const auto rest   = configured_rest();
-    const auto events = std::make_shared<FakeEventTransport>();
+    const auto                      rest   = configured_rest();
+    const auto                      events = std::make_shared<FakeEventTransport>();
     MoonrakerFilamentSourceProvider provider(rest, events);
     REQUIRE(provider.start());
 
@@ -330,8 +326,8 @@ TEST_CASE("Moonraker multiACE provider preserves metadata across disconnect and 
 
 TEST_CASE("Moonraker multiACE provider ignores malformed events without corrupting inventory", "[multiace][moonraker]")
 {
-    const auto rest   = configured_rest();
-    const auto events = std::make_shared<FakeEventTransport>();
+    const auto                      rest   = configured_rest();
+    const auto                      events = std::make_shared<FakeEventTransport>();
     MoonrakerFilamentSourceProvider provider(rest, events);
     REQUIRE(provider.start());
 
@@ -346,8 +342,8 @@ TEST_CASE("Moonraker multiACE provider ignores malformed events without corrupti
 
 TEST_CASE("Moonraker multiACE provider contains inventory subscriber failures", "[multiace][moonraker]")
 {
-    const auto rest   = configured_rest();
-    const auto events = std::make_shared<FakeEventTransport>();
+    const auto                      rest   = configured_rest();
+    const auto                      events = std::make_shared<FakeEventTransport>();
     MoonrakerFilamentSourceProvider provider(rest, events);
     REQUIRE(provider.start());
 
@@ -364,7 +360,7 @@ TEST_CASE("Moonraker multiACE provider contains inventory subscriber failures", 
 
 TEST_CASE("Moonraker multiACE provider posts RFID refresh and reloads inventory", "[multiace][moonraker]")
 {
-    const auto rest = configured_rest();
+    const auto                      rest = configured_rest();
     MoonrakerFilamentSourceProvider provider(rest);
     REQUIRE(provider.start());
 
@@ -385,7 +381,7 @@ TEST_CASE("Moonraker multiACE provider posts RFID refresh and reloads inventory"
 
 TEST_CASE("Moonraker multiACE provider keeps the last valid snapshot after HTTP failures", "[multiace][moonraker]")
 {
-    const auto rest = configured_rest();
+    const auto                      rest = configured_rest();
     MoonrakerFilamentSourceProvider provider(rest);
     REQUIRE(provider.start());
 
@@ -397,7 +393,7 @@ TEST_CASE("Moonraker multiACE provider keeps the last valid snapshot after HTTP 
 
 TEST_CASE("Moonraker multiACE provider requires advertised inventory support", "[multiace][moonraker]")
 {
-    const auto rest = configured_rest(inventory_payload("unused"), capabilities_payload(false, false, false));
+    const auto                      rest = configured_rest(inventory_payload("unused"), capabilities_payload(false, false, false));
     MoonrakerFilamentSourceProvider provider(rest);
 
     CHECK_FALSE(provider.start());
@@ -408,18 +404,17 @@ TEST_CASE("Moonraker multiACE provider requires advertised inventory support", "
 
 TEST_CASE("Moonraker multiACE provider validates refresh source providers", "[multiace][moonraker]")
 {
-    const auto rest = configured_rest();
+    const auto                      rest = configured_rest();
     MoonrakerFilamentSourceProvider provider(rest);
     REQUIRE(provider.start());
 
-    CHECK_THROWS_WITH((provider.request_metadata_refresh(SourceId{"other", "1", "2"})),
-                      "metadata refresh requires a multiace source ID");
+    CHECK_THROWS_WITH((provider.request_metadata_refresh(SourceId{"other", "1", "2"})), "metadata refresh requires a multiace source ID");
 }
 
 TEST_CASE("Moonraker multiACE provider marks inventory offline when stopped", "[multiace][moonraker]")
 {
-    const auto rest   = configured_rest();
-    const auto events = std::make_shared<FakeEventTransport>();
+    const auto                      rest   = configured_rest();
+    const auto                      events = std::make_shared<FakeEventTransport>();
     MoonrakerFilamentSourceProvider provider(rest, events);
     REQUIRE(provider.start());
 
