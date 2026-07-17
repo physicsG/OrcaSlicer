@@ -30,9 +30,9 @@ struct MoonrakerEndpoints
 class MoonrakerFilamentSourceProvider final : public FilamentSourceProvider
 {
 public:
-    MoonrakerFilamentSourceProvider(std::shared_ptr<RestTransport> rest_transport,
+    MoonrakerFilamentSourceProvider(std::shared_ptr<RestTransport>  rest_transport,
                                     std::shared_ptr<EventTransport> event_transport = {},
-                                    MoonrakerEndpoints endpoints = {})
+                                    MoonrakerEndpoints              endpoints       = {})
         : m_rest_transport(std::move(rest_transport)), m_event_transport(std::move(event_transport)), m_endpoints(std::move(endpoints))
     {
         if (!m_rest_transport)
@@ -49,9 +49,9 @@ public:
     }
 
     ProviderCapabilities capabilities() const override { return m_state.capabilities(); }
-    InventorySnapshot inventory() const override { return m_state.inventory(); }
-    SubscriptionId subscribe(InventoryCallback callback) override { return m_state.subscribe(std::move(callback)); }
-    bool unsubscribe(SubscriptionId subscription_id) override { return m_state.unsubscribe(subscription_id); }
+    InventorySnapshot    inventory() const override { return m_state.inventory(); }
+    SubscriptionId       subscribe(InventoryCallback callback) override { return m_state.subscribe(std::move(callback)); }
+    bool                 unsubscribe(SubscriptionId subscription_id) override { return m_state.unsubscribe(subscription_id); }
 
     void request_metadata_refresh(const SourceId& source) override
     {
@@ -69,6 +69,9 @@ public:
             require_success(response, "multiACE metadata refresh");
         } catch (const std::exception& error) {
             set_last_error(error.what());
+            return;
+        } catch (...) {
+            set_last_error("multiACE metadata refresh failed with an unknown error");
             return;
         }
 
@@ -113,6 +116,8 @@ public:
                     });
             } catch (const std::exception& error) {
                 set_last_error(std::string("multiACE event connection failed: ") + error.what());
+            } catch (...) {
+                set_last_error("multiACE event connection failed with an unknown error");
             }
         }
 
@@ -132,8 +137,7 @@ public:
         if (m_event_transport) {
             try {
                 m_event_transport->disconnect();
-            } catch (...) {
-            }
+            } catch (...) {}
         }
 
         {
@@ -162,6 +166,9 @@ public:
             return true;
         } catch (const std::exception& error) {
             set_last_error(error.what());
+            return false;
+        } catch (...) {
+            set_last_error("multiACE capabilities request failed with an unknown error");
             return false;
         }
     }
@@ -194,6 +201,8 @@ public:
             }
         } catch (const std::exception& error) {
             set_last_error(error.what());
+        } catch (...) {
+            set_last_error("multiACE event handling failed with an unknown error");
         }
     }
 
@@ -218,10 +227,10 @@ public:
 private:
     struct CallbackState
     {
-        std::mutex                             mutex;
-        std::condition_variable                callbacks_drained;
-        MoonrakerFilamentSourceProvider*       owner            = nullptr;
-        std::size_t                            active_callbacks = 0;
+        std::mutex                       mutex;
+        std::condition_variable          callbacks_drained;
+        MoonrakerFilamentSourceProvider* owner            = nullptr;
+        std::size_t                      active_callbacks = 0;
     };
 
     template<class Callback> static void invoke_owner(const std::weak_ptr<CallbackState>& weak_state, Callback&& callback)
@@ -344,6 +353,8 @@ private:
             }
         } catch (const std::exception& callback_error) {
             set_last_error(callback_error.what());
+        } catch (...) {
+            set_last_error("multiACE connection callback failed with an unknown error");
         }
     }
 
@@ -352,11 +363,14 @@ private:
         InventorySnapshot snapshot;
         try {
             std::lock_guard<std::mutex> lock(m_refresh_mutex);
-            const TransportResponse    response = m_rest_transport->get(m_endpoints.inventory);
+            const TransportResponse     response = m_rest_transport->get(m_endpoints.inventory);
             require_success(response, "multiACE inventory request");
             snapshot = parse_inventory(parse_json(response.body, "multiACE inventory response"));
         } catch (const std::exception& error) {
             set_last_error(error.what());
+            return false;
+        } catch (...) {
+            set_last_error("multiACE inventory request failed with an unknown error");
             return false;
         }
 
@@ -411,10 +425,10 @@ private:
         m_last_error.clear();
     }
 
-    ManualFilamentSourceProvider   m_state;
+    ManualFilamentSourceProvider    m_state;
     std::shared_ptr<RestTransport>  m_rest_transport;
     std::shared_ptr<EventTransport> m_event_transport;
-    MoonrakerEndpoints             m_endpoints;
+    MoonrakerEndpoints              m_endpoints;
     std::shared_ptr<CallbackState>  m_callback_state = std::make_shared<CallbackState>();
     mutable std::mutex              m_status_mutex;
     std::mutex                      m_refresh_mutex;
