@@ -65,18 +65,24 @@ public:
         require_owner_thread();
         const AmsInventoryProjection projection = project_inventory_to_ams(inventory);
 
+        std::set<std::string> retained_units;
+        MetadataMap          next_metadata;
+        SourceSlotMap        next_source_slots;
         for (const AmsUnitProjection& unit : projection.units) {
-            const auto existing = m_target.ams_list.find(unit.ams_id);
-            const auto owned    = m_units.find(unit.ams_id);
-            if (existing != m_target.ams_list.end() && (owned == m_units.end() || existing->second != owned->second.ams.get())) {
-                throw std::invalid_argument("multiACE AMS unit ID collides with an existing machine AMS entry: " + unit.ams_id);
+            retained_units.emplace(unit.ams_id);
+            validate_target_unit(unit.ams_id);
+            for (const AmsTrayProjection& tray : unit.trays) {
+                const auto slot_key = std::make_pair(tray.ams_id, tray.tray_id);
+                if (!next_metadata.emplace(slot_key, AmsSourceMetadata{tray.source, projection.revision}).second)
+                    throw std::logic_error("multiACE projection contains duplicate AMS slot metadata");
+                if (!next_source_slots.emplace(tray.source_id, AmsSourceSlot{tray.ams_id, tray.tray_id}).second)
+                    throw std::logic_error("multiACE projection contains duplicate source metadata");
             }
         }
 
-        std::set<std::string> retained_units;
         for (const AmsUnitProjection& unit : projection.units) {
-            retained_units.emplace(unit.ams_id);
             OwnedUnit& owned = get_or_create_unit(unit);
+            ensure_target_unit(unit.ams_id, owned);
             update_unit(owned, unit);
         }
 
@@ -89,15 +95,8 @@ public:
             iterator = m_units.erase(iterator);
         }
 
-        m_metadata.clear();
-        m_source_slots.clear();
-        for (const AmsUnitProjection& unit : projection.units) {
-            for (const AmsTrayProjection& tray : unit.trays) {
-                const auto slot_key = std::make_pair(tray.ams_id, tray.tray_id);
-                m_metadata.emplace(slot_key, AmsSourceMetadata{tray.source, projection.revision});
-                m_source_slots.emplace(tray.source_id, AmsSourceSlot{tray.ams_id, tray.tray_id});
-            }
-        }
+        m_metadata.swap(next_metadata);
+        m_source_slots.swap(next_source_slots);
 
         replace_owned_mask(m_target.ams_exist_bits, m_owned_ams_exist_bits, projection.ams_exist_bits);
         replace_owned_mask(m_target.tray_exist_bits, m_owned_tray_exist_bits, projection.tray_exist_bits);
@@ -146,6 +145,22 @@ private:
         std::map<std::string, std::unique_ptr<TrayType>> trays;
     };
 
+    using MetadataMap   = std::map<std::pair<std::string, std::string>, AmsSourceMetadata>;
+    using SourceSlotMap = std::map<std::string, AmsSourceSlot>;
+
+    void validate_target_unit(const std::string& ams_id) const
+    {
+        const auto existing = m_target.ams_list.find(ams_id);
+        const auto owned    = m_units.find(ams_id);
+        if (owned == m_units.end()) {
+            if (existing != m_target.ams_list.end())
+                throw std::invalid_argument("multiACE AMS unit ID collides with an existing machine AMS entry: " + ams_id);
+            return;
+        }
+        if (existing != m_target.ams_list.end() && existing->second != owned->second.ams.get())
+            throw std::logic_error("multiACE AMS target changed during model update: " + ams_id);
+    }
+
     OwnedUnit& get_or_create_unit(const AmsUnitProjection& unit)
     {
         auto found = m_units.find(unit.ams_id);
@@ -162,7 +177,7 @@ private:
         try {
             const auto target_inserted = m_target.ams_list.emplace(unit.ams_id, raw);
             if (!target_inserted.second)
-                throw std::logic_error("multiACE AMS target changed during model update");
+                throw std::logic_error("multiACE AMS target changed during model update: " + unit.ams_id);
         } catch (...) {
             m_units.erase(inserted.first);
             throw;
@@ -170,14 +185,31 @@ private:
         return inserted.first->second;
     }
 
+    void ensure_target_unit(const std::string& ams_id, const OwnedUnit& owned)
+    {
+        const auto found = m_target.ams_list.find(ams_id);
+        if (found == m_target.ams_list.end()) {
+            const auto inserted = m_target.ams_list.emplace(ams_id, owned.ams.get());
+            if (!inserted.second)
+                throw std::logic_error("multiACE AMS target changed during model update: " + ams_id);
+            return;
+        }
+        if (found->second != owned.ams.get())
+            throw std::logic_error("multiACE AMS target changed during model update: " + ams_id);
+    }
+
     void update_unit(OwnedUnit& owned, const AmsUnitProjection& projection)
     {
-        Traits::update_ams(*owned.ams, projection);
         auto& tray_list = Traits::tray_list(*owned.ams);
 
         std::set<std::string> retained_trays;
         for (const AmsTrayProjection& tray_projection : projection.trays) {
             retained_trays.emplace(tray_projection.tray_id);
+            validate_target_tray(owned, tray_list, projection.ams_id, tray_projection.tray_id);
+        }
+
+        Traits::update_ams(*owned.ams, projection);
+        for (const AmsTrayProjection& tray_projection : projection.trays) {
             auto found = owned.trays.find(tray_projection.tray_id);
             if (found == owned.trays.end()) {
                 auto tray = Traits::create_tray(tray_projection);
@@ -189,11 +221,14 @@ private:
                 try {
                     const auto tray_inserted = tray_list.emplace(tray_projection.tray_id, raw);
                     if (!tray_inserted.second)
-                        throw std::logic_error("multiACE AMS tray target changed during model update");
+                        throw std::logic_error("multiACE AMS tray target changed during model update: " + projection.ams_id + ':' +
+                                               tray_projection.tray_id);
                 } catch (...) {
                     owned.trays.erase(found);
                     throw;
                 }
+            } else {
+                ensure_target_tray(tray_list, projection.ams_id, tray_projection.tray_id, found->second.get());
             }
             Traits::update_tray(*found->second, tray_projection);
         }
@@ -203,9 +238,48 @@ private:
                 ++iterator;
                 continue;
             }
-            tray_list.erase(iterator->first);
+            erase_target_tray(tray_list, iterator->first, iterator->second.get());
             iterator = owned.trays.erase(iterator);
         }
+    }
+
+    static void validate_target_tray(const OwnedUnit&                    owned,
+                                     const std::map<std::string, TrayType*>& tray_list,
+                                     const std::string&                    ams_id,
+                                     const std::string&                    tray_id)
+    {
+        const auto owned_tray = owned.trays.find(tray_id);
+        const auto target_tray = tray_list.find(tray_id);
+        if (owned_tray == owned.trays.end()) {
+            if (target_tray != tray_list.end())
+                throw std::logic_error("multiACE AMS tray target changed during model update: " + ams_id + ':' + tray_id);
+            return;
+        }
+        if (target_tray != tray_list.end() && target_tray->second != owned_tray->second.get())
+            throw std::logic_error("multiACE AMS tray target changed during model update: " + ams_id + ':' + tray_id);
+    }
+
+    static void ensure_target_tray(std::map<std::string, TrayType*>& tray_list,
+                                   const std::string&                 ams_id,
+                                   const std::string&                 tray_id,
+                                   TrayType*                          tray)
+    {
+        const auto found = tray_list.find(tray_id);
+        if (found == tray_list.end()) {
+            const auto inserted = tray_list.emplace(tray_id, tray);
+            if (!inserted.second)
+                throw std::logic_error("multiACE AMS tray target changed during model update: " + ams_id + ':' + tray_id);
+            return;
+        }
+        if (found->second != tray)
+            throw std::logic_error("multiACE AMS tray target changed during model update: " + ams_id + ':' + tray_id);
+    }
+
+    static void erase_target_tray(std::map<std::string, TrayType*>& tray_list, const std::string& tray_id, const TrayType* tray)
+    {
+        const auto found = tray_list.find(tray_id);
+        if (found != tray_list.end() && found->second == tray)
+            tray_list.erase(found);
     }
 
     void erase_target_unit(const std::string& ams_id, const OwnedUnit& owned)
@@ -253,10 +327,10 @@ private:
     AmsModelTarget<AmsType> m_target;
     std::thread::id         m_owner_thread;
 
-    std::map<std::string, OwnedUnit>                                 m_units;
-    std::map<std::pair<std::string, std::string>, AmsSourceMetadata> m_metadata;
-    std::map<std::string, AmsSourceSlot>                             m_source_slots;
-    std::string                                                      m_revision;
+    std::map<std::string, OwnedUnit> m_units;
+    MetadataMap                      m_metadata;
+    SourceSlotMap                    m_source_slots;
+    std::string                      m_revision;
 
     long m_owned_ams_exist_bits      = 0;
     long m_owned_tray_exist_bits     = 0;
