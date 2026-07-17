@@ -288,11 +288,13 @@ TEST_CASE("manual filament source provider supports offline snapshots and callba
     ManualFilamentSourceProvider provider(capabilities);
 
     std::vector<std::string> callback_revisions;
-    provider.subscribe([&callback_revisions](const InventorySnapshot& snapshot) {
+    const auto subscription_id = provider.subscribe([&callback_revisions](const InventorySnapshot& snapshot) {
         callback_revisions.emplace_back(snapshot.revision);
         REQUIRE(snapshot.sources.size() == 1);
         CHECK(snapshot.sources[0].id.str() == "multiace:0:2");
     });
+    REQUIRE(subscription_id != FilamentSourceProvider::INVALID_SUBSCRIPTION_ID);
+    CHECK(provider.subscribe({}) == FilamentSourceProvider::INVALID_SUBSCRIPTION_ID);
 
     SourceId refresh_source;
     provider.set_refresh_callback([&refresh_source](const SourceId& source) { refresh_source = source; });
@@ -316,6 +318,13 @@ TEST_CASE("manual filament source provider supports offline snapshots and callba
 
     provider.request_metadata_refresh(source.id);
     CHECK(refresh_source == source.id);
+
+    CHECK(provider.unsubscribe(subscription_id));
+    CHECK_FALSE(provider.unsubscribe(subscription_id));
+    CHECK_FALSE(provider.unsubscribe(FilamentSourceProvider::INVALID_SUBSCRIPTION_ID));
+    snapshot.revision = "manual-3";
+    provider.set_inventory(snapshot);
+    CHECK(callback_revisions.size() == 2);
 }
 
 TEST_CASE("manual provider serializes reentrant updates and recovers from callback failures", "[multiace][provider]")
@@ -342,8 +351,8 @@ TEST_CASE("manual provider serializes reentrant updates and recovers from callba
     snapshot.revision = "manual-1";
 
     CHECK_THROWS_WITH(provider.set_inventory(snapshot), "callback failure");
-    CHECK(primary_revisions == std::vector<std::string>{"manual-1", "manual-2"});
-    CHECK(secondary_revisions == std::vector<std::string>{"manual-1", "manual-2"});
+    CHECK((primary_revisions == std::vector<std::string>{"manual-1", "manual-2"}));
+    CHECK((secondary_revisions == std::vector<std::string>{"manual-1", "manual-2"}));
 
     snapshot.revision = "manual-3";
     CHECK_NOTHROW(provider.set_inventory(snapshot));
