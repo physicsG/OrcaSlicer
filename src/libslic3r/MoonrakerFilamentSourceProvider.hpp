@@ -8,6 +8,8 @@
 
 #include <atomic>
 #include <cctype>
+#include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -41,8 +43,9 @@ public:
     ~MoonrakerFilamentSourceProvider() override
     {
         stop();
-        std::lock_guard<std::mutex> lock(m_callback_state->mutex);
+        std::unique_lock<std::mutex> lock(m_callback_state->mutex);
         m_callback_state->owner = nullptr;
+        m_callback_state->callbacks_drained.wait(lock, [this] { return m_callback_state->active_callbacks == 0; });
     }
 
     ProviderCapabilities capabilities() const override { return m_state.capabilities(); }
@@ -101,10 +104,10 @@ public:
                 m_event_transport->connect(
                     m_endpoints.events,
                     [callback_state](const std::string& payload) {
-                        invoke_owner(callback_state, [&payload](MoonrakerFilamentSourceProvider& owner) { owner.handle_event(payload); });
+                        invoke_owner(callback_state, [payload](MoonrakerFilamentSourceProvider& owner) { owner.handle_event(payload); });
                     },
                     [callback_state](bool connected, const std::string& error) {
-                        invoke_owner(callback_state, [connected, &error](MoonrakerFilamentSourceProvider& owner) {
+                        invoke_owner(callback_state, [connected, error](MoonrakerFilamentSourceProvider& owner) {
                             owner.handle_event_connection(connected, error);
                         });
                     });
@@ -118,6 +121,14 @@ public:
 
     void stop()
     {
+        bool was_active = false;
+        {
+            std::lock_guard<std::mutex> lock(m_status_mutex);
+            was_active = m_started || m_events_connected;
+        }
+        if (!was_active)
+            return;
+
         if (m_event_transport) {
             try {
                 m_event_transport->disconnect();
@@ -125,15 +136,12 @@ public:
             }
         }
 
-        bool should_mark_offline = false;
         {
             std::lock_guard<std::mutex> lock(m_status_mutex);
-            should_mark_offline = m_started || m_events_connected;
-            m_started           = false;
-            m_events_connected  = false;
+            m_started          = false;
+            m_events_connected = false;
         }
-        if (should_mark_offline)
-            mark_inventory_offline();
+        mark_inventory_offline();
     }
 
     bool refresh_capabilities()
@@ -218,7 +226,9 @@ private:
     struct CallbackState
     {
         std::mutex                             mutex;
-        MoonrakerFilamentSourceProvider* owner = nullptr;
+        std::condition_variable                callbacks_drained;
+        MoonrakerFilamentSourceProvider* owner            = nullptr;
+        std::size_t                            active_callbacks = 0;
     };
 
     template<class Callback> static void invoke_owner(const std::weak_ptr<CallbackState>& weak_state, Callback&& callback)
@@ -227,9 +237,30 @@ private:
         if (!state)
             return;
 
+        MoonrakerFilamentSourceProvider* owner = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            if (state->owner == nullptr)
+                return;
+            owner = state->owner;
+            ++state->active_callbacks;
+        }
+
+        try {
+            callback(*owner);
+        } catch (...) {
+            release_callback(state);
+            throw;
+        }
+        release_callback(state);
+    }
+
+    static void release_callback(const std::shared_ptr<CallbackState>& state)
+    {
         std::lock_guard<std::mutex> lock(state->mutex);
-        if (state->owner != nullptr)
-            callback(*state->owner);
+        --state->active_callbacks;
+        if (state->active_callbacks == 0)
+            state->callbacks_drained.notify_all();
     }
 
     static nlohmann::json parse_json(const std::string& body, const std::string& description)
@@ -303,18 +334,22 @@ private:
 
     void handle_event_connection(bool connected, const std::string& error)
     {
-        {
-            std::lock_guard<std::mutex> lock(m_status_mutex);
-            m_events_connected = connected;
-        }
+        try {
+            {
+                std::lock_guard<std::mutex> lock(m_status_mutex);
+                m_events_connected = connected;
+            }
 
-        if (connected) {
-            clear_last_error();
-            refresh_inventory();
-        } else {
-            if (!error.empty())
-                set_last_error("multiACE event connection lost: " + error);
-            mark_inventory_offline();
+            if (connected) {
+                clear_last_error();
+                refresh_inventory();
+            } else {
+                if (!error.empty())
+                    set_last_error("multiACE event connection lost: " + error);
+                mark_inventory_offline();
+            }
+        } catch (const std::exception& callback_error) {
+            set_last_error(callback_error.what());
         }
     }
 
@@ -354,19 +389,19 @@ private:
         m_last_error.clear();
     }
 
-    ManualFilamentSourceProvider      m_state;
-    std::shared_ptr<RestTransport>     m_rest_transport;
-    std::shared_ptr<EventTransport>    m_event_transport;
-    MoonrakerEndpoints                m_endpoints;
-    std::shared_ptr<CallbackState>     m_callback_state = std::make_shared<CallbackState>();
-    mutable std::mutex                 m_status_mutex;
-    std::mutex                         m_refresh_mutex;
-    std::recursive_mutex               m_publish_mutex;
-    std::atomic<std::uint64_t>         m_next_update_sequence{1};
-    std::uint64_t                      m_last_published_sequence = 0;
-    bool                               m_started                 = false;
-    bool                               m_events_connected        = false;
-    std::string                        m_last_error;
+    ManualFilamentSourceProvider  m_state;
+    std::shared_ptr<RestTransport> m_rest_transport;
+    std::shared_ptr<EventTransport> m_event_transport;
+    MoonrakerEndpoints             m_endpoints;
+    std::shared_ptr<CallbackState> m_callback_state = std::make_shared<CallbackState>();
+    mutable std::mutex             m_status_mutex;
+    std::mutex                     m_refresh_mutex;
+    std::recursive_mutex           m_publish_mutex;
+    std::atomic<std::uint64_t>     m_next_update_sequence{1};
+    std::uint64_t                  m_last_published_sequence = 0;
+    bool                           m_started                 = false;
+    bool                           m_events_connected        = false;
+    std::string                    m_last_error;
 };
 
 } // namespace Slic3r::MultiAce
