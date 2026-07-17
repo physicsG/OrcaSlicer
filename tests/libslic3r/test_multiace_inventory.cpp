@@ -6,6 +6,7 @@
 #include "nlohmann/json.hpp"
 
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -175,6 +176,18 @@ TEST_CASE("multiACE inventory rejects malformed and inconsistent payloads", "[mu
         CHECK_THROWS_WITH(parse_inventory(payload), "duplicate multiACE source_id: multiace:0:0");
     }
 
+    SECTION("negative numeric source index")
+    {
+        const nlohmann::json payload = {
+            {"schema_version", 1},
+            {"revision", "r1"},
+            {"sources", nlohmann::json::array({
+                            {{"unit_id", -1}, {"slot_id", 0}},
+                        })},
+        };
+        CHECK_THROWS_WITH(parse_inventory(payload), "source.unit_id must not be negative");
+    }
+
     SECTION("invalid physical toolhead")
     {
         const nlohmann::json payload = {
@@ -185,6 +198,23 @@ TEST_CASE("multiACE inventory rejects malformed and inconsistent payloads", "[mu
                         })},
         };
         CHECK_THROWS_WITH(parse_inventory(payload), "reachable_toolheads contains an invalid U1 toolhead");
+    }
+
+    SECTION("loaded toolhead is not reachable")
+    {
+        const nlohmann::json payload = {
+            {"schema_version", 1},
+            {"revision", "r1"},
+            {"sources", nlohmann::json::array({
+                            {
+                                {"unit_id", 0},
+                                {"slot_id", 0},
+                                {"reachable_toolheads", {0, 2}},
+                                {"loaded_toolhead", 1},
+                            },
+                        })},
+        };
+        CHECK_THROWS_WITH(parse_inventory(payload), "loaded_toolhead must be included in reachable_toolheads");
     }
 
     SECTION("oversized bounded integer")
@@ -201,6 +231,28 @@ TEST_CASE("multiACE inventory rejects malformed and inconsistent payloads", "[mu
                         })},
         };
         CHECK_THROWS_WITH(parse_inventory(payload), "remaining_percent is outside the supported range");
+    }
+
+    SECTION("unsigned integer below a positive minimum")
+    {
+        const nlohmann::json payload = {{"value", 0U}};
+        CHECK_THROWS_WITH(detail::optional_bounded_integer(payload, "value", 1, 10), "value is outside the supported range");
+    }
+
+    SECTION("non-finite telemetry")
+    {
+        const nlohmann::json payload = {
+            {"schema_version", 1},
+            {"revision", "r1"},
+            {"sources", nlohmann::json::array({
+                            {
+                                {"unit_id", 0},
+                                {"slot_id", 0},
+                                {"temperature_c", std::numeric_limits<double>::infinity()},
+                            },
+                        })},
+        };
+        CHECK_THROWS_WITH(parse_inventory(payload), "temperature_c must be finite");
     }
 }
 
@@ -264,4 +316,37 @@ TEST_CASE("manual filament source provider supports offline snapshots and callba
 
     provider.request_metadata_refresh(source.id);
     CHECK(refresh_source == source.id);
+}
+
+TEST_CASE("manual provider serializes reentrant updates and recovers from callback failures", "[multiace][provider]")
+{
+    ManualFilamentSourceProvider provider;
+    std::vector<std::string>     primary_revisions;
+    std::vector<std::string>     secondary_revisions;
+
+    provider.subscribe([&](const InventorySnapshot& snapshot) {
+        primary_revisions.emplace_back(snapshot.revision);
+        if (snapshot.revision == "manual-1") {
+            InventorySnapshot nested = snapshot;
+            nested.revision          = "manual-2";
+            provider.set_inventory(std::move(nested));
+        }
+    });
+    provider.subscribe([&](const InventorySnapshot& snapshot) {
+        secondary_revisions.emplace_back(snapshot.revision);
+        if (snapshot.revision == "manual-1")
+            throw std::runtime_error("callback failure");
+    });
+
+    InventorySnapshot snapshot;
+    snapshot.revision = "manual-1";
+
+    CHECK_THROWS_WITH(provider.set_inventory(snapshot), "callback failure");
+    CHECK(primary_revisions == std::vector<std::string>{"manual-1", "manual-2"});
+    CHECK(secondary_revisions == std::vector<std::string>{"manual-1", "manual-2"});
+
+    snapshot.revision = "manual-3";
+    CHECK_NOTHROW(provider.set_inventory(snapshot));
+    CHECK(primary_revisions.back() == "manual-3");
+    CHECK(secondary_revisions.back() == "manual-3");
 }
