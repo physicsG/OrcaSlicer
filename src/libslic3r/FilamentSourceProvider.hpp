@@ -61,7 +61,7 @@ public:
             return INVALID_SUBSCRIPTION_ID;
 
         std::lock_guard<std::mutex> lock(m_mutex);
-        const SubscriptionId       subscription_id = m_next_subscription_id++;
+        const SubscriptionId        subscription_id = m_next_subscription_id++;
         m_inventory_callbacks.emplace_back(subscription_id, std::move(callback));
         return subscription_id;
     }
@@ -72,11 +72,11 @@ public:
             return false;
 
         std::lock_guard<std::mutex> lock(m_mutex);
-        const auto                  first_removed = std::remove_if(
-            m_inventory_callbacks.begin(),
-            m_inventory_callbacks.end(),
-            [subscription_id](const InventorySubscriber& subscriber) { return subscriber.first == subscription_id; });
-        const bool removed = first_removed != m_inventory_callbacks.end();
+        const auto                  first_removed = std::remove_if(m_inventory_callbacks.begin(), m_inventory_callbacks.end(),
+                                                                   [subscription_id](const InventorySubscriber& subscriber) {
+                                                      return subscriber.first == subscription_id;
+                                                  });
+        const bool                  removed       = first_removed != m_inventory_callbacks.end();
         m_inventory_callbacks.erase(first_removed, m_inventory_callbacks.end());
         return removed;
     }
@@ -165,7 +165,7 @@ private:
     std::vector<InventorySubscriber> m_inventory_callbacks;
     RefreshCallback                  m_refresh_callback;
     std::deque<InventorySnapshot>    m_pending_inventory;
-    SubscriptionId                   m_next_subscription_id = 1;
+    SubscriptionId                   m_next_subscription_id  = 1;
     bool                             m_dispatching_inventory = false;
 };
 
