@@ -157,11 +157,13 @@ jobs:
             2>&1 | tee test-results/cmake-configure.log
 
       - name: Build unit and integration test targets
-        run: >-
-          cmake --build build-ci
-          --config Release
-          --target libslic3r_tests fff_print_tests
-          --parallel 2
+        run: |
+          set -o pipefail
+          cmake --build build-ci \
+            --config Release \
+            --target libslic3r_tests fff_print_tests \
+            --parallel 2 \
+            2>&1 | tee test-results/test-build.log
 
       - name: Run blocking unit smoke baseline
         run: |
@@ -257,6 +259,7 @@ jobs:
           path: |
             test-results/*.xml
             test-results/cmake-configure.log
+            test-results/test-build.log
             build-ci/CMakeFiles/CMakeConfigureLog.yaml
             build-ci/Testing/Temporary/LastTest.log
           if-no-files-found: warn
