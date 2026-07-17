@@ -4,6 +4,7 @@
 #include "nlohmann/json.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -153,14 +154,18 @@ inline std::string required_id_component(const nlohmann::json& source, const cha
 
     const nlohmann::json& value = source.at(field);
     std::string           result;
-    if (value.is_string())
+    if (value.is_string()) {
         result = value.get<std::string>();
-    else if (value.is_number_unsigned())
+    } else if (value.is_number_unsigned()) {
         result = std::to_string(value.get<unsigned long long>());
-    else if (value.is_number_integer())
-        result = std::to_string(value.get<long long>());
-    else
+    } else if (value.is_number_integer()) {
+        const long long numeric_value = value.get<long long>();
+        if (numeric_value < 0)
+            throw std::invalid_argument(std::string("source.") + field + " must not be negative");
+        result = std::to_string(numeric_value);
+    } else {
         throw std::invalid_argument(std::string("source.") + field + " must be a string or integer");
+    }
 
     if (result.empty())
         throw std::invalid_argument(std::string("source.") + field + " must not be empty");
@@ -180,6 +185,8 @@ inline std::string optional_string(const nlohmann::json& object, const char* fie
 
 inline std::optional<int> optional_bounded_integer(const nlohmann::json& object, const char* field, int minimum, int maximum)
 {
+    if (minimum > maximum)
+        throw std::invalid_argument(std::string(field) + " has invalid bounds");
     if (!object.contains(field) || object.at(field).is_null())
         return std::nullopt;
 
@@ -189,7 +196,9 @@ inline std::optional<int> optional_bounded_integer(const nlohmann::json& object,
 
     if (value_json.is_number_unsigned()) {
         const unsigned long long value = value_json.get<unsigned long long>();
-        if (value > static_cast<unsigned long long>(maximum))
+        const bool below_minimum = minimum > 0 && value < static_cast<unsigned long long>(minimum);
+        const bool above_maximum = maximum < 0 || value > static_cast<unsigned long long>(maximum);
+        if (below_minimum || above_maximum)
             throw std::invalid_argument(std::string(field) + " is outside the supported range");
         return static_cast<int>(value);
     }
@@ -206,7 +215,11 @@ inline std::optional<double> optional_number(const nlohmann::json& object, const
         return std::nullopt;
     if (!object.at(field).is_number())
         throw std::invalid_argument(std::string(field) + " must be numeric or null");
-    return object.at(field).get<double>();
+
+    const double value = object.at(field).get<double>();
+    if (!std::isfinite(value))
+        throw std::invalid_argument(std::string(field) + " must be finite");
+    return value;
 }
 
 inline bool optional_bool(const nlohmann::json& object, const char* field)
@@ -380,6 +393,10 @@ inline InventorySnapshot parse_inventory(const nlohmann::json& payload)
         source.temperature_c           = detail::optional_number(source_json, "temperature_c");
         source.dryer_state             = detail::parse_dryer_state(source_json);
         source.dryer_remaining_minutes = detail::optional_bounded_integer(source_json, "dryer_remaining_minutes", 0, 24 * 60);
+
+        if (source.loaded_toolhead && !source.reachable_toolheads.empty() &&
+            std::find(source.reachable_toolheads.begin(), source.reachable_toolheads.end(), *source.loaded_toolhead) == source.reachable_toolheads.end())
+            throw std::invalid_argument("loaded_toolhead must be included in reachable_toolheads");
 
         result.sources.emplace_back(std::move(source));
     }
