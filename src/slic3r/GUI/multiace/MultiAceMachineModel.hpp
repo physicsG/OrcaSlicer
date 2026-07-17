@@ -42,31 +42,14 @@ struct GuiAmsModelTraits
 
     static void update_tray(AmsTray& tray, const AmsTrayProjection& projection)
     {
-        tray.id      = projection.tray_id;
-        tray.tag_uid = projection.source.rfid_uid;
-        tray.setting_id.clear();
-        tray.filament_setting_id.clear();
-        tray.type       = projection.source.material;
-        tray.sub_brands = projection.source.subtype.empty() ? projection.source.brand : projection.source.subtype;
-        tray.color      = projection.color_rgba;
-        tray.cols.clear();
-        tray.weight.clear();
-        tray.diameter.clear();
-        tray.temp.clear();
-        tray.time.clear();
-        tray.bed_temp_type.clear();
-        tray.bed_temp.clear();
-        tray.nozzle_temp_max.clear();
-        tray.nozzle_temp_min.clear();
-        tray.xcam_info.clear();
-        tray.uuid.clear();
-        tray.ctype         = 0;
-        tray.k             = 0.0f;
-        tray.n             = 0.0f;
-        tray.cali_idx      = 0;
-        tray.is_bbl        = false;
+        // Only update fields owned by the live inventory bridge. Profile,
+        // calibration, UUID, and other GUI-managed fields must survive refreshes.
+        tray.id            = projection.tray_id;
+        tray.tag_uid       = projection.source.rfid_uid;
+        tray.type          = projection.source.material;
+        tray.sub_brands    = projection.source.subtype.empty() ? projection.source.brand : projection.source.subtype;
+        tray.color         = projection.color_rgba;
         tray.is_exists     = projection.exists;
-        tray.hold_count    = 0;
         tray.remain        = projection.source.remaining_percent.value_or(0);
         tray.road_position = road_position(projection.road_position);
         tray.step_state    = step_state(projection.step_state);
