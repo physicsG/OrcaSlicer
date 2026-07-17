@@ -20,7 +20,7 @@ class RestTransport
 public:
     virtual ~RestTransport() = default;
 
-    virtual TransportResponse get(const std::string& path) = 0;
+    virtual TransportResponse get(const std::string& path)                           = 0;
     virtual TransportResponse post(const std::string& path, const std::string& body) = 0;
 };
 
@@ -34,7 +34,7 @@ public:
 
     // Implementations must stop invoking callbacks before disconnect() returns.
     virtual void connect(const std::string& path, EventCallback event_callback, ConnectionCallback connection_callback) = 0;
-    virtual void disconnect() = 0;
+    virtual void disconnect()                                                                                           = 0;
 };
 
 } // namespace Slic3r::MultiAce
