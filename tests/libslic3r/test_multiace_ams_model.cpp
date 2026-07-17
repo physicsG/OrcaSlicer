@@ -60,13 +60,13 @@ struct FakeTray
 struct FakeAms
 {
     std::string                      id;
-    int                              nozzle              = -1;
-    int                              type                = 1;
-    bool                             is_exists           = false;
-    int                              humidity            = 5;
-    int                              humidity_raw        = -1;
+    int                              nozzle       = -1;
+    int                              type         = 1;
+    bool                             is_exists    = false;
+    int                              humidity     = 5;
+    int                              humidity_raw = -1;
     std::optional<double>            current_temperature;
-    int                              left_dry_time       = 0;
+    int                              left_dry_time = 0;
     std::map<std::string, FakeTray*> tray_list;
 };
 
@@ -106,11 +106,11 @@ struct FakeAmsTraits
 
     static void update_tray(FakeTray& tray, const AmsTrayProjection& projection)
     {
-        tray.id             = projection.tray_id;
-        tray.tag_uid        = projection.source.rfid_uid;
-        tray.type           = projection.source.material;
-        tray.sub_brands     = projection.source.subtype.empty() ? projection.source.brand : projection.source.subtype;
-        tray.color          = projection.color_rgba;
+        tray.id         = projection.tray_id;
+        tray.tag_uid    = projection.source.rfid_uid;
+        tray.type       = projection.source.material;
+        tray.sub_brands = projection.source.subtype.empty() ? projection.source.brand : projection.source.subtype;
+        tray.color      = projection.color_rgba;
         tray.uuid.clear();
         tray.remain         = projection.source.remaining_percent.value_or(0);
         tray.is_exists      = projection.exists;
@@ -233,7 +233,7 @@ TEST_CASE("multiACE AMS projection rejects invalid inherited topology", "[multia
 TEST_CASE("multiACE model preserves pointers and native AMS entries", "[multiace][ams]")
 {
     LocalAmsTarget target;
-    FakeAms       native_ams;
+    FakeAms        native_ams;
     native_ams.id     = "5";
     native_ams.nozzle = 3;
     target.ams_list.emplace("5", &native_ams);
@@ -313,7 +313,7 @@ TEST_CASE("multiACE model preserves overlapping external mask ownership", "[mult
 TEST_CASE("multiACE model rejects native AMS collisions", "[multiace][ams]")
 {
     LocalAmsTarget target;
-    FakeAms       native_ams;
+    FakeAms        native_ams;
     native_ams.id = "0";
     target.ams_list.emplace("0", &native_ams);
 
@@ -325,8 +325,8 @@ TEST_CASE("multiACE model rejects native AMS collisions", "[multiace][ams]")
 
 TEST_CASE("multiACE model enforces owner-thread access", "[multiace][ams]")
 {
-    LocalAmsTarget target;
-    TestMachineModel model(target.target());
+    LocalAmsTarget    target;
+    TestMachineModel  model(target.target());
     std::atomic<bool> rejected{false};
 
     std::thread worker([&] {
