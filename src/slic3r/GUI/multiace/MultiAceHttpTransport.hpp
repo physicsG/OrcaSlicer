@@ -22,7 +22,7 @@ struct HttpTransportConfig
     std::map<std::string, std::string> headers;
     long                               connect_timeout_seconds = 5;
     long                               request_timeout_seconds = 15;
-    std::size_t                        response_size_limit      = 2 * 1024 * 1024;
+    std::size_t                        response_size_limit     = 2 * 1024 * 1024;
 };
 
 class HttpRestTransport final : public RestTransport
@@ -35,6 +35,10 @@ public:
 
         if (m_config.base_url.rfind("http://", 0) != 0 && m_config.base_url.rfind("https://", 0) != 0)
             throw std::invalid_argument("multiACE base URL must start with http:// or https://");
+        if (!m_config.password.empty() && m_config.username.empty())
+            throw std::invalid_argument("multiACE basic-auth password requires a username");
+        if (!m_config.username.empty() && !m_config.bearer_token.empty())
+            throw std::invalid_argument("multiACE basic authentication and bearer authentication are mutually exclusive");
         if (m_config.connect_timeout_seconds <= 0)
             throw std::invalid_argument("multiACE connect timeout must be positive");
         if (m_config.request_timeout_seconds <= 0)
