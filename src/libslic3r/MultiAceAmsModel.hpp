@@ -71,6 +71,14 @@ public:
         for (const AmsUnitProjection& unit : projection.units) {
             retained_units.emplace(unit.ams_id);
             validate_target_unit(unit.ams_id);
+
+            const auto owned = m_units.find(unit.ams_id);
+            if (owned != m_units.end()) {
+                const auto& tray_list = Traits::tray_list(*owned->second.ams);
+                for (const AmsTrayProjection& tray : unit.trays)
+                    validate_target_tray(owned->second, tray_list, unit.ams_id, tray.tray_id);
+            }
+
             for (const AmsTrayProjection& tray : unit.trays) {
                 const auto slot_key = std::make_pair(tray.ams_id, tray.tray_id);
                 if (!next_metadata.emplace(slot_key, AmsSourceMetadata{tray.source, projection.revision}).second)
@@ -203,10 +211,8 @@ private:
         auto& tray_list = Traits::tray_list(*owned.ams);
 
         std::set<std::string> retained_trays;
-        for (const AmsTrayProjection& tray_projection : projection.trays) {
+        for (const AmsTrayProjection& tray_projection : projection.trays)
             retained_trays.emplace(tray_projection.tray_id);
-            validate_target_tray(owned, tray_list, projection.ams_id, tray_projection.tray_id);
-        }
 
         Traits::update_ams(*owned.ams, projection);
         for (const AmsTrayProjection& tray_projection : projection.trays) {
@@ -243,12 +249,12 @@ private:
         }
     }
 
-    static void validate_target_tray(const OwnedUnit&                    owned,
+    static void validate_target_tray(const OwnedUnit&                       owned,
                                      const std::map<std::string, TrayType*>& tray_list,
-                                     const std::string&                    ams_id,
-                                     const std::string&                    tray_id)
+                                     const std::string&                      ams_id,
+                                     const std::string&                      tray_id)
     {
-        const auto owned_tray = owned.trays.find(tray_id);
+        const auto owned_tray  = owned.trays.find(tray_id);
         const auto target_tray = tray_list.find(tray_id);
         if (owned_tray == owned.trays.end()) {
             if (target_tray != tray_list.end())
