@@ -72,7 +72,7 @@ public:
             return;
         }
 
-        refresh_inventory();
+        refresh_inventory(next_update_sequence());
     }
 
     bool start()
@@ -90,7 +90,7 @@ public:
             set_last_error("multiACE provider does not advertise inventory support");
             return false;
         }
-        if (!refresh_inventory())
+        if (!refresh_inventory(next_update_sequence()))
             return false;
 
         {
@@ -141,7 +141,14 @@ public:
             m_started          = false;
             m_events_connected = false;
         }
-        mark_inventory_offline();
+
+        try {
+            mark_inventory_offline(next_update_sequence());
+        } catch (const std::exception& error) {
+            set_last_error(error.what());
+        } catch (...) {
+            set_last_error("multiACE inventory subscriber failed during shutdown");
+        }
     }
 
     bool refresh_capabilities()
@@ -159,26 +166,11 @@ public:
         }
     }
 
-    bool refresh_inventory()
-    {
-        InventorySnapshot snapshot;
-        try {
-            std::lock_guard<std::mutex> lock(m_refresh_mutex);
-            const TransportResponse    response = m_rest_transport->get(m_endpoints.inventory);
-            require_success(response, "multiACE inventory request");
-            snapshot = parse_inventory(parse_json(response.body, "multiACE inventory response"));
-        } catch (const std::exception& error) {
-            set_last_error(error.what());
-            return false;
-        }
-
-        publish_inventory(std::move(snapshot));
-        clear_last_error();
-        return true;
-    }
+    bool refresh_inventory() { return refresh_inventory(next_update_sequence()); }
 
     void handle_event(const std::string& payload)
     {
+        const std::uint64_t sequence = next_update_sequence();
         try {
             const nlohmann::json event = parse_json(payload, "multiACE event");
             if (!event.is_object())
@@ -189,15 +181,16 @@ public:
                 nlohmann::json normalized = *inventory_payload;
                 if (!normalized.contains("schema_version") && event.contains("schema_version"))
                     normalized["schema_version"] = event.at("schema_version");
-                publish_inventory(parse_inventory(normalized));
+                publish_inventory(parse_inventory(normalized), sequence);
                 clear_last_error();
                 return;
             }
 
+            detail::parse_schema_version(event);
             const std::string event_type = read_event_type(event);
             if (event_type == "inventory_changed" || event_type == "source_changed" || event_type == "rfid_updated" ||
                 event_type == "refresh") {
-                refresh_inventory();
+                refresh_inventory(sequence);
             }
         } catch (const std::exception& error) {
             set_last_error(error.what());
@@ -227,7 +220,7 @@ private:
     {
         std::mutex                             mutex;
         std::condition_variable                callbacks_drained;
-        MoonrakerFilamentSourceProvider* owner            = nullptr;
+        MoonrakerFilamentSourceProvider*       owner            = nullptr;
         std::size_t                            active_callbacks = 0;
     };
 
@@ -334,6 +327,7 @@ private:
 
     void handle_event_connection(bool connected, const std::string& error)
     {
+        const std::uint64_t sequence = next_update_sequence();
         try {
             {
                 std::lock_guard<std::mutex> lock(m_status_mutex);
@@ -342,20 +336,46 @@ private:
 
             if (connected) {
                 clear_last_error();
-                refresh_inventory();
+                refresh_inventory(sequence);
             } else {
                 if (!error.empty())
                     set_last_error("multiACE event connection lost: " + error);
-                mark_inventory_offline();
+                mark_inventory_offline(sequence);
             }
         } catch (const std::exception& callback_error) {
             set_last_error(callback_error.what());
         }
     }
 
-    void publish_inventory(InventorySnapshot snapshot)
+    bool refresh_inventory(std::uint64_t sequence)
     {
-        const std::uint64_t sequence = m_next_update_sequence.fetch_add(1, std::memory_order_relaxed);
+        InventorySnapshot snapshot;
+        try {
+            std::lock_guard<std::mutex> lock(m_refresh_mutex);
+            const TransportResponse    response = m_rest_transport->get(m_endpoints.inventory);
+            require_success(response, "multiACE inventory request");
+            snapshot = parse_inventory(parse_json(response.body, "multiACE inventory response"));
+        } catch (const std::exception& error) {
+            set_last_error(error.what());
+            return false;
+        }
+
+        try {
+            publish_inventory(std::move(snapshot), sequence);
+        } catch (const std::exception& error) {
+            set_last_error(error.what());
+            return false;
+        } catch (...) {
+            set_last_error("multiACE inventory subscriber failed");
+            return false;
+        }
+
+        clear_last_error();
+        return true;
+    }
+
+    void publish_inventory(InventorySnapshot snapshot, std::uint64_t sequence)
+    {
         std::lock_guard<std::recursive_mutex> lock(m_publish_mutex);
         if (sequence <= m_last_published_sequence)
             return;
@@ -363,7 +383,7 @@ private:
         m_state.set_inventory(std::move(snapshot));
     }
 
-    void mark_inventory_offline()
+    void mark_inventory_offline(std::uint64_t sequence)
     {
         InventorySnapshot snapshot = inventory();
         bool              changed  = false;
@@ -374,8 +394,10 @@ private:
             }
         }
         if (changed)
-            publish_inventory(std::move(snapshot));
+            publish_inventory(std::move(snapshot), sequence);
     }
+
+    std::uint64_t next_update_sequence() { return m_next_update_sequence.fetch_add(1, std::memory_order_relaxed); }
 
     void set_last_error(std::string error)
     {
@@ -389,19 +411,19 @@ private:
         m_last_error.clear();
     }
 
-    ManualFilamentSourceProvider  m_state;
-    std::shared_ptr<RestTransport> m_rest_transport;
+    ManualFilamentSourceProvider   m_state;
+    std::shared_ptr<RestTransport>  m_rest_transport;
     std::shared_ptr<EventTransport> m_event_transport;
     MoonrakerEndpoints             m_endpoints;
-    std::shared_ptr<CallbackState> m_callback_state = std::make_shared<CallbackState>();
-    mutable std::mutex             m_status_mutex;
-    std::mutex                     m_refresh_mutex;
-    std::recursive_mutex           m_publish_mutex;
-    std::atomic<std::uint64_t>     m_next_update_sequence{1};
-    std::uint64_t                  m_last_published_sequence = 0;
-    bool                           m_started                 = false;
-    bool                           m_events_connected        = false;
-    std::string                    m_last_error;
+    std::shared_ptr<CallbackState>  m_callback_state = std::make_shared<CallbackState>();
+    mutable std::mutex              m_status_mutex;
+    std::mutex                      m_refresh_mutex;
+    std::recursive_mutex            m_publish_mutex;
+    std::atomic<std::uint64_t>      m_next_update_sequence{1};
+    std::uint64_t                   m_last_published_sequence = 0;
+    bool                            m_started                 = false;
+    bool                            m_events_connected        = false;
+    std::string                     m_last_error;
 };
 
 } // namespace Slic3r::MultiAce
