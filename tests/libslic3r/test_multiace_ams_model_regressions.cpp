@@ -155,3 +155,11 @@ TEST_CASE("multiACE projection rejects loaded sources without a declared route",
     CHECK_THROWS_WITH(project_inventory_to_ams(regression_inventory("r1", {regression_source("0", "0", {}, 2)})),
                       "multiACE loaded_toolhead is not reachable from its source");
 }
+
+TEST_CASE("multiACE projection rejects toolheads outside the U1 range", "[multiace][ams][regression]")
+{
+    CHECK_THROWS_WITH(project_inventory_to_ams(regression_inventory("r1", {regression_source("0", "0", {4})})),
+                      "multiACE source contains an invalid U1 toolhead");
+    CHECK_THROWS_WITH(project_inventory_to_ams(regression_inventory("r1", {regression_source("0", "0", {-1})})),
+                      "multiACE source contains an invalid U1 toolhead");
+}
