@@ -47,9 +47,7 @@ public:
     using AmsType  = typename Traits::AmsType;
     using TrayType = typename Traits::TrayType;
 
-    explicit BasicMultiAceAmsModel(AmsModelTarget<AmsType> target)
-        : m_target(target), m_owner_thread(std::this_thread::get_id())
-    {}
+    explicit BasicMultiAceAmsModel(AmsModelTarget<AmsType> target) : m_target(target), m_owner_thread(std::this_thread::get_id()) {}
 
     ~BasicMultiAceAmsModel()
     {
@@ -144,7 +142,7 @@ public:
 private:
     struct OwnedUnit
     {
-        std::unique_ptr<AmsType>                            ams;
+        std::unique_ptr<AmsType>                         ams;
         std::map<std::string, std::unique_ptr<TrayType>> trays;
     };
 
@@ -159,7 +157,7 @@ private:
         if (!owned.ams)
             throw std::logic_error("multiACE AMS traits returned a null unit");
 
-        AmsType*  raw      = owned.ams.get();
+        AmsType*   raw      = owned.ams.get();
         const auto inserted = m_units.emplace(unit.ams_id, std::move(owned));
         try {
             const auto target_inserted = m_target.ams_list.emplace(unit.ams_id, raw);
