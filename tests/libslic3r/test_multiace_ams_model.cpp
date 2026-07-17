@@ -1,16 +1,15 @@
 #include <catch2/catch.hpp>
 
-#include "libslic3r/MultiAceAmsProjection.hpp"
-#include "slic3r/GUI/multiace/MultiAceMachineModel.hpp"
+#include "libslic3r/MultiAceAmsModel.hpp"
 
 #include <atomic>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <thread>
 #include <vector>
 
-using namespace Slic3r;
 using namespace Slic3r::MultiAce;
 
 namespace {
@@ -43,17 +42,97 @@ InventorySnapshot inventory(std::string revision, std::vector<FilamentSource> so
     return {SUPPORTED_SCHEMA_VERSION, std::move(revision), std::move(sources)};
 }
 
+struct FakeTray
+{
+    std::string           id;
+    std::string           tag_uid;
+    std::string           type;
+    std::string           sub_brands;
+    std::string           color;
+    std::string           uuid;
+    int                   remain         = 0;
+    bool                  is_exists      = false;
+    bool                  rfid_read_done = false;
+    ProjectedRoadPosition road_position  = ProjectedRoadPosition::Tray;
+    ProjectedStepState    step_state     = ProjectedStepState::Init;
+};
+
+struct FakeAms
+{
+    std::string                      id;
+    int                              nozzle              = -1;
+    int                              type                = 1;
+    bool                             is_exists           = false;
+    int                              humidity            = 5;
+    int                              humidity_raw        = -1;
+    std::optional<double>            current_temperature;
+    int                              left_dry_time       = 0;
+    std::map<std::string, FakeTray*> tray_list;
+};
+
+struct FakeAmsTraits
+{
+    using AmsType  = FakeAms;
+    using TrayType = FakeTray;
+
+    static std::unique_ptr<FakeAms> create_ams(const AmsUnitProjection& projection)
+    {
+        auto ams    = std::make_unique<FakeAms>();
+        ams->id     = projection.ams_id;
+        ams->nozzle = projection.nozzle;
+        return ams;
+    }
+
+    static std::unique_ptr<FakeTray> create_tray(const AmsTrayProjection& projection)
+    {
+        auto tray = std::make_unique<FakeTray>();
+        tray->id  = projection.tray_id;
+        return tray;
+    }
+
+    static std::map<std::string, FakeTray*>& tray_list(FakeAms& ams) { return ams.tray_list; }
+
+    static void update_ams(FakeAms& ams, const AmsUnitProjection& projection)
+    {
+        ams.id                  = projection.ams_id;
+        ams.nozzle              = projection.nozzle;
+        ams.type                = 1;
+        ams.is_exists           = true;
+        ams.humidity            = projection.humidity_level;
+        ams.humidity_raw        = projection.humidity_raw;
+        ams.current_temperature = projection.current_temperature;
+        ams.left_dry_time       = projection.dryer_remaining_seconds;
+    }
+
+    static void update_tray(FakeTray& tray, const AmsTrayProjection& projection)
+    {
+        tray.id             = projection.tray_id;
+        tray.tag_uid        = projection.source.rfid_uid;
+        tray.type           = projection.source.material;
+        tray.sub_brands     = projection.source.subtype.empty() ? projection.source.brand : projection.source.subtype;
+        tray.color          = projection.color_rgba;
+        tray.uuid.clear();
+        tray.remain         = projection.source.remaining_percent.value_or(0);
+        tray.is_exists      = projection.exists;
+        tray.rfid_read_done = projection.rfid_read_done;
+        tray.road_position  = projection.road_position;
+        tray.step_state     = projection.step_state;
+    }
+};
+
+using TestMachineModel = BasicMultiAceAmsModel<FakeAmsTraits>;
+
 struct LocalAmsTarget
 {
-    std::map<std::string, Ams*> ams_list;
-    long                        ams_exist_bits      = 0;
-    long                        tray_exist_bits     = 0;
-    long                        tray_is_bbl_bits    = 0;
-    long                        tray_read_done_bits = 0;
-    long                        tray_reading_bits   = 0;
-    bool                        is_ams_need_update  = false;
+    std::map<std::string, FakeAms*> ams_list;
+    long                            ams_exist_bits      = 0;
+    long                            tray_exist_bits     = 0;
+    long                            tray_is_bbl_bits    = 0;
+    long                            tray_read_done_bits = 0;
+    long                            tray_reading_bits   = 0;
+    bool                            is_ams_need_update  = false;
 
-    AmsModelTarget target()
+    AmsModelTarget<FakeAms> target()
     {
         return {ams_list, ams_exist_bits, tray_exist_bits, tray_is_bbl_bits, tray_read_done_bits, tray_reading_bits, is_ams_need_update};
     }
@@ -151,30 +230,32 @@ TEST_CASE("multiACE AMS projection rejects invalid inherited topology", "[multia
     }
 }
 
-TEST_CASE("multiACE machine model preserves pointers and native AMS entries", "[multiace][ams]")
+TEST_CASE("multiACE model preserves pointers and native AMS entries", "[multiace][ams]")
 {
     LocalAmsTarget target;
-    Ams            native_ams("5", 3, 1);
+    FakeAms       native_ams;
+    native_ams.id     = "5";
+    native_ams.nozzle = 3;
     target.ams_list.emplace("5", &native_ams);
     target.ams_exist_bits      = 1L << 5;
     target.tray_exist_bits     = 1L << 20;
     target.tray_read_done_bits = 1L << 20;
 
     {
-        MultiAceMachineModel model(target.target());
+        TestMachineModel model(target.target());
         model.apply(inventory("r1", {source("0", "0"), source("0", "1", SourceState::Ready, "PETG", "00FF00", {1})}));
 
         REQUIRE(target.ams_list.size() == 2);
         CHECK(target.ams_list.at("5") == &native_ams);
-        Ams*     unit_pointer = target.ams_list.at("0");
-        AmsTray* tray_pointer = unit_pointer->trayList.at("0");
+        FakeAms*  unit_pointer = target.ams_list.at("0");
+        FakeTray* tray_pointer = unit_pointer->tray_list.at("0");
         CHECK(unit_pointer->nozzle == -1);
         CHECK(tray_pointer->type == "PLA");
         CHECK(tray_pointer->color == "D52332FF");
         CHECK(tray_pointer->uuid.empty());
         CHECK(tray_pointer->remain == 75);
         CHECK(tray_pointer->is_exists);
-        CHECK(tray_pointer->rfid_state == AMS_REID_DONE);
+        CHECK(tray_pointer->rfid_read_done);
 
         const AmsSourceMetadata* metadata = model.source_metadata("0", "0");
         REQUIRE(metadata != nullptr);
@@ -190,12 +271,12 @@ TEST_CASE("multiACE machine model preserves pointers and native AMS entries", "[
                                      source("1", "2", SourceState::Ready, "PLA", "FFFFFF", {2}, 2)}));
 
         CHECK(target.ams_list.at("0") == unit_pointer);
-        CHECK(target.ams_list.at("0")->trayList.at("0") == tray_pointer);
+        CHECK(target.ams_list.at("0")->tray_list.at("0") == tray_pointer);
         CHECK(tray_pointer->type == "ABS");
         CHECK(tray_pointer->color == "010203FF");
         CHECK(tray_pointer->is_exists);
-        CHECK(tray_pointer->road_position == AMS_ROAD_POSITION_TRAY);
-        CHECK(target.ams_list.at("0")->trayList.count("1") == 0);
+        CHECK(tray_pointer->road_position == ProjectedRoadPosition::Tray);
+        CHECK(target.ams_list.at("0")->tray_list.count("1") == 0);
         CHECK(target.ams_list.count("1") == 1);
         CHECK(model.revision() == "r2");
 
@@ -213,14 +294,14 @@ TEST_CASE("multiACE machine model preserves pointers and native AMS entries", "[
     }
 }
 
-TEST_CASE("multiACE machine model preserves overlapping external mask ownership", "[multiace][ams]")
+TEST_CASE("multiACE model preserves overlapping external mask ownership", "[multiace][ams]")
 {
     LocalAmsTarget target;
     target.ams_exist_bits      = 1L;
     target.tray_exist_bits     = 1L;
     target.tray_read_done_bits = 1L;
 
-    MultiAceMachineModel model(target.target());
+    TestMachineModel model(target.target());
     model.apply(inventory("r1", {source("0", "0")}));
     model.clear();
 
@@ -229,23 +310,24 @@ TEST_CASE("multiACE machine model preserves overlapping external mask ownership"
     CHECK(target.tray_read_done_bits == 1L);
 }
 
-TEST_CASE("multiACE machine model rejects native AMS collisions", "[multiace][ams]")
+TEST_CASE("multiACE model rejects native AMS collisions", "[multiace][ams]")
 {
     LocalAmsTarget target;
-    Ams            native_ams("0", 0, 1);
+    FakeAms       native_ams;
+    native_ams.id = "0";
     target.ams_list.emplace("0", &native_ams);
 
-    MultiAceMachineModel model(target.target());
+    TestMachineModel model(target.target());
     CHECK_THROWS_WITH(model.apply(inventory("r1", {source("0", "0")})),
                       "multiACE AMS unit ID collides with an existing machine AMS entry: 0");
     CHECK(target.ams_list.at("0") == &native_ams);
 }
 
-TEST_CASE("multiACE machine model enforces owner-thread access", "[multiace][ams]")
+TEST_CASE("multiACE model enforces owner-thread access", "[multiace][ams]")
 {
-    LocalAmsTarget       target;
-    MultiAceMachineModel model(target.target());
-    std::atomic<bool>    rejected{false};
+    LocalAmsTarget target;
+    TestMachineModel model(target.target());
+    std::atomic<bool> rejected{false};
 
     std::thread worker([&] {
         try {
