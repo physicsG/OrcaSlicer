@@ -66,11 +66,11 @@ struct AmsInventoryProjection
     std::string                    revision;
     std::vector<AmsUnitProjection> units;
 
-    long ams_exist_bits       = 0;
-    long tray_exist_bits      = 0;
-    long tray_is_bbl_bits     = 0;
-    long tray_read_done_bits  = 0;
-    long tray_reading_bits    = 0;
+    long ams_exist_bits      = 0;
+    long tray_exist_bits     = 0;
+    long tray_is_bbl_bits    = 0;
+    long tray_read_done_bits = 0;
+    long tray_reading_bits   = 0;
 };
 
 namespace projection_detail {
@@ -140,8 +140,8 @@ inline AmsInventoryProjection project_inventory_to_ams(const InventorySnapshot& 
     struct UnitAccumulator
     {
         AmsUnitProjection projection;
-        double            temperature_sum   = 0.0;
-        int               temperature_count = 0;
+        double            temperature_sum    = 0.0;
+        int               temperature_count  = 0;
         std::optional<int> common_nozzle;
         bool              nozzle_is_ambiguous = false;
     };
@@ -162,9 +162,11 @@ inline AmsInventoryProjection project_inventory_to_ams(const InventorySnapshot& 
         if (slot_index < 0 || slot_index >= AMS_SLOTS_PER_UNIT)
             throw std::invalid_argument("multiACE slot_id must be between 0 and 3");
 
-        const int flat_slot_index = unit_index * AMS_SLOTS_PER_UNIT + slot_index;
-        if (unit_index >= usable_mask_bits || flat_slot_index >= usable_mask_bits)
+        const int largest_unit_for_slot = (usable_mask_bits - 1 - slot_index) / AMS_SLOTS_PER_UNIT;
+        if (unit_index >= usable_mask_bits || unit_index > largest_unit_for_slot)
             throw std::invalid_argument("multiACE unit and slot exceed the inherited AMS bit-mask capacity");
+        const int flat_slot_index = unit_index * AMS_SLOTS_PER_UNIT + slot_index;
+
         if (!occupied_slots.emplace(unit_index, slot_index).second)
             throw std::invalid_argument("multiACE inventory contains duplicate unit and slot topology");
 
