@@ -169,7 +169,7 @@ inline AmsInventoryProjection project_inventory_to_ams(const InventorySnapshot& 
         if (!occupied_slots.emplace(unit_index, slot_index).second)
             throw std::invalid_argument("multiACE inventory contains duplicate unit and slot topology");
 
-        if (source.loaded_toolhead.has_value() && !source.reachable_toolheads.empty() &&
+        if (source.loaded_toolhead.has_value() &&
             !projection_detail::contains_toolhead(source.reachable_toolheads, *source.loaded_toolhead)) {
             throw std::invalid_argument("multiACE loaded_toolhead is not reachable from its source");
         }
