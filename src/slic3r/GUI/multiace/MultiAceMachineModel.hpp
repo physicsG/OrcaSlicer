@@ -29,12 +29,8 @@ struct AmsModelTarget
 
 inline AmsModelTarget make_ams_model_target(MachineObject& machine)
 {
-    return {machine.amsList,
-            machine.ams_exist_bits,
-            machine.tray_exist_bits,
-            machine.tray_is_bbl_bits,
-            machine.tray_read_done_bits,
-            machine.tray_reading_bits,
+    return {machine.amsList,           machine.ams_exist_bits,      machine.tray_exist_bits,
+            machine.tray_is_bbl_bits,  machine.tray_read_done_bits, machine.tray_reading_bits,
             machine.is_ams_need_update};
 }
 
@@ -75,8 +71,7 @@ public:
         for (const AmsUnitProjection& unit : projection.units) {
             const auto existing = m_target.ams_list.find(unit.ams_id);
             const auto owned    = m_units.find(unit.ams_id);
-            if (existing != m_target.ams_list.end() &&
-                (owned == m_units.end() || existing->second != owned->second.ams.get())) {
+            if (existing != m_target.ams_list.end() && (owned == m_units.end() || existing->second != owned->second.ams.get())) {
                 throw std::invalid_argument("multiACE AMS unit ID collides with an existing machine AMS entry: " + unit.ams_id);
             }
         }
@@ -113,7 +108,7 @@ public:
         replace_owned_mask(m_target.tray_read_done_bits, m_owned_tray_read_done_bits, projection.tray_read_done_bits);
         replace_owned_mask(m_target.tray_reading_bits, m_owned_tray_reading_bits, projection.tray_reading_bits);
 
-        m_revision                   = projection.revision;
+        m_revision                  = projection.revision;
         m_target.is_ams_need_update = true;
     }
 
@@ -181,8 +176,8 @@ private:
             return found->second;
 
         OwnedUnit owned;
-        owned.ams = std::make_unique<Ams>(unit.ams_id, unit.nozzle, 1);
-        Ams* raw  = owned.ams.get();
+        owned.ams           = std::make_unique<Ams>(unit.ams_id, unit.nozzle, 1);
+        Ams*       raw      = owned.ams.get();
         const auto inserted = m_units.emplace(unit.ams_id, std::move(owned));
         try {
             const auto target_inserted = m_target.ams_list.emplace(unit.ams_id, raw);
@@ -197,13 +192,13 @@ private:
 
     static void update_tray(AmsTray& tray, const AmsTrayProjection& projection)
     {
-        tray.id                  = projection.tray_id;
-        tray.tag_uid             = projection.source.rfid_uid;
+        tray.id      = projection.tray_id;
+        tray.tag_uid = projection.source.rfid_uid;
         tray.setting_id.clear();
         tray.filament_setting_id.clear();
-        tray.type                = projection.source.material;
-        tray.sub_brands          = projection.source.subtype.empty() ? projection.source.brand : projection.source.subtype;
-        tray.color               = projection.color_rgba;
+        tray.type       = projection.source.material;
+        tray.sub_brands = projection.source.subtype.empty() ? projection.source.brand : projection.source.subtype;
+        tray.color      = projection.color_rgba;
         tray.cols.clear();
         tray.weight.clear();
         tray.diameter.clear();
@@ -236,9 +231,8 @@ private:
         ams.is_exists           = true;
         ams.humidity            = projection.humidity_level;
         ams.humidity_raw        = projection.humidity_raw;
-        ams.current_temperature = projection.current_temperature.has_value()
-                                      ? static_cast<float>(*projection.current_temperature)
-                                      : INVALID_AMS_TEMPERATURE;
+        ams.current_temperature = projection.current_temperature.has_value() ? static_cast<float>(*projection.current_temperature) :
+                                                                               INVALID_AMS_TEMPERATURE;
         ams.left_dry_time       = projection.dryer_remaining_seconds;
     }
 
@@ -321,10 +315,10 @@ private:
     AmsModelTarget  m_target;
     std::thread::id m_owner_thread;
 
-    std::map<std::string, OwnedUnit>                                  m_units;
+    std::map<std::string, OwnedUnit>                                 m_units;
     std::map<std::pair<std::string, std::string>, AmsSourceMetadata> m_metadata;
-    std::map<std::string, AmsSourceSlot>                              m_source_slots;
-    std::string                                                       m_revision;
+    std::map<std::string, AmsSourceSlot>                             m_source_slots;
+    std::string                                                      m_revision;
 
     long m_owned_ams_exist_bits      = 0;
     long m_owned_tray_exist_bits     = 0;
