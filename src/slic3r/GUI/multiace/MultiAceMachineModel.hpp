@@ -150,7 +150,7 @@ public:
 private:
     struct OwnedUnit
     {
-        std::unique_ptr<Ams>                           ams;
+        std::unique_ptr<Ams>                            ams;
         std::map<std::string, std::unique_ptr<AmsTray>> trays;
     };
 
@@ -185,7 +185,9 @@ private:
         Ams* raw  = owned.ams.get();
         const auto inserted = m_units.emplace(unit.ams_id, std::move(owned));
         try {
-            m_target.ams_list.emplace(unit.ams_id, raw);
+            const auto target_inserted = m_target.ams_list.emplace(unit.ams_id, raw);
+            if (!target_inserted.second)
+                throw std::logic_error("multiACE AMS target changed during model update");
         } catch (...) {
             m_units.erase(inserted.first);
             throw;
@@ -212,18 +214,18 @@ private:
         tray.nozzle_temp_max.clear();
         tray.nozzle_temp_min.clear();
         tray.xcam_info.clear();
-        tray.uuid                = projection.source_id;
-        tray.ctype               = 0;
-        tray.k                   = 0.0f;
-        tray.n                   = 0.0f;
-        tray.cali_idx            = 0;
-        tray.is_bbl              = false;
-        tray.is_exists           = projection.exists;
-        tray.hold_count          = 0;
-        tray.remain              = projection.source.remaining_percent.value_or(0);
-        tray.road_position       = road_position(projection.road_position);
-        tray.step_state          = step_state(projection.step_state);
-        tray.rfid_state          = projection.rfid_read_done ? AMS_REID_DONE : AMS_RFID_INIT;
+        tray.uuid          = projection.source_id;
+        tray.ctype         = 0;
+        tray.k             = 0.0f;
+        tray.n             = 0.0f;
+        tray.cali_idx      = 0;
+        tray.is_bbl        = false;
+        tray.is_exists     = projection.exists;
+        tray.hold_count    = 0;
+        tray.remain        = projection.source.remaining_percent.value_or(0);
+        tray.road_position = road_position(projection.road_position);
+        tray.step_state    = step_state(projection.step_state);
+        tray.rfid_state    = projection.rfid_read_done ? AMS_REID_DONE : AMS_RFID_INIT;
     }
 
     static void update_unit_fields(Ams& ams, const AmsUnitProjection& projection)
@@ -249,10 +251,14 @@ private:
             retained_trays.emplace(tray_projection.tray_id);
             auto found = owned.trays.find(tray_projection.tray_id);
             if (found == owned.trays.end()) {
-                auto tray = std::make_unique<AmsTray>(tray_projection.tray_id);
-                AmsTray* raw = tray.get();
-                found = owned.trays.emplace(tray_projection.tray_id, std::move(tray)).first;
-                owned.ams->trayList.emplace(tray_projection.tray_id, raw);
+                auto     tray = std::make_unique<AmsTray>(tray_projection.tray_id);
+                AmsTray* raw  = tray.get();
+                found         = owned.trays.emplace(tray_projection.tray_id, std::move(tray)).first;
+                const auto tray_inserted = owned.ams->trayList.emplace(tray_projection.tray_id, raw);
+                if (!tray_inserted.second) {
+                    owned.trays.erase(found);
+                    throw std::logic_error("multiACE AMS tray target changed during model update");
+                }
             }
             update_tray(*found->second, tray_projection);
         }
@@ -276,8 +282,9 @@ private:
 
     static void replace_owned_mask(long& target, long& owned_mask, long next_mask)
     {
-        target     = (target & ~owned_mask) | next_mask;
-        owned_mask = next_mask;
+        const long external_mask = target & ~owned_mask;
+        target                   = external_mask | next_mask;
+        owned_mask               = next_mask & ~external_mask;
     }
 
     void clear_impl()
@@ -308,13 +315,13 @@ private:
             throw std::logic_error("multiACE AMS model may only be accessed from its owner thread");
     }
 
-    AmsModelTarget m_target;
+    AmsModelTarget  m_target;
     std::thread::id m_owner_thread;
 
-    std::map<std::string, OwnedUnit>                          m_units;
+    std::map<std::string, OwnedUnit>                                  m_units;
     std::map<std::pair<std::string, std::string>, AmsSourceMetadata> m_metadata;
-    std::map<std::string, AmsSourceSlot>                      m_source_slots;
-    std::string                                               m_revision;
+    std::map<std::string, AmsSourceSlot>                              m_source_slots;
+    std::string                                                       m_revision;
 
     long m_owned_ams_exist_bits      = 0;
     long m_owned_tray_exist_bits     = 0;
