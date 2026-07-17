@@ -17,13 +17,14 @@ The first bridge version intentionally accepts the inherited topology that exist
 - Slot IDs are canonical integers from `0` through `3`.
 - Each unit/slot pair must be unique.
 - Unit and flat-slot indices must fit the inherited signed `long` bit masks.
+- A loaded toolhead must be declared as reachable by that source.
 - Projected `Ams::nozzle` is set only when every slot in a unit has exactly one identical reachable toolhead. Mixed or incomplete routing uses `-1`; per-source routing remains authoritative in the sidecar metadata.
 
 This preserves the distinction between many spool sources and the U1's four physical toolheads.
 
 ## Existing AMS fields
 
-Each source populates inherited tray fields used by current UI components:
+Each source populates only inherited tray fields owned by live inventory:
 
 - RFID UID;
 - material and subtype;
@@ -33,6 +34,8 @@ Each source populates inherited tray fields used by current UI components:
 - RFID-read completion;
 - filament road position;
 - loading/completed step state.
+
+Filament profile IDs, UUID, calibration values, multicolor configuration, temperature/profile fields, and other GUI-managed state are deliberately left untouched during refreshes.
 
 Offline sources retain their metadata and remain present in the model, while explicitly empty sources clear the tray-existence bit.
 
@@ -44,6 +47,8 @@ The inherited tray object cannot represent every multiACE field. `BasicMultiAceA
 
 The inherited filament profile and UUID fields remain untouched. Callers that require stable source identity, routing, metadata origin, dryer state, or loaded-toolhead information must use the sidecar lookup.
 
+Pointers returned by `source_metadata()` remain valid only until the next `apply()` or `clear()` call. Callers that need longer-lived data must copy the returned record.
+
 ## Ownership and pointer stability
 
 The model owns only the units and trays it inserts. It:
@@ -51,10 +56,15 @@ The model owns only the units and trays it inserts. It:
 - preserves unrelated/native `amsList` entries;
 - rejects unit-ID collisions rather than replacing an existing AMS;
 - updates existing owned units and trays in place when identities remain present;
+- repairs a missing target-map entry by restoring the same owned pointer;
+- rejects a target-map entry that was replaced with a different pointer;
 - removes only owned entries that disappear from the next inventory snapshot;
+- leaves an externally replaced entry untouched when its former multiACE source disappears;
 - preserves bit-mask flags that were already owned by another machine-data path.
 
 The target machine model must outlive the bridge. The bridge must be created, accessed, and destroyed on one GUI thread. Provider callbacks must be marshalled onto that thread before calling `apply()`.
+
+The model provides the basic exception guarantee: a failed update remains memory-safe and preserves ownership, but trait field assignments may already have updated part of an existing unit or tray. Callers should keep trait updates non-throwing apart from allocation failures and retry with a complete inventory snapshot after reporting an error.
 
 ## Lifecycle boundary
 
