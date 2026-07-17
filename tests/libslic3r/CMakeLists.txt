@@ -1,6 +1,6 @@
 get_filename_component(_TEST_NAME ${CMAKE_CURRENT_LIST_DIR} NAME)
 
-add_executable(${_TEST_NAME}_tests 
+add_executable(${_TEST_NAME}_tests
 	${_TEST_NAME}_tests.cpp
 	test_3mf.cpp
 	test_aabbindirect.cpp
@@ -11,6 +11,7 @@ add_executable(${_TEST_NAME}_tests
 	test_elephant_foot_compensation.cpp
 	test_geometry.cpp
 	test_mixed_filament.cpp
+	test_multiace_inventory.cpp
 	test_triangle_selector.cpp
 	test_local_z_order_optimizer.cpp
 	test_placeholder_parser.cpp
@@ -31,7 +32,7 @@ add_executable(${_TEST_NAME}_tests
 if (TARGET OpenVDB::openvdb)
     target_sources(${_TEST_NAME}_tests PRIVATE test_hollowing.cpp)
 endif()
-    
+
 target_link_libraries(${_TEST_NAME}_tests test_common libslic3r OpenSSL::Crypto)
 if (WIN32)
     target_link_libraries(${_TEST_NAME}_tests bcrypt.lib)
