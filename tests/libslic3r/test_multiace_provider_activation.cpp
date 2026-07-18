@@ -2,7 +2,22 @@
 
 #include "slic3r/GUI/multiace/MultiAceProviderConfig.hpp"
 
+#include <memory>
+#include <stdexcept>
+
 using namespace Slic3r::MultiAce;
+
+namespace {
+
+class FakeStartedProvider
+{
+public:
+    void stop() { ++stop_count; }
+
+    int stop_count = 0;
+};
+
+} // namespace
 
 TEST_CASE("multiACE activation derives matching HTTP and WebSocket service roots", "[multiace][activation]")
 {
@@ -49,4 +64,40 @@ TEST_CASE("multiACE activation rejects raw whitespace and control characters in 
                       "multiACE service URL must not contain whitespace or control characters");
     CHECK_THROWS_WITH(provider_transport_urls("http://192.0.2.10:7125/multiace\n"),
                       "multiACE service URL must not contain whitespace or control characters");
+}
+
+TEST_CASE("multiACE activation does not attach when provider startup fails", "[multiace][activation][lifecycle]")
+{
+    bool attach_called = false;
+    auto provider_factory = []() -> std::shared_ptr<FakeStartedProvider> { throw std::runtime_error("startup failed"); };
+    auto attach           = [&attach_called](const auto&) {
+        attach_called = true;
+        return 1;
+    };
+
+    CHECK_THROWS_WITH(activate_multiace_provider(provider_factory, attach), "startup failed");
+    CHECK_FALSE(attach_called);
+}
+
+TEST_CASE("multiACE activation stops a started provider when attachment fails", "[multiace][activation][lifecycle]")
+{
+    const auto provider         = std::make_shared<FakeStartedProvider>();
+    auto       provider_factory = [&provider] { return provider; };
+    auto       attach           = [](const auto&) -> int { throw std::runtime_error("attachment failed"); };
+
+    CHECK_THROWS_WITH(activate_multiace_provider(provider_factory, attach), "attachment failed");
+    CHECK(provider->stop_count == 1);
+}
+
+TEST_CASE("multiACE activation retains a started provider after successful attachment", "[multiace][activation][lifecycle]")
+{
+    const auto provider         = std::make_shared<FakeStartedProvider>();
+    auto       provider_factory = [&provider] { return provider; };
+    int        binding          = 42;
+    auto       attach           = [&binding](const auto&) -> int& { return binding; };
+
+    int& result = activate_multiace_provider(provider_factory, attach);
+
+    CHECK(&result == &binding);
+    CHECK(provider->stop_count == 0);
 }
