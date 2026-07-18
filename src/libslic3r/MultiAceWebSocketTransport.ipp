@@ -272,8 +272,24 @@ public:
         m_started = true;
         m_running = true;
         const std::shared_ptr<State> self = shared_from_this();
-        m_worker = std::thread([self] { self->run(); });
-        websocket_detail::asio::post(m_io, [self] { self->begin_attempt(); });
+        try {
+            m_worker = std::thread([self] { self->run(); });
+            websocket_detail::asio::post(m_io, [self] { self->begin_attempt(); });
+        } catch (...) {
+            // Thread construction and asio::post may both throw. Keep startup
+            // transactional so a failed connect cannot leave a live worker or
+            // make running() report a transport that never started.
+            m_stopping = true;
+            m_work_guard.reset();
+            m_io.stop();
+            if (m_worker.joinable())
+                m_worker.join();
+            m_started      = false;
+            m_stop_started = false;
+            m_running      = false;
+            m_stopping     = false;
+            throw;
+        }
     }
 
     void stop()
@@ -549,8 +565,14 @@ inline void BeastWebSocketEventTransport::connect(const std::string& path,
         previous->stop();
 
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_state == state)
-        state->start();
+    if (m_state == state) {
+        try {
+            state->start();
+        } catch (...) {
+            m_state.reset();
+            throw;
+        }
+    }
 }
 
 inline void BeastWebSocketEventTransport::disconnect()
