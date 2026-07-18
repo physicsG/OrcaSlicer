@@ -161,9 +161,9 @@ TEST_CASE("multiACE provider binding dispatches initial and live inventory on th
     auto dispatcher = std::make_shared<QueueDispatcher>();
 
     std::vector<std::string> revisions;
-    FilamentSourceBinding binding(provider,
-                                  [dispatcher](std::function<void()> callback) { dispatcher->post(std::move(callback)); },
-                                  [&revisions](const InventorySnapshot& inventory) { revisions.emplace_back(inventory.revision); });
+    FilamentSourceBinding    binding(
+        provider, [dispatcher](std::function<void()> callback) { dispatcher->post(std::move(callback)); },
+        [&revisions](const InventorySnapshot& inventory) { revisions.emplace_back(inventory.revision); });
 
     CHECK(revisions.empty());
     CHECK(dispatcher->size() == 1);
@@ -187,9 +187,9 @@ TEST_CASE("multiACE provider binding marshals worker updates to the dispatcher t
 
     const std::thread::id        owner_thread = std::this_thread::get_id();
     std::vector<std::thread::id> apply_threads;
-    FilamentSourceBinding binding(provider,
-                                  [dispatcher](std::function<void()> callback) { dispatcher->post(std::move(callback)); },
-                                  [&apply_threads](const InventorySnapshot&) { apply_threads.emplace_back(std::this_thread::get_id()); });
+    FilamentSourceBinding        binding(
+        provider, [dispatcher](std::function<void()> callback) { dispatcher->post(std::move(callback)); },
+        [&apply_threads](const InventorySnapshot&) { apply_threads.emplace_back(std::this_thread::get_id()); });
     dispatcher->run_all();
 
     std::thread worker([provider] { provider->set_inventory(snapshot("worker")); });
@@ -208,9 +208,9 @@ TEST_CASE("multiACE provider binding prevents a stale initial read from overwrit
     provider->configure_inventory_race(snapshot("new"));
 
     std::vector<std::string> revisions;
-    FilamentSourceBinding binding(provider,
-                                  [dispatcher](std::function<void()> callback) { dispatcher->post(std::move(callback)); },
-                                  [&revisions](const InventorySnapshot& inventory) { revisions.emplace_back(inventory.revision); });
+    FilamentSourceBinding    binding(
+        provider, [dispatcher](std::function<void()> callback) { dispatcher->post(std::move(callback)); },
+        [&revisions](const InventorySnapshot& inventory) { revisions.emplace_back(inventory.revision); });
 
     dispatcher->run_all();
     CHECK(revisions == std::vector<std::string>{"new"});
@@ -222,9 +222,9 @@ TEST_CASE("multiACE provider binding drops queued and stale callbacks after deta
     auto dispatcher = std::make_shared<QueueDispatcher>();
 
     std::vector<std::string> revisions;
-    FilamentSourceBinding binding(provider,
-                                  [dispatcher](std::function<void()> callback) { dispatcher->post(std::move(callback)); },
-                                  [&revisions](const InventorySnapshot& inventory) { revisions.emplace_back(inventory.revision); });
+    FilamentSourceBinding    binding(
+        provider, [dispatcher](std::function<void()> callback) { dispatcher->post(std::move(callback)); },
+        [&revisions](const InventorySnapshot& inventory) { revisions.emplace_back(inventory.revision); });
 
     provider->emit(snapshot("r2"));
     binding.detach();
@@ -246,8 +246,7 @@ TEST_CASE("multiACE provider binding waits for an in-flight apply before detach 
     std::thread             dispatch_thread;
 
     FilamentSourceBinding binding(
-        provider,
-        [&dispatch_thread](std::function<void()> callback) { dispatch_thread = std::thread(std::move(callback)); },
+        provider, [&dispatch_thread](std::function<void()> callback) { dispatch_thread = std::thread(std::move(callback)); },
         [&](const InventorySnapshot&) {
             std::unique_lock<std::mutex> lock(gate_mutex);
             apply_started = true;
@@ -262,7 +261,7 @@ TEST_CASE("multiACE provider binding waits for an in-flight apply before detach 
     }
 
     std::atomic<bool> detach_finished{false};
-    std::thread detach_thread([&] {
+    std::thread       detach_thread([&] {
         binding.detach();
         detach_finished = true;
     });
@@ -287,13 +286,13 @@ TEST_CASE("multiACE provider binding contains apply failures and recovers on a n
     auto dispatcher = std::make_shared<QueueDispatcher>();
 
     std::vector<std::string> revisions;
-    FilamentSourceBinding binding(provider,
-                                  [dispatcher](std::function<void()> callback) { dispatcher->post(std::move(callback)); },
-                                  [&revisions](const InventorySnapshot& inventory) {
-                                      if (inventory.revision == "bad")
-                                          throw std::runtime_error("projection failed");
-                                      revisions.emplace_back(inventory.revision);
-                                  });
+    FilamentSourceBinding    binding(
+        provider, [dispatcher](std::function<void()> callback) { dispatcher->post(std::move(callback)); },
+        [&revisions](const InventorySnapshot& inventory) {
+            if (inventory.revision == "bad")
+                throw std::runtime_error("projection failed");
+            revisions.emplace_back(inventory.revision);
+        });
     dispatcher->run_all();
 
     CHECK_NOTHROW(provider->set_inventory(snapshot("bad")));
@@ -312,9 +311,9 @@ TEST_CASE("multiACE provider binding contains dispatcher failures", "[multiace][
     auto provider = std::make_shared<ManualFilamentSourceProvider>(ProviderCapabilities{}, snapshot("r1"));
     bool applied  = false;
 
-    FilamentSourceBinding binding(provider,
-                                  [](std::function<void()>) { throw std::runtime_error("dispatcher unavailable"); },
-                                  [&applied](const InventorySnapshot&) { applied = true; });
+    FilamentSourceBinding binding(
+        provider, [](std::function<void()>) { throw std::runtime_error("dispatcher unavailable"); },
+        [&applied](const InventorySnapshot&) { applied = true; });
 
     CHECK_FALSE(applied);
     CHECK(binding.last_error() == "dispatcher unavailable");
