@@ -30,7 +30,7 @@ A failed newer snapshot is still considered consumed. An older snapshot queued l
 
 `MultiAceMachineBinding` combines `FilamentSourceBinding` with `MultiAceMachineModel`.
 
-The supplied dispatcher must marshal work to the same thread on which the binding and machine model are created and destroyed. In the final wxWidgets integration this dispatcher will use the GUI event loop.
+The supplied dispatcher must marshal work to the same thread on which the binding and machine model are created and destroyed. `DeviceManager` now supplies a wxWidgets `CallAfter` dispatcher by default and accepts an injected dispatcher for deterministic tests.
 
 The binding exposes the existing model sidecar lookups:
 
@@ -52,13 +52,12 @@ MachineObject created
   -> MachineObject destroyed
 ```
 
-The binding must be detached before legacy `MachineObject` cleanup deletes raw `AmsTray*` pointers. The final `DeviceManager` ownership hook will enforce this ordering when provider discovery/configuration is connected.
+The binding must be detached before legacy `MachineObject` cleanup deletes raw `AmsTray*` pointers. `DeviceManager` owns one binding per machine, detaches an old binding before provider replacement, and detaches all bindings before deleting machine objects during shutdown. User-machine removal and logout paths use the same ordering.
 
 ## Scope boundary
 
-This slice establishes and tests the callback/lifetime machinery. The remaining integration work is intentionally separate:
+The callback/lifetime machinery and `DeviceManager` ownership hook are now established and tested. The remaining integration work is intentionally separate:
 
-- store the binding alongside each eligible `MachineObject` in `DeviceManager` and detach it before machine deletion;
 - construct/start the Moonraker provider from printer configuration;
 - provide the concrete reconnecting WebSocket `EventTransport`;
 - expose refresh/status actions in the existing AMS UI.

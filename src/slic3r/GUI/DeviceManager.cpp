@@ -1,5 +1,6 @@
 #include "libslic3r/libslic3r.h"
 #include "DeviceManager.hpp"
+#include "multiace/MultiAceMachineBinding.hpp"
 #include "libslic3r/Time.hpp"
 #include "libslic3r/Thread.hpp"
 #include "slic3r/Utils/ColorSpaceConvert.hpp"
@@ -6078,6 +6079,8 @@ void DeviceManager::update_local_machine(const MachineObject& m)
 
 DeviceManager::~DeviceManager()
 {
+    m_multiace_bindings.detach_all();
+
     for (auto it = localMachineList.begin(); it != localMachineList.end(); it++) {
         if (it->second) {
             delete it->second;
@@ -6094,7 +6097,6 @@ DeviceManager::~DeviceManager()
     }
     userMachineList.clear();
 }
-
 
 float DeviceManager::nozzle_diameter_conver(int diame)
 {
@@ -6409,7 +6411,14 @@ MachineObject* DeviceManager::get_local_machine(std::string dev_id)
 
 void DeviceManager::erase_user_machine(std::string dev_id)
 {
-    userMachineList.erase(dev_id);
+    const auto found = userMachineList.find(dev_id);
+    if (found == userMachineList.end())
+        return;
+
+    MachineObject* machine = found->second;
+    if (machine)
+        detach_multiace_provider(*machine);
+    userMachineList.erase(found);
 }
 
 MachineObject* DeviceManager::get_user_machine(std::string dev_id)
@@ -6446,6 +6455,7 @@ void DeviceManager::clean_user_info()
     // clean user list
     for (auto it = userMachineList.begin(); it != userMachineList.end(); it++) {
         if (it->second) {
+            detach_multiace_provider(*it->second);
             delete it->second;
             it->second = nullptr;
         }
@@ -6705,11 +6715,13 @@ void DeviceManager::parse_user_print_info(std::string body)
 
             //remove MachineObject from userMachineList
             std::map<std::string, MachineObject*>::iterator iterat;
-            for (iterat = userMachineList.begin(); iterat != userMachineList.end(); ) {
+            for (iterat = userMachineList.begin(); iterat != userMachineList.end();) {
                 if (new_list.find(iterat->first) == new_list.end()) {
+                    MachineObject* machine = iterat->second;
+                    if (machine)
+                        detach_multiace_provider(*machine);
                     iterat = userMachineList.erase(iterat);
-                }
-                else {
+                } else {
                     iterat++;
                 }
             }
@@ -6720,9 +6732,37 @@ void DeviceManager::parse_user_print_info(std::string body)
     }
 }
 
+MultiAce::MultiAceMachineBinding& DeviceManager::attach_multiace_provider(MachineObject&                                    machine,
+                                                                          std::shared_ptr<MultiAce::FilamentSourceProvider> provider,
+                                                                          MultiAceDispatcher                                dispatcher)
+{
+    if (!dispatcher) {
+        dispatcher = [](std::function<void()> callback) {
+            GUI::wxGetApp().CallAfter([callback = std::move(callback)]() mutable { callback(); });
+        };
+    }
+
+    return m_multiace_bindings.attach(machine, [&] {
+        return std::make_unique<MultiAce::MultiAceMachineBinding>(machine, std::move(provider), std::move(dispatcher));
+    });
+}
+
+bool DeviceManager::detach_multiace_provider(MachineObject& machine) noexcept { return m_multiace_bindings.detach(machine); }
+
+MultiAce::MultiAceMachineBinding* DeviceManager::multiace_binding(MachineObject& machine) noexcept
+{
+    return m_multiace_bindings.get(machine);
+}
+
+const MultiAce::MultiAceMachineBinding* DeviceManager::multiace_binding(const MachineObject& machine) const noexcept
+{
+    return m_multiace_bindings.get(machine);
+}
+
 void DeviceManager::update_user_machine_list_info()
 {
-    if (!m_agent) return;
+    if (!m_agent)
+        return;
 
     BOOST_LOG_TRIVIAL(debug) << "update_user_machine_list_info";
     unsigned int http_code;
@@ -6732,7 +6772,6 @@ void DeviceManager::update_user_machine_list_info()
         parse_user_print_info(body);
     }
 }
-
 
 std::map<std::string ,MachineObject*> DeviceManager::get_local_machine_list()
 {

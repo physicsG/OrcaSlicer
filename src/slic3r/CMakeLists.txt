@@ -93,6 +93,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/DesktopIntegrationDialog.hpp
     GUI/DeviceManager.cpp
     GUI/DeviceManager.hpp
+    GUI/multiace/MultiAceMachineBinding.hpp
+    GUI/multiace/MultiAceMachineModel.hpp
     GUI/Downloader.cpp
     GUI/DownloaderFileGet.cpp
     GUI/DownloaderFileGet.hpp

@@ -6,11 +6,13 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <functional>
 #include <chrono>
 #include <boost/thread.hpp>
 #include <boost/nowide/fstream.hpp>
 #include "nlohmann/json.hpp"
 #include "libslic3r/ProjectTask.hpp"
+#include "libslic3r/MultiAceBindingStore.hpp"
 #include "slic3r/Utils/json_diff.hpp"
 #include "slic3r/Utils/NetworkAgent.hpp"
 #include "boost/bimap/bimap.hpp"
@@ -56,6 +58,11 @@ wxString get_stage_string(int stage);
 using namespace nlohmann;
 
 namespace Slic3r {
+
+namespace MultiAce {
+class FilamentSourceProvider;
+class MultiAceMachineBinding;
+} // namespace MultiAce
 
 struct BBLocalMachine;
 class SecondaryCheckDialog;
@@ -1099,47 +1106,57 @@ public:
     void update_filament_list();
     void update_printer_preset_name();
     void check_ams_filament_valid();
-
 };
 
 class DeviceManager
 {
 private:
-    NetworkAgent* m_agent { nullptr };
+    NetworkAgent*                                                                        m_agent{nullptr};
+    MultiAce::BasicMultiAceBindingStore<MachineObject, MultiAce::MultiAceMachineBinding> m_multiace_bindings;
+
 public:
-    static bool   EnableMultiMachine;
+    using MultiAceDispatcher = std::function<void(std::function<void()>)>;
+
+    static bool EnableMultiMachine;
 
     DeviceManager(NetworkAgent* agent = nullptr);
     ~DeviceManager();
     void set_agent(NetworkAgent* agent);
 
-    std::mutex listMutex;
-    std::string selected_machine;                               /* dev_id */
-    std::string local_selected_machine;                         /* dev_id */
-    std::map<std::string, MachineObject*> localMachineList;     /* dev_id -> MachineObject*, localMachine SSDP   */
-    std::map<std::string, MachineObject*> userMachineList;      /* dev_id -> MachineObject*  cloudMachine of User */
+    std::mutex                            listMutex;
+    std::string                           selected_machine;       /* dev_id */
+    std::string                           local_selected_machine; /* dev_id */
+    std::map<std::string, MachineObject*> localMachineList;       /* dev_id -> MachineObject*, localMachine SSDP   */
+    std::map<std::string, MachineObject*> userMachineList;        /* dev_id -> MachineObject*  cloudMachine of User */
 
     void keep_alive();
     void check_pushing();
 
-    static float nozzle_diameter_conver(int diame);
-    static int nozzle_diameter_conver(float diame);
+    static float       nozzle_diameter_conver(int diame);
+    static int         nozzle_diameter_conver(float diame);
     static std::string nozzle_type_conver(int type);
-    static int nozzle_type_conver(std::string& type);
+    static int         nozzle_type_conver(std::string& type);
 
     MachineObject* get_default_machine();
     MachineObject* get_local_selected_machine();
     MachineObject* get_local_machine(std::string dev_id);
     MachineObject* get_user_machine(std::string dev_id);
     MachineObject* get_my_machine(std::string dev_id);
-    void erase_user_machine(std::string dev_id);
-    void clean_user_info();
-    void reload_printer_settings();
+    void           erase_user_machine(std::string dev_id);
+    void           clean_user_info();
+    void           reload_printer_settings();
 
-    bool set_selected_machine(std::string dev_id,  bool need_disconnect = false);
+    MultiAce::MultiAceMachineBinding&       attach_multiace_provider(MachineObject&                                    machine,
+                                                                     std::shared_ptr<MultiAce::FilamentSourceProvider> provider,
+                                                                     MultiAceDispatcher                                dispatcher = {});
+    bool                                    detach_multiace_provider(MachineObject& machine) noexcept;
+    MultiAce::MultiAceMachineBinding*       multiace_binding(MachineObject& machine) noexcept;
+    const MultiAce::MultiAceMachineBinding* multiace_binding(const MachineObject& machine) const noexcept;
+
+    bool           set_selected_machine(std::string dev_id, bool need_disconnect = false);
     MachineObject* get_selected_machine();
-    void add_user_subscribe();
-    void del_user_subscribe();
+    void           add_user_subscribe();
+    void           del_user_subscribe();
 
     void subscribe_device_list(std::vector<std::string> dev_list);
 
