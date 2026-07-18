@@ -24,7 +24,7 @@ inline void validate_persisted_provider_config(const PersistedProviderConfig& co
     if (config.activation.username.empty() != config.activation.password.empty())
         throw std::invalid_argument("multiACE basic authentication requires both username and password");
 
-    for (const auto &[name, value] : config.activation.headers) {
+    for (const auto& [name, value] : config.activation.headers) {
         (void) value;
         if (name.empty())
             throw std::invalid_argument("multiACE custom header names must not be empty");
