@@ -66,8 +66,8 @@ public:
         const AmsInventoryProjection projection = project_inventory_to_ams(inventory);
 
         std::set<std::string> retained_units;
-        MetadataMap          next_metadata;
-        SourceSlotMap        next_source_slots;
+        MetadataMap           next_metadata;
+        SourceSlotMap         next_source_slots;
         for (const AmsUnitProjection& unit : projection.units) {
             retained_units.emplace(unit.ams_id);
             validate_target_unit(unit.ams_id);
@@ -249,7 +249,7 @@ private:
         }
     }
 
-    static void validate_target_tray(const OwnedUnit&                       owned,
+    static void validate_target_tray(const OwnedUnit&                        owned,
                                      const std::map<std::string, TrayType*>& tray_list,
                                      const std::string&                      ams_id,
                                      const std::string&                      tray_id)
@@ -266,9 +266,9 @@ private:
     }
 
     static void ensure_target_tray(std::map<std::string, TrayType*>& tray_list,
-                                   const std::string&                 ams_id,
-                                   const std::string&                 tray_id,
-                                   TrayType*                          tray)
+                                   const std::string&                ams_id,
+                                   const std::string&                tray_id,
+                                   TrayType*                         tray)
     {
         const auto found = tray_list.find(tray_id);
         if (found == tray_list.end()) {
