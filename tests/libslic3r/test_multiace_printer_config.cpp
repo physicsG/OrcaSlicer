@@ -7,12 +7,12 @@ using namespace Slic3r::MultiAce;
 TEST_CASE("multiACE persisted provider config round trips connection settings", "[multiace][config]")
 {
     PersistedProviderConfig config;
-    config.enabled                   = true;
-    config.activation.service_url    = "http://192.0.2.10:7125/multiace";
-    config.activation.username       = "user";
-    config.activation.password       = "secret";
-    config.activation.bearer_token   = "token";
-    config.activation.headers        = {{"X-Printer", "u1"}, {"X-Site", "lab"}};
+    config.enabled                 = true;
+    config.activation.service_url  = "http://192.0.2.10:7125/multiace";
+    config.activation.username     = "user";
+    config.activation.password     = "secret";
+    config.activation.bearer_token = "token";
+    config.activation.headers      = {{"X-Printer", "u1"}, {"X-Site", "lab"}};
 
     const nlohmann::json serialized = serialize_persisted_provider_config(config);
     const auto           parsed     = parse_persisted_provider_config(serialized);
