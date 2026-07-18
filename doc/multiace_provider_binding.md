@@ -38,6 +38,19 @@ The binding exposes the existing model sidecar lookups:
 - full source metadata by AMS unit and tray;
 - stable `SourceId` to AMS slot lookup.
 
+## Concrete provider activation
+
+`MultiAceProviderActivation.hpp` provides the concrete activation path for the deployed multiACE Web service:
+
+- a configured `http://` service URL is normalized once and reused as the REST root;
+- the matching `ws://` root is derived without losing ports, IPv6 literals, or nested service paths;
+- authentication and custom headers are applied consistently to REST and WebSocket transports;
+- the provider is constructed with the deployed `/api/version`, `/api/state`, and `/ws` profile;
+- startup must complete successfully before `DeviceManager` replaces an existing machine binding;
+- if attachment fails after startup, the new provider is stopped before the error is propagated.
+
+HTTPS activation is intentionally rejected until the transport supports `wss://`; it is never silently downgraded.
+
 ## Lifetime order
 
 The required lifetime is:
@@ -56,10 +69,8 @@ The binding must be detached before legacy `MachineObject` cleanup deletes raw `
 
 ## Scope boundary
 
-The callback/lifetime machinery and `DeviceManager` ownership hook are now established and tested. The remaining integration work is intentionally separate:
+The callback/lifetime machinery, `DeviceManager` ownership hook, concrete transport construction, and start-before-attach activation helper are now established. Remaining UI integration work is intentionally separate:
 
-- construct/start the Moonraker provider from printer configuration;
+- read/persist the service URL and optional credentials from the printer configuration surface;
+- invoke activation automatically for configured machines;
 - expose refresh/status actions in the existing AMS UI.
-
-The concrete reconnecting WebSocket transport and compatibility with the deployed multiACE Web `/api/state` + `/ws` contract are available to
-that activation layer.
