@@ -122,7 +122,7 @@ private:
         }
     }
 
-    asio::io_context              m_io;
+    asio::io_context               m_io;
     tcp::acceptor                  m_acceptor;
     std::vector<ServerSession>     m_sessions;
     unsigned short                 m_port = 0;
@@ -218,10 +218,8 @@ TEST_CASE("multiACE WebSocket endpoint parsing normalizes origins and paths", "[
         CHECK(endpoint.host_header == "[::1]:7125");
     }
 
-    CHECK_THROWS_WITH(parse_websocket_endpoint("wss://printer.local", "/events"),
-                      "multiACE WebSocket TLS (wss://) is not supported yet");
-    CHECK_THROWS_WITH(parse_websocket_endpoint("http://printer.local", "/events"),
-                      "multiACE WebSocket base URL must start with ws://");
+    CHECK_THROWS_WITH(parse_websocket_endpoint("wss://printer.local", "/events"), "multiACE WebSocket TLS (wss://) is not supported yet");
+    CHECK_THROWS_WITH(parse_websocket_endpoint("http://printer.local", "/events"), "multiACE WebSocket base URL must start with ws://");
     CHECK_THROWS_WITH(parse_websocket_endpoint("ws://user@printer.local", "/events"),
                       "multiACE WebSocket credentials must be configured separately from the URL");
     CHECK_THROWS_WITH(parse_websocket_endpoint("ws://printer.local:70000", "/events"),
@@ -240,16 +238,16 @@ TEST_CASE("multiACE WebSocket reconnect backoff is bounded", "[multiace][websock
 
 TEST_CASE("multiACE Beast WebSocket transport receives text events and sends configured headers", "[multiace][websocket]")
 {
-    LoopbackWebSocketServer      server({{"hello", false}});
+    LoopbackWebSocketServer       server({{"hello", false}});
     WebSocketEventTransportConfig config = config_for(server);
-    config.bearer_token                   = "token-123";
+    config.bearer_token                  = "token-123";
     config.headers.emplace("X-MultiAce-Test", "header-value");
 
-    CallbackLog                   log;
+    CallbackLog                  log;
     BeastWebSocketEventTransport transport(config);
-    transport.connect("/events",
-                      [&log](const std::string& message) { log.event(message); },
-                      [&log](bool connected, const std::string& error) { log.connection(connected, error); });
+    transport.connect(
+        "/events", [&log](const std::string& message) { log.event(message); },
+        [&log](bool connected, const std::string& error) { log.connection(connected, error); });
 
     REQUIRE(log.wait_for_events(1));
     REQUIRE(server.wait_for_handshakes(1));
@@ -268,13 +266,13 @@ TEST_CASE("multiACE Beast WebSocket transport receives text events and sends con
 
 TEST_CASE("multiACE Beast WebSocket transport reconnects after a dropped session", "[multiace][websocket]")
 {
-    LoopbackWebSocketServer       server({{"first", true}, {"second", false}});
-    CallbackLog                   log;
+    LoopbackWebSocketServer      server({{"first", true}, {"second", false}});
+    CallbackLog                  log;
     BeastWebSocketEventTransport transport(config_for(server));
 
-    transport.connect("/events",
-                      [&log](const std::string& message) { log.event(message); },
-                      [&log](bool connected, const std::string& error) { log.connection(connected, error); });
+    transport.connect(
+        "/events", [&log](const std::string& message) { log.event(message); },
+        [&log](bool connected, const std::string& error) { log.connection(connected, error); });
 
     REQUIRE(log.wait_for_events(2));
     REQUIRE(server.wait_for_handshakes(2));
@@ -315,7 +313,6 @@ TEST_CASE("multiACE Beast WebSocket transport validates configuration", "[multia
     {
         config.reconnect_initial_delay = 2s;
         config.reconnect_max_delay     = 1s;
-        CHECK_THROWS_WITH(BeastWebSocketEventTransport(config),
-                          "multiACE WebSocket initial reconnect delay must not exceed the maximum");
+        CHECK_THROWS_WITH(BeastWebSocketEventTransport(config), "multiACE WebSocket initial reconnect delay must not exceed the maximum");
     }
 }
