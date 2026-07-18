@@ -38,6 +38,22 @@ struct AmsSourceSlot
     std::string tray_id;
 };
 
+template<class TrayType, class RoadPositionType, class StepStateType, class RfidStateType>
+void apply_projected_tray_live_fields(
+    TrayType& tray, const AmsTrayProjection& projection, RoadPositionType road_position, StepStateType step_state, RfidStateType rfid_state)
+{
+    tray.id            = projection.tray_id;
+    tray.tag_uid       = projection.source.rfid_uid;
+    tray.type          = projection.source.material;
+    tray.sub_brands    = projection.source.subtype.empty() ? projection.source.brand : projection.source.subtype;
+    tray.color         = projection.color_rgba;
+    tray.is_exists     = projection.exists;
+    tray.remain        = projection.source.remaining_percent.value_or(0);
+    tray.road_position = road_position;
+    tray.step_state    = step_state;
+    tray.rfid_state    = rfid_state;
+}
+
 // Traits must expose AmsType, TrayType, create_ams(), create_tray(), tray_list(),
 // update_ams(), and update_tray(). The ownership and lifecycle rules stay
 // independent from the GUI's concrete Ams and AmsTray definitions.
