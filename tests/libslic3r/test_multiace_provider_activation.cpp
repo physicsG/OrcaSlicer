@@ -1,6 +1,6 @@
 #include <catch2/catch.hpp>
 
-#include "slic3r/GUI/multiace/MultiAceProviderActivation.hpp"
+#include "slic3r/GUI/multiace/MultiAceProviderConfig.hpp"
 
 using namespace Slic3r::MultiAce;
 
