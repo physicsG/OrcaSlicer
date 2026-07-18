@@ -44,16 +44,8 @@ struct GuiAmsModelTraits
     {
         // Only update fields owned by the live inventory bridge. Profile,
         // calibration, UUID, and other GUI-managed fields must survive refreshes.
-        tray.id            = projection.tray_id;
-        tray.tag_uid       = projection.source.rfid_uid;
-        tray.type          = projection.source.material;
-        tray.sub_brands    = projection.source.subtype.empty() ? projection.source.brand : projection.source.subtype;
-        tray.color         = projection.color_rgba;
-        tray.is_exists     = projection.exists;
-        tray.remain        = projection.source.remaining_percent.value_or(0);
-        tray.road_position = road_position(projection.road_position);
-        tray.step_state    = step_state(projection.step_state);
-        tray.rfid_state    = projection.rfid_read_done ? AMS_REID_DONE : AMS_RFID_INIT;
+        apply_projected_tray_live_fields(tray, projection, road_position(projection.road_position), step_state(projection.step_state),
+                                         projection.rfid_read_done ? AMS_REID_DONE : AMS_RFID_INIT);
     }
 
 private:
