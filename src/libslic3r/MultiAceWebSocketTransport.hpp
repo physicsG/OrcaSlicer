@@ -36,8 +36,8 @@ struct WebSocketEndpoint
 WebSocketEndpoint parse_websocket_endpoint(const std::string& base_url, const std::string& path);
 
 std::chrono::milliseconds websocket_reconnect_delay(std::chrono::milliseconds initial_delay,
-                                                     std::chrono::milliseconds maximum_delay,
-                                                     std::size_t               retry_index);
+                                                    std::chrono::milliseconds maximum_delay,
+                                                    std::size_t               retry_index);
 
 class BeastWebSocketEventTransport final : public EventTransport
 {
