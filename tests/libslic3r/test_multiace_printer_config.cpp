@@ -81,12 +81,10 @@ TEST_CASE("multiACE persisted config rejects unsupported schema versions", "[mul
 
 TEST_CASE("multiACE persisted config rejects malformed top-level values", "[multiace][config]")
 {
-    CHECK_THROWS_WITH(parse_persisted_provider_config(nlohmann::json::array()),
-                      "multiACE persisted configuration must be a JSON object");
+    CHECK_THROWS_WITH(parse_persisted_provider_config(nlohmann::json::array()), "multiACE persisted configuration must be a JSON object");
     CHECK_THROWS_WITH(parse_persisted_provider_config({{"enabled", false}}),
                       "multiACE persisted configuration requires an integer version");
-    CHECK_THROWS_WITH(parse_persisted_provider_config({{"version", "1"}}),
-                      "multiACE persisted configuration requires an integer version");
+    CHECK_THROWS_WITH(parse_persisted_provider_config({{"version", "1"}}), "multiACE persisted configuration requires an integer version");
     CHECK_THROWS_WITH(parse_persisted_provider_config({{"version", 1}, {"enabled", "yes"}}),
                       "multiACE persisted enabled flag must be boolean");
     CHECK_THROWS_WITH(parse_persisted_provider_config({{"version", 1}, {"service_url", 42}}),
@@ -119,7 +117,6 @@ TEST_CASE("enabled multiACE persisted config validates its service URL before ac
 {
     CHECK_THROWS_WITH(parse_persisted_provider_config({{"version", 1}, {"enabled", true}}),
                       "enabled multiACE configuration requires a service URL");
-    CHECK_THROWS_WITH(parse_persisted_provider_config(
-                          {{"version", 1}, {"enabled", true}, {"service_url", "https://192.0.2.10/multiace"}}),
+    CHECK_THROWS_WITH(parse_persisted_provider_config({{"version", 1}, {"enabled", true}, {"service_url", "https://192.0.2.10/multiace"}}),
                       "multiACE HTTPS activation requires wss:// transport support");
 }
