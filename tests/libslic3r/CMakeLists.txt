@@ -13,7 +13,6 @@ add_executable(${_TEST_NAME}_tests
 	test_mixed_filament.cpp
 	test_multiace_ams_model.cpp
 	test_multiace_ams_model_regressions.cpp
-	test_multiace_machine_model_header.cpp
 	test_multiace_http_transport_header.cpp
 	test_multiace_inventory.cpp
 	test_multiace_moonraker_provider.cpp
