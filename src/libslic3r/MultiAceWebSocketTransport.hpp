@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace Slic3r::MultiAce {
@@ -58,9 +59,12 @@ private:
     class State;
 
     WebSocketEventTransportConfig m_config;
-    std::shared_ptr<State>         m_state;
+    mutable std::mutex            m_mutex;
+    std::shared_ptr<State>        m_state;
 };
 
 } // namespace Slic3r::MultiAce
+
+#include "MultiAceWebSocketTransport.ipp"
 
 #endif // slic3r_MultiAceWebSocketTransport_hpp_
