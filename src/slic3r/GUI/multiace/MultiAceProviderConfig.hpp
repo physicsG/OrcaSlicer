@@ -43,6 +43,11 @@ inline ProviderTransportUrls provider_transport_urls(const std::string& service_
     if (normalized.rfind("http://", 0) != 0)
         throw std::invalid_argument("multiACE service URL must start with http://");
 
+    for (const unsigned char character : normalized) {
+        if (character <= 0x20 || character == 0x7f)
+            throw std::invalid_argument("multiACE service URL must not contain whitespace or control characters");
+    }
+
     ProviderTransportUrls urls{normalized, "ws://" + normalized.substr(7)};
     (void) parse_websocket_endpoint(urls.websocket_base_url, "/");
     return urls;
