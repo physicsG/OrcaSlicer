@@ -38,11 +38,14 @@ inline std::string trim_trailing_slashes(std::string value)
 inline ProviderTransportUrls provider_transport_urls(const std::string& service_url)
 {
     const std::string normalized = trim_trailing_slashes(service_url);
-    if (normalized.rfind("http://", 0) == 0)
-        return {normalized, "ws://" + normalized.substr(7)};
     if (normalized.rfind("https://", 0) == 0)
         throw std::invalid_argument("multiACE HTTPS activation requires wss:// transport support");
-    throw std::invalid_argument("multiACE service URL must start with http://");
+    if (normalized.rfind("http://", 0) != 0)
+        throw std::invalid_argument("multiACE service URL must start with http://");
+
+    ProviderTransportUrls urls{normalized, "ws://" + normalized.substr(7)};
+    (void) parse_websocket_endpoint(urls.websocket_base_url, "/");
+    return urls;
 }
 
 inline std::shared_ptr<MoonrakerFilamentSourceProvider> create_started_multiace_web_provider(const ProviderActivationConfig& config)
