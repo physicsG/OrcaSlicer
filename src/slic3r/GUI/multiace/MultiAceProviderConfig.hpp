@@ -30,19 +30,20 @@ struct ProviderTransportUrls
 
 inline std::string trim_trailing_slashes(std::string value)
 {
-    while (value.size() > 1 && value.back() == '/')
+    constexpr std::size_t HTTP_SCHEME_SIZE = 7;
+    while (value.size() > HTTP_SCHEME_SIZE && value.back() == '/')
         value.pop_back();
     return value;
 }
 
 inline ProviderTransportUrls provider_transport_urls(const std::string& service_url)
 {
-    const std::string normalized = trim_trailing_slashes(service_url);
-    if (normalized.rfind("https://", 0) == 0)
+    if (service_url.rfind("https://", 0) == 0)
         throw std::invalid_argument("multiACE HTTPS activation requires wss:// transport support");
-    if (normalized.rfind("http://", 0) != 0)
+    if (service_url.rfind("http://", 0) != 0)
         throw std::invalid_argument("multiACE service URL must start with http://");
 
+    const std::string normalized = trim_trailing_slashes(service_url);
     for (const unsigned char character : normalized) {
         if (character <= 0x20 || character == 0x7f)
             throw std::invalid_argument("multiACE service URL must not contain whitespace or control characters");
