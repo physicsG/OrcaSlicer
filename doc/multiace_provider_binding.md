@@ -59,5 +59,7 @@ The binding must be detached before legacy `MachineObject` cleanup deletes raw `
 The callback/lifetime machinery and `DeviceManager` ownership hook are now established and tested. The remaining integration work is intentionally separate:
 
 - construct/start the Moonraker provider from printer configuration;
-- provide the concrete reconnecting WebSocket `EventTransport`;
 - expose refresh/status actions in the existing AMS UI.
+
+The concrete reconnecting WebSocket transport and compatibility with the deployed multiACE Web `/api/state` + `/ws` contract are available to
+that activation layer.

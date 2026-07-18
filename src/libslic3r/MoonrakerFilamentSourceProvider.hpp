@@ -3,6 +3,7 @@
 
 #include "FilamentSourceProvider.hpp"
 #include "MultiAceTransport.hpp"
+#include "MultiAceWebPayload.hpp"
 
 #include "nlohmann/json.hpp"
 
@@ -19,12 +20,29 @@
 
 namespace Slic3r::MultiAce {
 
+enum class MoonrakerApiProfile {
+    VersionedInventoryV1,
+    MultiAceWeb,
+};
+
 struct MoonrakerEndpoints
 {
-    std::string capabilities = "/api/v1/capabilities";
-    std::string inventory    = "/api/v1/inventory";
-    std::string events       = "/api/v1/events";
-    std::string sources      = "/api/v1/sources";
+    std::string         capabilities = "/api/v1/capabilities";
+    std::string         inventory    = "/api/v1/inventory";
+    std::string         events       = "/api/v1/events";
+    std::string         sources      = "/api/v1/sources";
+    MoonrakerApiProfile profile      = MoonrakerApiProfile::VersionedInventoryV1;
+
+    static MoonrakerEndpoints multiace_web()
+    {
+        MoonrakerEndpoints endpoints;
+        endpoints.capabilities = "/api/version";
+        endpoints.inventory    = "/api/state";
+        endpoints.events       = "/ws";
+        endpoints.sources.clear();
+        endpoints.profile = MoonrakerApiProfile::MultiAceWeb;
+        return endpoints;
+    }
 };
 
 class MoonrakerFilamentSourceProvider final : public FilamentSourceProvider
@@ -160,7 +178,10 @@ public:
         try {
             const TransportResponse response = m_rest_transport->get(m_endpoints.capabilities);
             require_success(response, "multiACE capabilities request");
-            const ProviderCapabilities parsed = parse_capabilities(parse_json(response.body, "multiACE capabilities response"));
+            const nlohmann::json       response_json = parse_json(response.body, "multiACE capabilities response");
+            const ProviderCapabilities parsed        = m_endpoints.profile == MoonrakerApiProfile::MultiAceWeb ?
+                                                           parse_multiace_web_capabilities(response_json) :
+                                                           parse_capabilities(response_json);
             m_state.set_capabilities(parsed);
             clear_last_error();
             return true;
@@ -182,6 +203,11 @@ public:
             const nlohmann::json event = parse_json(payload, "multiACE event");
             if (!event.is_object())
                 throw std::invalid_argument("multiACE event must be a JSON object");
+
+            if (m_endpoints.profile == MoonrakerApiProfile::MultiAceWeb) {
+                handle_multiace_web_event(event, sequence);
+                return;
+            }
 
             const nlohmann::json* inventory_payload = find_inventory_payload(event);
             if (inventory_payload != nullptr) {
@@ -317,6 +343,26 @@ private:
         return nullptr;
     }
 
+    void handle_multiace_web_event(const nlohmann::json& event, std::uint64_t sequence)
+    {
+        const std::string event_type = read_event_type(event);
+        if (event_type == "state") {
+            if (multiace_web_reports_disconnected(event)) {
+                set_last_error("multiACE Web reports that Klippy is disconnected");
+                mark_inventory_offline(sequence);
+                return;
+            }
+            publish_inventory(parse_multiace_web_inventory(event), sequence);
+            clear_last_error();
+            return;
+        }
+
+        if (event_type == "error") {
+            const std::string error = web_detail::optional_string(event, "error");
+            set_last_error(error.empty() ? "multiACE Web reported an event error" : "multiACE Web event error: " + error);
+        }
+    }
+
     static std::string percent_encode_path_segment(const std::string& value)
     {
         static constexpr char HEX[] = "0123456789ABCDEF";
@@ -365,7 +411,9 @@ private:
             std::lock_guard<std::mutex> lock(m_refresh_mutex);
             const TransportResponse     response = m_rest_transport->get(m_endpoints.inventory);
             require_success(response, "multiACE inventory request");
-            snapshot = parse_inventory(parse_json(response.body, "multiACE inventory response"));
+            const nlohmann::json response_json = parse_json(response.body, "multiACE inventory response");
+            snapshot = m_endpoints.profile == MoonrakerApiProfile::MultiAceWeb ? parse_multiace_web_inventory(response_json) :
+                                                                                 parse_inventory(response_json);
         } catch (const std::exception& error) {
             set_last_error(error.what());
             return false;
@@ -394,6 +442,8 @@ private:
         if (sequence <= m_last_published_sequence)
             return;
         m_last_published_sequence = sequence;
+        if (m_state.inventory() == snapshot)
+            return;
         m_state.set_inventory(std::move(snapshot));
     }
 

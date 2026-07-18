@@ -6,6 +6,7 @@
 
 #include <condition_variable>
 #include <deque>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -145,6 +146,14 @@ private:
 
 TransportResponse json_response(const nlohmann::json& body, unsigned status_code = 200) { return {status_code, body.dump(), {}}; }
 
+nlohmann::json web_fixture(const std::string& name)
+{
+    std::ifstream input(std::string(TEST_DATA_DIR) + "/multiace/" + name);
+    if (!input)
+        throw std::runtime_error("failed to open multiACE fixture: " + name);
+    return nlohmann::json::parse(input);
+}
+
 nlohmann::json capabilities_payload(bool live_events = true, bool rfid_refresh = true, bool inventory = true)
 {
     return {
@@ -199,6 +208,14 @@ std::shared_ptr<FakeRestTransport> configured_rest(const nlohmann::json& invento
     return rest;
 }
 
+std::shared_ptr<FakeRestTransport> configured_web_rest(const nlohmann::json& inventory)
+{
+    auto rest = std::make_shared<FakeRestTransport>();
+    rest->queue_get("/api/version", json_response({{"web", "0.99.5b"}}));
+    rest->queue_get("/api/state", json_response(inventory));
+    return rest;
+}
+
 } // namespace
 
 TEST_CASE("Moonraker multiACE provider loads capabilities and inventory", "[multiace][moonraker]")
@@ -220,6 +237,65 @@ TEST_CASE("Moonraker multiACE provider loads capabilities and inventory", "[mult
     CHECK(revisions == std::vector<std::string>{"r1"});
     CHECK(events->connect_count == 1);
     CHECK(events->connected_path == "/api/v1/events");
+    CHECK(provider.last_error().empty());
+    CHECK(provider.unsubscribe(subscription));
+}
+
+TEST_CASE("Moonraker multiACE provider consumes the deployed multiACE Web profile", "[multiace][moonraker][web-contract]")
+{
+    const nlohmann::json            state  = web_fixture("multiace_web_state_v0.99.5b.json");
+    const auto                      rest   = configured_web_rest(state);
+    const auto                      events = std::make_shared<FakeEventTransport>();
+    std::vector<InventorySnapshot>  received;
+    MoonrakerFilamentSourceProvider provider(rest, events, MoonrakerEndpoints::multiace_web());
+    const auto subscription = provider.subscribe([&received](const InventorySnapshot& inventory) { received.emplace_back(inventory); });
+
+    REQUIRE(provider.start());
+    CHECK(provider.capabilities().inventory);
+    CHECK(provider.capabilities().live_events);
+    CHECK(provider.capabilities().dryer_state);
+    CHECK(provider.capabilities().per_source_routing);
+    CHECK_FALSE(provider.capabilities().rfid_refresh);
+    CHECK(provider.inventory().sources.size() == 8);
+    CHECK(provider.inventory().revision.rfind("multiace-web:", 0) == 0);
+    REQUIRE(rest->requests.size() == 2);
+    CHECK(rest->requests[0].path == "/api/version");
+    CHECK(rest->requests[1].path == "/api/state");
+    CHECK(events->connected_path == "/ws");
+    CHECK(received.size() == 1);
+    CHECK(provider.unsubscribe(subscription));
+}
+
+TEST_CASE("Moonraker multiACE Web provider coalesces periodic state and recovers from Klippy disconnect",
+          "[multiace][moonraker][web-contract]")
+{
+    nlohmann::json                  state  = web_fixture("multiace_web_state_v0.99.5b.json");
+    const auto                      rest   = configured_web_rest(state);
+    const auto                      events = std::make_shared<FakeEventTransport>();
+    std::vector<InventorySnapshot>  received;
+    MoonrakerFilamentSourceProvider provider(rest, events, MoonrakerEndpoints::multiace_web());
+    const auto subscription = provider.subscribe([&received](const InventorySnapshot& inventory) { received.emplace_back(inventory); });
+    REQUIRE(provider.start());
+    REQUIRE(received.size() == 1);
+
+    state["type"] = "state";
+    state["ts"]   = state.at("ts").get<double>() + 1.0;
+    events->emit(state.dump());
+    CHECK(received.size() == 1);
+
+    events->emit(R"json({"type":"gcode_error","msg":"printer-side load failed"})json");
+    CHECK(received.size() == 1);
+    CHECK(provider.last_error().empty());
+
+    events->emit(R"json({"type":"state","klippy":"disconnected","ts":1784385602})json");
+    REQUIRE(received.size() == 2);
+    for (const FilamentSource& filament_source : provider.inventory().sources)
+        CHECK(filament_source.state == SourceState::Offline);
+    CHECK(provider.last_error().find("Klippy is disconnected") != std::string::npos);
+
+    events->emit(state.dump());
+    REQUIRE(received.size() == 3);
+    CHECK(provider.inventory().sources.front().state != SourceState::Offline);
     CHECK(provider.last_error().empty());
     CHECK(provider.unsubscribe(subscription));
 }

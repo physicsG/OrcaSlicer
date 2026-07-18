@@ -1,0 +1,102 @@
+{
+  "ace_status": "ready",
+  "ace_temp": 31.5,
+  "printer_state": "idle",
+  "active_device": 0,
+  "device_count": 2,
+  "mode": "multi",
+  "ace_head": 3,
+  "ace_heads": [0, 1, 2, 3],
+  "head_ace": {"0": 0, "1": 1, "2": 2, "3": 3},
+  "aces": [
+    {
+      "idx": 0,
+      "connected": true,
+      "protocol": "v1",
+      "status": "ready",
+      "temp": 31.5,
+      "humidity": 34,
+      "dryer": {"status": "run", "target_temp": 55, "duration": 240, "remain_time": 2670},
+      "slots": [
+        {
+          "idx": 0,
+          "state": "ready",
+          "raw": 1,
+          "status": "ready",
+          "rfid": 2,
+          "material": "PLA",
+          "brand": "Anycubic",
+          "sku": "PLA-BASIC-WHITE",
+          "subtype": "PLA Basic",
+          "color": "#f4f3ef",
+          "source": "rfid"
+        },
+        {
+          "idx": 1,
+          "state": "loading",
+          "raw": 2,
+          "status": "loading",
+          "rfid": 0,
+          "material": "PETG",
+          "brand": "Generic",
+          "sku": "",
+          "subtype": "PETG HF",
+          "color": "#1f7acc",
+          "source": "override"
+        },
+        {
+          "idx": 2,
+          "state": "empty",
+          "raw": 0,
+          "status": "empty1",
+          "rfid": 0,
+          "material": "",
+          "brand": "",
+          "sku": "",
+          "subtype": "",
+          "color": null,
+          "source": "empty"
+        },
+        {
+          "idx": 3,
+          "state": "error",
+          "raw": 4,
+          "status": "error",
+          "rfid": 0,
+          "material": "ABS",
+          "brand": "Generic",
+          "sku": "",
+          "subtype": "",
+          "color": "#303030",
+          "source": "derived"
+        }
+      ]
+    },
+    {
+      "idx": 1,
+      "connected": true,
+      "protocol": "v2",
+      "status": "ready",
+      "temp": 29.0,
+      "humidity": 41,
+      "dryer": {"status": "stop", "target_temp": 0, "duration": 0, "remain_time": 0},
+      "slots": [
+        {"idx": 0, "state": "ready", "rfid": 2, "material": "PLA", "brand": "Anycubic", "sku": "PLA-RED", "subtype": "PLA Basic", "color": "#d52332", "source": "rfid"},
+        {"idx": 1, "state": "ready", "rfid": 0, "material": "PLA-CF", "brand": "Generic", "sku": "", "subtype": "", "color": "#222222", "source": "override"},
+        {"idx": 2, "state": "unloading", "rfid": 0, "material": "PETG", "brand": "Generic", "sku": "", "subtype": "", "color": "#36a65c", "source": "derived"},
+        {"idx": 3, "state": "empty", "rfid": 0, "material": "", "brand": "", "sku": "", "subtype": "", "color": null, "source": "empty"}
+      ]
+    }
+  ],
+  "toolheads": [
+    {"idx": 0, "ace": 1, "slot": 0, "head_source_known": true, "manual": false, "feeder": false},
+    {"idx": 1, "ace": 0, "slot": 1, "head_source_known": true, "manual": false, "feeder": false},
+    {"idx": 2, "ace": null, "slot": null, "head_source_known": false, "manual": false, "feeder": false},
+    {"idx": 3, "ace": null, "slot": null, "head_source_known": false, "manual": false, "feeder": false}
+  ],
+  "wiring": [
+    {"ace": 1, "slot": 0, "toolhead": 0, "color": "#d52332", "material": "PLA"},
+    {"ace": 0, "slot": 1, "toolhead": 1, "color": "#1f7acc", "material": "PETG"}
+  ],
+  "ts": 1784385600.125
+}
