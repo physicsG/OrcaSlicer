@@ -29,8 +29,7 @@ public:
         m_binding.detach();
         try {
             m_model.clear();
-        } catch (...) {
-        }
+        } catch (...) {}
     }
 
     MultiAceMachineBinding(const MultiAceMachineBinding&)            = delete;
