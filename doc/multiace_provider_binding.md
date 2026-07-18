@@ -51,6 +51,21 @@ The binding exposes the existing model sidecar lookups:
 
 HTTPS activation is intentionally rejected until the transport supports `wss://`; it is never silently downgraded.
 
+## Persisted printer configuration
+
+`MultiAcePrinterConfig.hpp` defines the versioned, GUI-independent configuration payload used to persist a printer's multiACE provider settings.
+
+The schema stores:
+
+- whether multiACE integration is enabled for the printer;
+- the service URL;
+- optional basic and bearer authentication;
+- optional custom HTTP/WebSocket headers.
+
+Parsing is deliberately fail-closed. Invalid field types, unsupported schema versions, partial basic-auth credentials, invalid custom headers, or an enabled configuration without a usable service URL are rejected before provider activation. Unknown fields in the current schema version are ignored so additive UI metadata can be introduced without breaking older readers.
+
+Disabled configurations may retain their connection settings so toggling integration off does not discard user input. `provider_activation_config_if_enabled()` is the boundary used by automatic activation: disabled configurations produce no activation settings, while enabled configurations are fully validated before being returned.
+
 ## Lifetime order
 
 The required lifetime is:
@@ -69,8 +84,8 @@ The binding must be detached before legacy `MachineObject` cleanup deletes raw `
 
 ## Scope boundary
 
-The callback/lifetime machinery, `DeviceManager` ownership hook, concrete transport construction, and start-before-attach activation helper are now established. Remaining UI integration work is intentionally separate:
+The callback/lifetime machinery, `DeviceManager` ownership hook, concrete transport construction, start-before-attach activation helper, and persisted configuration model are now established. Remaining UI integration work is intentionally separate:
 
-- read/persist the service URL and optional credentials from the printer configuration surface;
+- store/load the versioned multiACE payload through the existing per-printer configuration surface;
 - invoke activation automatically for configured machines;
 - expose refresh/status actions in the existing AMS UI.
