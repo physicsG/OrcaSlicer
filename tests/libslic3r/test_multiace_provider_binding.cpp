@@ -2,6 +2,8 @@
 
 #include "libslic3r/FilamentSourceBinding.hpp"
 
+#include <atomic>
+#include <condition_variable>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -54,7 +56,7 @@ public:
     }
 
 private:
-    mutable std::mutex                  m_mutex;
+    mutable std::mutex                m_mutex;
     std::deque<std::function<void()>> m_callbacks;
 };
 
@@ -69,13 +71,15 @@ public:
     {
         InventoryCallback callback;
         InventorySnapshot result;
+        InventorySnapshot event;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             callback = m_emit_during_inventory ? m_callback : InventoryCallback{};
             result   = m_inventory;
+            event    = m_inventory_event;
         }
         if (callback)
-            callback(m_inventory_event);
+            callback(event);
         return result;
     }
 
@@ -91,8 +95,12 @@ public:
     {
         if (subscription_id != 1)
             return false;
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_callback = {};
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_callback     = {};
+            m_unsubscribed = true;
+        }
+        m_unsubscribe_condition.notify_all();
         return true;
     }
 
@@ -128,13 +136,21 @@ public:
             callback(inventory);
     }
 
+    void wait_until_unsubscribed()
+    {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_unsubscribe_condition.wait(lock, [this] { return m_unsubscribed; });
+    }
+
 private:
-    mutable std::mutex m_mutex;
-    InventorySnapshot  m_inventory;
-    InventorySnapshot  m_inventory_event;
-    InventoryCallback  m_callback;
-    InventoryCallback  m_retained_stale;
-    bool               m_emit_during_inventory = false;
+    mutable std::mutex      m_mutex;
+    std::condition_variable m_unsubscribe_condition;
+    InventorySnapshot       m_inventory;
+    InventorySnapshot       m_inventory_event;
+    InventoryCallback       m_callback;
+    InventoryCallback       m_retained_stale;
+    bool                    m_emit_during_inventory = false;
+    bool                    m_unsubscribed          = false;
 };
 
 } // namespace
@@ -169,7 +185,7 @@ TEST_CASE("multiACE provider binding marshals worker updates to the dispatcher t
     auto provider   = std::make_shared<ManualFilamentSourceProvider>(ProviderCapabilities{}, snapshot("r1"));
     auto dispatcher = std::make_shared<QueueDispatcher>();
 
-    const std::thread::id owner_thread = std::this_thread::get_id();
+    const std::thread::id       owner_thread = std::this_thread::get_id();
     std::vector<std::thread::id> apply_threads;
     FilamentSourceBinding binding(provider,
                                   [dispatcher](std::function<void()> callback) { dispatcher->post(std::move(callback)); },
@@ -219,6 +235,52 @@ TEST_CASE("multiACE provider binding drops queued and stale callbacks after deta
     CHECK(revisions.empty());
 }
 
+TEST_CASE("multiACE provider binding waits for an in-flight apply before detach returns", "[multiace][binding]")
+{
+    auto provider = std::make_shared<RetainedCallbackProvider>(snapshot(""));
+
+    std::mutex              gate_mutex;
+    std::condition_variable gate_condition;
+    bool                    apply_started = false;
+    bool                    release_apply = false;
+    std::thread             dispatch_thread;
+
+    FilamentSourceBinding binding(
+        provider,
+        [&dispatch_thread](std::function<void()> callback) { dispatch_thread = std::thread(std::move(callback)); },
+        [&](const InventorySnapshot&) {
+            std::unique_lock<std::mutex> lock(gate_mutex);
+            apply_started = true;
+            gate_condition.notify_all();
+            gate_condition.wait(lock, [&release_apply] { return release_apply; });
+        });
+
+    provider->emit(snapshot("r1"));
+    {
+        std::unique_lock<std::mutex> lock(gate_mutex);
+        gate_condition.wait(lock, [&apply_started] { return apply_started; });
+    }
+
+    std::atomic<bool> detach_finished{false};
+    std::thread detach_thread([&] {
+        binding.detach();
+        detach_finished = true;
+    });
+
+    provider->wait_until_unsubscribed();
+    CHECK_FALSE(detach_finished.load());
+
+    {
+        std::lock_guard<std::mutex> lock(gate_mutex);
+        release_apply = true;
+    }
+    gate_condition.notify_all();
+
+    dispatch_thread.join();
+    detach_thread.join();
+    CHECK(detach_finished.load());
+}
+
 TEST_CASE("multiACE provider binding contains apply failures and recovers on a newer snapshot", "[multiace][binding]")
 {
     auto provider   = std::make_shared<ManualFilamentSourceProvider>(ProviderCapabilities{}, snapshot("r1"));
@@ -248,12 +310,15 @@ TEST_CASE("multiACE provider binding contains apply failures and recovers on a n
 TEST_CASE("multiACE provider binding contains dispatcher failures", "[multiace][binding]")
 {
     auto provider = std::make_shared<ManualFilamentSourceProvider>(ProviderCapabilities{}, snapshot("r1"));
+    bool applied  = false;
 
     FilamentSourceBinding binding(provider,
                                   [](std::function<void()>) { throw std::runtime_error("dispatcher unavailable"); },
-                                  [](const InventorySnapshot&) { FAIL("apply must not run when dispatch fails"); });
+                                  [&applied](const InventorySnapshot&) { applied = true; });
 
+    CHECK_FALSE(applied);
     CHECK(binding.last_error() == "dispatcher unavailable");
     CHECK_NOTHROW(provider->set_inventory(snapshot("r2")));
+    CHECK_FALSE(applied);
     CHECK(binding.last_error() == "dispatcher unavailable");
 }
