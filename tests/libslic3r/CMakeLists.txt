@@ -15,6 +15,7 @@ add_executable(${_TEST_NAME}_tests
 	test_multiace_ams_model_regressions.cpp
 	test_multiace_http_transport_header.cpp
 	test_multiace_inventory.cpp
+	test_multiace_machine_binding_header.cpp
 	test_multiace_moonraker_provider.cpp
 	test_multiace_provider_binding.cpp
 	test_triangle_selector.cpp
