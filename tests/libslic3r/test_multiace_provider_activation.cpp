@@ -43,3 +43,11 @@ TEST_CASE("multiACE activation rejects service URL queries and fragments", "[mul
     CHECK_THROWS_WITH(provider_transport_urls("http://192.0.2.10:7125/multiace#status"),
                       "multiACE WebSocket base URL must not contain a query or fragment");
 }
+
+TEST_CASE("multiACE activation rejects raw whitespace and control characters in service URLs", "[multiace][activation]")
+{
+    CHECK_THROWS_WITH(provider_transport_urls("http://192.0.2.10:7125/multi ace"),
+                      "multiACE service URL must not contain whitespace or control characters");
+    CHECK_THROWS_WITH(provider_transport_urls("http://192.0.2.10:7125/multiace\n"),
+                      "multiACE service URL must not contain whitespace or control characters");
+}
