@@ -12,9 +12,19 @@ namespace {
 class FakeStartedProvider
 {
 public:
-    void stop() { ++stop_count; }
+    explicit FakeStartedProvider(bool throw_on_stop = false) : m_throw_on_stop(throw_on_stop) {}
+
+    void stop()
+    {
+        ++stop_count;
+        if (m_throw_on_stop)
+            throw std::runtime_error("stop failed");
+    }
 
     int stop_count = 0;
+
+private:
+    bool m_throw_on_stop;
 };
 
 } // namespace
@@ -79,9 +89,22 @@ TEST_CASE("multiACE activation does not attach when provider startup fails", "[m
     CHECK_FALSE(attach_called);
 }
 
-TEST_CASE("multiACE activation stops a started provider when attachment fails", "[multiace][activation][lifecycle]")
+TEST_CASE("multiACE activation rejects null providers before attachment", "[multiace][activation][lifecycle]")
 {
-    const auto provider         = std::make_shared<FakeStartedProvider>();
+    bool attach_called = false;
+    auto provider_factory = [] { return std::shared_ptr<FakeStartedProvider>{}; };
+    auto attach           = [&attach_called](const auto&) {
+        attach_called = true;
+        return 1;
+    };
+
+    CHECK_THROWS_WITH(activate_multiace_provider(provider_factory, attach), "multiACE provider factory returned null");
+    CHECK_FALSE(attach_called);
+}
+
+TEST_CASE("multiACE activation preserves attachment failures when provider cleanup throws", "[multiace][activation][lifecycle]")
+{
+    const auto provider         = std::make_shared<FakeStartedProvider>(true);
     auto       provider_factory = [&provider] { return provider; };
     auto       attach           = [](const auto&) -> int { throw std::runtime_error("attachment failed"); };
 
@@ -89,7 +112,7 @@ TEST_CASE("multiACE activation stops a started provider when attachment fails", 
     CHECK(provider->stop_count == 1);
 }
 
-TEST_CASE("multiACE activation retains a started provider after successful attachment", "[multiace][activation][lifecycle]")
+TEST_CASE("multiACE activation does not stop a provider after successful attachment", "[multiace][activation][lifecycle]")
 {
     const auto provider         = std::make_shared<FakeStartedProvider>();
     auto       provider_factory = [&provider] { return provider; };
