@@ -31,8 +31,7 @@ TEST_CASE("multiACE activation rejects unusable service URL authorities", "[mult
 {
     CHECK_THROWS_WITH(provider_transport_urls("http://user:password@192.0.2.10:7125/multiace"),
                       "multiACE WebSocket credentials must be configured separately from the URL");
-    CHECK_THROWS_WITH(provider_transport_urls("http://192.0.2.10:invalid/multiace"),
-                      "multiACE WebSocket port must be numeric");
+    CHECK_THROWS_WITH(provider_transport_urls("http://192.0.2.10:invalid/multiace"), "multiACE WebSocket port must be numeric");
     CHECK_THROWS_WITH(provider_transport_urls("http://"), "multiACE WebSocket base URL must contain a host");
 }
 
