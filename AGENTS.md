@@ -13,6 +13,18 @@ Platform helpers such as `build_linux.sh`, `build_release_macos.sh`, and `build_
 ## Coding Style & Naming Conventions
 `.clang-format` enforces 4-space indents, a 140-column limit, aligned initializers, and brace wrapping for classes and functions. Run `clang-format -i <file>` before committing; the CMake `clang-format` target is available when LLVM tools are on your PATH. Prefer `CamelCase` for classes, `snake_case` for functions and locals, and `SCREAMING_CASE` for constants, matching conventions in `src/`. Keep headers self-contained and align include order with the IWYU pragmas.
 
+## Pre-Commit Verification
+Do not create a commit until all checks applicable to the changed files have been run locally and pass. Treat the pull-request CI quality gates as the source of truth for what is required.
+
+- Run `clang-format` on every changed C/C++ source or header and verify there is no remaining formatting diff. Formatting is mandatory, not a follow-up CI fix.
+- Run the narrowest relevant unit/integration tests for behavioral changes. For multiACE work, run the affected Catch2 multiACE tests at minimum; run the broader test target when shared infrastructure is changed.
+- For changed Markdown, JSON, GitHub Actions workflows, release tooling, or repository-structure files, run the corresponding checks defined in `.github/workflows/ci_quality.yml` (markdownlint/JSON parsing, actionlint + yamllint, release helper checks, and repository hygiene respectively).
+- Run `clang-tidy --verify-config` when C/C++ or clang-tidy configuration is touched.
+- Before committing, inspect the staged diff and confirm generated files, credentials, build outputs, debug artifacts, and unrelated edits are not included.
+- If an applicable required check cannot be executed locally, do not silently skip it: explicitly record what was not run and why before committing or publishing the change.
+
+A commit should be considered ready only when its applicable local checks are green; do not rely on GitHub Actions to discover routine formatting, lint, or targeted-test failures after the commit is pushed.
+
 ## Testing Guidelines
 Unit tests rely on Catch2 (`tests/catch2/`). Name specs after the component under test—for example `tests/libslic3r/TestPlanarHole.cpp`—and tag long-running cases so `ctest -L fast` remains useful. Cover new algorithms with deterministic fixtures or sample G-code stored in `tests/data/`. Document manual printer validation or regression slicer checks in your PR when automated coverage is insufficient.
 
