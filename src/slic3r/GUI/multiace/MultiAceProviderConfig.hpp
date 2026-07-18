@@ -84,6 +84,21 @@ inline std::shared_ptr<MoonrakerFilamentSourceProvider> create_started_multiace_
     return provider;
 }
 
+template<class ProviderFactory, class Attach>
+decltype(auto) activate_multiace_provider(ProviderFactory&& provider_factory, Attach&& attach)
+{
+    auto provider = std::forward<ProviderFactory>(provider_factory)();
+    if (!provider)
+        throw std::invalid_argument("multiACE provider factory returned null");
+
+    try {
+        return std::forward<Attach>(attach)(provider);
+    } catch (...) {
+        provider->stop();
+        throw;
+    }
+}
+
 } // namespace Slic3r::MultiAce
 
 #endif // slic3r_MultiAceProviderConfig_hpp_
