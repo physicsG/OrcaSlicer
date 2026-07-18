@@ -94,7 +94,9 @@ decltype(auto) activate_multiace_provider(ProviderFactory&& provider_factory, At
     try {
         return std::forward<Attach>(attach)(provider);
     } catch (...) {
-        provider->stop();
+        try {
+            provider->stop();
+        } catch (...) {}
         throw;
     }
 }
