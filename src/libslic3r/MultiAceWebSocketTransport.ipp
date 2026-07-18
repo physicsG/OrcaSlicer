@@ -265,12 +265,11 @@ public:
 
     void start()
     {
-        bool expected = false;
-        if (!m_started.compare_exchange_strong(expected, true) || m_stopping.load())
-            return;
-        if (m_stopping.load())
+        std::lock_guard<std::mutex> lock(m_lifecycle_mutex);
+        if (m_started || m_stopping)
             return;
 
+        m_started = true;
         m_running = true;
         const std::shared_ptr<State> self = shared_from_this();
         m_worker = std::thread([self] { self->run(); });
@@ -279,20 +278,26 @@ public:
 
     void stop()
     {
-        m_stopping = true;
-        if (!m_started.load())
-            return;
-
-        if (!m_stop_posted.exchange(true)) {
-            const std::shared_ptr<State> self = shared_from_this();
-            websocket_detail::asio::post(m_io, [self] { self->stop_on_io(); });
+        bool stop_on_worker = false;
+        {
+            std::lock_guard<std::mutex> lock(m_lifecycle_mutex);
+            m_stopping = true;
+            if (!m_started || m_stop_started)
+                return;
+            m_stop_started = true;
+            stop_on_worker = m_worker.joinable() && m_worker.get_id() == std::this_thread::get_id();
+            if (!stop_on_worker) {
+                const std::shared_ptr<State> self = shared_from_this();
+                websocket_detail::asio::post(m_io, [self] { self->stop_on_io(); });
+            }
         }
 
-        if (m_worker.joinable()) {
-            if (m_worker.get_id() == std::this_thread::get_id())
+        if (stop_on_worker) {
+            stop_on_io();
+            if (m_worker.joinable())
                 m_worker.detach();
-            else
-                m_worker.join();
+        } else if (m_worker.joinable()) {
+            m_worker.join();
         }
     }
 
@@ -420,7 +425,7 @@ private:
         if (m_stopping)
             return;
 
-        close_socket();
+        close_socket(true);
         report_connection(false, std::string("multiACE WebSocket ") + operation + " failed: " + error.message());
         if (m_stopping)
             return;
@@ -447,15 +452,16 @@ private:
         m_resolver.cancel();
         ErrorCode ignored;
         m_reconnect_timer.cancel(ignored);
-        close_socket();
+        close_socket(false);
         report_connection(false, {});
         m_event_callback      = {};
         m_connection_callback = {};
         m_work_guard.reset();
         m_io.stop();
+        m_running = false;
     }
 
-    void close_socket()
+    void close_socket(bool release_socket)
     {
         using namespace websocket_detail;
         if (!m_socket)
@@ -464,7 +470,8 @@ private:
         beast::get_lowest_layer(*m_socket).socket().cancel(ignored);
         beast::get_lowest_layer(*m_socket).socket().shutdown(tcp::socket::shutdown_both, ignored);
         beast::get_lowest_layer(*m_socket).socket().close(ignored);
-        m_socket.reset();
+        if (release_socket)
+            m_socket.reset();
     }
 
     void invoke_event(const std::string& message)
@@ -496,19 +503,20 @@ private:
     EventCallback                 m_event_callback;
     ConnectionCallback            m_connection_callback;
 
-    websocket_detail::asio::io_context                                             m_io;
+    websocket_detail::asio::io_context                                                     m_io;
     websocket_detail::asio::executor_work_guard<websocket_detail::asio::io_context::executor_type> m_work_guard;
-    websocket_detail::tcp::resolver                                                 m_resolver;
-    websocket_detail::asio::steady_timer                                            m_reconnect_timer;
-    std::unique_ptr<websocket_detail::WebSocket>                                    m_socket;
-    websocket_detail::beast::flat_buffer                                            m_buffer;
-    std::thread                                                                     m_worker;
-    std::atomic<bool>                                                               m_started{false};
-    std::atomic<bool>                                                               m_running{false};
-    std::atomic<bool>                                                               m_stopping{false};
-    std::atomic<bool>                                                               m_stop_posted{false};
-    std::optional<bool>                                                             m_reported_connection;
-    std::size_t                                                                     m_retry_index = 0;
+    websocket_detail::tcp::resolver                                                         m_resolver;
+    websocket_detail::asio::steady_timer                                                    m_reconnect_timer;
+    std::unique_ptr<websocket_detail::WebSocket>                                            m_socket;
+    websocket_detail::beast::flat_buffer                                                    m_buffer;
+    std::thread                                                                             m_worker;
+    mutable std::mutex                                                                      m_lifecycle_mutex;
+    bool                                                                                    m_started      = false;
+    bool                                                                                    m_stop_started = false;
+    std::atomic<bool>                                                                       m_running{false};
+    std::atomic<bool>                                                                       m_stopping{false};
+    std::optional<bool>                                                                     m_reported_connection;
+    std::size_t                                                                             m_retry_index = 0;
 };
 
 inline BeastWebSocketEventTransport::BeastWebSocketEventTransport(WebSocketEventTransportConfig config) : m_config(std::move(config))
@@ -541,7 +549,10 @@ inline void BeastWebSocketEventTransport::connect(const std::string& path,
     }
     if (previous)
         previous->stop();
-    state->start();
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_state == state)
+        state->start();
 }
 
 inline void BeastWebSocketEventTransport::disconnect()
