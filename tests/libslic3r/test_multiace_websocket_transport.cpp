@@ -11,7 +11,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
-#include <deque>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -85,8 +84,8 @@ private:
             if (error)
                 return;
 
-            websocket::stream<tcp::socket> web_socket(std::move(socket));
-            beast::flat_buffer             request_buffer;
+            websocket::stream<tcp::socket>   web_socket(std::move(socket));
+            beast::flat_buffer               request_buffer;
             http::request<http::string_body> request;
             http::read(web_socket.next_layer(), request_buffer, request, error);
             if (error)
@@ -95,9 +94,9 @@ private:
             RecordedHandshake handshake;
             handshake.target = std::string(request.target());
             if (request.find(http::field::authorization) != request.end())
-                handshake.authorization = request.at(http::field::authorization).to_string();
+                handshake.authorization = std::string(request.at(http::field::authorization));
             if (request.find("X-MultiAce-Test") != request.end())
-                handshake.test_header = request.at("X-MultiAce-Test").to_string();
+                handshake.test_header = std::string(request.at("X-MultiAce-Test"));
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
                 m_handshakes.emplace_back(std::move(handshake));
@@ -241,7 +240,7 @@ TEST_CASE("multiACE WebSocket reconnect backoff is bounded", "[multiace][websock
 
 TEST_CASE("multiACE Beast WebSocket transport receives text events and sends configured headers", "[multiace][websocket]")
 {
-    LoopbackWebSocketServer server({{"hello", false}});
+    LoopbackWebSocketServer      server({{"hello", false}});
     WebSocketEventTransportConfig config = config_for(server);
     config.bearer_token                   = "token-123";
     config.headers.emplace("X-MultiAce-Test", "header-value");
@@ -264,13 +263,13 @@ TEST_CASE("multiACE Beast WebSocket transport receives text events and sends con
 
     transport.disconnect();
     CHECK_FALSE(transport.running());
-    CHECK(log.connections() == std::vector<bool>{true, false});
+    CHECK((log.connections() == std::vector<bool>{true, false}));
 }
 
 TEST_CASE("multiACE Beast WebSocket transport reconnects after a dropped session", "[multiace][websocket]")
 {
-    LoopbackWebSocketServer server({{"first", true}, {"second", false}});
-    CallbackLog             log;
+    LoopbackWebSocketServer       server({{"first", true}, {"second", false}});
+    CallbackLog                   log;
     BeastWebSocketEventTransport transport(config_for(server));
 
     transport.connect("/events",
