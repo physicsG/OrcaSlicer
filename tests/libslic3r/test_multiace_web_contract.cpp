@@ -4,6 +4,7 @@
 
 #include "nlohmann/json.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -21,12 +22,12 @@ nlohmann::json fixture(const std::string& name)
     return nlohmann::json::parse(input);
 }
 
-const FilamentSource& source(const InventorySnapshot& inventory, const std::string& id)
+const FilamentSource& source(const InventorySnapshot& inventory, const char* id)
 {
     const auto found = std::find_if(inventory.sources.begin(), inventory.sources.end(),
                                     [&id](const FilamentSource& candidate) { return candidate.id.str() == id; });
     if (found == inventory.sources.end())
-        throw std::runtime_error("fixture source not found: " + id);
+        throw std::runtime_error(std::string("fixture source not found: ") + id);
     return *found;
 }
 
@@ -130,6 +131,24 @@ TEST_CASE("multiACE Web ACE-per-head mode routes every unit slot to its configur
     CHECK(*second_loaded.loaded_toolhead == 3);
 }
 
+TEST_CASE("multiACE Web head mode does not guess routes without an explicit ACE mapping", "[multiace][web-contract]")
+{
+    const nlohmann::json payload = {
+        {"mode", "head"},
+        {"ace_heads", {3}},
+        {"aces", nlohmann::json::array({
+                     {
+                         {"idx", 0},
+                         {"slots", nlohmann::json::array({{{"idx", 0}, {"state", "ready"}}})},
+                     },
+                 })},
+    };
+
+    const InventorySnapshot inventory = parse_multiace_web_inventory(payload);
+    REQUIRE(inventory.sources.size() == 1);
+    CHECK(inventory.sources.front().reachable_toolheads.empty());
+}
+
 TEST_CASE("multiACE Web disconnected units retain metadata while becoming offline", "[multiace][web-contract]")
 {
     nlohmann::json payload          = fixture("multiace_web_state_v0.99.5b.json");
@@ -199,6 +218,13 @@ TEST_CASE("multiACE Web rejects malformed routing and service failures", "[multi
         nlohmann::json payload   = fixture("multiace_web_event_head_mode_v0.99.5b.json");
         payload["head_ace"]["4"] = 9;
         CHECK_THROWS_WITH(parse_multiace_web_inventory(payload), "multiACE Web head_ace contains an invalid U1 toolhead");
+    }
+
+    SECTION("normalized duplicate head mappings are rejected")
+    {
+        nlohmann::json payload    = fixture("multiace_web_event_head_mode_v0.99.5b.json");
+        payload["head_ace"]["01"] = 1;
+        CHECK_THROWS_WITH(parse_multiace_web_inventory(payload), "duplicate multiACE Web head_ace key: 1");
     }
 
     SECTION("duplicate slot")

@@ -214,8 +214,8 @@ public:
                 nlohmann::json normalized = *inventory_payload;
                 if (!normalized.contains("schema_version") && event.contains("schema_version"))
                     normalized["schema_version"] = event.at("schema_version");
-                publish_inventory(parse_inventory(normalized), sequence);
-                clear_last_error();
+                if (publish_inventory(parse_inventory(normalized), sequence))
+                    clear_last_error();
                 return;
             }
 
@@ -348,12 +348,12 @@ private:
         const std::string event_type = read_event_type(event);
         if (event_type == "state") {
             if (multiace_web_reports_disconnected(event)) {
-                set_last_error("multiACE Web reports that Klippy is disconnected");
-                mark_inventory_offline(sequence);
+                if (mark_inventory_offline(sequence))
+                    set_last_error("multiACE Web reports that Klippy is disconnected");
                 return;
             }
-            publish_inventory(parse_multiace_web_inventory(event), sequence);
-            clear_last_error();
+            if (publish_inventory(parse_multiace_web_inventory(event), sequence))
+                clear_last_error();
             return;
         }
 
@@ -390,12 +390,10 @@ private:
             }
 
             if (connected) {
-                clear_last_error();
                 refresh_inventory(sequence);
             } else {
-                if (!error.empty())
-                    set_last_error("multiACE event connection lost: " + error);
-                mark_inventory_offline(sequence);
+                if (mark_inventory_offline(sequence))
+                    set_last_error(error.empty() ? "multiACE event connection lost" : "multiACE event connection lost: " + error);
             }
         } catch (const std::exception& callback_error) {
             set_last_error(callback_error.what());
@@ -407,13 +405,18 @@ private:
     bool refresh_inventory(std::uint64_t sequence)
     {
         InventorySnapshot snapshot;
+        bool              service_disconnected = false;
         try {
             std::lock_guard<std::mutex> lock(m_refresh_mutex);
             const TransportResponse     response = m_rest_transport->get(m_endpoints.inventory);
             require_success(response, "multiACE inventory request");
             const nlohmann::json response_json = parse_json(response.body, "multiACE inventory response");
-            snapshot = m_endpoints.profile == MoonrakerApiProfile::MultiAceWeb ? parse_multiace_web_inventory(response_json) :
-                                                                                 parse_inventory(response_json);
+            service_disconnected               = m_endpoints.profile == MoonrakerApiProfile::MultiAceWeb &&
+                                   multiace_web_reports_disconnected(response_json);
+            if (!service_disconnected) {
+                snapshot = m_endpoints.profile == MoonrakerApiProfile::MultiAceWeb ? parse_multiace_web_inventory(response_json) :
+                                                                                     parse_inventory(response_json);
+            }
         } catch (const std::exception& error) {
             set_last_error(error.what());
             return false;
@@ -422,8 +425,22 @@ private:
             return false;
         }
 
+        if (service_disconnected) {
+            try {
+                if (mark_inventory_offline(sequence))
+                    set_last_error("multiACE Web reports that Klippy is disconnected");
+            } catch (const std::exception& error) {
+                set_last_error(std::string("multiACE Web reports that Klippy is disconnected; inventory subscriber failed: ") +
+                               error.what());
+            } catch (...) {
+                set_last_error("multiACE Web reports that Klippy is disconnected; inventory subscriber failed with an unknown error");
+            }
+            return false;
+        }
+
+        bool accepted = false;
         try {
-            publish_inventory(std::move(snapshot), sequence);
+            accepted = publish_inventory(std::move(snapshot), sequence);
         } catch (const std::exception& error) {
             set_last_error(error.what());
             return false;
@@ -432,33 +449,31 @@ private:
             return false;
         }
 
-        clear_last_error();
+        if (accepted)
+            clear_last_error();
         return true;
     }
 
-    void publish_inventory(InventorySnapshot snapshot, std::uint64_t sequence)
+    bool publish_inventory(InventorySnapshot snapshot, std::uint64_t sequence)
     {
         std::lock_guard<std::recursive_mutex> lock(m_publish_mutex);
         if (sequence <= m_last_published_sequence)
-            return;
+            return false;
         m_last_published_sequence = sequence;
         if (m_state.inventory() == snapshot)
-            return;
+            return true;
         m_state.set_inventory(std::move(snapshot));
+        return true;
     }
 
-    void mark_inventory_offline(std::uint64_t sequence)
+    bool mark_inventory_offline(std::uint64_t sequence)
     {
         InventorySnapshot snapshot = inventory();
-        bool              changed  = false;
         for (FilamentSource& source : snapshot.sources) {
-            if (source.state != SourceState::Offline) {
+            if (source.state != SourceState::Offline)
                 source.state = SourceState::Offline;
-                changed      = true;
-            }
         }
-        if (changed)
-            publish_inventory(std::move(snapshot), sequence);
+        return publish_inventory(std::move(snapshot), sequence);
     }
 
     std::uint64_t next_update_sequence() { return m_next_update_sequence.fetch_add(1, std::memory_order_relaxed); }

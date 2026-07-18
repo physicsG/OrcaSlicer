@@ -71,7 +71,8 @@ inventory provider, and Klippy-disconnected frames mark the retained inventory o
 
 ## Disconnect behavior
 
-When the event connection is lost or the provider is stopped, the last valid source metadata and inventory revision are retained while source states become `Offline`. A successful reconnect performs a full inventory refresh.
+When the event connection is lost, a REST or WebSocket state reports Klippy disconnected, or the provider is stopped, the last valid source
+metadata and inventory revision are retained while source states become `Offline`. A successful reconnect performs a full inventory refresh.
 
 Malformed responses or events update `last_error()` but do not replace the last valid inventory snapshot.
 

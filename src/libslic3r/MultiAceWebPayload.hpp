@@ -245,17 +245,16 @@ inline std::map<int, std::vector<int>> parse_head_mode_routes(const nlohmann::js
             const int head = parse_object_index(entry.key(), "multiACE Web head_ace key");
             if (head >= PHYSICAL_TOOLHEAD_COUNT)
                 throw std::invalid_argument("multiACE Web head_ace contains an invalid U1 toolhead");
-            head_ace.emplace(head, checked_nonnegative_integer(entry.value(), "multiACE Web head_ace value"));
+            if (!head_ace.emplace(head, checked_nonnegative_integer(entry.value(), "multiACE Web head_ace value")).second)
+                throw std::invalid_argument("duplicate multiACE Web head_ace key: " + std::to_string(head));
         }
     }
 
     std::map<int, std::vector<int>> routes;
     for (const int head : ace_heads) {
-        int        unit  = head;
         const auto found = head_ace.find(head);
         if (found != head_ace.end())
-            unit = found->second;
-        routes[unit].emplace_back(head);
+            routes[found->second].emplace_back(head);
     }
     return routes;
 }
