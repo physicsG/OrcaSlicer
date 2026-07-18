@@ -18,6 +18,7 @@ add_executable(${_TEST_NAME}_tests
 	test_multiace_inventory.cpp
 	test_multiace_moonraker_provider.cpp
 	test_multiace_provider_binding.cpp
+	test_multiace_web_contract.cpp
 	test_multiace_websocket_transport.cpp
 	test_triangle_selector.cpp
 	test_local_z_order_optimizer.cpp

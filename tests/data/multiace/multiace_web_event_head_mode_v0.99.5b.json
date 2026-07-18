@@ -1,0 +1,54 @@
+{
+  "type": "state",
+  "ts": 1784385601.25,
+  "ace_status": "ready",
+  "printer_state": "idle",
+  "active_device": 0,
+  "device_count": 2,
+  "mode": "head",
+  "ace_head": 1,
+  "ace_heads": [1, 3],
+  "head_ace": {"0": 0, "1": 0, "2": 2, "3": 1},
+  "aces": [
+    {
+      "idx": 0,
+      "connected": true,
+      "protocol": "v1",
+      "status": "ready",
+      "temp": 30,
+      "humidity": 38,
+      "dryer": {"status": "stop", "target_temp": 0, "duration": 0, "remain_time": 0},
+      "slots": [
+        {"idx": 0, "state": "ready", "rfid": 2, "material": "PLA", "brand": "Anycubic", "sku": "WHITE", "subtype": "PLA Basic", "color": "#ffffff", "source": "rfid"},
+        {"idx": 1, "state": "ready", "rfid": 2, "material": "PLA", "brand": "Anycubic", "sku": "BLACK", "subtype": "PLA Basic", "color": "#111111", "source": "rfid"},
+        {"idx": 2, "state": "ready", "rfid": 0, "material": "PETG", "brand": "Generic", "sku": "", "subtype": "PETG HF", "color": "#3366cc", "source": "override"},
+        {"idx": 3, "state": "empty", "rfid": 0, "material": "", "brand": "", "sku": "", "subtype": "", "color": null, "source": "empty"}
+      ]
+    },
+    {
+      "idx": 1,
+      "connected": true,
+      "protocol": "v2",
+      "status": "ready",
+      "temp": 28,
+      "humidity": 44,
+      "dryer": {"status": "stop", "target_temp": 0, "duration": 0, "remain_time": 0},
+      "slots": [
+        {"idx": 0, "state": "ready", "rfid": 2, "material": "PLA", "brand": "Anycubic", "sku": "RED", "subtype": "PLA Basic", "color": "#d52332", "source": "rfid"},
+        {"idx": 1, "state": "ready", "rfid": 0, "material": "ASA", "brand": "Generic", "sku": "", "subtype": "", "color": "#d9a441", "source": "override"},
+        {"idx": 2, "state": "empty", "rfid": 0, "material": "", "brand": "", "sku": "", "subtype": "", "color": null, "source": "empty"},
+        {"idx": 3, "state": "ready", "rfid": 0, "material": "PVA", "brand": "Generic", "sku": "", "subtype": "", "color": "#e7d9aa", "source": "derived"}
+      ]
+    }
+  ],
+  "toolheads": [
+    {"idx": 0, "ace": null, "slot": null, "head_source_known": false, "manual": false, "feeder": true},
+    {"idx": 1, "ace": 0, "slot": 2, "head_source_known": true, "manual": false, "feeder": false},
+    {"idx": 2, "ace": null, "slot": null, "head_source_known": false, "manual": true, "feeder": false},
+    {"idx": 3, "ace": 1, "slot": 0, "head_source_known": true, "manual": false, "feeder": false}
+  ],
+  "wiring": [
+    {"ace": 0, "slot": 2, "toolhead": 1, "color": "#3366cc", "material": "PETG"},
+    {"ace": 1, "slot": 0, "toolhead": 3, "color": "#d52332", "material": "PLA"}
+  ]
+}

@@ -88,6 +88,16 @@ struct ProviderCapabilities
     bool dryer_state            = false;
     bool per_source_routing     = false;
     bool measured_change_timing = false;
+
+    friend bool operator==(const ProviderCapabilities& lhs, const ProviderCapabilities& rhs)
+    {
+        return lhs.schema_version == rhs.schema_version && lhs.inventory == rhs.inventory && lhs.live_events == rhs.live_events &&
+               lhs.rfid_refresh == rhs.rfid_refresh && lhs.remaining_percent == rhs.remaining_percent &&
+               lhs.dryer_state == rhs.dryer_state && lhs.per_source_routing == rhs.per_source_routing &&
+               lhs.measured_change_timing == rhs.measured_change_timing;
+    }
+
+    friend bool operator!=(const ProviderCapabilities& lhs, const ProviderCapabilities& rhs) { return !(lhs == rhs); }
 };
 
 struct FilamentSource
@@ -111,6 +121,18 @@ struct FilamentSource
     std::optional<double> temperature_c;
     DryerState            dryer_state = DryerState::Unknown;
     std::optional<int>    dryer_remaining_minutes;
+
+    friend bool operator==(const FilamentSource& lhs, const FilamentSource& rhs)
+    {
+        return lhs.id == rhs.id && lhs.rfid_uid == rhs.rfid_uid && lhs.material == rhs.material && lhs.subtype == rhs.subtype &&
+               lhs.brand == rhs.brand && lhs.color == rhs.color && lhs.remaining_percent == rhs.remaining_percent &&
+               lhs.metadata_origin == rhs.metadata_origin && lhs.state == rhs.state && lhs.reachable_toolheads == rhs.reachable_toolheads &&
+               lhs.loaded_toolhead == rhs.loaded_toolhead && lhs.humidity_percent == rhs.humidity_percent &&
+               lhs.temperature_c == rhs.temperature_c && lhs.dryer_state == rhs.dryer_state &&
+               lhs.dryer_remaining_minutes == rhs.dryer_remaining_minutes;
+    }
+
+    friend bool operator!=(const FilamentSource& lhs, const FilamentSource& rhs) { return !(lhs == rhs); }
 };
 
 struct InventorySnapshot
@@ -118,6 +140,13 @@ struct InventorySnapshot
     int                         schema_version = SUPPORTED_SCHEMA_VERSION;
     std::string                 revision;
     std::vector<FilamentSource> sources;
+
+    friend bool operator==(const InventorySnapshot& lhs, const InventorySnapshot& rhs)
+    {
+        return lhs.schema_version == rhs.schema_version && lhs.revision == rhs.revision && lhs.sources == rhs.sources;
+    }
+
+    friend bool operator!=(const InventorySnapshot& lhs, const InventorySnapshot& rhs) { return !(lhs == rhs); }
 };
 
 namespace detail {

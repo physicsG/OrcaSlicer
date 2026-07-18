@@ -3,6 +3,7 @@
 
 #include "FilamentSourceProvider.hpp"
 #include "MultiAceTransport.hpp"
+#include "MultiAceWebPayload.hpp"
 
 #include "nlohmann/json.hpp"
 
@@ -19,12 +20,29 @@
 
 namespace Slic3r::MultiAce {
 
+enum class MoonrakerApiProfile {
+    VersionedInventoryV1,
+    MultiAceWeb,
+};
+
 struct MoonrakerEndpoints
 {
-    std::string capabilities = "/api/v1/capabilities";
-    std::string inventory    = "/api/v1/inventory";
-    std::string events       = "/api/v1/events";
-    std::string sources      = "/api/v1/sources";
+    std::string         capabilities = "/api/v1/capabilities";
+    std::string         inventory    = "/api/v1/inventory";
+    std::string         events       = "/api/v1/events";
+    std::string         sources      = "/api/v1/sources";
+    MoonrakerApiProfile profile      = MoonrakerApiProfile::VersionedInventoryV1;
+
+    static MoonrakerEndpoints multiace_web()
+    {
+        MoonrakerEndpoints endpoints;
+        endpoints.capabilities = "/api/version";
+        endpoints.inventory    = "/api/state";
+        endpoints.events       = "/ws";
+        endpoints.sources.clear();
+        endpoints.profile = MoonrakerApiProfile::MultiAceWeb;
+        return endpoints;
+    }
 };
 
 class MoonrakerFilamentSourceProvider final : public FilamentSourceProvider
@@ -160,7 +178,10 @@ public:
         try {
             const TransportResponse response = m_rest_transport->get(m_endpoints.capabilities);
             require_success(response, "multiACE capabilities request");
-            const ProviderCapabilities parsed = parse_capabilities(parse_json(response.body, "multiACE capabilities response"));
+            const nlohmann::json       response_json = parse_json(response.body, "multiACE capabilities response");
+            const ProviderCapabilities parsed        = m_endpoints.profile == MoonrakerApiProfile::MultiAceWeb ?
+                                                           parse_multiace_web_capabilities(response_json) :
+                                                           parse_capabilities(response_json);
             m_state.set_capabilities(parsed);
             clear_last_error();
             return true;
@@ -183,13 +204,18 @@ public:
             if (!event.is_object())
                 throw std::invalid_argument("multiACE event must be a JSON object");
 
+            if (m_endpoints.profile == MoonrakerApiProfile::MultiAceWeb) {
+                handle_multiace_web_event(event, sequence);
+                return;
+            }
+
             const nlohmann::json* inventory_payload = find_inventory_payload(event);
             if (inventory_payload != nullptr) {
                 nlohmann::json normalized = *inventory_payload;
                 if (!normalized.contains("schema_version") && event.contains("schema_version"))
                     normalized["schema_version"] = event.at("schema_version");
-                publish_inventory(parse_inventory(normalized), sequence);
-                clear_last_error();
+                if (publish_inventory(parse_inventory(normalized), sequence))
+                    clear_last_error();
                 return;
             }
 
@@ -317,6 +343,26 @@ private:
         return nullptr;
     }
 
+    void handle_multiace_web_event(const nlohmann::json& event, std::uint64_t sequence)
+    {
+        const std::string event_type = read_event_type(event);
+        if (event_type == "state") {
+            if (multiace_web_reports_disconnected(event)) {
+                if (mark_inventory_offline(sequence))
+                    set_last_error("multiACE Web reports that Klippy is disconnected");
+                return;
+            }
+            if (publish_inventory(parse_multiace_web_inventory(event), sequence))
+                clear_last_error();
+            return;
+        }
+
+        if (event_type == "error") {
+            const std::string error = web_detail::optional_string(event, "error");
+            set_last_error(error.empty() ? "multiACE Web reported an event error" : "multiACE Web event error: " + error);
+        }
+    }
+
     static std::string percent_encode_path_segment(const std::string& value)
     {
         static constexpr char HEX[] = "0123456789ABCDEF";
@@ -344,12 +390,10 @@ private:
             }
 
             if (connected) {
-                clear_last_error();
                 refresh_inventory(sequence);
             } else {
-                if (!error.empty())
-                    set_last_error("multiACE event connection lost: " + error);
-                mark_inventory_offline(sequence);
+                if (mark_inventory_offline(sequence))
+                    set_last_error(error.empty() ? "multiACE event connection lost" : "multiACE event connection lost: " + error);
             }
         } catch (const std::exception& callback_error) {
             set_last_error(callback_error.what());
@@ -361,11 +405,18 @@ private:
     bool refresh_inventory(std::uint64_t sequence)
     {
         InventorySnapshot snapshot;
+        bool              service_disconnected = false;
         try {
             std::lock_guard<std::mutex> lock(m_refresh_mutex);
             const TransportResponse     response = m_rest_transport->get(m_endpoints.inventory);
             require_success(response, "multiACE inventory request");
-            snapshot = parse_inventory(parse_json(response.body, "multiACE inventory response"));
+            const nlohmann::json response_json = parse_json(response.body, "multiACE inventory response");
+            service_disconnected               = m_endpoints.profile == MoonrakerApiProfile::MultiAceWeb &&
+                                   multiace_web_reports_disconnected(response_json);
+            if (!service_disconnected) {
+                snapshot = m_endpoints.profile == MoonrakerApiProfile::MultiAceWeb ? parse_multiace_web_inventory(response_json) :
+                                                                                     parse_inventory(response_json);
+            }
         } catch (const std::exception& error) {
             set_last_error(error.what());
             return false;
@@ -374,8 +425,22 @@ private:
             return false;
         }
 
+        if (service_disconnected) {
+            try {
+                if (mark_inventory_offline(sequence))
+                    set_last_error("multiACE Web reports that Klippy is disconnected");
+            } catch (const std::exception& error) {
+                set_last_error(std::string("multiACE Web reports that Klippy is disconnected; inventory subscriber failed: ") +
+                               error.what());
+            } catch (...) {
+                set_last_error("multiACE Web reports that Klippy is disconnected; inventory subscriber failed with an unknown error");
+            }
+            return false;
+        }
+
+        bool accepted = false;
         try {
-            publish_inventory(std::move(snapshot), sequence);
+            accepted = publish_inventory(std::move(snapshot), sequence);
         } catch (const std::exception& error) {
             set_last_error(error.what());
             return false;
@@ -384,31 +449,31 @@ private:
             return false;
         }
 
-        clear_last_error();
+        if (accepted)
+            clear_last_error();
         return true;
     }
 
-    void publish_inventory(InventorySnapshot snapshot, std::uint64_t sequence)
+    bool publish_inventory(InventorySnapshot snapshot, std::uint64_t sequence)
     {
         std::lock_guard<std::recursive_mutex> lock(m_publish_mutex);
         if (sequence <= m_last_published_sequence)
-            return;
+            return false;
         m_last_published_sequence = sequence;
+        if (m_state.inventory() == snapshot)
+            return true;
         m_state.set_inventory(std::move(snapshot));
+        return true;
     }
 
-    void mark_inventory_offline(std::uint64_t sequence)
+    bool mark_inventory_offline(std::uint64_t sequence)
     {
         InventorySnapshot snapshot = inventory();
-        bool              changed  = false;
         for (FilamentSource& source : snapshot.sources) {
-            if (source.state != SourceState::Offline) {
+            if (source.state != SourceState::Offline)
                 source.state = SourceState::Offline;
-                changed      = true;
-            }
         }
-        if (changed)
-            publish_inventory(std::move(snapshot), sequence);
+        return publish_inventory(std::move(snapshot), sequence);
     }
 
     std::uint64_t next_update_sequence() { return m_next_update_sequence.fetch_add(1, std::memory_order_relaxed); }
