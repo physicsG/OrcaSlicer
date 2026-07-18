@@ -79,8 +79,10 @@ TEST_CASE("multiACE activation rejects raw whitespace and control characters in 
 TEST_CASE("multiACE activation does not attach when provider startup fails", "[multiace][activation][lifecycle]")
 {
     bool attach_called = false;
+
     auto provider_factory = []() -> std::shared_ptr<FakeStartedProvider> { throw std::runtime_error("startup failed"); };
-    auto attach           = [&attach_called](const auto&) {
+
+    auto attach = [&attach_called](const auto&) {
         attach_called = true;
         return 1;
     };
@@ -92,8 +94,10 @@ TEST_CASE("multiACE activation does not attach when provider startup fails", "[m
 TEST_CASE("multiACE activation rejects null providers before attachment", "[multiace][activation][lifecycle]")
 {
     bool attach_called = false;
+
     auto provider_factory = [] { return std::shared_ptr<FakeStartedProvider>{}; };
-    auto attach           = [&attach_called](const auto&) {
+
+    auto attach = [&attach_called](const auto&) {
         attach_called = true;
         return 1;
     };
@@ -104,9 +108,11 @@ TEST_CASE("multiACE activation rejects null providers before attachment", "[mult
 
 TEST_CASE("multiACE activation preserves attachment failures when provider cleanup throws", "[multiace][activation][lifecycle]")
 {
-    const auto provider         = std::make_shared<FakeStartedProvider>(true);
-    auto       provider_factory = [&provider] { return provider; };
-    auto       attach           = [](const auto&) -> int { throw std::runtime_error("attachment failed"); };
+    const auto provider = std::make_shared<FakeStartedProvider>(true);
+
+    auto provider_factory = [&provider] { return provider; };
+
+    auto attach = [](const auto&) -> int { throw std::runtime_error("attachment failed"); };
 
     CHECK_THROWS_WITH(activate_multiace_provider(provider_factory, attach), "attachment failed");
     CHECK(provider->stop_count == 1);
@@ -114,10 +120,13 @@ TEST_CASE("multiACE activation preserves attachment failures when provider clean
 
 TEST_CASE("multiACE activation does not stop a provider after successful attachment", "[multiace][activation][lifecycle]")
 {
-    const auto provider         = std::make_shared<FakeStartedProvider>();
-    auto       provider_factory = [&provider] { return provider; };
-    int        binding          = 42;
-    auto       attach           = [&binding](const auto&) -> int& { return binding; };
+    const auto provider = std::make_shared<FakeStartedProvider>();
+
+    auto provider_factory = [&provider] { return provider; };
+
+    int binding = 42;
+
+    auto attach = [&binding](const auto&) -> int& { return binding; };
 
     int& result = activate_multiace_provider(provider_factory, attach);
 
