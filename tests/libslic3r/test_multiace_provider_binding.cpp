@@ -176,7 +176,7 @@ TEST_CASE("multiACE provider binding dispatches initial and live inventory on th
     CHECK(dispatcher->size() == 1);
 
     dispatcher->run_all();
-    CHECK(revisions == std::vector<std::string>{"r1", "r2", "r3"});
+    CHECK((revisions == std::vector<std::string>{"r1", "r2", "r3"}));
     CHECK(binding.last_error().empty());
 }
 
@@ -185,7 +185,7 @@ TEST_CASE("multiACE provider binding marshals worker updates to the dispatcher t
     auto provider   = std::make_shared<ManualFilamentSourceProvider>(ProviderCapabilities{}, snapshot("r1"));
     auto dispatcher = std::make_shared<QueueDispatcher>();
 
-    const std::thread::id       owner_thread = std::this_thread::get_id();
+    const std::thread::id        owner_thread = std::this_thread::get_id();
     std::vector<std::thread::id> apply_threads;
     FilamentSourceBinding binding(provider,
                                   [dispatcher](std::function<void()> callback) { dispatcher->post(std::move(callback)); },
@@ -303,7 +303,7 @@ TEST_CASE("multiACE provider binding contains apply failures and recovers on a n
 
     provider->set_inventory(snapshot("r2"));
     dispatcher->run_all();
-    CHECK(revisions == std::vector<std::string>{"r1", "r2"});
+    CHECK((revisions == std::vector<std::string>{"r1", "r2"}));
     CHECK(binding.last_error().empty());
 }
 
