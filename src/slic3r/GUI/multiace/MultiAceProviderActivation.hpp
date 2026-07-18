@@ -14,9 +14,11 @@ inline MultiAceMachineBinding& activate_multiace_web_provider(DeviceManager&    
                                                               DeviceManager::MultiAceDispatcher dispatcher = {})
 {
     auto provider_factory = [&config] { return create_started_multiace_web_provider(config); };
+
     auto attach = [&device_manager, &machine, &dispatcher](const auto& provider) -> MultiAceMachineBinding& {
         return device_manager.attach_multiace_provider(machine, provider, std::move(dispatcher));
     };
+
     return activate_multiace_provider(provider_factory, attach);
 }
 
