@@ -39,22 +39,21 @@ order with the IWYU pragmas.
 
 ## Pre-Commit Verification
 
-Do not create a commit until all checks applicable to the changed files have
-been run locally and pass. Treat the pull-request CI quality gates as the source
-of truth for what is required.
+Install the repository Git hooks once per clone with:
 
-- Run `clang-format` on every changed C/C++ source or header and verify there is
-  no remaining formatting diff. Formatting is mandatory, not a follow-up CI
-  fix.
+`bash scripts/ci/install_git_hooks.sh`
+
+The `.githooks/pre-commit` hook runs `scripts/ci/precommit.sh` against staged
+files before every commit. Do not bypass it for normal development. The script
+runs the applicable local equivalents of the pull-request quality gates,
+including clang-format, clang-tidy configuration validation when available,
+Markdown linting, JSON parsing, workflow linting, and release-tooling checks.
+
+In addition:
+
 - Run the narrowest relevant unit/integration tests for behavioral changes. For
   multiACE work, run the affected Catch2 multiACE tests at minimum; run the
   broader test target when shared infrastructure is changed.
-- For changed Markdown, JSON, GitHub Actions workflows, release tooling, or
-  repository-structure files, run the corresponding checks defined in
-  `.github/workflows/ci_quality.yml`: markdownlint/JSON parsing, actionlint plus
-  yamllint, release helper checks, and repository hygiene respectively.
-- Run `clang-tidy --verify-config` when C/C++ or clang-tidy configuration is
-  touched.
 - Before committing, inspect the staged diff and confirm generated files,
   credentials, build outputs, debug artifacts, and unrelated edits are not
   included.
@@ -62,7 +61,7 @@ of truth for what is required.
   skip it. Explicitly record what was not run and why before committing or
   publishing the change.
 
-A commit should be considered ready only when its applicable local checks are
+A commit should be considered ready only when the hook and applicable tests are
 green. Do not rely on GitHub Actions to discover routine formatting, lint, or
 targeted-test failures after the commit is pushed.
 
