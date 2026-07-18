@@ -41,7 +41,7 @@ public:
         m_state->apply      = std::move(apply);
 
         const std::weak_ptr<State> weak_state = m_state;
-        m_subscription_id = m_provider->subscribe([weak_state](const InventorySnapshot& snapshot) {
+        m_subscription_id                     = m_provider->subscribe([weak_state](const InventorySnapshot& snapshot) {
             const std::shared_ptr<State> state = weak_state.lock();
             if (!state)
                 return;
@@ -72,14 +72,14 @@ public:
     void detach()
     {
         std::shared_ptr<FilamentSourceProvider> provider;
-        FilamentSourceProvider::SubscriptionId subscription_id = FilamentSourceProvider::INVALID_SUBSCRIPTION_ID;
+        FilamentSourceProvider::SubscriptionId  subscription_id = FilamentSourceProvider::INVALID_SUBSCRIPTION_ID;
         {
             std::lock_guard<std::mutex> lock(m_lifecycle_mutex);
             if (m_detached)
                 return;
-            m_detached       = true;
-            provider         = m_provider;
-            subscription_id  = m_subscription_id;
+            m_detached        = true;
+            provider          = m_provider;
+            subscription_id   = m_subscription_id;
             m_subscription_id = FilamentSourceProvider::INVALID_SUBSCRIPTION_ID;
         }
 
@@ -92,8 +92,7 @@ public:
         if (provider && subscription_id != FilamentSourceProvider::INVALID_SUBSCRIPTION_ID) {
             try {
                 provider->unsubscribe(subscription_id);
-            } catch (...) {
-            }
+            } catch (...) {}
         }
 
         std::unique_lock<std::mutex> state_lock(m_state->mutex);
@@ -123,21 +122,21 @@ public:
     }
 
 private:
-    static constexpr std::uint64_t INITIAL_SEQUENCE = 1;
+    static constexpr std::uint64_t INITIAL_SEQUENCE        = 1;
     static constexpr std::uint64_t FIRST_CALLBACK_SEQUENCE = 2;
 
     struct PendingInventory
     {
-        std::uint64_t    sequence = 0;
+        std::uint64_t     sequence = 0;
         InventorySnapshot snapshot;
     };
 
     struct State
     {
-        std::mutex              mutex;
-        std::condition_variable callbacks_drained;
-        Dispatcher              dispatcher;
-        ApplyCallback           apply;
+        std::mutex                   mutex;
+        std::condition_variable      callbacks_drained;
+        Dispatcher                   dispatcher;
+        ApplyCallback                apply;
         std::deque<PendingInventory> pending;
         std::atomic<std::uint64_t>   next_sequence{FIRST_CALLBACK_SEQUENCE};
         std::uint64_t                last_consumed_sequence = 0;
@@ -245,11 +244,11 @@ private:
         state->last_error.clear();
     }
 
-    mutable std::mutex                         m_lifecycle_mutex;
-    std::shared_ptr<FilamentSourceProvider>    m_provider;
-    std::shared_ptr<State>                     m_state;
-    FilamentSourceProvider::SubscriptionId     m_subscription_id = FilamentSourceProvider::INVALID_SUBSCRIPTION_ID;
-    bool                                       m_detached        = false;
+    mutable std::mutex                      m_lifecycle_mutex;
+    std::shared_ptr<FilamentSourceProvider> m_provider;
+    std::shared_ptr<State>                  m_state;
+    FilamentSourceProvider::SubscriptionId  m_subscription_id = FilamentSourceProvider::INVALID_SUBSCRIPTION_ID;
+    bool                                    m_detached        = false;
 };
 
 } // namespace Slic3r::MultiAce
