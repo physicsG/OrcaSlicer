@@ -457,8 +457,6 @@ private:
         m_event_callback      = {};
         m_connection_callback = {};
         m_work_guard.reset();
-        m_io.stop();
-        m_running = false;
     }
 
     void close_socket(bool release_socket)
