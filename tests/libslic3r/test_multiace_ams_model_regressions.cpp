@@ -19,6 +19,26 @@ struct RegressionTray
     std::string material;
 };
 
+struct LiveFieldTray
+{
+    std::string id;
+    std::string tag_uid;
+    std::string type;
+    std::string sub_brands;
+    std::string color;
+    bool        is_exists     = false;
+    int         remain        = 0;
+    int         road_position = 0;
+    int         step_state    = 0;
+    int         rfid_state    = 0;
+
+    std::string              setting_id          = "setting-id";
+    std::string              filament_setting_id = "filament-profile-id";
+    std::string              uuid                = "profile-uuid";
+    std::vector<std::string> cols                = {"112233FF", "445566FF"};
+    int                      cali_idx            = 7;
+};
+
 struct RegressionAms
 {
     std::string                            id;
@@ -162,4 +182,36 @@ TEST_CASE("multiACE projection rejects toolheads outside the U1 range", "[multia
                       "multiACE source contains an invalid U1 toolhead");
     CHECK_THROWS_WITH(project_inventory_to_ams(regression_inventory("r1", {regression_source("0", "0", {-1})})),
                       "multiACE source contains an invalid U1 toolhead");
+}
+
+TEST_CASE("multiACE live tray field application preserves profile-managed state", "[multiace][ams][regression]")
+{
+    LiveFieldTray     tray;
+    AmsTrayProjection projection;
+    projection.tray_id                  = "2";
+    projection.source.rfid_uid          = "rfid-12";
+    projection.source.material          = "PETG";
+    projection.source.subtype           = "PETG Basic";
+    projection.source.remaining_percent = 61;
+    projection.color_rgba               = "010203FF";
+    projection.exists                   = true;
+
+    apply_projected_tray_live_fields(tray, projection, 3, 4, 5);
+
+    CHECK(tray.id == "2");
+    CHECK(tray.tag_uid == "rfid-12");
+    CHECK(tray.type == "PETG");
+    CHECK(tray.sub_brands == "PETG Basic");
+    CHECK(tray.color == "010203FF");
+    CHECK(tray.is_exists);
+    CHECK(tray.remain == 61);
+    CHECK(tray.road_position == 3);
+    CHECK(tray.step_state == 4);
+    CHECK(tray.rfid_state == 5);
+
+    CHECK(tray.setting_id == "setting-id");
+    CHECK(tray.filament_setting_id == "filament-profile-id");
+    CHECK(tray.uuid == "profile-uuid");
+    CHECK((tray.cols == std::vector<std::string>{"112233FF", "445566FF"}));
+    CHECK(tray.cali_idx == 7);
 }
