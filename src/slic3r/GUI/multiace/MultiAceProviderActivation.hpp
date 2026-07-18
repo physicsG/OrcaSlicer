@@ -64,9 +64,9 @@ inline std::shared_ptr<MoonrakerFilamentSourceProvider> create_started_multiace_
     websocket_config.bearer_token = config.bearer_token;
     websocket_config.headers      = config.headers;
 
-    auto provider = std::make_shared<MoonrakerFilamentSourceProvider>(std::make_shared<HttpRestTransport>(std::move(http_config)),
-                                                                      std::make_shared<BeastWebSocketEventTransport>(std::move(websocket_config)),
-                                                                      MoonrakerEndpoints::multiace_web());
+    auto provider = std::make_shared<MoonrakerFilamentSourceProvider>(
+        std::make_shared<HttpRestTransport>(std::move(http_config)),
+        std::make_shared<BeastWebSocketEventTransport>(std::move(websocket_config)), MoonrakerEndpoints::multiace_web());
 
     if (!provider->start()) {
         const std::string error = provider->last_error();
@@ -76,10 +76,10 @@ inline std::shared_ptr<MoonrakerFilamentSourceProvider> create_started_multiace_
     return provider;
 }
 
-inline MultiAceMachineBinding& activate_multiace_web_provider(DeviceManager&                   device_manager,
-                                                               MachineObject&                    machine,
-                                                               const ProviderActivationConfig&   config,
-                                                               DeviceManager::MultiAceDispatcher dispatcher = {})
+inline MultiAceMachineBinding& activate_multiace_web_provider(DeviceManager&                    device_manager,
+                                                              MachineObject&                    machine,
+                                                              const ProviderActivationConfig&   config,
+                                                              DeviceManager::MultiAceDispatcher dispatcher = {})
 {
     auto provider = create_started_multiace_web_provider(config);
     try {
