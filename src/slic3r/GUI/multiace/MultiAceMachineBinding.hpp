@@ -42,8 +42,10 @@ public:
         if (m_detached)
             return;
         m_binding.detach();
-        m_model.clear();
         m_detached = true;
+        try {
+            m_model.clear();
+        } catch (...) {}
     }
 
     bool detached() const { return m_detached || m_binding.detached(); }
