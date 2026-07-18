@@ -5,6 +5,7 @@
 #include "libslic3r/MoonrakerFilamentSourceProvider.hpp"
 #include "libslic3r/MultiAceWebSocketTransport.hpp"
 
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <stdexcept>
