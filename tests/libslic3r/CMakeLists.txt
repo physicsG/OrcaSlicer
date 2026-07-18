@@ -11,6 +11,7 @@ add_executable(${_TEST_NAME}_tests
 	test_elephant_foot_compensation.cpp
 	test_geometry.cpp
 	test_mixed_filament.cpp
+	test_multiace_binding_store.cpp
 	test_multiace_ams_model.cpp
 	test_multiace_ams_model_regressions.cpp
 	test_multiace_http_transport_header.cpp

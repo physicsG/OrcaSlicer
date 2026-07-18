@@ -26,23 +26,10 @@ jobs:
           sudo apt-get install --yes clang-format
 
       - name: Check changed C and C++ files
-        run: |
-          python scripts/ci/changed_files.py \
-            --base "$BASE_SHA" \
-            --head "$HEAD_SHA" \
-            --suffix .c --suffix .cc --suffix .cpp --suffix .cxx \
-            --suffix .h --suffix .hh --suffix .hpp --suffix .hxx \
-            --suffix .m --suffix .mm \
-            > /tmp/changed-cpp-files.txt
-
-          if [[ ! -s /tmp/changed-cpp-files.txt ]]; then
-            echo "No changed C/C++ files require formatting checks."
-            exit 0
-          fi
-
-          mapfile -t files < /tmp/changed-cpp-files.txt
-          printf 'Checking formatting for %s files.\n' "${#files[@]}"
-          clang-format --dry-run --Werror "${files[@]}"
+        run: >-
+          python scripts/ci/check_clang_format.py
+          --base "$BASE_SHA"
+          --head "$HEAD_SHA"
 
   static-analysis:
     name: static-analysis
