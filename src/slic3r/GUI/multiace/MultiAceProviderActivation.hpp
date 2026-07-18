@@ -1,7 +1,7 @@
 #ifndef slic3r_MultiAceProviderActivation_hpp_
 #define slic3r_MultiAceProviderActivation_hpp_
 
-#include "DeviceManager.hpp"
+#include "../DeviceManager.hpp"
 #include "MultiAceHttpTransport.hpp"
 #include "libslic3r/MoonrakerFilamentSourceProvider.hpp"
 #include "libslic3r/MultiAceWebSocketTransport.hpp"
@@ -84,7 +84,7 @@ inline MultiAceMachineBinding& activate_multiace_web_provider(DeviceManager&    
 {
     auto provider = create_started_multiace_web_provider(config);
     try {
-        return device_manager.attach_multiace_provider(machine, std::move(provider), std::move(dispatcher));
+        return device_manager.attach_multiace_provider(machine, provider, std::move(dispatcher));
     } catch (...) {
         provider->stop();
         throw;
