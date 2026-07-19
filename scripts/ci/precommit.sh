@@ -4,7 +4,10 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
-mapfile -t staged_files < <(git diff --cached --name-only --diff-filter=ACMR)
+staged_files=()
+while IFS= read -r file; do
+    staged_files+=("$file")
+done < <(git diff --cached --name-only --diff-filter=ACMR)
 
 if (( ${#staged_files[@]} == 0 )); then
     echo "pre-commit: no staged files"
@@ -33,7 +36,11 @@ collect_matching() {
 }
 
 run_clang_format() {
-    mapfile -t cpp_files < <(collect_matching '\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$')
+    local -a cpp_files=()
+    local file
+    while IFS= read -r file; do
+        cpp_files+=("$file")
+    done < <(collect_matching '\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$')
     (( ${#cpp_files[@]} == 0 )) && return
 
     if ! has_command clang-format; then
@@ -53,7 +60,11 @@ run_clang_format() {
 }
 
 run_markdownlint() {
-    mapfile -t markdown_files < <(collect_matching '\.md$')
+    local -a markdown_files=()
+    local file
+    while IFS= read -r file; do
+        markdown_files+=("$file")
+    done < <(collect_matching '\.md$')
     (( ${#markdown_files[@]} == 0 )) && return
 
     if ! has_command npx; then
@@ -66,12 +77,15 @@ run_markdownlint() {
 }
 
 run_json_validation() {
-    mapfile -t json_files < <(collect_matching '\.json$')
+    local -a json_files=()
+    local file
+    while IFS= read -r file; do
+        json_files+=("$file")
+    done < <(collect_matching '\.json$')
     (( ${#json_files[@]} == 0 )) && return
 
     require_python3
     echo "pre-commit: validating JSON"
-    local file
     for file in "${json_files[@]}"; do
         python3 -m json.tool "$file" >/dev/null
     done
