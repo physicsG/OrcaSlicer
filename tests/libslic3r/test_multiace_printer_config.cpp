@@ -7,12 +7,11 @@ using namespace Slic3r::MultiAce;
 TEST_CASE("multiACE persisted provider config round trips connection settings", "[multiace][config]")
 {
     PersistedProviderConfig config;
-    config.enabled                 = true;
-    config.activation.service_url  = "http://192.0.2.10:7125/multiace";
-    config.activation.username     = "user";
-    config.activation.password     = "secret";
-    config.activation.bearer_token = "token";
-    config.activation.headers      = {{"X-Printer", "u1"}, {"X-Site", "lab"}};
+    config.enabled                = true;
+    config.activation.service_url = "http://192.0.2.10:7125/multiace";
+    config.activation.username    = "user";
+    config.activation.password    = "secret";
+    config.activation.headers     = {{"X-Printer", "u1"}, {"X-Site", "lab"}};
 
     const nlohmann::json serialized = serialize_persisted_provider_config(config);
     const auto           parsed     = parse_persisted_provider_config(serialized);
@@ -21,8 +20,22 @@ TEST_CASE("multiACE persisted provider config round trips connection settings", 
     CHECK(parsed.activation.service_url == config.activation.service_url);
     CHECK(parsed.activation.username == config.activation.username);
     CHECK(parsed.activation.password == config.activation.password);
-    CHECK(parsed.activation.bearer_token == config.activation.bearer_token);
+    CHECK(parsed.activation.bearer_token.empty());
     CHECK(parsed.activation.headers == config.activation.headers);
+}
+
+TEST_CASE("multiACE persisted provider config round trips bearer authentication", "[multiace][config]")
+{
+    PersistedProviderConfig config;
+    config.enabled                 = true;
+    config.activation.service_url  = "http://192.0.2.10:7125/multiace";
+    config.activation.bearer_token = "token";
+
+    const auto parsed = parse_persisted_provider_config(serialize_persisted_provider_config(config));
+
+    CHECK(parsed.activation.username.empty());
+    CHECK(parsed.activation.password.empty());
+    CHECK(parsed.activation.bearer_token == config.activation.bearer_token);
 }
 
 TEST_CASE("multiACE persisted provider config defaults to disabled", "[multiace][config]")
@@ -101,6 +114,11 @@ TEST_CASE("multiACE persisted config rejects malformed authentication", "[multia
                       "multiACE basic authentication requires both username and password");
     CHECK_THROWS_WITH(parse_persisted_provider_config({{"version", 1}, {"auth", {{"password", "secret"}}}}),
                       "multiACE basic authentication requires both username and password");
+    CHECK_THROWS_WITH(parse_persisted_provider_config({{"version", 1},
+                                                       {"enabled", true},
+                                                       {"service_url", "http://192.0.2.10:7125/multiace"},
+                                                       {"auth", {{"username", "user"}, {"password", "secret"}, {"bearer_token", "token"}}}}),
+                      "multiACE basic and bearer authentication are mutually exclusive");
 }
 
 TEST_CASE("multiACE persisted config rejects malformed custom headers", "[multiace][config]")
@@ -111,6 +129,12 @@ TEST_CASE("multiACE persisted config rejects malformed custom headers", "[multia
                       "multiACE persisted header values must be strings");
     CHECK_THROWS_WITH(parse_persisted_provider_config({{"version", 1}, {"headers", {{"", "value"}}}}),
                       "multiACE custom header names must not be empty");
+    CHECK_THROWS_WITH(parse_persisted_provider_config({{"version", 1}, {"headers", {{"X Bad", "value"}}}}),
+                      "multiACE custom header names contain invalid characters");
+    CHECK_THROWS_WITH(parse_persisted_provider_config({{"version", 1}, {"headers", {{"X:Bad", "value"}}}}),
+                      "multiACE custom header names contain invalid characters");
+    CHECK_THROWS_WITH(parse_persisted_provider_config({{"version", 1}, {"headers", {{"X-Printer", "one\r\ntwo"}}}}),
+                      "multiACE custom header values contain control characters");
 }
 
 TEST_CASE("enabled multiACE persisted config validates its service URL before activation", "[multiace][config]")
