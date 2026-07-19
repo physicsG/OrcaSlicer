@@ -55,7 +55,8 @@ TEST_CASE("multiACE printer lifecycle replaces changed configuration and retries
     };
     auto detach = [](const std::string&) {};
 
-    REQUIRE(lifecycle.reconcile("u1", enabled_config("http://old.local:5000"), activate, detach) == PrinterLifecycleAction::Activated);
+    REQUIRE(lifecycle.reconcile("u1", enabled_config("http://old.local:5000"), activate, detach) ==
+            PrinterLifecycleAction::Activated);
     CHECK_THROWS(lifecycle.reconcile("u1", enabled_config("http://new.local:5000"), activate, detach));
     CHECK(lifecycle.is_tracked("u1"));
 
