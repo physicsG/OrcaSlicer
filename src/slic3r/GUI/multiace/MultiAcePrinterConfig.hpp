@@ -25,12 +25,23 @@ inline void validate_persisted_provider_config(const PersistedProviderConfig& co
         throw std::invalid_argument("multiACE basic authentication requires both username and password");
 
     for (const auto& [name, value] : config.activation.headers) {
-        (void) value;
         if (name.empty())
             throw std::invalid_argument("multiACE custom header names must not be empty");
+
+        for (const unsigned char ch : name) {
+            if (ch <= 0x20 || ch == 0x7f || ch == ':')
+                throw std::invalid_argument("multiACE custom header names contain invalid characters");
+        }
+
+        for (const unsigned char ch : value) {
+            if (ch < 0x20 || ch == 0x7f)
+                throw std::invalid_argument("multiACE custom header values contain control characters");
+        }
     }
 
     if (config.enabled) {
+        if (!config.activation.username.empty() && !config.activation.bearer_token.empty())
+            throw std::invalid_argument("multiACE basic and bearer authentication are mutually exclusive");
         if (config.activation.service_url.empty())
             throw std::invalid_argument("enabled multiACE configuration requires a service URL");
         (void) provider_transport_urls(config.activation.service_url);
