@@ -18,10 +18,10 @@ class MultiAceDeviceLifecycle
 public:
     explicit MultiAceDeviceLifecycle(DeviceManager& device_manager) : m_device_manager(device_manager) {}
 
-    PrinterLifecycleAction reconcile(const std::string&                machine_id,
-                                     MachineObject&                    machine,
+    PrinterLifecycleAction reconcile(const std::string&                   machine_id,
+                                     MachineObject&                       machine,
                                      const std::optional<nlohmann::json>& persisted_value,
-                                     DeviceManager::MultiAceDispatcher dispatcher = {})
+                                     DeviceManager::MultiAceDispatcher    dispatcher = {})
     {
         return m_lifecycle.reconcile(
             machine_id,
@@ -41,8 +41,8 @@ public:
     std::size_t size() const noexcept { return m_lifecycle.size(); }
 
 private:
-    DeviceManager&             m_device_manager;
-    MultiAcePrinterLifecycle   m_lifecycle;
+    DeviceManager&           m_device_manager;
+    MultiAcePrinterLifecycle m_lifecycle;
 };
 
 } // namespace Slic3r::MultiAce
