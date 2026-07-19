@@ -25,14 +25,13 @@ template<class MachineKey> class BasicMultiAcePrinterLifecycle
 {
 public:
     template<class Activate, class Detach>
-    PrinterLifecycleAction reconcile(const MachineKey& machine_key,
+    PrinterLifecycleAction reconcile(const MachineKey&                    machine_key,
                                      const std::optional<nlohmann::json>& persisted_value,
-                                     Activate&& activate,
-                                     Detach&& detach)
+                                     Activate&&                            activate,
+                                     Detach&&                              detach)
     {
-        if (!persisted_value) {
+        if (!persisted_value)
             return detach_if_tracked(machine_key, std::forward<Detach>(detach));
-        }
 
         PersistedProviderConfig persisted;
         try {
@@ -76,7 +75,11 @@ public:
         }
     }
 
-    bool is_tracked(const MachineKey& machine_key) const noexcept { return m_active_fingerprints.find(machine_key) != m_active_fingerprints.end(); }
+    bool is_tracked(const MachineKey& machine_key) const noexcept
+    {
+        return m_active_fingerprints.find(machine_key) != m_active_fingerprints.end();
+    }
+
     std::size_t size() const noexcept { return m_active_fingerprints.size(); }
 
 private:
