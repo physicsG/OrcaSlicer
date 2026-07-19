@@ -66,6 +66,21 @@ Parsing is deliberately fail-closed. Invalid field types, unsupported schema ver
 
 Disabled configurations may retain their connection settings so toggling integration off does not discard user input. `provider_activation_config_if_enabled()` is the boundary used by automatic activation: disabled configurations produce no activation settings, while enabled configurations are fully validated before being returned.
 
+## Printer lifecycle reconciliation
+
+`MultiAcePrinterLifecycle.hpp` reconciles persisted per-printer settings with active provider state. It deliberately keeps persistence I/O and GUI code outside the state machine.
+
+For every machine discovery or printer-settings reload, the caller supplies the saved JSON payload. The reconciler:
+
+- activates an enabled valid configuration;
+- fingerprints the canonical persisted payload and suppresses duplicate startup on repeated discovery/settings events;
+- attempts a changed configuration before updating its active fingerprint, so failed replacement remains eligible for retry and the existing provider is not marked as replaced;
+- detaches a tracked provider when configuration is disabled or removed;
+- fails closed on malformed persisted configuration and detaches the tracked provider;
+- clears tracked lifecycle state deterministically during machine removal or shutdown.
+
+`MultiAceDeviceLifecycle.hpp` is the thin `DeviceManager` adapter. It routes activation through `activate_multiace_web_provider()` and detach through `DeviceManager::detach_multiace_provider()`, preserving the existing start-before-replace and machine-model lifetime guarantees.
+
 ## Lifetime order
 
 The required lifetime is:
@@ -84,8 +99,7 @@ The binding must be detached before legacy `MachineObject` cleanup deletes raw `
 
 ## Scope boundary
 
-The callback/lifetime machinery, `DeviceManager` ownership hook, concrete transport construction, start-before-attach activation helper, and persisted configuration model are now established. Remaining UI integration work is intentionally separate:
+The callback/lifetime machinery, `DeviceManager` ownership hook, concrete transport construction, start-before-attach activation helper, persisted configuration model, and deterministic printer-lifecycle reconciliation are established. Remaining UI integration work is intentionally separate:
 
-- store/load the versioned multiACE payload through the existing per-printer configuration surface;
-- invoke activation automatically for configured machines;
-- expose refresh/status actions in the existing AMS UI.
+- read/write the versioned multiACE payload from the concrete existing per-printer settings surface and call `MultiAceDeviceLifecycle::reconcile()` on discovery/settings reload;
+- expose connection settings plus AMS refresh/status actions in the existing UI.
