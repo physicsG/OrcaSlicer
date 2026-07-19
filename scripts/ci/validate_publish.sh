@@ -22,6 +22,7 @@ require_command() {
 
 require_command python3
 require_command clang-format
+require_command clang-tidy
 
 echo "validate-publish: validating ${base_ref}..${head_ref}"
 python3 scripts/ci/check_clang_format.py --base "$base_ref" --head "$head_ref"
@@ -58,12 +59,7 @@ if git diff --name-only --diff-filter=ACMRT "$base_ref" "$head_ref" -- 'scripts/
     python3 scripts/release/check_builder_side_effects.py
 fi
 
-if command -v clang-tidy >/dev/null 2>&1; then
-    clang-tidy --verify-config
-else
-    echo "validate-publish: clang-tidy not installed; configuration validation skipped"
-fi
-
+clang-tidy --verify-config
 git diff --check "$base_ref" "$head_ref"
 
 echo "validate-publish: all blocking publication checks passed"
