@@ -18,6 +18,7 @@ add_executable(${_TEST_NAME}_tests
 	test_multiace_inventory.cpp
 	test_multiace_moonraker_provider.cpp
 	test_multiace_printer_config.cpp
+	test_multiace_printer_lifecycle.cpp
 	test_multiace_provider_activation.cpp
 	test_multiace_provider_binding.cpp
 	test_multiace_web_contract.cpp
