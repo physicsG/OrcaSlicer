@@ -6,6 +6,15 @@ on:
 
   workflow_dispatch:
     inputs:
+      platform:
+        description: 'Platform to build (leave blank for all)'
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - windows
+          - linux
+          - macos
       build-deps-only:
         description: 'Only build dependencies (bypasses caching)'
         type: boolean
@@ -30,9 +39,16 @@ jobs:
           # Deprecate 20.04appimage
           # - os: ubuntu-20.04
           - os: ubuntu-24.04
+            platform: linux
           - os: windows-2022
+            platform: windows
           - os: macos-14
             arch: arm64
+            platform: macos
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      inputs.platform == 'all' ||
+      matrix.platform == inputs.platform
     uses: ./.github/workflows/build_check_cache.yml
     with:
       os: ${{ matrix.os }}
@@ -41,6 +57,10 @@ jobs:
     secrets: inherit
   flatpak:
     name: "Flatpak"
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      inputs.platform == 'all' ||
+      inputs.platform == 'linux'
     concurrency:
       group: flatpak-${{ matrix.variant.arch }}-${{ github.ref }}
       cancel-in-progress: false
