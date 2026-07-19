@@ -15,6 +15,13 @@ has_command() {
     command -v "$1" >/dev/null 2>&1
 }
 
+require_python3() {
+    if ! has_command python3; then
+        echo "pre-commit: python3 is required for this check" >&2
+        exit 1
+    fi
+}
+
 collect_matching() {
     local regex="$1"
     local file
@@ -62,10 +69,11 @@ run_json_validation() {
     mapfile -t json_files < <(collect_matching '\.json$')
     (( ${#json_files[@]} == 0 )) && return
 
+    require_python3
     echo "pre-commit: validating JSON"
     local file
     for file in "${json_files[@]}"; do
-        python -m json.tool "$file" >/dev/null
+        python3 -m json.tool "$file" >/dev/null
     done
 }
 
@@ -109,10 +117,11 @@ run_release_tooling_checks() {
     done
     [[ "$changed" == false ]] && return
 
+    require_python3
     echo "pre-commit: checking release tooling"
-    python -m py_compile scripts/release/*.py
-    python scripts/release/test_release_tools.py
-    python scripts/release/check_builder_side_effects.py
+    python3 -m py_compile scripts/release/*.py
+    python3 scripts/release/test_release_tools.py
+    python3 scripts/release/check_builder_side_effects.py
 }
 
 run_clang_format
