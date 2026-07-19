@@ -24,8 +24,7 @@ public:
                                      DeviceManager::MultiAceDispatcher    dispatcher = {})
     {
         return m_lifecycle.reconcile(
-            machine_id,
-            persisted_value,
+            machine_id, persisted_value,
             [&](const std::string&, const ProviderActivationConfig& config) {
                 activate_multiace_web_provider(m_device_manager, machine, config, dispatcher);
             },
@@ -37,7 +36,7 @@ public:
         return m_lifecycle.forget(machine_id, [&](const std::string&) { m_device_manager.detach_multiace_provider(machine); });
     }
 
-    bool is_tracked(const std::string& machine_id) const noexcept { return m_lifecycle.is_tracked(machine_id); }
+    bool        is_tracked(const std::string& machine_id) const noexcept { return m_lifecycle.is_tracked(machine_id); }
     std::size_t size() const noexcept { return m_lifecycle.size(); }
 
 private:
