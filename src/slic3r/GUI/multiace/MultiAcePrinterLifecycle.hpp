@@ -27,8 +27,8 @@ public:
     template<class Activate, class Detach>
     PrinterLifecycleAction reconcile(const MachineKey&                    machine_key,
                                      const std::optional<nlohmann::json>& persisted_value,
-                                     Activate&&                            activate,
-                                     Detach&&                              detach)
+                                     Activate&&                           activate,
+                                     Detach&&                             detach)
     {
         if (!persisted_value)
             return detach_if_tracked(machine_key, std::forward<Detach>(detach));
