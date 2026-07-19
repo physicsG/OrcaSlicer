@@ -83,7 +83,7 @@ TEST_CASE("multiACE printer lifecycle detaches disabled or removed configuration
         {"enabled", false},
         {"service_url", "http://printer.local:5000"},
     };
-    CHECK(lifecycle.reconcile("u1", disabled, activate, detach) == PrinterLifecycleAction::Detached);
+    CHECK(lifecycle.reconcile("u1", std::optional<nlohmann::json>{disabled}, activate, detach) == PrinterLifecycleAction::Detached);
     CHECK(detaches == 1);
     CHECK_FALSE(lifecycle.is_tracked("u1"));
 
@@ -107,7 +107,7 @@ TEST_CASE("multiACE printer lifecycle fails closed for malformed persisted confi
         {"enabled", "yes"},
         {"service_url", "http://printer.local:5000"},
     };
-    CHECK(lifecycle.reconcile("u1", malformed, activate, detach) == PrinterLifecycleAction::InvalidConfig);
+    CHECK(lifecycle.reconcile("u1", std::optional<nlohmann::json>{malformed}, activate, detach) == PrinterLifecycleAction::InvalidConfig);
     CHECK(activations == 1);
     CHECK(detaches == 1);
     CHECK_FALSE(lifecycle.is_tracked("u1"));
