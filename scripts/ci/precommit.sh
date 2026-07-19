@@ -35,6 +35,23 @@ collect_matching() {
     done
 }
 
+run_staged_hygiene_checks() {
+    local file
+
+    require_python3
+    echo "pre-commit: checking staged repository hygiene"
+    git diff --cached --check
+
+    for file in "${staged_files[@]}"; do
+        case "$file" in
+            build/*|build-ci/*|destdir/*|*/CMakeFiles/*|*.7z|*.appimage|*.dll|*.dmg|*.dylib|*.exe|*.o|*.obj|*.so|*.tar|*.tgz|*.zip)
+                echo "pre-commit: generated/build artifact should not be committed: $file" >&2
+                exit 1
+                ;;
+        esac
+    done
+}
+
 run_clang_format() {
     local -a cpp_files=()
     local file
@@ -138,6 +155,7 @@ run_release_tooling_checks() {
     python3 scripts/release/check_builder_side_effects.py
 }
 
+run_staged_hygiene_checks
 run_clang_format
 run_markdownlint
 run_json_validation
