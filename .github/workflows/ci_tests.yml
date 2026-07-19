@@ -13,6 +13,14 @@ on:
         required: false
         default: true
         type: boolean
+      base_sha:
+        description: Base commit for changed-file validation.
+        required: false
+        type: string
+      head_sha:
+        description: Head commit for changed-file validation.
+        required: false
+        type: string
   workflow_dispatch:
     inputs:
       source_ref:
@@ -30,8 +38,8 @@ permissions:
   contents: read
 
 env:
-  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-  HEAD_SHA: ${{ github.sha }}
+  BASE_SHA: ${{ inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}
+  HEAD_SHA: ${{ inputs.head_sha || github.sha }}
   LEGACY_FAILURE_REGEX: >-
     (^libslic3r_tests$|Scenario: init_print functionality|Scenario: Extrusion width specifics|
     Scenario: lift\(\) is not ignored after unlift\(\) at normal values of Z|Scenario: Model construction|

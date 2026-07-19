@@ -47,6 +47,9 @@ jobs:
     name: quality
     needs: changes
     uses: ./.github/workflows/ci_quality.yml
+    with:
+      base_sha: ${{ github.event.pull_request.base.sha || github.event.before }}
+      head_sha: ${{ github.sha }}
 
   tests:
     name: tests and build smoke
@@ -55,6 +58,9 @@ jobs:
       - quality
     if: needs.changes.outputs.run_tests == 'true'
     uses: ./.github/workflows/ci_tests.yml
+    with:
+      base_sha: ${{ github.event.pull_request.base.sha || github.event.before }}
+      head_sha: ${{ github.sha }}
 
   required:
     name: required

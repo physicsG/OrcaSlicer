@@ -51,6 +51,8 @@ def main() -> int:
     dependencies = any(path.startswith("deps/") for path in files)
     documentation = any(path.startswith("doc/") or path.endswith(".md") for path in files)
 
+    # Workflow/script-only changes are fully covered by the quality gate and should
+    # not schedule the expensive Linux build/test smoke job by themselves.
     outputs = {
         "code": code,
         "workflows": workflows,
@@ -58,7 +60,7 @@ def main() -> int:
         "tests": tests,
         "dependencies": dependencies,
         "documentation": documentation,
-        "run_tests": code or workflows or profiles or tests or dependencies,
+        "run_tests": code or profiles or tests or dependencies,
     }
 
     for key, value in outputs.items():
