@@ -11,6 +11,29 @@ env:
   HEAD_SHA: ${{ github.sha }}
 
 jobs:
+  publication-gate:
+    name: publication-gate
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang-format clang-tidy
+          python -m pip install --disable-pip-version-check yamllint==1.38.0
+
+      - name: Run mandatory publication gate
+        run: bash scripts/ci/validate_publish.sh "$BASE_SHA" "$HEAD_SHA"
+
   format:
     name: format
     runs-on: ubuntu-24.04
