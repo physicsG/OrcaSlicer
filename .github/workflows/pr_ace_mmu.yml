@@ -1,0 +1,135 @@
+name: PR — ACE MMU Feature
+
+on:
+  pull_request:
+    branches:
+      - feat/add-ace-mmu-support
+
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to build'
+        type: choice
+        default: windows
+        options:
+          - windows
+          - linux
+          - macos
+      build-deps-only:
+        description: 'Only build dependencies (bypasses caching)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ─── Lint / style checks ────────────────────────────────────────────────────
+# Single source of truth: .pre-commit-config.yaml drives both local hooks
+# and CI. Adding a new check only requires updating that one file.
+
+jobs:
+  lint:
+    name: Lint (pre-commit)
+    runs-on: ubuntu-22.04   # pinned: clang-format-14 available; matches hook rev
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # need full history for --from-ref
+
+      # Cache hook environments keyed on the config so re-installs are rare
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit on PR diff
+        uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: >-
+            --from-ref ${{ github.event.pull_request.base.sha }}
+            --to-ref   ${{ github.event.pull_request.head.sha }}
+
+  check-profiles:
+    name: Check profiles
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Get changed profile files
+        id: changed
+        uses: tj-actions/changed-files@v46
+        with:
+          files: resources/profiles/**
+
+      - name: Run extra JSON check
+        if: steps.changed.outputs.any_changed == 'true'
+        run: python3 ./scripts/orca_extra_profile_check.py
+
+      - name: Download profile validator
+        if: steps.changed.outputs.any_changed == 'true'
+        run: |
+          curl -LJO https://github.com/SoftFever/Orca_tools/releases/download/1/OrcaSlicer_profile_validator
+          chmod +x ./OrcaSlicer_profile_validator
+
+      - name: Validate system profiles
+        if: steps.changed.outputs.any_changed == 'true'
+        run: ./OrcaSlicer_profile_validator -p ${{ github.workspace }}/resources/profiles -l 2
+
+  check-locale:
+    name: Check locale
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Get changed locale files
+        id: changed
+        uses: tj-actions/changed-files@v46
+        with:
+          files: localization/**
+
+      - name: Install gettext
+        if: steps.changed.outputs.any_changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext
+
+      - name: Check translation format
+        if: steps.changed.outputs.any_changed == 'true'
+        run: |
+          pot_file="./localization/i18n/Snapmaker_Orca.pot"
+          for dir in ./localization/i18n/*/; do
+            dir=${dir%*/}
+            lang=${dir##*/}
+            if [ -f "$dir/Snapmaker_Orca_${lang}.po" ]; then
+              mkdir -p ./resources/i18n/${lang}/
+              msgfmt --check-format -o ./resources/i18n/${lang}/Snapmaker_Orca.mo \
+                "$dir/Snapmaker_Orca_${lang}.po"
+            fi
+          done
+
+# ─── Build (manual only — building is slow; use workflow_dispatch) ───────────
+
+  build:
+    name: Build (${{ matrix.platform }})
+    if: github.event_name == 'workflow_dispatch' && matrix.platform == inputs.platform
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform: windows
+          - os: ubuntu-24.04
+            platform: linux
+          - os: macos-14
+            arch: arm64
+            platform: macos
+    uses: ./.github/workflows/build_check_cache.yml
+    with:
+      os: ${{ matrix.os }}
+      arch: ${{ matrix.arch }}
+      build-deps-only: ${{ inputs.build-deps-only || false }}
+    secrets: inherit

@@ -1,0 +1,43 @@
+# Pre-commit hooks — Snapmaker Orca (ACE MMU branch)
+#
+# Install once:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Run manually against all files:
+#   pre-commit run --all-files
+#
+# Run against staged changes only (what the commit hook does):
+#   pre-commit run
+
+default_install_hook_types: [pre-commit]
+
+repos:
+  # ── General file hygiene ───────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(deps/|deps_src/|localization/|sandboxes/)
+      - id: end-of-file-fixer
+        exclude: ^(deps/|deps_src/|localization/|sandboxes/)
+      - id: check-yaml
+        # Workflow files use multi-doc anchors sometimes; don't be strict
+        args: [--unsafe]
+      - id: check-json
+        exclude: ^(deps/|deps_src/)
+      - id: check-merge-conflict
+
+  # ── C++ formatting — pin to v14 to match CI (pre-LLVM-16 .clang-format) ──
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v14.0.6
+    hooks:
+      - id: clang-format
+        types_or: [c, c++]
+        exclude: ^(deps/|deps_src/|sandboxes/)
+
+  # ── Shell scripts ──────────────────────────────────────────────────────────
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
