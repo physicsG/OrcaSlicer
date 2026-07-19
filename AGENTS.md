@@ -49,6 +49,27 @@ runs the applicable local equivalents of the pull-request quality gates,
 including clang-format, clang-tidy configuration validation when available,
 Markdown linting, JSON parsing, workflow linting, and release-tooling checks.
 
+The `.githooks/pre-push` hook resolves the intended branch base and delegates to
+`scripts/ci/validate_publish.sh`. That script is the canonical blocking
+publication gate for formatting, repository hygiene, Markdown, JSON, workflow,
+release-tooling, clang-tidy configuration when available, and whitespace checks.
+CI and automation must use this same entry point instead of reimplementing an
+approximation of these checks.
+
+For connector/API-based publication, local Git hooks do not run. Direct writes
+to the target feature branch are therefore prohibited. Automation must:
+
+1. create or update a temporary `validation/**` candidate branch containing the
+   exact commit intended for publication;
+2. include `Validation-Base: <target-base-ref>` as a commit-message trailer;
+3. wait for the `Pre-Publication Validation / publication-gate` workflow to pass;
+4. only then fast-forward or otherwise promote the validated commit to the real
+   feature branch.
+
+A failed or missing candidate validation must never be bypassed by publishing
+the commit directly to the target branch. This two-phase flow is the required
+server-side equivalent of the local pre-push hook.
+
 In addition:
 
 - Run the narrowest relevant unit/integration tests for behavioral changes. For
