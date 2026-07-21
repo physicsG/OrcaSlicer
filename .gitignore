@@ -38,6 +38,12 @@ src/Snapmaker_Orca-doc/
 **/.flatpak-builder/
 resources/profiles/user/default
 *.code-workspace
+
+# Local build tools downloaded by scripts/setup_tools_win.ps1
+/tools/cmake/
+/tools/vs_buildtools/
+/tools/perl/
+
 deps_src/build/
 .claude/
 .hermes/

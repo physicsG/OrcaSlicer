@@ -2,6 +2,56 @@
 @echo off
 set WP=%CD%
 
+@REM Prefer repo-local cmake (tools\cmake\bin) over any system cmake.
+@REM Run scripts\setup_tools_win.ps1 once to populate it.
+@REM NOTE: avoid if()block here — parentheses in %PATH% (e.g. NVIDIA) break it.
+if not exist "%WP%\tools\cmake\bin\cmake.exe" goto :skip_local_cmake
+set "PATH=%WP%\tools\cmake\bin;%PATH%"
+echo [build] Using local cmake: %WP%\tools\cmake\bin\cmake.exe
+:skip_local_cmake
+
+@REM Add local Perl (perl\bin only — NOT c\bin, which conflicts with cmake per CMakeLists.txt).
+@REM Required for OpenSSL's deps build (perl Configure).
+if not exist "%WP%\tools\perl\perl\bin\perl.exe" goto :skip_local_perl
+set "PATH=%WP%\tools\perl\perl\bin;%PATH%"
+echo [build] Using local Perl   : %WP%\tools\perl\perl\bin\perl.exe
+:skip_local_perl
+
+@REM Find VS Build Tools — probe in priority order, set VS_INSTANCE + VS_GENERATOR.
+@REM CMAKE_GENERATOR_INSTANCE bypasses vswhere for Build-Tools-only installs.
+set "VS_INSTANCE="
+set "VS_GENERATOR=Visual Studio 17 2022"
+if not exist "%WP%\tools\vs_buildtools\VC\Auxiliary\Build\vcvarsall.bat" goto :try_sys22_x86
+set "VS_INSTANCE=%WP%\tools\vs_buildtools"
+goto :found_vs
+:try_sys22_x86
+if not exist "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" goto :try_sys22_x64
+set "VS_INSTANCE=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools"
+goto :found_vs
+:try_sys22_x64
+if not exist "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" goto :try_sys19_x86
+set "VS_INSTANCE=C:\Program Files\Microsoft Visual Studio\2022\BuildTools"
+goto :found_vs
+:try_sys19_x86
+if not exist "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" goto :try_sys19_x64
+set "VS_INSTANCE=C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools"
+set "VS_GENERATOR=Visual Studio 16 2019"
+goto :found_vs
+:try_sys19_x64
+if not exist "C:\Program Files\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" goto :found_vs
+set "VS_INSTANCE=C:\Program Files\Microsoft Visual Studio\2019\BuildTools"
+set "VS_GENERATOR=Visual Studio 16 2019"
+:found_vs
+if "%VS_INSTANCE%"=="" (
+    echo [build] WARNING: no VS Build Tools found; CMake will try to auto-detect.
+    goto :skip_vs_setup
+)
+call "%VS_INSTANCE%\VC\Auxiliary\Build\vcvarsall.bat" amd64
+echo [build] Using VS Build Tools : %VS_INSTANCE%
+echo [build] CMake generator      : %VS_GENERATOR%
+:skip_vs_setup
+
+
 @REM Pack deps
 if "%1"=="pack" (
     setlocal ENABLEDELAYEDEXPANSION 
@@ -47,7 +97,7 @@ if "%1"=="slicer" (
 echo "building deps.."
 
 echo on
-cmake ../ -G "Visual Studio 17 2022" -A x64 -DDESTDIR="%DEPS%" -DCMAKE_BUILD_TYPE=%build_type% -DDEP_DEBUG=%debug% -DORCA_INCLUDE_DEBUG_INFO=%debuginfo%
+cmake ../ -G "%VS_GENERATOR%" -A x64 -DDESTDIR="%DEPS%" -DCMAKE_BUILD_TYPE=%build_type% -DDEP_DEBUG=%debug% -DORCA_INCLUDE_DEBUG_INFO=%debuginfo% "-DCMAKE_GENERATOR_INSTANCE=%VS_INSTANCE%"
 cmake --build . --config %build_type% --target deps -- -m
 @echo off
 
@@ -60,7 +110,7 @@ mkdir %build_dir%
 cd %build_dir%
 
 echo on
-cmake .. -G "Visual Studio 17 2022" -A x64 -DBBL_RELEASE_TO_PUBLIC=1 -DORCA_TOOLS=ON %SIG_FLAG% -DCMAKE_PREFIX_PATH="%DEPS%/usr/local" -DCMAKE_INSTALL_PREFIX="./Snapmaker_Orca" -DCMAKE_BUILD_TYPE=%build_type% -DWIN10SDK_PATH="%WindowsSdkDir%Include\%WindowsSDKVersion%\"
+cmake .. -G "%VS_GENERATOR%" -A x64 -DBBL_RELEASE_TO_PUBLIC=1 -DORCA_TOOLS=ON %SIG_FLAG% -DCMAKE_PREFIX_PATH="%DEPS%/usr/local" -DCMAKE_INSTALL_PREFIX="./Snapmaker_Orca" -DCMAKE_BUILD_TYPE=%build_type% -DWIN10SDK_PATH="%WindowsSdkDir%Include\%WindowsSDKVersion%\" "-DCMAKE_GENERATOR_INSTANCE=%VS_INSTANCE%" "-DOPENSSL_ROOT_DIR=%DEPS%/usr/local"
 cmake --build . --config %build_type% --target ALL_BUILD -- -m
 @echo off
 cd ..
