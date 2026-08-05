@@ -39,7 +39,7 @@ repos:
         # merge hell). Exclude the legacy files we touch for the ACE MMU feature;
         # new files (src/libslic3r/AceMmu*, src/slic3r/GUI/AceMmuProvider.*) stay
         # formatted. Extend this list as more legacy files are touched.
-        exclude: '^(deps/|deps_src/|sandboxes/|src/slic3r/GUI/DeviceManager\.(cpp|hpp)$|src/slic3r/GUI/StatusPanel\.cpp$)'
+        exclude: '^(deps/|deps_src/|sandboxes/|src/slic3r/GUI/DeviceManager\.(cpp|hpp)$|src/slic3r/GUI/StatusPanel\.cpp$|src/slic3r/GUI/Plater\.(cpp|hpp)$)'
 
   # ── Shell scripts ──────────────────────────────────────────────────────────
   - repo: https://github.com/shellcheck-py/shellcheck-py

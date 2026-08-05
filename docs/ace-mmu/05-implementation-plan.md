@@ -163,3 +163,20 @@ Flutter Device page (which is blocked without Snapmaker's frontend source).
   inventory. [user request 2026-08-05]
 - Live Device-page ACE display would require Snapmaker's Flutter frontend source +
   a new SSWCP endpoint; out of scope until that source is available.
+
+### Device-page ACE view — chosen future approach (2026-08-05, user)
+When we return to a live Device-page ACE view, do **Option B**: add a **native wx
+panel** that instantiates the existing BBS `AMSControl`/`AMSItem` widgets for the U1
+and renders from the `amsList` we already populate — i.e. resurrect the native AMS UI
+that Snapmaker replaced with the webview. Polish it by **drawing from Bambu Studio's
+AMS interface** (layout, per-slot spool cards, humidity/dryer, colours). This reuses
+the Phase 2 `amsList` projection directly and needs no Flutter source. Sequenced
+**after** the native Prepare/Preview filament work. (Rebuilding the Flutter frontend —
+"Option A" — remains a fallback if Snapmaker's Dart source becomes available.)
+
+### First native step (in progress, 2026-08-05)
+Prepare tab "Sync from AMS": the button is now shown for the U1, and
+`Sidebar::sync_ams_list()` calls `MachineObject::sync_ace_ams()` (synchronous multiACE
+fetch → `apply_ace_snapshot` → `amsList`) before `build_filament_ams_list`, so ACE
+spools appear in the Prepare filament list. `setting_id` (preset auto-match) is left
+empty for now — a later polish (mirrors the Bambu `tray_info_idx` lookup).

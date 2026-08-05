@@ -7,20 +7,21 @@
 ## Snapshot
 
 - **Branch:** `feat/add-ace-mmu-support`
-- **Current phase:** Phase 0 ✅, Phase 1 ✅, Phase 2 ✅ (amsList projection) done &
-  pushed. **UI-surface pivot in progress** (see below).
-- **Overall status:** 🟡 Provider + amsList projection work and are committed, BUT a
-  runtime check on the printer revealed the **U1 Device tab is a Flutter webview**
-  (`PrinterWebView` → `resources/web/flutter_web`, via SSWCP), **not** the native
-  `StatusPanel`/`AMSControl` Phases 2–3 assumed. No Flutter source in-repo, so the
-  ACE cannot be shown on the Device page here. Prepare/Preview tabs ARE native.
-- **⚠️ Next action (direction changed 2026-08-05, user):** integrate the MMU into
-  the **native Prepare/Preview tabs** (and the native send/mapping dialogs), NOT the
-  Flutter Device page. First step: investigate the native Prepare *Filament
-  Management* + `AmsMappingPopup`/`SelectMachine` widgets and decide how ACE units/
-  slots surface there. See [05-implementation-plan.md](05-implementation-plan.md)
-  "UI surfaces — reality check". The amsList projection (Phase 2) still feeds those
-  native mapping dialogs, so it is not wasted.
+- **Current phase:** Phase 0–2 ✅. **Phase 3 (native UI) in progress:** Prepare
+  "Sync from AMS" wired for the U1; a native ACE MMU page (dialog) added.
+- **Overall status:** 🟢 Native path working. The U1 Device tab is a Flutter webview
+  (`PrinterWebView`+SSWCP, no in-repo source) so ACE can't render there; we surface it
+  in the **native** Prepare tab instead. Done this session: (a) Prepare "Sync from AMS"
+  button shown for the U1 → `MachineObject::sync_ace_ams()` fetches multiACE → amsList
+  → filament list; (b) native `AceMmuDialog` (unit humidity/temp/protocol/mode, four
+  slot cards with RFID/override chips + hex, toolhead strip, live **Refresh**) opened
+  from an "ACE" button in Prepare; (c) parser extended with `toolheads[]`/`ace_head`;
+  (d) interactive HTML mockup at [device-page-mockup.html](device-page-mockup.html).
+- **Next action:** validate on the printer (open Prepare → **ACE** / **Sync from AMS**
+  for the connected U1). Then Phase 3b = **Option B**: promote the dialog into a proper
+  native Device *page/tab* styled after Bambu's AMS UI (see 05). Later: `setting_id`
+  preset auto-match; Preview per-slot labels; write actions (Dry/load) — deferred
+  (untested printer commands).
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
   - `libslic3r_tests "[ace_mmu]"` → 5 cases / 48 assertions pass (incl. live fixture).
     Rebuild: `cmake --build build --config Release --target libslic3r_tests -j 6`.
@@ -64,7 +65,8 @@ Record every non-obvious choice here so future sessions don't relitigate it.
 | 2026-08-05 | Parser tolerates `ace_status`/`status` as string **or** int; never throws | Live firmware returns `ace_status:"ready"` (string), contradicting doc 02's `int|null`. Parser degrades malformed/partial payloads to empty rather than throwing, so a bad fetch never clears good inventory. |
 | 2026-08-05 | Keep plan's raw-`/api/state` architecture; borrow non-conflicting bits from sibling `MultiAce*` branches | User direction. Reused so far: header-only libslic3r placement, defensive JSON-helper style, and a captured-payload test fixture. The sibling normalized-schema parser (`MultiAceInventory`) conflicts (different schema) and is **not** used. |
 | 2026-08-05 | Target the **native Prepare/Preview** tabs for MMU UI, not the Flutter Device page | The U1 Device tab is `PrinterWebView` (Snapmaker's compiled Flutter frontend + SSWCP); no Dart source in-repo, so an ACE view can't be added there. Prepare/Preview are native wx. amsList (Phase 2) still feeds native send/mapping dialogs, so it isn't wasted. |
-| 2026-08-05 | Exclude legacy `DeviceManager.{cpp,hpp}` / `StatusPanel.cpp` from the clang-format pre-commit hook | They predate this branch's `.clang-format`; a small functional edit otherwise forces a whole-file reformat (thousands of lines → merge hell). New ACE files stay formatted. |
+| 2026-08-05 | Exclude legacy `DeviceManager.{cpp,hpp}` / `StatusPanel.cpp` (and later `Plater.{cpp,hpp}`) from the clang-format pre-commit hook | They predate this branch's `.clang-format`; a small functional edit otherwise forces a whole-file reformat (thousands of lines → merge hell). New ACE files stay formatted. |
+| 2026-08-06 | Resolve the ACE host via `AceMmuProvider::resolve_connected_host()` (selected `MachineObject::dev_ip`, else the connected `PrintHost`), not `dev_ip` alone | Runtime test: Prepare "Sync from AMS" returned "No AMS filaments" because the webview-connected U1 has **no selected MachineObject / empty dev_ip**. The reliable connection is the `PrintHost` (`get_connect_host`). `sync_ace_ams(host)` + a snapshot-direct filament-list fallback now cover the no-MachineObject case. |
 
 ## Blockers / open questions
 
@@ -87,6 +89,26 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-06 — Phase 3 native UI: Prepare sync + native ACE page + mockup
+- **Prepare "Sync from AMS" for the U1:** `ams_btn` now shown for the U1
+  (`Plater.cpp` visibility block); `Sidebar::sync_ams_list()` calls new
+  `MachineObject::sync_ace_ams()` (synchronous multiACE fetch → `apply_ace_snapshot`
+  → amsList) before `build_filament_ams_list`, so ACE spools enter the filament list.
+- **Native ACE page:** added `src/slic3r/GUI/AceMmuDialog.{hpp,cpp}` — a functional
+  page (unit humidity/temp/protocol/mode header, four slot cards with colour swatch +
+  material + brand + RFID/override chip + hex, a toolhead strip with active head, and a
+  live **Refresh** that re-fetches). Opened from a new "ACE" button in Prepare (U1 only).
+  Registered in `src/slic3r/CMakeLists.txt`.
+- **Parser:** `AceMmuState.hpp` gained `AceToolhead` + `ace_head` and parses
+  `toolheads[]` (+ `opt_bool`); new `[ace_mmu]` toolhead test.
+- **Mockup:** `docs/ace-mmu/device-page-mockup.html` — interactive Bambu-/U1-inspired
+  Device-page design (published as an Artifact). Chosen future direction = Option B
+  (native tab styled after Bambu AMS UI); design doc updated.
+- **clang:** excluded `Plater.{cpp,hpp}` from the clang-format hook (legacy files).
+- **Result:** Option-1 (Prepare sync) build green; final build (dialog + parser + button)
+  in progress at time of writing. Runtime not yet verified on the printer.
+- **Next:** verify on the U1; then Option B native Device tab. Write actions deferred.
 
 ### 2026-08-05 — Phase 2 landed, then UI-surface pivot
 - Committed + pushed Phase 2 (`b3754ea86`, `c13827646`): `ace_*_exist_bits` helpers,
