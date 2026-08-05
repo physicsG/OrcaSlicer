@@ -133,3 +133,33 @@ correct swaps on a real U1.
 | `src/slic3r/GUI/SelectMachine.cpp` | verify send-dialog AMS list (likely no change) |
 | `resources/profiles/Snapmaker*` | (optional) `support_ace_mmu` capability flag |
 | `tests/…` | snapshot-parse unit test |
+
+## UI surfaces — reality check (2026-08-05)
+
+**The U1's Device tab is not the native BBS `StatusPanel`/`AMSControl`** that
+Phases 2–3 assumed. It is `PrinterWebView` — a `wxWebView` rendering Snapmaker's
+compiled **Flutter** frontend (`resources/web/flutter_web/index.html`, served
+locally on `http://localhost:<port>`), which talks to the slicer over **SSWCP**.
+The Flutter **source (Dart) is not in this repo** — only the compiled
+`main.dart.js` — so we **cannot add an ACE view to the live Device page** here.
+
+Consequences:
+
+- Populating `MachineObject::amsList` (Phase 2) does **not** render on the Device
+  page, and `StatusPanel::update_ams` likely never runs for the U1. amsList still
+  feeds the **native** send-to-printer / filament-mapping dialogs (`SelectMachine`,
+  `AmsMappingPopup`) — to be verified for the U1 send path.
+- The **Prepare** and **Preview** tabs ARE native wx (e.g. Prepare's *Filament
+  Management*). These are the feasible surfaces for MMU/spool UI.
+
+### Revised direction (2026-08-05, user)
+Integrate the MMU into the **native Prepare/Preview tabs first**, rather than the
+Flutter Device page (which is blocked without Snapmaker's frontend source).
+
+### Future work (after the current provider/amsList/mapping phases)
+- Surface the MMU (ACE units) and per-slot **spools** in the **Prepare** and
+  **Preview** tabs (native): show ACE slots as filament sources and let the user
+  map project filaments → (ACE, slot), with colours/materials from the live
+  inventory. [user request 2026-08-05]
+- Live Device-page ACE display would require Snapmaker's Flutter frontend source +
+  a new SSWCP endpoint; out of scope until that source is available.

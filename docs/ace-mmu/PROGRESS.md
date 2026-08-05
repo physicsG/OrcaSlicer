@@ -7,15 +7,20 @@
 ## Snapshot
 
 - **Branch:** `feat/add-ace-mmu-support`
-- **Current phase:** Phase 0 ✅ and Phase 1 ✅ done; Phase 2 next.
-- **Overall status:** 🟢 Live data path proven; raw `/api/state` parser + unit test
-  passing; GUI `AceMmuProvider` (poll → cache `AceSnapshot`) compiles into the app.
-  All committed and pushed to `origin` (physicsG).
-- **Next action:** Phase 2 — attach `AceMmuProvider` to the U1 `MachineObject`
-  lifecycle in `DeviceManager` (capability detect: `is_snapmaker_u1()` / probe
-  `/multiace/api/health`) and implement `apply_snapshot()` to project
-  `AceSnapshot`→`amsList` (`Ams`/`AmsTray` + `ams_exist_bits`/`tray_exist_bits`,
-  `humidity`→`humidity_raw`). Then verify against the live printer in the AMS tab.
+- **Current phase:** Phase 0 ✅, Phase 1 ✅, Phase 2 ✅ (amsList projection) done &
+  pushed. **UI-surface pivot in progress** (see below).
+- **Overall status:** 🟡 Provider + amsList projection work and are committed, BUT a
+  runtime check on the printer revealed the **U1 Device tab is a Flutter webview**
+  (`PrinterWebView` → `resources/web/flutter_web`, via SSWCP), **not** the native
+  `StatusPanel`/`AMSControl` Phases 2–3 assumed. No Flutter source in-repo, so the
+  ACE cannot be shown on the Device page here. Prepare/Preview tabs ARE native.
+- **⚠️ Next action (direction changed 2026-08-05, user):** integrate the MMU into
+  the **native Prepare/Preview tabs** (and the native send/mapping dialogs), NOT the
+  Flutter Device page. First step: investigate the native Prepare *Filament
+  Management* + `AmsMappingPopup`/`SelectMachine` widgets and decide how ACE units/
+  slots surface there. See [05-implementation-plan.md](05-implementation-plan.md)
+  "UI surfaces — reality check". The amsList projection (Phase 2) still feeds those
+  native mapping dialogs, so it is not wasted.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
   - `libslic3r_tests "[ace_mmu]"` → 5 cases / 48 assertions pass (incl. live fixture).
     Rebuild: `cmake --build build --config Release --target libslic3r_tests -j 6`.
@@ -58,6 +63,8 @@ Record every non-obvious choice here so future sessions don't relitigate it.
 | 2026-08-05 | Live `humidity` (=49) → `Ams::humidity_raw`, not `Ams::humidity` | Real firmware reports raw **percent**, not the 1..5 bucket doc 04's table assumed. `Ams` already has a dedicated `humidity_raw` field; derive/leave the 1..5 `humidity` bucket separately. |
 | 2026-08-05 | Parser tolerates `ace_status`/`status` as string **or** int; never throws | Live firmware returns `ace_status:"ready"` (string), contradicting doc 02's `int|null`. Parser degrades malformed/partial payloads to empty rather than throwing, so a bad fetch never clears good inventory. |
 | 2026-08-05 | Keep plan's raw-`/api/state` architecture; borrow non-conflicting bits from sibling `MultiAce*` branches | User direction. Reused so far: header-only libslic3r placement, defensive JSON-helper style, and a captured-payload test fixture. The sibling normalized-schema parser (`MultiAceInventory`) conflicts (different schema) and is **not** used. |
+| 2026-08-05 | Target the **native Prepare/Preview** tabs for MMU UI, not the Flutter Device page | The U1 Device tab is `PrinterWebView` (Snapmaker's compiled Flutter frontend + SSWCP); no Dart source in-repo, so an ACE view can't be added there. Prepare/Preview are native wx. amsList (Phase 2) still feeds native send/mapping dialogs, so it isn't wasted. |
+| 2026-08-05 | Exclude legacy `DeviceManager.{cpp,hpp}` / `StatusPanel.cpp` from the clang-format pre-commit hook | They predate this branch's `.clang-format`; a small functional edit otherwise forces a whole-file reformat (thousands of lines → merge hell). New ACE files stay formatted. |
 
 ## Blockers / open questions
 
@@ -80,6 +87,22 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-05 — Phase 2 landed, then UI-surface pivot
+- Committed + pushed Phase 2 (`b3754ea86`, `c13827646`): `ace_*_exist_bits` helpers,
+  `MachineObject::poll_ace_ams()`/`apply_ace_snapshot()`, and the
+  `StatusPanel::update_ams` hook. Kept diffs **functional-only** (reverted clang-format
+  whole-file reformat of the legacy files) and added a clang-format `exclude` for them
+  in `.pre-commit-config.yaml`.
+- **Ran the app in WSL (WSLg) against the live U1 — the ACE did NOT appear.** Root
+  cause: the Device tab is `PrinterWebView` = Snapmaker's compiled **Flutter** web app
+  (`resources/web/flutter_web`, served locally) driven by **SSWCP**, not the native
+  `StatusPanel`/`AMSControl`. No Dart source in-repo → cannot add an ACE view to the
+  Device page. Prepare/Preview tabs ARE native wx.
+- **Pivot (user):** build MMU UI in the **native Prepare/Preview** tabs + native
+  send/mapping dialogs. amsList projection still feeds the native mapping path.
+- **Next:** investigate native Prepare *Filament Management* + `AmsMappingPopup` /
+  `SelectMachine` to surface ACE units/slots; scope the Prepare/Preview MMU UI.
 
 ### 2026-08-05 — Plan validation + environment triage (no code)
 - Read all design docs (`README`, `01`–`07`, `AGENT.md`, this file).
