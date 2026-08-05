@@ -624,6 +624,12 @@ public:
     // snapshot into amsList. Safe no-op for every other printer; a U1 without
     // multiACE simply keeps amsList empty (no regression).
     void poll_ace_ams();
+    // Synchronous one-shot: fetch the ACE inventory now and project it onto
+    // amsList (used by the Prepare "Sync from AMS" action, which the U1's Device
+    // page can't drive). `host` overrides dev_ip when non-empty (the U1 often has
+    // no dev_ip, so callers pass AceMmuProvider::resolve_connected_host()).
+    // Returns true on a good fetch; keeps last-good on failure.
+    bool sync_ace_ams(const std::string& host = std::string());
     // Project a fetched ACE snapshot onto amsList (Ams/AmsTray + exist bits).
     void apply_ace_snapshot(const AceMmu::AceSnapshot& snap);
 

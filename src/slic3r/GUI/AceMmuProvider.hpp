@@ -52,6 +52,12 @@ public:
 
     const std::string& base_url() const { return m_base_url; }
 
+    // Best-effort IP/host of the currently-connected printer: the selected
+    // MachineObject's dev_ip if set, else parsed from the connected PrintHost
+    // (the U1 connects as a PrintHost via the webview, not a MachineObject).
+    // Empty if nothing is connected.
+    static std::string resolve_connected_host();
+
 private:
     void run();
 

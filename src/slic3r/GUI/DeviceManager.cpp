@@ -883,13 +883,33 @@ void MachineObject::poll_ace_ams()
     apply_ace_snapshot(m_ace_provider->snapshot());
 }
 
+bool MachineObject::sync_ace_ams(const std::string& host)
+{
+    // Explicit user action (Prepare "Sync from AMS"). Fetch synchronously so the
+    // freshly-read inventory is in amsList before the caller builds the filament
+    // list. Prefer the caller-supplied host (resolved from the connected PrintHost)
+    // over dev_ip, which the webview-connected U1 usually leaves empty. A printer
+    // without a reachable multiACE service just fails the fetch and keeps last-good.
+    const std::string ip = host.empty() ? dev_ip : host;
+    if (ip.empty())
+        return false;
+    const std::string base = "http://" + ip + "/multiace";
+    if (!m_ace_provider || m_ace_provider->base_url() != base)
+        m_ace_provider = std::make_unique<GUI::AceMmuProvider>(ip);
+    if (!m_ace_provider->fetch_once())
+        return false;
+    apply_ace_snapshot(m_ace_provider->snapshot());
+    return true;
+}
+
 void MachineObject::apply_ace_snapshot(const AceMmu::AceSnapshot& snap)
 {
     using namespace Slic3r::AceMmu;
 
     ams_exist_bits          = ace_ams_exist_bits(snap);
     tray_exist_bits         = ace_tray_exist_bits(snap);
-    is_support_ams_humidity = true; // ACE units report humidity; let the UI show it
+    is_support_ams_humidity = true;  // ACE units report humidity; let the UI show it
+    ams_support_virtual_tray = false; // no Bambu-style external spool for the ACE
     is_ace_mmu              = !snap.units.empty();
 
     std::set<std::string> seen_ams;

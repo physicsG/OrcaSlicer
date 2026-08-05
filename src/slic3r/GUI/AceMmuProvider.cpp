@@ -1,14 +1,41 @@
 #include "AceMmuProvider.hpp"
 
 #include "slic3r/Utils/Http.hpp"
+#include "slic3r/Utils/PrintHost.hpp"
+#include "GUI_App.hpp"
+#include "DeviceManager.hpp"
 
 #include "nlohmann/json.hpp"
 #include <boost/log/trivial.hpp>
 
 #include <chrono>
+#include <memory>
 #include <utility>
 
 namespace Slic3r { namespace GUI {
+
+std::string AceMmuProvider::resolve_connected_host()
+{
+    // Prefer a selected MachineObject's IP.
+    if (auto* dev = wxGetApp().getDeviceManager()) {
+        if (MachineObject* obj = dev->get_selected_machine())
+            if (!obj->dev_ip.empty())
+                return obj->dev_ip;
+    }
+    // Fall back to the connected PrintHost (the U1's webview connection).
+    std::shared_ptr<PrintHost> host;
+    wxGetApp().get_connect_host(host);
+    if (host) {
+        std::string h      = host->get_host();
+        const auto  scheme = h.find("://");
+        if (scheme != std::string::npos)
+            h = h.substr(scheme + 3);
+        h = h.substr(0, h.find('/')); // strip any path
+        h = h.substr(0, h.find(':')); // strip any port
+        return h;
+    }
+    return {};
+}
 
 AceMmuProvider::AceMmuProvider(std::string host, int poll_interval_s)
     : m_host(std::move(host)), m_base_url("http://" + m_host + "/multiace"), m_poll_interval_s(poll_interval_s < 1 ? 1 : poll_interval_s)
