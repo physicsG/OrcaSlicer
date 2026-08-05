@@ -75,6 +75,25 @@ TEST_CASE("parse live /api/state fixture into an AceSnapshot", "[ace_mmu]")
     CHECK(ace_color_to_rrggbbaa(s3.color_rrggbb) == "8FA7C8FF");
 }
 
+TEST_CASE("toolheads parse from the live fixture", "[ace_mmu]")
+{
+    const AceSnapshot snap = parse_ace_state(load_fixture("state_live_v0.99.6.1b.json"));
+
+    CHECK(snap.mode == "head");
+    CHECK(snap.ace_head == 3); // active toolhead
+    REQUIRE(snap.toolheads.size() == 4);
+
+    const AceToolhead& t0 = snap.toolheads[0];
+    CHECK(t0.idx == 0);
+    CHECK(t0.material == "PLA");
+    CHECK(t0.color_rrggbb == "#f44336");
+    CHECK(t0.feeder);
+
+    // T3 (empty material) is not "detected as loaded from a slot".
+    CHECK(snap.toolheads[2].material.empty());
+    CHECK_FALSE(snap.toolheads[2].filament_detected);
+}
+
 TEST_CASE("occupancy uses both state and gate_status", "[ace_mmu]")
 {
     const auto snap = parse_ace_state(std::string(R"({

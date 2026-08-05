@@ -52,15 +52,31 @@ struct AceUnit
     std::vector<AceSlot>  slots;
 };
 
+// One physical extruder/toolhead (the "loaded" view: which (ACE,slot) feeds it).
+struct AceToolhead
+{
+    int                idx = 0; // 0..3 -> "T1".."T4"
+    std::optional<int> ace;     // which ACE unit currently feeds this head
+    std::optional<int> slot;    // which slot
+    std::string        material;
+    std::string        color_rrggbb; // "#rrggbb" or empty
+    bool               filament_detected = false;
+    bool               manual            = false; // hand-fed / TPU bypass
+    bool               feeder            = false; // stock feeder mode
+    std::string        source;
+};
+
 struct AceSnapshot
 {
-    int                   device_count  = 0; // authoritative "how many ACE units to expose"
-    int                   active_device = 0;
-    std::string           mode;          // normal|multi|head
-    std::string           printer_state; // idle|busy|printing|paused|complete|error
-    std::string           ace_status;    // top-level ACE status (string on real firmware)
-    std::optional<double> ace_temp;
-    std::vector<AceUnit>  units;
+    int                      device_count  = 0; // authoritative "how many ACE units to expose"
+    int                      active_device = 0;
+    int                      ace_head      = -1; // index of the active toolhead (-1 unknown)
+    std::string              mode;               // normal|multi|head
+    std::string              printer_state;      // idle|busy|printing|paused|complete|error
+    std::string              ace_status;         // top-level ACE status (string on real firmware)
+    std::optional<double>    ace_temp;
+    std::vector<AceUnit>     units;
+    std::vector<AceToolhead> toolheads;
 
     const AceUnit* find_unit(int idx) const
     {
@@ -162,6 +178,13 @@ inline std::optional<int> opt_int_null(const nlohmann::json& parent, const char*
     return parent.at(key).get<int>();
 }
 
+inline bool opt_bool(const nlohmann::json& parent, const char* key)
+{
+    if (!parent.contains(key) || !parent.at(key).is_boolean())
+        return false;
+    return parent.at(key).get<bool>();
+}
+
 inline AceSlot parse_slot(const nlohmann::json& j, int index_fallback)
 {
     AceSlot slot;
@@ -214,6 +237,21 @@ inline AceUnit parse_unit(const nlohmann::json& j, int index_fallback)
     return unit;
 }
 
+inline AceToolhead parse_toolhead(const nlohmann::json& j, int index_fallback)
+{
+    AceToolhead th;
+    th.idx               = opt_int(j, "idx", index_fallback);
+    th.ace               = opt_int_null(j, "ace");
+    th.slot              = opt_int_null(j, "slot");
+    th.material          = opt_string(j, "material");
+    th.color_rrggbb      = opt_string(j, "color");
+    th.filament_detected = opt_bool(j, "filament_detected");
+    th.manual            = opt_bool(j, "manual");
+    th.feeder            = opt_bool(j, "feeder");
+    th.source            = opt_string(j, "source");
+    return th;
+}
+
 } // namespace detail
 
 // Parse a raw multiACE `/api/state` (or `/api/aces`) document. Tolerant of
@@ -227,6 +265,7 @@ inline AceSnapshot parse_ace_state(const nlohmann::json& j)
 
     snap.device_count  = detail::opt_int(j, "device_count", 0);
     snap.active_device = detail::opt_int(j, "active_device", 0);
+    snap.ace_head      = detail::opt_int(j, "ace_head", -1);
     snap.mode          = detail::opt_string(j, "mode");
     snap.printer_state = detail::opt_string(j, "printer_state");
     snap.ace_status    = detail::as_status_string(j, "ace_status");
@@ -237,6 +276,15 @@ inline AceSnapshot parse_ace_state(const nlohmann::json& j)
         for (const nlohmann::json& uj : j.at("aces")) {
             if (uj.is_object())
                 snap.units.emplace_back(detail::parse_unit(uj, i));
+            ++i;
+        }
+    }
+
+    if (j.contains("toolheads") && j.at("toolheads").is_array()) {
+        int i = 0;
+        for (const nlohmann::json& tj : j.at("toolheads")) {
+            if (tj.is_object())
+                snap.toolheads.emplace_back(detail::parse_toolhead(tj, i));
             ++i;
         }
     }
