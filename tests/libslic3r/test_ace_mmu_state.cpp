@@ -114,3 +114,37 @@ TEST_CASE("malformed payloads degrade to an empty snapshot", "[ace_mmu]")
     CHECK(parse_ace_state(std::string("[]")).units.empty());
     CHECK(parse_ace_state(std::string("{}")).device_count == 0);
 }
+
+TEST_CASE("exist-bits project from the live fixture", "[ace_mmu]")
+{
+    const AceSnapshot snap = parse_ace_state(load_fixture("state_live_v0.99.6.1b.json"));
+
+    // One connected unit at idx 0 -> ams bit 0.
+    CHECK(ace_ams_exist_bits(snap) == 0x1);
+    // Occupied slots 0 and 3 of unit 0 -> tray bits 0 and 3 = 0b1001.
+    CHECK(ace_tray_exist_bits(snap) == 0x9);
+    CHECK(ace_tray_index(0, 0) == 0);
+    CHECK(ace_tray_index(0, 3) == 3);
+}
+
+TEST_CASE("exist-bits place multiple units on the ams_id*4+slot grid", "[ace_mmu]")
+{
+    const auto snap = parse_ace_state(std::string(R"({
+        "device_count": 3,
+        "aces": [
+            {"idx": 0, "connected": true,  "slots": [{"idx":0,"state":"ready","raw":1}]},
+            {"idx": 1, "connected": false, "slots": [{"idx":0,"state":"ready","raw":1}]},
+            {"idx": 2, "connected": true,  "slots": [{"idx":1,"state":"ready","raw":1},
+                                                     {"idx":3,"state":"empty","raw":0}]}
+        ]
+    })"));
+
+    // Units 0 and 2 connected (1 is not) -> bits 0 and 2 = 0b101.
+    CHECK(ace_ams_exist_bits(snap) == 0x5);
+    // Occupied: unit0/slot0 -> T0; unit1 not connected but slot occupied still counts
+    // as a tray bit (bit tracks slot occupancy, unit connectivity is the ams bit):
+    //   unit0 slot0 -> bit 0; unit1 slot0 -> bit 4; unit2 slot1 -> bit 9.
+    CHECK(ace_tray_index(1, 0) == 4);
+    CHECK(ace_tray_index(2, 1) == 9);
+    CHECK(ace_tray_exist_bits(snap) == ((1L << 0) | (1L << 4) | (1L << 9)));
+}

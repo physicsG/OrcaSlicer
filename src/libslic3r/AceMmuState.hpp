@@ -71,6 +71,34 @@ struct AceSnapshot
     }
 };
 
+// Orca's flat tray index: T = unit*4 + slot, identical to multiACE's toolhead
+// numbering and to `MachineObject::tray_index = ams_id*4 + tray_id`.
+inline int ace_tray_index(int unit_idx, int slot_idx) { return unit_idx * SLOT_COUNT + slot_idx; }
+
+// `ams_exist_bits`: bit `unit.idx` set for every connected ACE unit.
+inline long ace_ams_exist_bits(const AceSnapshot& snap)
+{
+    long bits = 0;
+    for (const AceUnit& u : snap.units)
+        if (u.connected && u.idx >= 0)
+            bits |= (1L << u.idx);
+    return bits;
+}
+
+// `tray_exist_bits`: bit `unit.idx*4 + slot.idx` set for every occupied slot.
+inline long ace_tray_exist_bits(const AceSnapshot& snap)
+{
+    long bits = 0;
+    for (const AceUnit& u : snap.units) {
+        if (u.idx < 0)
+            continue;
+        for (const AceSlot& s : u.slots)
+            if (s.occupied && s.idx >= 0)
+                bits |= (1L << ace_tray_index(u.idx, s.idx));
+    }
+    return bits;
+}
+
 // "#83afff" -> "83AFFFFF" (Orca stores colour as 8-hex RRGGBBAA). Empty/invalid
 // input yields an empty string so callers can fall back to a default.
 inline std::string ace_color_to_rrggbbaa(const std::string& hash_rrggbb)
