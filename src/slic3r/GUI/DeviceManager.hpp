@@ -57,6 +57,9 @@ using namespace nlohmann;
 
 namespace Slic3r {
 
+namespace AceMmu { struct AceSnapshot; }
+namespace GUI { class AceMmuProvider; }
+
 struct BBLocalMachine;
 class SecondaryCheckDialog;
 enum PrinterArch {
@@ -607,6 +610,22 @@ public:
     bool has_ams() { return ams_exist_bits != 0; }
     bool can_unload_filament();
     bool is_support_ams_mapping();
+
+    // --- ACE MMU (multiACE) integration ---------------------------------------
+    // A Snapmaker U1 has no native AMS; when a multiACE service is present on the
+    // printer we poll it (AceMmuProvider) and project its inventory into amsList
+    // so the existing AMS UI works unchanged. See docs/ace-mmu/.
+    bool                                 is_ace_mmu{false};
+    std::unique_ptr<GUI::AceMmuProvider> m_ace_provider;
+    // True for a Snapmaker U1 (multiACE candidate). Detection is by printer_type;
+    // whether multiACE is actually present is decided by a successful poll.
+    bool is_snapmaker_u1();
+    // GUI-thread tick: lazily start the provider for a U1 and copy its latest
+    // snapshot into amsList. Safe no-op for every other printer; a U1 without
+    // multiACE simply keeps amsList empty (no regression).
+    void poll_ace_ams();
+    // Project a fetched ACE snapshot onto amsList (Ams/AmsTray + exist bits).
+    void apply_ace_snapshot(const AceMmu::AceSnapshot& snap);
 
     void get_ams_colors(std::vector<wxColour>& ams_colors);
     int ams_filament_mapping(std::vector<FilamentInfo> filaments, std::vector<FilamentInfo> &result, std::vector<int> exclude_id = std::vector<int>());

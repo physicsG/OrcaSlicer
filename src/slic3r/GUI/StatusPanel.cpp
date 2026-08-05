@@ -2570,6 +2570,10 @@ void StatusPanel::update_extruder_status(MachineObject* obj)
 
 void StatusPanel::update_ams(MachineObject *obj)
 {
+    // Snapmaker U1 + multiACE: pull the latest ACE inventory into amsList (GUI
+    // thread) so the AMS UI below renders it. No-op for every other printer.
+    if (obj) obj->poll_ace_ams();
+
     // update obj in sub dlg
     if (m_ams_setting_dlg) {
         m_ams_setting_dlg->obj = obj;

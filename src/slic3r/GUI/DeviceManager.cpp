@@ -1,5 +1,7 @@
 #include "libslic3r/libslic3r.h"
 #include "DeviceManager.hpp"
+#include "AceMmuProvider.hpp"
+#include "libslic3r/AceMmuState.hpp"
 #include "libslic3r/Time.hpp"
 #include "libslic3r/Thread.hpp"
 #include "slic3r/Utils/ColorSpaceConvert.hpp"
@@ -13,6 +15,7 @@
 #include <mutex>
 #include <codecvt>
 #include <boost/foreach.hpp>
+#include <boost/algorithm/string.hpp>
 #include <boost/typeof/typeof.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
@@ -849,6 +852,113 @@ bool MachineObject::can_unload_filament()
 bool MachineObject::is_support_ams_mapping()
 {
     return true;
+}
+
+bool MachineObject::is_snapmaker_u1()
+{
+    // printer_type carries the model_id ("SM_U1" in the U1 profiles); the cloud
+    // path may instead report the human name "Snapmaker U1". Accept both. There is
+    // no series helper for the U1, so this string check is the available signal.
+    return printer_type == "SM_U1" ||
+           (boost::icontains(printer_type, "snapmaker") && boost::icontains(printer_type, "u1"));
+}
+
+void MachineObject::poll_ace_ams()
+{
+    // Runs on the GUI thread from StatusPanel::update_ams (~1 Hz). Additive: for
+    // any non-U1 printer this is an immediate no-op.
+    if (!is_snapmaker_u1() || dev_ip.empty())
+        return;
+
+    if (!m_ace_provider) {
+        m_ace_provider = std::make_unique<GUI::AceMmuProvider>(dev_ip);
+        m_ace_provider->start();
+    }
+
+    // revision() stays 0 until the first well-formed fetch; a failed/garbage poll
+    // never bumps it, so we keep the last good amsList until real data arrives.
+    if (m_ace_provider->revision() == 0)
+        return;
+
+    apply_ace_snapshot(m_ace_provider->snapshot());
+}
+
+void MachineObject::apply_ace_snapshot(const AceMmu::AceSnapshot& snap)
+{
+    using namespace Slic3r::AceMmu;
+
+    ams_exist_bits          = ace_ams_exist_bits(snap);
+    tray_exist_bits         = ace_tray_exist_bits(snap);
+    is_support_ams_humidity = true; // ACE units report humidity; let the UI show it
+    is_ace_mmu              = !snap.units.empty();
+
+    std::set<std::string> seen_ams;
+    for (const AceUnit& unit : snap.units) {
+        const std::string ams_id = std::to_string(unit.idx);
+        seen_ams.insert(ams_id);
+
+        Ams* ams    = nullptr;
+        auto ams_it = amsList.find(ams_id);
+        if (ams_it == amsList.end()) {
+            ams = new Ams(ams_id, MAIN_NOZZLE_ID, 1 /* 1:ams -> AMSModel::GENERIC_AMS */);
+            amsList.insert(std::make_pair(ams_id, ams));
+        } else {
+            ams = ams_it->second;
+        }
+        ams->type                = 1;
+        ams->nozzle              = MAIN_NOZZLE_ID;
+        ams->is_exists           = unit.connected;
+        ams->humidity_raw        = unit.humidity ? *unit.humidity : -1;
+        ams->current_temperature = unit.temp ? static_cast<float>(*unit.temp) : INVALID_AMS_TEMPERATURE;
+        ams->left_dry_time       = unit.dryer_remaining_minutes ? *unit.dryer_remaining_minutes : 0;
+
+        std::set<std::string> seen_tray;
+        for (const AceSlot& slot : unit.slots) {
+            const std::string tray_id = std::to_string(slot.idx);
+            seen_tray.insert(tray_id);
+
+            AmsTray* tray    = nullptr;
+            auto     tray_it = ams->trayList.find(tray_id);
+            if (tray_it == ams->trayList.end()) {
+                tray = new AmsTray(tray_id);
+                ams->trayList.insert(std::make_pair(tray_id, tray));
+            } else {
+                tray = tray_it->second;
+            }
+
+            if (slot.occupied) {
+                tray->type              = slot.material;
+                tray->sub_brands        = slot.brand;
+                const std::string color = ace_color_to_rrggbbaa(slot.color_rrggbb);
+                tray->color             = color.empty() ? std::string("FFFFFFFF") : color;
+                tray->wx_color          = AmsTray::decode_color(tray->color);
+                tray->tag_uid           = (slot.rfid == 2) ? std::string("1") : std::string("0");
+            } else {
+                tray->reset();
+            }
+            tray->is_exists = slot.occupied;
+        }
+
+        // Prune slots no longer reported by this unit.
+        for (auto it = ams->trayList.begin(); it != ams->trayList.end();) {
+            if (seen_tray.count(it->first) == 0) {
+                delete it->second;
+                it = ams->trayList.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    // Prune ACE units no longer present.
+    for (auto it = amsList.begin(); it != amsList.end();) {
+        if (seen_ams.count(it->first) == 0) {
+            delete it->second;
+            it = amsList.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 static float calc_color_distance(wxColour c1, wxColour c2)
