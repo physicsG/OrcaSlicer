@@ -7,40 +7,31 @@
 ## Snapshot
 
 - **Branch:** `feat/add-ace-mmu-support`
-- **Current phase:** Phase 0 — not started (design validated 2026-08-05)
-- **Overall status:** 🟡 Design complete + independently validated against source;
-  implementation not started.
-- **Next action (fresh session, read this first):** No code has been written yet.
-  Decide execution scope with the user (options below), then begin. If the Cowork
-  Linux sandbox is available (run a `bash` probe: `git`, `cmake`, `python3`, `curl`),
-  do the real **Phase 0 spike** — `GET http://192.168.2.242/multiace/api/state`,
-  parse it, log `device_count` + each slot's `material`/`color` — then Phase 1.
-  If the sandbox is still unavailable, fall back to writing code via file tools and
-  hand builds to the user (see Session log 2026-08-05 for why).
-
-### Pending decision — execution scope (ask the user, then proceed)
-1. **Phases 1–2 + unit test, then pause** — provider skeleton, CMake registration,
-   `amsList` population, U1 capability detection, Catch2 snapshot-parse test; user
-   builds/reviews the core before continuing. *(safest — recommended)*
-2. **All phases 0–4 in one pass** — full draft for the user to build.
-3. **Phase-by-phase, pause after each** — most controlled, most round-trips.
-User leaned toward first getting a real build environment (Hyper-V) working before
-committing to unverified code. Re-confirm on pickup.
-
-### Environment notes (2026-08-05 session)
-- Cowork **Linux sandbox was unavailable** ("failed to start / not supported on this
-  device") for the entire session → could not `cmake` build `Snapmaker_Orca`, run
-  Catch2 tests, use `git`, or `curl` the printer. File tools (Read/Write/Edit) worked
-  fine on the repo. User enabled Hyper-V; a reboot + fresh session is needed for the
-  VM to (maybe) come up. **First thing next session: re-probe the sandbox.**
-- `web_fetch` reaches `http://192.168.2.242/multiace/api/state` but returns an **empty
-  body** (service is behind nginx `auth_request`). If no sandbox `curl`, use the
-  Chrome browser tools (`navigate` + `get_page_text`) to read the live JSON, or have
-  the user paste a sample.
-- U1 reachable at **192.168.2.242**; firmware branch `feat/filament-rfid-write`;
-  multiACE on branch `feat/bowden-path-calibration`. Repos are nested one level deep,
-  e.g. the Orca git root is `OrcaSlicer_multiace/OrcaSlicer/` (HEAD =
-  `feat/add-ace-mmu-support`).
+- **Current phase:** Phase 0 ✅ and Phase 1 ✅ done; Phase 2 next.
+- **Overall status:** 🟢 Live data path proven; raw `/api/state` parser + unit test
+  passing; GUI `AceMmuProvider` (poll → cache `AceSnapshot`) compiles into the app.
+  All committed and pushed to `origin` (physicsG).
+- **Next action:** Phase 2 — attach `AceMmuProvider` to the U1 `MachineObject`
+  lifecycle in `DeviceManager` (capability detect: `is_snapmaker_u1()` / probe
+  `/multiace/api/health`) and implement `apply_snapshot()` to project
+  `AceSnapshot`→`amsList` (`Ams`/`AmsTray` + `ams_exist_bits`/`tray_exist_bits`,
+  `humidity`→`humidity_raw`). Then verify against the live printer in the AMS tab.
+- **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
+  - `libslic3r_tests "[ace_mmu]"` → 5 cases / 48 assertions pass (incl. live fixture).
+    Rebuild: `cmake --build build --config Release --target libslic3r_tests -j 6`.
+  - Full app `Snapmaker_Orca` builds with `AceMmuProvider` compiled in.
+    Rebuild: `cmake --build build --config Release --target Snapmaker_Orca -j 4`.
+  - CI: a PR to this branch runs `pre-commit` (clang-format **14** + hygiene hooks).
+    Run `pre-commit run --files <changed>` before committing (`sudo apt install -y pre-commit`).
+- **Environment / hardware:** U1 at **192.168.2.242** (multiACE `0.99.6.1b`); plain
+  HTTP `GET /multiace/api/state` + `/api/health` work **unauthenticated**. Firmware
+  branch `feat/filament-rfid-write`; multiACE branch `feat/bowden-path-calibration`.
+- **Sibling branches (context):** a large *parallel* multiACE implementation exists
+  (`validation/pr30-fix-rest` ~273 commits, `feat/wire-multiace-printer-lifecycle`,
+  `feat/integrate-multiace`; PRs #28/#30/#35) using a **different** architecture
+  (self-normalized `FilamentSourceProvider`/`MultiAce*` in `libslic3r`, not the
+  plan's raw-`/api/state` `AceMmuProvider`). Per user direction: follow this plan,
+  reuse non-conflicting pieces only. See Decisions log.
 
 ## Phase checklist
 
@@ -116,6 +107,11 @@ Newest first. One block per session: date, what changed (files), result, next.
 - **Next:** re-probe sandbox in a fresh session; confirm execution scope; then
   Phase 0 spike / Phase 1.
 - New blockers: Cowork Linux sandbox unavailable (VM failed to start).
+- **⚠️ SUPERSEDED the same day** — a later session (WSL) got the build env working
+  and completed Phase 0 + Phase 1 with committed code + passing tests. See the two
+  2026-08-05 entries below and the Snapshot at the top. This entry's "no code" /
+  "sandbox unavailable" state no longer holds. (A stale copy of it briefly overwrote
+  the Snapshot during a Windows merge; corrected here.)
 
 ### 2026-07-19 — Design & docs
 - Researched multiACE, Anycubic Slicer Next, and the Orca AMS model.
