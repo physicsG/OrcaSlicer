@@ -93,6 +93,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/DesktopIntegrationDialog.hpp
     GUI/AceMmuProvider.cpp
     GUI/AceMmuProvider.hpp
+    GUI/AceMmuDialog.cpp
+    GUI/AceMmuDialog.hpp
     GUI/DeviceManager.cpp
     GUI/DeviceManager.hpp
     GUI/Downloader.cpp
