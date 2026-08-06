@@ -148,6 +148,7 @@
                '#f2c6d8','#f39221','#e2540f'];
   function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
   function attr(o){return Object.keys(o).map(function(k){return o[k]==null||o[k]===''?'':' data-'+k+'="'+esc(o[k])+'"';}).join('');}
+  function fmtDur(min){ min=Math.max(0,Math.round(min)); var h=Math.floor(min/60), m=min%60; return h>0?(h+'h '+m+'m'):(m+'m'); }
   function actionFor(source){ return source==='rfid' ? 'view' : 'edit'; }
   function iconFor(doo){ return doo==='view' ? 'eye' : 'pen'; }
 
@@ -198,12 +199,13 @@
       });
       var hum = (u.humidity!=null)?('<div class="stat group"><span class="humid" style="--p:'+u.humidity+'"></span><b>'+u.humidity+'%</b>'
                 + (u.temp!=null?'<span class="vdiv"></span><span class="thermo"></span><b>'+Math.round(u.temp)+'°C</b>':'') +'</div>'):'';
-      var dry = (u.dryer_min && u.dryer_min>0) ? (u.dryer_min+' min') : 'Off';
+      var drying = u.dryer_min && u.dryer_min>0;
+      var dry = drying ? fmtDur(u.dryer_min) : 'Off';
       srcHTML+='<div class="acebox" id="aceU'+u.idx+'">'
             +'<div class="aceband"><div class="acebadge">'+letter+'</div>'
             +'<div class="nm">'+model+' <span class="mt">· '+(u.connected?'connected':'offline')+'</span></div>'
             +'<div class="stats">'+hum+'<div class="stat" id="dryerstat'+u.idx+'">Dryer <b>'+dry+'</b></div>'
-            +'<button class="btn heatbtn" data-unit="'+u.idx+'">◈ Dry</button></div></div>'
+            +'<button class="btn heatbtn" data-unit="'+u.idx+'"'+(drying?' aria-pressed="true"':'')+'>'+(drying?'■ Stop':'◈ Dry')+'</button></div></div>'
             +'<div class="drybar" id="drybar'+u.idx+'" hidden><span class="dl">Dry at</span>'
             +'<div class="pillset"><span class="p on">45°C</span><span class="p">55°C</span><span class="p">65°C</span></div>'
             +'<span class="dl">for</span><div class="pillset"><span class="p">2 h</span><span class="p on">4 h</span><span class="p">6 h</span></div>'
@@ -320,7 +322,7 @@
         var hb=document.querySelector('.heatbtn[data-unit="'+u+'"]');
         if(hb){hb.setAttribute('aria-pressed','true'); hb.textContent='■ Stop';}
         bar.hidden=true; requestAnimationFrame(drawWires);
-        window.sendGcode('ACE_DRY ACE='+u+' TEMP='+temp+' DURATION='+(hours*60));
+        window.sendGcode('ACE_DRY ACE='+u+' TEMP='+temp+' DURATION='+hours);
       });
     });
   }
