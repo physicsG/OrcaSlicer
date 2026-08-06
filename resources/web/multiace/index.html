@@ -158,9 +158,10 @@
     var map=document.getElementById('feedmap'), empty=document.getElementById('empty');
     var heads=(state&&state.toolheads)||[], units=(state&&state.units)||[];
     var hasAce = units.length>0;
-    empty.hidden = hasAce || heads.length>0;
-    map.hidden = !empty.hidden ? false : true;
-    if(empty.hidden===false && !hasAce && heads.length===0){ map.innerHTML=''; return; }
+    var showContent = hasAce || heads.length>0;
+    empty.hidden = showContent;
+    map.hidden = !showContent;
+    if(!showContent){ map.innerHTML=''; return; }
 
     CONNS=[];
     var srcHTML='', headHTML='';
@@ -328,7 +329,7 @@
   document.getElementById('refresh').addEventListener('click',function(){ if(window.wx&&window.wx.postMessage) window.__notify('refresh'); else render(DEMO); });
 
   // ---- entry point called by the host (C++), with a demo fallback ----
-  window.setAceState=function(s){ try{ render(typeof s==='string'?JSON.parse(s):s); }catch(e){ console.error(e); } };
+  window.setAceState=function(s){ try{ render(typeof s==='string'?JSON.parse(s):s); }catch(e){ var em=document.getElementById('empty'); if(em){em.hidden=false; em.textContent='Page error: '+((e&&e.message)||e);} } };
 
   var DEMO={dark:false,mode:'head',
     toolheads:[
