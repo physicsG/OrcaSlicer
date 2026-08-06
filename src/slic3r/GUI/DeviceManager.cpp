@@ -953,6 +953,9 @@ void MachineObject::apply_ace_snapshot(const AceMmu::AceSnapshot& snap)
                 tray->color             = color.empty() ? std::string("FFFFFFFF") : color;
                 tray->wx_color          = AmsTray::decode_color(tray->color);
                 tray->tag_uid           = (slot.rfid == 2) ? std::string("1") : std::string("0");
+                // Non-empty so PresetBundle::sync_ams_list doesn't skip the spool; it
+                // isn't a real preset id, so sync falls back to "Generic <type>".
+                tray->setting_id = slot.material.empty() ? std::string() : ("ace:" + slot.material);
             } else {
                 tray->reset();
             }

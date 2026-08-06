@@ -8224,14 +8224,19 @@ static std::map<int, DynamicPrintConfig> build_filament_ams_list_from_snapshot(c
     for (const auto& unit : snap.units) {
         const char n = char('A' + unit.idx);
         for (const auto& slot : unit.slots) {
-            const char         t = char('1' + slot.idx);
+            if (!slot.occupied)
+                continue; // only real spools become project filaments
+            const char t = char('1' + slot.idx);
+            // Non-empty filament_id so sync_ams_list doesn't skip it; not a real
+            // preset id, so sync falls back to "Generic <type>".
+            const std::string filament_id = slot.material.empty() ? std::string("ace") : ("ace:" + slot.material);
             DynamicPrintConfig cfg;
-            cfg.set_key_value("filament_id", new ConfigOptionStrings{std::string()});
+            cfg.set_key_value("filament_id", new ConfigOptionStrings{filament_id});
             cfg.set_key_value("tag_uid", new ConfigOptionStrings{std::string(slot.rfid == 2 ? "1" : "0")});
             cfg.set_key_value("filament_type", new ConfigOptionStrings{slot.material});
             cfg.set_key_value("tray_name", new ConfigOptionStrings{std::string(1, n) + std::string(1, t)});
             cfg.set_key_value("filament_colour", new ConfigOptionStrings{slot.color_rrggbb.empty() ? std::string("#FFFFFF") : slot.color_rrggbb});
-            cfg.set_key_value("filament_exist", new ConfigOptionBools{slot.occupied});
+            cfg.set_key_value("filament_exist", new ConfigOptionBools{true});
             cfg.set_key_value("filament_multi_colors", new ConfigOptionStrings{});
             filament_ams_list.emplace(unit.idx * 4 + slot.idx, std::move(cfg));
         }
