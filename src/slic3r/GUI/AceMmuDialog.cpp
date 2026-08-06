@@ -10,6 +10,7 @@
 #include <wx/button.h>
 #include <wx/settings.h>
 #include <wx/font.h>
+#include <boost/log/trivial.hpp>
 
 namespace Slic3r { namespace GUI {
 
@@ -139,11 +140,14 @@ void AceMmuDialog::rebuild()
     std::string                 host = AceMmuProvider::resolve_connected_host();
     if (host.empty() && m_obj)
         host = m_obj->dev_ip;
+    bool fetched = false;
     if (!host.empty()) {
         AceMmuProvider prov(host);
-        if (prov.fetch_once())
+        fetched = prov.fetch_once();
+        if (fetched)
             snap = prov.snapshot();
     }
+    BOOST_LOG_TRIVIAL(info) << "AceMmuDialog: host='" << host << "' fetched=" << fetched << " units=" << snap.units.size();
     if (m_obj && !snap.units.empty())
         m_obj->apply_ace_snapshot(snap); // keep amsList in sync for the Prepare flow
 
