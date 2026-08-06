@@ -174,6 +174,23 @@ the Phase 2 `amsList` projection directly and needs no Flutter source. Sequenced
 **after** the native Prepare/Preview filament work. (Rebuilding the Flutter frontend —
 "Option A" — remains a fallback if Snapmaker's Dart source becomes available.)
 
+### Current limitations (2026-08-06)
+- **LAN only.** The ACE is read over HTTP directly from the printer
+  (`http://<ip>/multiace/api/state`), which is only reachable when the U1 is
+  connected on the **local network**. A cloud-only session cannot see the ACE.
+  Cloud support would require Option A (ACE state carried over the U1's MQTT stream).
+- `setting_id` isn't resolved to a real filament preset yet, so Prepare's
+  "Sync from AMS" maps ACE spools to `Generic <type>` (a "mapped to generic" notice).
+
+### Future work — Filament Management split (mockup ready)
+Split Prepare's "Filament Management" into **U1 toolheads** (filament loaded at each
+of the 4 heads, from `toolheads[]`) and **ACE slots** (spools in the unit, from
+`aces[].slots[]`), each mappable to a project filament. Mockup:
+`docs/ace-mmu/filament-management-mockup.html`. Open question to settle while
+iterating: map project filaments to *heads* (head mode) or directly to *ACE slots*
+(multi mode), and how that drives exported tool indices (`T = ace*4 + slot`).
+[user request 2026-08-06]
+
 ### First native step (in progress, 2026-08-05)
 Prepare tab "Sync from AMS": the button is now shown for the U1, and
 `Sidebar::sync_ams_list()` calls `MachineObject::sync_ace_ams()` (synchronous multiACE

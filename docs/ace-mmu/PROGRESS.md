@@ -94,6 +94,33 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 
 Newest first. One block per session: date, what changed (files), result, next.
 
+### 2026-08-06 (cont.) — "U1 + ACE" full page, sync fix, login fix, FM mockup
+- **LAN-only (confirmed):** the ACE only appears when the U1 is connected over **LAN**
+  — the multiACE HTTP endpoint isn't reachable via the cloud connection. Documented
+  as a known limitation; cloud support would need Option A (ACE state over MQTT).
+- **Sync-from-AMS error fixed:** `PresetBundle::sync_ams_list` skips entries with an
+  empty `filament_id`, so ACE spools (empty id) produced "no compatible filaments".
+  Now occupied ACE slots get a non-empty `filament_id`/`setting_id` (`ace:<type>`) and
+  empty slots are skipped, so sync falls through to the built-in `Generic <type>`
+  match. (Real preset resolution to avoid the "mapped to generic" notice = future.)
+- **Login persistence — real bug fixed:** the restore call was in `restart_networking()`
+  (not guaranteed at launch). Moved `sm_restore_login()` to `GUI_App::post_init()`
+  (runs once at startup, after `init_app_config()` in the ctor). Persist-on-login and
+  clear-on-logout unchanged.
+- **"U1 + ACE" tab:** renamed from "MMU"; `AceMmuPanel` rebuilt to the mockup's
+  two-column layout (left: Printer card w/ camera placeholder + state/mode/ACE-temp/
+  units tiles; right: ACE unit header w/ humidity/temp/dryer tiles, four slot cards,
+  toolhead strip, legend). Native wx approximation of
+  [device-page-mockup.html](device-page-mockup.html) (no circular-spool/ring custom
+  paint yet).
+- **New mockup (future work):** [filament-management-mockup.html](filament-management-mockup.html)
+  — Prepare "Filament Management" split into **U1 toolheads** and **ACE slots**. To
+  build after the current page work; open question noted (map to heads vs ACE slots).
+- **Result:** builds green (login + sync + rename + page). Runtime verified: ACE shows
+  over LAN. Login-persist + full page not yet re-verified by user.
+- **Next:** user verifies "U1 + ACE" page + login-persist; iterate on the FM split
+  mockup; then implement the FM split; write actions still deferred.
+
 ### 2026-08-06 — Native MMU tab, login persistence, fast-build tooling
 - **Device + MMU tab:** extracted the ACE view into a reusable `AceMmuPanel`
   (`src/slic3r/GUI/AceMmuPanel.{hpp,cpp}`) and added it as a persistent top-level

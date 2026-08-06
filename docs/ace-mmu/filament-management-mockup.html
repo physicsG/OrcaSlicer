@@ -1,0 +1,158 @@
+<title>Filament Management — U1 slots + ACE slots (mockup)</title>
+<style>
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --bg: #f3f5f7; --panel: #ffffff; --panel-2: #f6f8fa; --line: #e2e7ec;
+    --text: #1a2229; --dim: #66727c; --faint: #9aa5ad;
+    --accent: #0f9c78; --accent-soft: rgba(15,156,120,.12);
+    --warn: #d6983c; --warn-soft: rgba(214,152,60,.14); --humid: #2b86cf;
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0e1114; --panel:#181c21; --panel-2:#1f252b; --line:#2a333b;
+      --text:#e9edf0; --dim:#9aa5ad; --faint:#6c7982;
+      --accent:#17b890; --accent-soft: rgba(23,184,144,.16); --warn:#e6a23c; --humid:#4aa3e8;
+    }
+  }
+  :root[data-theme="dark"]{--bg:#0e1114;--panel:#181c21;--panel-2:#1f252b;--line:#2a333b;--text:#e9edf0;--dim:#9aa5ad;--faint:#6c7982;--accent:#17b890;--accent-soft:rgba(23,184,144,.16);--warn:#e6a23c;--humid:#4aa3e8;}
+  :root[data-theme="light"]{--bg:#f3f5f7;--panel:#fff;--panel-2:#f6f8fa;--line:#e2e7ec;--text:#1a2229;--dim:#66727c;--faint:#9aa5ad;--accent:#0f9c78;--accent-soft:rgba(15,156,120,.12);--warn:#d6983c;--humid:#2b86cf;}
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:var(--font-sans); line-height:1.45; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 24px clamp(12px,3vw,28px) 60px; }
+  .lead { color: var(--dim); font-size: 13px; margin: 0 0 18px; max-width: 62ch; }
+  .toggle { float:right; font:inherit; cursor:pointer; background:var(--panel); border:1px solid var(--line); color:var(--dim); border-radius:8px; padding:6px 10px; }
+
+  /* the sidebar panel */
+  .sidebar { width: 380px; max-width:100%; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; box-shadow: 0 10px 30px -18px rgba(0,0,0,.4); }
+  .panel-head { display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--line); }
+  .panel-head h2 { font-size:13px; margin:0; letter-spacing:.3px; }
+  .panel-head .sp { flex:1; }
+  .panel-head .tag { font-size:10.5px; font-weight:700; color:var(--accent); background:var(--accent-soft); padding:3px 8px; border-radius:999px; }
+
+  .group { border-bottom:1px solid var(--line); }
+  .group:last-child { border-bottom:0; }
+  .group-head { display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--panel-2); cursor:pointer; }
+  .group-head .chev { color:var(--faint); font-size:11px; }
+  .group-head h3 { font-size:12px; margin:0; text-transform:uppercase; letter-spacing:.5px; color:var(--dim); }
+  .group-head .sub { font-size:11px; color:var(--faint); }
+  .group-head .sp { flex:1; }
+  .group-body { padding: 6px 10px 12px; }
+
+  .row { display:flex; align-items:center; gap:10px; padding:8px 6px; border-radius:8px; }
+  .row:hover { background:var(--panel-2); }
+  .idx { width:20px; height:20px; border-radius:5px; display:grid; place-items:center; font-size:11px; font-weight:700; color:#fff; flex:none; }
+  .swatch { width:22px; height:22px; border-radius:6px; flex:none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.2); }
+  .row .name { font-size:13px; font-weight:600; }
+  .row .meta { font-size:11px; color:var(--dim); }
+  .row .grow { flex:1; min-width:0; }
+  .row .picker { font-size:12px; color:var(--dim); border:1px solid var(--line); border-radius:7px; padding:4px 8px; background:var(--panel); white-space:nowrap; }
+  .chip { font-size:9.5px; font-weight:700; letter-spacing:.3px; padding:2px 6px; border-radius:999px; }
+  .chip.rfid { color:var(--accent); background:var(--accent-soft); }
+  .chip.ovr { color:var(--warn); background:var(--warn-soft); }
+  .empty .name { color:var(--faint); font-weight:500; }
+  .empty .swatch { background: repeating-linear-gradient(135deg, var(--line) 0 5px, transparent 5px 10px); box-shadow: inset 0 0 0 1px var(--line); }
+  .map { font-size:11px; color:var(--accent); }
+  .note { font-size:12px; color:var(--faint); margin-top:20px; max-width:62ch; }
+  .flow { display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start; }
+  .legend { font-size:11.5px; color:var(--dim); margin-top:10px; display:flex; gap:14px; flex-wrap:wrap; }
+  .legend i { display:inline-block; width:10px;height:10px;border-radius:3px; vertical-align:middle; margin-right:4px;}
+  /* per-head source chip */
+  .src { font-size:9.5px; font-weight:700; letter-spacing:.2px; padding:2px 7px; border-radius:999px; display:inline-flex; align-items:center; gap:5px; }
+  .src.ace { color:var(--accent); background:var(--accent-soft); }
+  .src.feeder { color:var(--dim); background:var(--panel-2); box-shadow:inset 0 0 0 1px var(--line); }
+  .src.manual { color:var(--warn); background:var(--warn-soft); }
+  .src .dot { width:8px; height:8px; border-radius:50%; }
+  .feeds { font-size:10.5px; color:var(--accent); font-weight:600; white-space:nowrap; }
+</style>
+
+<div class="wrap">
+  <button class="toggle" id="theme">◐ theme</button>
+  <h1 style="font-size:20px;margin:0 0 6px">Filament Management — split by source</h1>
+  <p class="lead">Mockup to iterate on. The Prepare "Filament Management" panel splits into two groups:
+  <b>U1 toolheads</b> (filament loaded directly at each of the four print heads) and
+  <b>ACE slots</b> (spools in the ACE unit that feed the U1). Each row maps to a project filament.</p>
+
+  <div class="flow">
+    <div class="sidebar">
+      <div class="panel-head">
+        <h2>◧ Filament Management</h2><span class="sp"></span>
+        <span class="tag">U1 + ACE</span>
+      </div>
+
+      <!-- Group 1: U1 toolheads. The "source" chip shows how each head is fed. -->
+      <div class="group">
+        <div class="group-head"><span class="chev">▾</span><h3>U1 Toolheads</h3><span class="sp"></span><span class="sub">4 heads · head mode</span></div>
+        <div class="group-body">
+          <div class="row"><span class="idx" style="background:#e5533c">1</span><span class="swatch" style="background:#f44336"></span>
+            <div class="grow"><div class="name">PLA <span class="src feeder">Feeder</span></div><div class="meta">T1 · stock feeder</div></div>
+            <span class="picker">Generic PLA ▾</span></div>
+          <div class="row"><span class="idx" style="background:#8a3b57">2</span><span class="swatch" style="background:#bd4068"></span>
+            <div class="grow"><div class="name">PETG <span class="src feeder">Feeder</span></div><div class="meta">T2 · stock feeder</div></div>
+            <span class="picker">Generic PETG ▾</span></div>
+          <div class="row"><span class="idx" style="background:#8a949c">3</span><span class="swatch" style="background:repeating-linear-gradient(135deg,#8a949c 0 5px,transparent 5px 10px)"></span>
+            <div class="grow"><div class="name">— <span class="src manual">Manual / TPU</span></div><div class="meta">T3 · hand-fed (bypass ACE)</div></div>
+            <span class="map">＋ assign</span></div>
+          <div class="row"><span class="idx" style="background:#5b7fa6">4</span><span class="swatch" style="background:#8fa7c8"></span>
+            <div class="grow"><div class="name">PETG <span class="src ace"><span class="dot" style="background:#8fa7c8"></span>ACE A · A4</span></div><div class="meta">T4 · active · ● feeding from ACE</div></div>
+            <span class="picker">Generic PETG ▾</span></div>
+        </div>
+      </div>
+
+      <!-- Group 2: ACE slots -->
+      <div class="group">
+        <div class="group-head"><span class="chev">▾</span><h3>ACE 2 Pro — Unit A</h3><span class="sp"></span><span class="sub">v2 · 49% RH · 31°C</span></div>
+        <div class="group-body">
+          <div class="row"><span class="idx" style="background:#5b7fa6">A1</span><span class="swatch" style="background:#83afff"></span>
+            <div class="grow"><div class="name">PETG · Silver <span class="chip ovr">OVERRIDE</span></div><div class="meta">Kingroon · #83AFFF · idle</div></div>
+            <span class="map">→ map</span></div>
+          <div class="row empty"><span class="idx" style="background:#8a949c">A2</span><span class="swatch"></span>
+            <div class="grow"><div class="name">Empty</div><div class="meta">no spool</div></div></div>
+          <div class="row empty"><span class="idx" style="background:#8a949c">A3</span><span class="swatch"></span>
+            <div class="grow"><div class="name">Empty</div><div class="meta">no spool</div></div></div>
+          <div class="row"><span class="idx" style="background:#6d7f95">A4</span><span class="swatch" style="background:#8fa7c8"></span>
+            <div class="grow"><div class="name">PETG · Gray <span class="chip ovr">OVERRIDE</span></div><div class="meta">Kingroon · #8FA7C8</div></div>
+            <span class="feeds">→ T4</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:220px">
+      <div class="legend">
+        <span><span class="src ace" style="padding:1px 6px"><span class="dot" style="background:#8fa7c8"></span>ACE</span> fed by an ACE slot</span>
+        <span><span class="src feeder" style="padding:1px 6px">Feeder</span> stock direct feeder</span>
+        <span><span class="src manual" style="padding:1px 6px">Manual</span> hand-fed / TPU</span>
+      </div>
+      <p class="note"><b>Showing the ACE→toolhead link.</b> Each U1 toolhead carries a <b>source chip</b> for how it's
+      fed — <span class="src ace" style="padding:1px 6px"><span class="dot" style="background:#8fa7c8"></span>ACE&nbsp;A&nbsp;·&nbsp;A4</span>
+      (dot = the feeding slot's colour), <span class="src feeder" style="padding:1px 6px">Feeder</span>, or
+      <span class="src manual" style="padding:1px 6px">Manual</span> — and the feeding ACE slot shows the reciprocal
+      <span class="feeds">→ T4</span>. So the connection reads both ways.</p>
+      <p class="note"><b>Mode is an ACE setting</b> (configured on the printer — Normal / Multi / Head), shown here
+      read-only because it changes how the panel should read: <b>Head</b> — each head is bound independently
+      (ACE unit / feeder / manual; from <code>head_feeder</code>, <code>head_ace</code>, <code>ace_heads</code>), so
+      the source chip is per-head. <b>Multi</b> — one active ACE feeds via toolchanges; its slots become the logical
+      tools (<code>T = ace*4 + slot</code>), so the ACE group leads and heads collapse to the active one.
+      <b>Normal</b> — a single direct spool, ACE not multiplexing. Multiple ACE units each get their own group.
+      Open question: in Head mode project filaments map to <i>heads</i>; in Multi mode to <i>ACE slots</i> — the
+      exported tool indices differ, to settle while iterating.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('theme').addEventListener('click', function () {
+    var r = document.documentElement, c = r.getAttribute('data-theme');
+    if (!c) c = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    r.setAttribute('data-theme', c === 'dark' ? 'light' : 'dark');
+  });
+  document.querySelectorAll('.group-head').forEach(function (h) {
+    h.addEventListener('click', function () {
+      var b = h.nextElementSibling, chev = h.querySelector('.chev');
+      var hidden = b.style.display === 'none';
+      b.style.display = hidden ? '' : 'none';
+      chev.textContent = hidden ? '▾' : '▸';
+    });
+  });
+</script>
