@@ -207,7 +207,7 @@
   .dial .wg:hover{fill:var(--teal-soft);}
   .dial .wl{fill:var(--dim);font-size:11px;font-weight:600;text-anchor:middle;dominant-baseline:central;pointer-events:none;}
   .dial .ax{fill:var(--faint);font-size:11px;text-anchor:middle;dominant-baseline:central;pointer-events:none;}
-  .dial-home{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--teal);font-size:22px;}
+  .dial-home{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:#3fb24f;font-size:22px;}
   .dial-home:hover{background:var(--teal-soft);}
   .bedz{display:flex;align-items:center;gap:8px;}
   .zb{min-width:44px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;color:var(--text);font-size:12px;display:grid;place-items:center;padding:0 6px;}
@@ -215,6 +215,15 @@
   .zlab{font-size:12px;color:var(--dim);}
   .cright{display:flex;flex-direction:column;align-items:center;gap:10px;}
   .cright .elab{font-size:11px;color:var(--dim);}
+  .ci.nz{width:16px;height:16px;border:1px solid var(--faint);border-radius:4px;font-size:9px;display:grid;place-items:center;color:var(--dim);font-weight:700;}
+  .crow .tt{cursor:pointer;color:var(--text);border-bottom:1px dashed var(--faint);}
+  .crow .tt:hover{color:var(--teal);border-color:var(--teal);}
+  .ttin{width:40px;font:inherit;font-size:12px;border:1px solid var(--teal);border-radius:4px;padding:0 3px;background:var(--panel);color:var(--text);}
+  .cbtn-sw{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:11px;color:var(--dim);}
+  .cbtn-sw .ci{font-size:18px;color:var(--faint);}
+  .tsw{width:36px;height:20px;border-radius:999px;background:var(--line);position:relative;cursor:pointer;transition:background .15s;}
+  .tsw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.3);}
+  .tsw.on{background:var(--teal);} .tsw.on::after{left:18px;}
   #toolsel .p{cursor:pointer;}
   .tdot{color:var(--teal);font-size:9px;margin-left:4px;}
   .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);max-width:80vw;background:#e5533c;color:#fff;padding:11px 16px;border-radius:9px;box-shadow:0 12px 34px -12px rgba(0,0,0,.55);font-size:13px;z-index:80;display:none;white-space:pre-line;line-height:1.4;}
@@ -308,10 +317,14 @@
       var o=(d.s>0?'+':'')+(d.s*10), i=(d.s>0?'+':'')+(d.s*1);
       svg+='<path class="wg" data-jog="'+d.ax+o+'" d="'+wedge(mid,R,a1,a2)+'"></path>';
       svg+='<path class="wg" data-jog="'+d.ax+i+'" d="'+wedge(ho,mid,a1,a2)+'"></path>';
-      var lo=pol(78,d.deg), li=pol(48,d.deg), la=pol(89,d.deg);
-      svg+='<text class="wl" x="'+lo[0].toFixed(1)+'" y="'+lo[1].toFixed(1)+'">'+o+'</text>';
-      svg+='<text class="wl" x="'+li[0].toFixed(1)+'" y="'+li[1].toFixed(1)+'">'+i+'</text>';
+      var la=pol(89,d.deg);
       svg+='<text class="ax" x="'+la[0].toFixed(1)+'" y="'+la[1].toFixed(1)+'">'+d.lbl+'</text>';
+    });
+    // ring-magnitude labels on the diagonals (like Bambu): +10/+1 upper-right, -1/-10 lower-left
+    [{deg:45,o:'+10',i:'+1'},{deg:225,o:'-10',i:'-1'}].forEach(function(g){
+      var lo=pol(79,g.deg), li=pol(47,g.deg);
+      svg+='<text class="wl" x="'+lo[0].toFixed(1)+'" y="'+lo[1].toFixed(1)+'">'+g.o+'</text>';
+      svg+='<text class="wl" x="'+li[0].toFixed(1)+'" y="'+li[1].toFixed(1)+'">'+g.i+'</text>';
     });
     svg+='</svg><div class="dial-home" data-jog="home">&#8962;</div>';
     el.innerHTML=svg;
@@ -324,11 +337,13 @@
       +'<div class="ctools"><div class="pillset" id="toolsel"><span class="p" data-tool="0">Tool1<b class="tdot"></b></span><span class="p" data-tool="1">Tool2<b class="tdot"></b></span><span class="p" data-tool="2">Tool3<b class="tdot"></b></span><span class="p" data-tool="3">Tool4<b class="tdot"></b></span></div><div class="pick" id="pickbtn">Pick Extruder</div></div>'
       +'<div class="cmain">'
       +'<div class="crail">'
-      +'<div class="crow"><span class="ci">&#9211;</span><span class="cv" data-k="e0">– / – °C</span></div>'
-      +'<div class="crow"><span class="ci">&#9832;</span><span class="cv" data-k="bed">– / – °C</span></div>'
-      +'<div class="crow"><span class="ci">&#9636;</span><span class="cv" data-k="cav">– / – °C</span></div>'
-      +'<div class="crow clk" id="fanrow"><span class="ci">&#10047;</span><b>Fan</b> <span class="cv" id="fanval">–</span></div>'
-      +'<div class="crail-bot"><div class="cbtn" id="speedbtn"><span class="ci">&#920;</span><span id="spdval">100%</span></div><div class="cbtn" id="ledbtn"><span class="ci">&#128161;</span>Lamp</div></div>'
+      +'<div class="crow"><span class="ci nz">1</span><span class="cv"><b data-cur="e0">–</b> / <span class="tt" data-set="extruder">–</span> °C</span></div>'
+      +'<div class="crow"><span class="ci nz">2</span><span class="cv"><b data-cur="e1">–</b> / <span class="tt" data-set="extruder1">–</span> °C</span></div>'
+      +'<div class="crow"><span class="ci nz">3</span><span class="cv"><b data-cur="e2">–</b> / <span class="tt" data-set="extruder2">–</span> °C</span></div>'
+      +'<div class="crow"><span class="ci nz">4</span><span class="cv"><b data-cur="e3">–</b> / <span class="tt" data-set="extruder3">–</span> °C</span></div>'
+      +'<div class="crow"><span class="ci">&#9832;</span><span class="cv"><b data-cur="bed">–</b> / <span class="tt" data-set="heater_bed">–</span> °C</span></div>'
+      +'<div class="crow"><span class="ci">&#9636;</span><span class="cv"><b data-cur="cav">–</b> °C</span></div>'
+      +'<div class="crail-bot"><div class="cbtn" id="fanrow"><span class="ci">&#10047;</span><span id="fanval">–</span></div><div class="cbtn" id="speedbtn"><span class="ci">&#920;</span><span id="spdval">100%</span></div><div class="cbtn-sw"><span class="ci">&#128161;</span><span class="tsw" id="ledsw"></span></div></div>'
       +'</div>'
       +'<div class="ccenter"><div class="dial" id="dial"></div><div class="bedz"><div class="zb" data-jog="Z-10">&#8593;10</div><div class="zb" data-jog="Z-1">&#8593;1</div><span class="zlab">Bed</span><div class="zb" data-jog="Z+1">&#8595;1</div><div class="zb" data-jog="Z+10">&#8595;10</div></div></div>'
       +'<div class="cright"><div class="jbtn" data-jog="E+10">&#9650;</div><div class="elab">Extruder</div><div class="jbtn" data-jog="E-10">&#9660;</div></div>'
@@ -366,24 +381,40 @@
       var seq=[100,150,200,50], cur=parseInt((document.getElementById('spdval').textContent||'100'),10)||100;
       var next=seq[(seq.indexOf(cur)+1)%seq.length]; window.sendGcode('M220 S'+next);
     });
-    document.getElementById('ledbtn').addEventListener('click',function(){
+    document.getElementById('ledsw').addEventListener('click',function(){
       var on=this.classList.contains('on'), v=on?0:1; window.sendGcode('SET_LED LED=cavity_led RED='+v+' GREEN='+v+' BLUE='+v);
+    });
+    // editable target temps: click the target -> inline input -> SET_HEATER_TEMPERATURE
+    cb.querySelectorAll('.tt[data-set]').forEach(function(sp){
+      sp.addEventListener('click',function(){
+        if(sp.querySelector('input')) return;
+        var cur=(sp.textContent||'').replace(/[^0-9.]/g,'')||'0';
+        var inp=document.createElement('input'); inp.type='number'; inp.min='0'; inp.value=cur; inp.className='ttin';
+        sp.textContent=''; sp.appendChild(inp); inp.focus(); inp.select();
+        var done=false;
+        function commit(send){ if(done)return; done=true; var v=parseInt(inp.value,10);
+          sp.textContent=(isNaN(v)?cur:v);
+          if(send && !isNaN(v)) window.sendGcode('SET_HEATER_TEMPERATURE HEATER='+sp.getAttribute('data-set')+' TARGET='+v); }
+        inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){e.preventDefault(); commit(true);} else if(e.key==='Escape'){ done=true; sp.textContent=cur; } });
+        inp.addEventListener('blur',function(){ commit(true); });
+      });
     });
     __ctrlBuilt=true;
   }
   function updateMachine(m){
     buildControls();
     var cb=document.getElementById('ctrlbody'); if(!cb) return;
-    function setT(k,t,tg){ var el=cb.querySelector('[data-k="'+k+'"]'); if(el) el.textContent=(t==null?'–':Math.round(t))+' / '+(tg==null?'–':Math.round(tg))+' °C'; }
-    if(!m){ ['e0','bed','cav'].forEach(function(k){ setT(k,null,null); }); return; }
-    var ex=m.extruders||[];
-    var act=0; for(var i=0;i<ex.length;i++){ if(ex[i].active){ act=i; break; } }
-    setT('e0', ex[act]&&ex[act].t, ex[act]&&ex[act].target); // nozzle = active toolhead
-    if(m.bed) setT('bed', m.bed.t, m.bed.target); if(m.chamber) setT('cav', m.chamber.t, null);
+    function setCur(k,t){ var el=cb.querySelector('[data-cur="'+k+'"]'); if(el) el.textContent=(t==null?'–':Math.round(t)); }
+    function setTgt(h,tg){ var tt=cb.querySelector('.tt[data-set="'+h+'"]'); if(tt && !tt.querySelector('input')) tt.textContent=(tg==null?'–':Math.round(tg)); }
+    if(!m){ ['e0','e1','e2','e3','bed','cav'].forEach(function(k){ setCur(k,null); }); return; }
+    var ex=m.extruders||[], names=['extruder','extruder1','extruder2','extruder3'];
+    for(var i=0;i<4;i++){ var e=ex[i]||{}; setCur('e'+i, e.t); setTgt(names[i], e.target); }
+    if(m.bed){ setCur('bed', m.bed.t); setTgt('heater_bed', m.bed.target); }
+    if(m.chamber) setCur('cav', m.chamber.t);
     var ts=document.getElementById('toolsel'); if(ts){ ts.querySelectorAll('.tdot').forEach(function(d,i){ d.textContent=(ex[i]&&ex[i].active)?' ●':''; }); }
     var fv=document.getElementById('fanval'); if(fv&&m.fan!=null) fv.textContent=Math.round(m.fan*100)+'%';
     var sv=document.getElementById('spdval'); if(sv&&m.speed!=null) sv.textContent=Math.round(m.speed*100)+'%';
-    var lb=document.getElementById('ledbtn'); if(lb&&m.led!=null) lb.classList.toggle('on', !!m.led);
+    var lsw=document.getElementById('ledsw'); if(lsw&&m.led!=null) lsw.classList.toggle('on', !!m.led);
     var p=m.print||{}, st=(p.state||'standby'), prog=Math.round((p.progress||0)*100);
     var b=document.getElementById('jobbadge'); if(b){ b.textContent=st; b.className='badge '+st; }
     var jf=document.getElementById('jobfile'); if(jf) jf.textContent=(p.file?p.file.replace(/\.[^.]+$/,''):'No active job');
