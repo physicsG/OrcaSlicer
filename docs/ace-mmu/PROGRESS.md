@@ -23,10 +23,15 @@
   preset auto-match; Preview per-slot labels; write actions (Dry/load) — deferred
   (untested printer commands).
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
-  - `libslic3r_tests "[ace_mmu]"` → 5 cases / 48 assertions pass (incl. live fixture).
-    Rebuild: `cmake --build build --config Release --target libslic3r_tests -j 6`.
-  - Full app `Snapmaker_Orca` builds with `AceMmuProvider` compiled in.
-    Rebuild: `cmake --build build --config Release --target Snapmaker_Orca -j 4`.
+  - `libslic3r_tests "[ace_mmu]"` → 8 cases / 67 assertions pass (incl. live fixture).
+    Rebuild: `cmake --build build --config Release --target libslic3r_tests -j 8`.
+  - Full app: `cmake --build build --config Release --target Snapmaker_Orca -j 8`.
+  - **Fast iteration (mold + ccache):** the `build/` dir is configured with
+    `-DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold`.
+    Touching only the small `AceMmu*` files means ~2 TUs recompile + a mold link
+    (seconds), not the ~30-min first build. Keep ACE logic in `AceMmu*` (not the
+    huge `Plater.cpp`/`DeviceManager.cpp`) to keep rebuilds tiny.
+  - Run (WSLg): `GDK_BACKEND=x11 ./build/src/Release/snapmaker-orca`.
   - CI: a PR to this branch runs `pre-commit` (clang-format **14** + hygiene hooks).
     Run `pre-commit run --files <changed>` before committing (`sudo apt install -y pre-commit`).
 - **Environment / hardware:** U1 at **192.168.2.242** (multiACE `0.99.6.1b`); plain
