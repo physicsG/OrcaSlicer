@@ -123,10 +123,33 @@
   .swgrid .sw{width:36px;height:36px;border-radius:50%;justify-self:center;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);}
   .swgrid .sw.white{box-shadow:inset 0 0 0 1px var(--line);}
   .swgrid .sw.sel{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--blue);}
+
+  /* Control (temps) + Printing Task panels */
+  .toprow{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+  @media (max-width:760px){.toprow{grid-template-columns:1fr;}}
+  .pbody{padding:14px;}
+  .muted{color:var(--dim);font-size:13px;}
+  .tgrid{display:flex;gap:10px;flex-wrap:wrap;}
+  .ttile{min-width:74px;background:var(--inset);border:1px solid var(--line);border-radius:10px;padding:9px 11px;}
+  .ttile.active{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal);}
+  .ttile .tlab{font-size:11px;color:var(--dim);}
+  .ttile .tval{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px;}
+  .ttile .tgt{font-size:12px;color:var(--faint);font-weight:400;}
+  .jobrow{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .pbadge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#fff;background:var(--dim);border-radius:5px;padding:2px 8px;flex:none;}
+  .pbadge.printing,.pbadge.complete{background:var(--teal);} .pbadge.paused{background:var(--warn);} .pbadge.error{background:#e5533c;}
+  .pfile{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pbar{height:7px;border-radius:999px;background:var(--inset);overflow:hidden;}
+  .pbar>i{display:block;height:100%;background:var(--teal);width:0;transition:width .3s;}
+  .pmeta{font-size:12px;color:var(--dim);margin-top:8px;font-variant-numeric:tabular-nums;}
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="toprow">
+    <div class="panel"><div class="phead"><span class="title">Control</span></div><div id="ctrlbody" class="pbody"><div class="muted">Connecting…</div></div></div>
+    <div class="panel"><div class="phead"><span class="title">Printing Task</span></div><div id="taskbody" class="pbody"><div class="muted">—</div></div></div>
+  </div>
   <div class="panel">
     <div class="phead"><span class="title">Filament</span>
       <span class="right"><span class="rbtn" id="refresh" title="Refresh">&#8635;</span></span></div>
@@ -154,8 +177,30 @@
 
   var CONNS=[];
 
+  function fmtElapsed(sec){ sec=Math.round(sec||0); var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60); return h>0?(h+'h '+m+'m'):(m+'m'); }
+  function tempTile(label,t,target,active){
+    var tv=(t==null)?'—':Math.round(t)+'°';
+    var tg=(target!=null&&target>0)?' <span class="tgt">/ '+Math.round(target)+'°</span>':'';
+    return '<div class="ttile'+(active?' active':'')+'"><div class="tlab">'+esc(label)+'</div><div class="tval">'+tv+tg+'</div></div>';
+  }
+  function renderMachine(m){
+    var cb=document.getElementById('ctrlbody'), tb=document.getElementById('taskbody');
+    if(!m){ if(cb)cb.innerHTML='<div class="muted">Not connected</div>'; if(tb)tb.innerHTML='<div class="muted">—</div>'; return; }
+    var tiles='';
+    (m.extruders||[]).forEach(function(e,i){ tiles+=tempTile('T'+(i+1), e.t, e.target, !!e.active); });
+    if(m.bed) tiles+=tempTile('Bed', m.bed.t, m.bed.target, false);
+    if(m.chamber) tiles+=tempTile('Chamber', m.chamber.t, null, false);
+    if(cb) cb.innerHTML='<div class="tgrid">'+tiles+'</div>';
+    var p=m.print||{}, st=(p.state||'standby'), prog=Math.round((p.progress||0)*100);
+    var file=p.file||''; var label=file?file.replace(/\.[^.]+$/,''):'No active job';
+    if(tb) tb.innerHTML='<div class="jobrow"><span class="pbadge '+esc(st)+'">'+esc(st)+'</span><span class="pfile">'+esc(label)+'</span></div>'
+      +'<div class="pbar"><i style="width:'+prog+'%"></i></div>'
+      +'<div class="pmeta">'+prog+'%'+(p.elapsed?(' · '+fmtElapsed(p.elapsed)):'')+'</div>';
+  }
+
   function render(state){
     document.documentElement.setAttribute('data-theme', state && state.dark ? 'dark' : 'light');
+    renderMachine(state && state.machine);
     var map=document.getElementById('feedmap'), empty=document.getElementById('empty');
     var heads=(state&&state.toolheads)||[], units=(state&&state.units)||[];
     var hasAce = units.length>0;
@@ -352,6 +397,8 @@
   window.setAceState=function(s){ try{ render(typeof s==='string'?JSON.parse(s):s); }catch(e){ var em=document.getElementById('empty'); if(em){em.hidden=false; em.textContent='Page error: '+((e&&e.message)||e);} } };
 
   var DEMO={dark:false,mode:'head',
+    machine:{extruders:[{t:30,target:0,active:false},{t:30,target:0,active:false},{t:29,target:0,active:false},{t:31,target:210,active:true}],
+             bed:{t:28,target:60},chamber:{t:31},print:{state:'printing',file:'benchy.gcode',progress:0.42,elapsed:2730}},
     toolheads:[
       {idx:0,material:'PLA',color:'#f0483d',brand:'Jayo',source:'rfid',filament_detected:true,feeder:true,ace:null,nozzle:'190°C – 230°C',bed:'45°C',colorname:'Red'},
       {idx:1,material:'PETG',color:'#c23a6b',brand:'KINGROON',source:'rfid',filament_detected:true,feeder:true,ace:null,nozzle:'230°C – 260°C',bed:'50°C',colorname:'Ruby'},
