@@ -58,6 +58,11 @@ public:
     // Empty if nothing is connected.
     static std::string resolve_connected_host();
 
+    // filament_id of a compatible system "Generic <material>" preset (e.g. PETG ->
+    // the Generic PETG preset's id), or empty if none. Used so ACE spools resolve to
+    // a real preset and PresetBundle::sync_ams_list doesn't flag them as "unknown".
+    static std::string resolve_generic_filament_id(const std::string& material);
+
 private:
     void run();
 

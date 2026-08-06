@@ -8227,9 +8227,12 @@ static std::map<int, DynamicPrintConfig> build_filament_ams_list_from_snapshot(c
             if (!slot.occupied)
                 continue; // only real spools become project filaments
             const char t = char('1' + slot.idx);
-            // Non-empty filament_id so sync_ams_list doesn't skip it; not a real
-            // preset id, so sync falls back to "Generic <type>".
-            const std::string filament_id = slot.material.empty() ? std::string("ace") : ("ace:" + slot.material);
+            // Resolve to a real "Generic <type>" preset id so sync_ams_list's direct
+            // match succeeds (no "unknown filaments" notice); fall back to a non-empty
+            // placeholder that still triggers its Generic fallback.
+            std::string filament_id = GUI::AceMmuProvider::resolve_generic_filament_id(slot.material);
+            if (filament_id.empty())
+                filament_id = slot.material.empty() ? std::string("ace") : ("ace:" + slot.material);
             DynamicPrintConfig cfg;
             cfg.set_key_value("filament_id", new ConfigOptionStrings{filament_id});
             cfg.set_key_value("tag_uid", new ConfigOptionStrings{std::string(slot.rfid == 2 ? "1" : "0")});

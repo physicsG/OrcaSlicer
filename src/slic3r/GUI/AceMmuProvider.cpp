@@ -8,6 +8,7 @@
 
 #include "nlohmann/json.hpp"
 #include <boost/log/trivial.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 #include <chrono>
 #include <memory>
@@ -75,6 +76,22 @@ std::string AceMmuProvider::resolve_connected_host()
     }
 
     BOOST_LOG_TRIVIAL(warning) << "AceMmuProvider::resolve_connected_host: no host found (dev_ip/connect_host/print_host all empty)";
+    return {};
+}
+
+std::string AceMmuProvider::resolve_generic_filament_id(const std::string& material)
+{
+    if (material.empty() || !wxGetApp().preset_bundle)
+        return {};
+    // Mirror PresetBundle::sync_ams_list's own fallback: a compatible, system
+    // "Generic <material>" preset. Returning its filament_id lets the direct match
+    // in sync_ams_list succeed, so the spool isn't counted as "unknown".
+    const std::string want      = "Generic " + material;
+    const auto&       filaments = wxGetApp().preset_bundle->filaments;
+    for (auto it = filaments.begin(); it != filaments.end(); ++it) {
+        if (it->is_compatible && it->is_system && boost::algorithm::starts_with(it->name, want))
+            return it->filament_id;
+    }
     return {};
 }
 

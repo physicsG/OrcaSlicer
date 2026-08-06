@@ -953,9 +953,13 @@ void MachineObject::apply_ace_snapshot(const AceMmu::AceSnapshot& snap)
                 tray->color             = color.empty() ? std::string("FFFFFFFF") : color;
                 tray->wx_color          = AmsTray::decode_color(tray->color);
                 tray->tag_uid           = (slot.rfid == 2) ? std::string("1") : std::string("0");
-                // Non-empty so PresetBundle::sync_ams_list doesn't skip the spool; it
-                // isn't a real preset id, so sync falls back to "Generic <type>".
-                tray->setting_id = slot.material.empty() ? std::string() : ("ace:" + slot.material);
+                // Resolve to a real "Generic <type>" preset id so sync_ams_list's
+                // direct match succeeds (no "unknown filaments" notice); fall back to
+                // a non-empty placeholder that still triggers its Generic fallback.
+                std::string fid = GUI::AceMmuProvider::resolve_generic_filament_id(slot.material);
+                if (fid.empty())
+                    fid = slot.material.empty() ? std::string("ace") : ("ace:" + slot.material);
+                tray->setting_id = fid;
             } else {
                 tray->reset();
             }
