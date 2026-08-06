@@ -94,6 +94,24 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 
 Newest first. One block per session: date, what changed (files), result, next.
 
+### 2026-08-06 (cont.) — Sync notice fixed, page styled, FM-split PLAN
+- Fixed the "unknown filaments mapped to generic preset" notice
+  (`AceMmuProvider::resolve_generic_filament_id` → real Generic preset id).
+- Styled the "U1 + ACE" page to the mockup's dark palette.
+- **Known bug:** "Sync from AMS" (legacy `sync_ams_list`) is destructive — it replaces
+  the project filament list with only the ACE slots, dropping U1 toolhead filaments.
+- **Investigated** the Prepare Sidebar filament model (flat 0-based list; tool index ==
+  filament index, no remap; count free ≤64; ACE already maps at send via
+  `ams_filament_mapping`, `tray_index=ace*4+slot`; reusable `filamentsync/`
+  components: `FilamentColorMapBoxGroup`, `SyncFilamentColorDialog`, `MachineFilamentPicker`).
+- **Wrote the plan** [08-filament-management-split.md](08-filament-management-split.md):
+  reuse the non-destructive `SyncFilamentColorDialog` and feed it BOTH sources (U1
+  toolheads + ACE slots) instead of building a new grouped widget in the fragile
+  2-column sidebar grid; hide/merge the destructive legacy "Sync from AMS". Head-vs-slot
+  resolved: filament list is mode-agnostic (display + mapping); mapping to (ace,slot) is
+  a send-time concern.
+- **Next:** user approves the plan → implement (no code written yet).
+
 ### 2026-08-06 (cont.) — "U1 + ACE" full page, sync fix, login fix, FM mockup
 - **LAN-only (confirmed):** the ACE only appears when the U1 is connected over **LAN**
   — the multiACE HTTP endpoint isn't reachable via the cloud connection. Documented
