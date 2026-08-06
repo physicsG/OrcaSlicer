@@ -131,19 +131,25 @@
   /* Printing Task tabs + file browser */
   .ttab{cursor:pointer;padding:3px 10px;border-radius:6px;font-size:12px;color:var(--dim);}
   .ttab.on{background:var(--teal);color:#fff;}
-  .filelist{display:flex;flex-direction:column;max-height:230px;overflow:auto;}
-  .filerow{display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid var(--line-soft);}
-  .filerow:last-child{border-bottom:0;}
-  .filerow .fn{flex:1;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .printbtn{border:1px solid var(--line);background:var(--panel);border-radius:7px;padding:5px 12px;font:inherit;font-size:12px;font-weight:600;color:var(--teal);cursor:pointer;flex:none;}
+  .filegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px;max-height:300px;overflow:auto;padding-right:4px;}
+  .filecard{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--inset);display:flex;flex-direction:column;}
+  .fthumb{aspect-ratio:1;background:var(--panel);display:grid;place-items:center;overflow:hidden;}
+  .fthumb img{width:100%;height:100%;object-fit:contain;}
+  .fthumb .noimg{color:var(--faint);font-size:30px;}
+  .filecard .fn{font-size:11.5px;padding:8px 8px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .printbtn{margin:0 8px 8px;border:1px solid var(--line);background:var(--panel);border-radius:7px;padding:5px 0;font:inherit;font-size:12px;font-weight:600;color:var(--teal);cursor:pointer;}
   .printbtn:hover{border-color:var(--teal);background:var(--teal-soft);}
-  /* Camera (all available streams shown at once) */
-  .camgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;}
+  /* Camera (single view, tabs for others, MJPEG stream with start/stop) */
+  .camtabs{display:inline-flex;gap:2px;margin-right:6px;}
+  .camtab{cursor:pointer;padding:3px 9px;border-radius:6px;font-size:11.5px;color:var(--dim);}
+  .camtab.on{background:var(--teal);color:#fff;}
   .cam{position:relative;aspect-ratio:16/9;background:#000;border-radius:8px;overflow:hidden;display:grid;place-items:center;}
   .cam img{width:100%;height:100%;object-fit:contain;display:none;}
   .cam img.on{display:block;}
-  .camoff{color:#7a7f84;font-size:12px;position:absolute;}
-  .camname{position:absolute;top:8px;left:8px;font-size:10px;font-weight:700;color:#fff;background:rgba(0,0,0,.5);padding:2px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.3px;z-index:1;}
+  .camplay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;}
+  .playbtn{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.16);position:relative;}
+  .playbtn::after{content:"";position:absolute;left:54%;top:50%;transform:translate(-50%,-50%);border-left:16px solid #fff;border-top:10px solid transparent;border-bottom:10px solid transparent;}
+  .camoff{color:#9aa0a6;font-size:12px;}
   .muted{color:var(--dim);font-size:13px;}
   .ctrl{display:grid;grid-template-columns:62px 1fr;gap:14px;}
   .trail{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 6px;display:flex;flex-direction:column;gap:12px;align-items:center;font-size:11px;color:var(--dim);}
@@ -198,8 +204,8 @@
 <body>
 <div class="wrap">
   <div class="grid2">
-    <div class="panel"><div class="phead"><span class="title">Camera</span></div>
-      <div class="pbody"><div class="camgrid" id="camgrid"><div class="muted">Camera off</div></div></div></div>
+    <div class="panel"><div class="phead"><span class="title">Camera</span><span class="right"><span class="camtabs" id="camtabs"></span><span class="rbtn" id="camtoggle" title="Start / stop">&#9654;</span></span></div>
+      <div class="pbody"><div class="cam"><img id="camimg" alt=""><div class="camplay" id="camplay"><div class="playbtn"></div><div class="camoff">Camera not on</div></div></div></div></div>
     <div class="panel"><div class="phead"><span class="title">Control</span></div><div id="ctrlbody" class="pbody"><div class="muted">Connecting…</div></div></div>
     <div class="panel"><div class="phead"><span class="title">Printing Task</span><span class="right"><span class="ttab on" data-tt="task">Task</span><span class="ttab" data-tt="files">Files</span></span></div><div id="taskbody" class="pbody"><div class="muted">—</div></div></div>
     <div class="panel">
@@ -538,37 +544,41 @@
   document.getElementById('errok').addEventListener('click',function(){ document.getElementById('errmodal').classList.remove('show'); });
   document.getElementById('errmodal').addEventListener('click',function(e){ if(e.target.id==='errmodal') this.classList.remove('show'); });
 
-  // camera: show every available stream as a polled snapshot <img>
-  var __cams=[], __camSig='', __camTimer=null;
-  function buildCamGrid(){
-    var g=document.getElementById('camgrid'); if(!g) return;
-    if(!__cams.length){ g.innerHTML='<div class="muted">Camera off</div>'; return; }
-    g.innerHTML=__cams.map(function(c){
-      return '<div class="cam"><img data-url="'+esc(c.url)+'" alt=""><span class="camname">'+esc(c.name||'cam')+'</span><div class="camoff">Camera not on</div></div>';
-    }).join('');
-    g.querySelectorAll('img').forEach(function(img){
-      var off=img.parentNode.querySelector('.camoff');
-      img.addEventListener('load',function(){ img.classList.add('on'); if(off)off.style.display='none'; });
-      img.addEventListener('error',function(){ img.classList.remove('on'); if(off)off.style.display=''; });
-    });
+  // camera: one view (case by default), tabs for the rest, live MJPEG stream the
+  // user starts/stops (default off — matches the stock page).
+  var __cams=[], __camIdx=0, __camOn=false, __camSig='';
+  function curCam(){ return __cams[__camIdx]||null; }
+  function renderCamTabs(){
+    var el=document.getElementById('camtabs'); if(!el) return;
+    if(__cams.length<=1){ el.innerHTML=''; return; }
+    el.innerHTML=__cams.map(function(c,i){ return '<span class="camtab'+(i===__camIdx?' on':'')+'" data-ci="'+i+'">'+esc(c.name||('cam'+(i+1)))+'</span>'; }).join('');
+    el.querySelectorAll('.camtab').forEach(function(t){ t.addEventListener('click',function(){ __camIdx=parseInt(t.getAttribute('data-ci'),10)||0; renderCamTabs(); if(__camOn) startStream(); }); });
   }
-  function tickCam(){ var g=document.getElementById('camgrid'); if(!g)return; g.querySelectorAll('img[data-url]').forEach(function(img){ var u=img.getAttribute('data-url'); if(u) img.src=u+(u.indexOf('?')>=0?'&':'?')+'t='+Date.now(); }); }
-  function startCam(){ if(__camTimer)clearInterval(__camTimer); tickCam(); __camTimer=setInterval(tickCam,1000); }
-  // file browser (host provides the U1's gcode file list)
+  function startStream(){ var c=curCam(), img=document.getElementById('camimg'), pl=document.getElementById('camplay'); if(!img) return; if(!c){ stopStream(); return; } img.src=c.stream||c.snapshot||''; img.classList.add('on'); if(pl) pl.style.display='none'; }
+  function stopStream(){ var img=document.getElementById('camimg'), pl=document.getElementById('camplay'); if(img){ img.src=''; img.classList.remove('on'); } if(pl) pl.style.display=''; }
+  function setCamOn(on){ __camOn=on; var tb=document.getElementById('camtoggle'); if(tb) tb.innerHTML=on?'&#9632;':'&#9654;'; if(on) startStream(); else stopStream(); }
+  function setCams(cams){
+    cams=cams||[]; var sig=cams.map(function(c){return c.stream||c.snapshot;}).join('|');
+    if(sig!==__camSig){ __camSig=sig; __cams=cams; if(__camIdx>=__cams.length)__camIdx=0; renderCamTabs(); if(__camOn) startStream(); }
+  }
+  (function initCam(){
+    var img=document.getElementById('camimg'), pl=document.getElementById('camplay'), tb=document.getElementById('camtoggle');
+    if(img) img.addEventListener('error',function(){ if(__camOn){ img.classList.remove('on'); if(pl) pl.style.display=''; } });
+    if(tb) tb.addEventListener('click',function(){ setCamOn(!__camOn); });
+    if(pl) pl.addEventListener('click',function(){ setCamOn(true); });
+  })();
+
+  // file browser (host provides the U1's gcode files with thumbnails)
   window.setFiles=function(list){
     var fb=document.getElementById('filesbody'); if(!fb) return;
     list=list||[];
     if(!list.length){ fb.innerHTML='<div class="muted">No files on the printer</div>'; return; }
-    fb.innerHTML='<div class="filelist">'+list.map(function(f){
-      return '<div class="filerow"><span class="fn" title="'+esc(f.path)+'">'+esc(f.name||f.path)+'</span><button class="printbtn" data-path="'+esc(f.path)+'">Print</button></div>';
+    fb.innerHTML='<div class="filegrid">'+list.map(function(f){
+      var thumb=f.thumb ? '<img src="'+esc(f.thumb)+'" alt="">' : '<span class="noimg">&#9635;</span>';
+      return '<div class="filecard"><div class="fthumb">'+thumb+'</div><div class="fn" title="'+esc(f.path)+'">'+esc(f.name||f.path)+'</div><button class="printbtn" data-path="'+esc(f.path)+'">Print</button></div>';
     }).join('')+'</div>';
     fb.querySelectorAll('.printbtn').forEach(function(b){ b.addEventListener('click',function(){ window.__notify('print:'+b.getAttribute('data-path')); b.textContent='Sent'; b.disabled=true; }); });
   };
-  function setCams(cams){
-    cams=cams||[]; var sig=cams.map(function(c){return c.url;}).join('|');
-    if(sig!==__camSig){ __cams=cams; __camSig=sig; buildCamGrid(); }
-    if(__cams.length && !__camTimer) startCam();
-  }
   document.getElementById('refresh').addEventListener('click',function(){ if(window.wx&&window.wx.postMessage) window.__notify('refresh'); else render(DEMO); });
 
   // ---- entry point called by the host (C++), with a demo fallback ----
