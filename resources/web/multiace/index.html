@@ -337,7 +337,7 @@
         var hb=document.querySelector('.heatbtn[data-unit="'+u+'"]');
         if(hb){hb.setAttribute('aria-pressed','true'); hb.textContent='■ Stop';}
         bar.hidden=true; requestAnimationFrame(drawWires);
-        window.sendGcode('ACE_DRY ACE='+u+' TEMP='+temp+' DURATION='+hours);
+        window.sendGcode('ACE_DRY ACE='+u+' TEMP='+temp+' DURATION='+(hours*60));
       });
     });
   }

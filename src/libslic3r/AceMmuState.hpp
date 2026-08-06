@@ -209,10 +209,13 @@ inline std::optional<int> parse_dryer_remaining(const nlohmann::json& unit)
     if (!unit.contains("dryer") || !unit.at("dryer").is_object())
         return std::nullopt;
     const nlohmann::json& d = unit.at("dryer");
-    // multiACE reports remaining under "remain_time" (minutes) or "remaining".
+    // multiACE reports the dryer countdown under "remain_time" in SECONDS; expose it
+    // as whole minutes. (ACE_DRY's DURATION param, by contrast, is in minutes.)
     if (auto v = opt_int_null(d, "remain_time"))
-        return v;
-    return opt_int_null(d, "remaining");
+        return std::optional<int>(*v / 60);
+    if (auto v = opt_int_null(d, "remaining"))
+        return std::optional<int>(*v / 60);
+    return std::nullopt;
 }
 
 inline AceUnit parse_unit(const nlohmann::json& j, int index_fallback)
