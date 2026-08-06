@@ -1,0 +1,139 @@
+<title>Sync Filament Information — with ACE (mockup)</title>
+<style>
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --bg:#eef1f3; --panel:#fff; --panel-2:#f5f7f9; --line:#dde3e8;
+    --text:#182027; --dim:#5b6770; --faint:#98a2ab;
+    --accent:#0f9c78; --accent-soft:rgba(15,156,120,.12);
+    --warn:#d6983c; --warn-soft:rgba(214,152,60,.14); --none:#8a949c;
+    --radius:12px;
+  }
+  @media (prefers-color-scheme: dark){:root{--bg:#0e1114;--panel:#181c21;--panel-2:#1f252b;--line:#2a333b;--text:#e9edf0;--dim:#9aa5ad;--faint:#6c7982;--accent:#17b890;--accent-soft:rgba(23,184,144,.16);--warn:#e6a23c;--none:#7d8791;}}
+  :root[data-theme="dark"]{--bg:#0e1114;--panel:#181c21;--panel-2:#1f252b;--line:#2a333b;--text:#e9edf0;--dim:#9aa5ad;--faint:#6c7982;--accent:#17b890;--accent-soft:rgba(23,184,144,.16);--warn:#e6a23c;--none:#7d8791;}
+  :root[data-theme="light"]{--bg:#eef1f3;--panel:#fff;--panel-2:#f5f7f9;--line:#dde3e8;--text:#182027;--dim:#5b6770;--faint:#98a2ab;--accent:#0f9c78;--accent-soft:rgba(15,156,120,.12);--warn:#d6983c;--none:#8a949c;}
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:var(--font-sans); line-height:1.45; }
+  .wrap { max-width:1000px; margin:0 auto; padding:22px clamp(12px,3vw,26px) 60px; }
+  .toggle { float:right; font:inherit; cursor:pointer; background:var(--panel); border:1px solid var(--line); color:var(--dim); border-radius:8px; padding:6px 10px; }
+  .lead { color:var(--dim); font-size:13px; max-width:66ch; margin:0 0 18px; }
+
+  .dialog { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:0 20px 50px -24px rgba(0,0,0,.5); overflow:hidden; }
+  .dlg-head { display:flex; align-items:center; justify-content:center; position:relative; padding:12px; border-bottom:1px solid var(--line); font-weight:700; font-size:14px; }
+  .dlg-head .x { position:absolute; right:12px; color:var(--faint); }
+  .seg { display:flex; justify-content:center; gap:2px; padding:12px; }
+  .seg .s { font-size:12.5px; font-weight:600; color:var(--dim); padding:7px 16px; border-radius:8px; cursor:pointer; }
+  .seg .s[aria-selected="true"]{ background:var(--accent); color:#fff; }
+
+  .body { display:grid; grid-template-columns: 1fr 320px; gap:18px; padding:0 18px 8px; }
+  @media (max-width:820px){ .body{ grid-template-columns:1fr; } }
+
+  .maplabels { display:grid; grid-template-rows:auto auto; gap:10px; font-size:12px; color:var(--dim); }
+  .maprow { display:flex; gap:10px; flex-wrap:wrap; }
+  .mapcard { width:120px; border:1px solid var(--line); border-radius:10px; padding:8px; background:var(--panel-2); }
+  .mapcard .src { display:flex; align-items:center; gap:7px; }
+  .idx { width:20px; height:20px; border-radius:5px; color:#fff; font-size:11px; font-weight:700; display:grid; place-items:center; flex:none; }
+  .mapcard .to { margin-top:8px; border-top:1px dashed var(--line); padding-top:8px; }
+  .pick { display:flex; align-items:center; gap:7px; font-size:12px; cursor:pointer; }
+  .pick .chev { margin-left:auto; color:var(--faint); }
+  .sw { width:16px; height:16px; border-radius:5px; flex:none; box-shadow:inset 0 0 0 1px rgba(0,0,0,.25); }
+  .sw.none { background:repeating-linear-gradient(135deg,var(--none) 0 4px,transparent 4px 8px); box-shadow:inset 0 0 0 1px var(--none); }
+  .chip { font-size:9px; font-weight:700; letter-spacing:.2px; padding:1px 6px; border-radius:999px; }
+  .chip.ace{ color:var(--accent); background:var(--accent-soft); } .chip.feeder{ color:var(--dim); background:var(--panel-2); box-shadow:inset 0 0 0 1px var(--line);} .chip.manual{ color:var(--warn); background:var(--warn-soft);} .chip.none{ color:var(--none); box-shadow:inset 0 0 0 1px var(--line);}
+
+  /* the open picker = the key idea */
+  .picker { border:1px solid var(--accent); border-radius:10px; background:var(--panel); box-shadow:0 12px 26px -14px rgba(0,0,0,.5); overflow:hidden; }
+  .pgroup-h { font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--faint); padding:8px 12px 4px; background:var(--panel-2); }
+  .prow { display:flex; align-items:center; gap:9px; padding:8px 12px; font-size:12.5px; }
+  .prow:hover{ background:var(--panel-2); }
+  .prow[aria-selected="true"]{ background:var(--accent-soft); }
+  .prow .nm{ font-weight:600; } .prow .meta{ color:var(--dim); font-size:11px; }
+  .prow .rt{ margin-left:auto; }
+  .note { font-size:12px; color:var(--faint); margin-top:16px; line-height:1.6; max-width:66ch; }
+  .note code{ font-family:var(--font-mono); color:var(--dim); }
+  .foot { display:flex; justify-content:flex-end; gap:10px; padding:14px 18px; border-top:1px solid var(--line); margin-top:8px; }
+  .btn { font:inherit; font-size:13px; font-weight:600; border-radius:9px; padding:9px 18px; cursor:pointer; border:1px solid var(--line); background:var(--panel); color:var(--text); }
+  .btn.primary{ background:var(--accent); color:#fff; border-color:transparent; }
+  .addrow { padding:10px 18px 0; font-size:12.5px; color:var(--dim); display:flex; align-items:center; gap:8px; }
+</style>
+
+<div class="wrap">
+  <button class="toggle" id="theme">◐ theme</button>
+  <h1 style="font-size:20px;margin:0 0 6px">Sync Filament Information — with ACE</h1>
+  <p class="lead">Mockup of the existing sync dialog, extended so the <b>Printer Filament</b> a project filament maps
+  to is chosen from a <b>topology-aware, grouped list</b>: the four U1 toolheads (each with its source) plus the ACE
+  inventory — deduped, with a real <b>None</b> option. Colours/data are the live values.</p>
+
+  <div class="dialog">
+    <div class="dlg-head">Sync Filament Information <span class="x">✕</span></div>
+    <div class="seg"><div class="s" aria-selected="true">Match Mapping</div><div class="s">Direct Override</div></div>
+
+    <div class="body">
+      <!-- left: mapping cards (project -> printer) -->
+      <div>
+        <div class="maplabels">
+          <div class="maprow">
+            <!-- card 1 -->
+            <div class="mapcard">
+              <div class="src"><span class="idx" style="background:#e5533c">1</span><span class="sw" style="background:#f44336"></span><b style="font-size:12px">PLA</b></div>
+              <div class="to"><div class="pick"><span class="sw" style="background:#f44336"></span>T1 · PLA<span class="chev">▾</span></div></div>
+            </div>
+            <!-- card 2 -->
+            <div class="mapcard">
+              <div class="src"><span class="idx" style="background:#8a3b57">2</span><span class="sw" style="background:#bd4068"></span><b style="font-size:12px">PETG</b></div>
+              <div class="to"><div class="pick"><span class="sw" style="background:#bd4068"></span>T2 · PETG<span class="chev">▾</span></div></div>
+            </div>
+            <!-- card 3 - the one with the open picker -->
+            <div class="mapcard" style="border-color:var(--accent)">
+              <div class="src"><span class="idx" style="background:#5b7fa6">3</span><span class="sw" style="background:#8fa7c8"></span><b style="font-size:12px">PETG</b></div>
+              <div class="to"><div class="pick"><span class="sw" style="background:#8fa7c8"></span>T4 · PETG<span class="chev">▴</span></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- the open picker: the key idea -->
+        <div style="margin-top:12px;max-width:320px">
+          <div class="picker">
+            <div class="pgroup-h">U1 Toolheads</div>
+            <div class="prow"><span class="sw" style="background:#f44336"></span><span><span class="nm">T1 · PLA</span></span><span class="chip feeder rt">Feeder</span></div>
+            <div class="prow"><span class="sw" style="background:#bd4068"></span><span><span class="nm">T2 · PETG</span></span><span class="chip feeder rt">Feeder</span></div>
+            <div class="prow"><span class="sw none"></span><span><span class="nm">T3</span> <span class="meta">— empty</span></span><span class="chip none rt">None</span></div>
+            <div class="prow" aria-selected="true"><span class="sw" style="background:#8fa7c8"></span><span><span class="nm">T4 · PETG</span> <span class="meta">from ACE A4</span></span><span class="chip ace rt">● ACE A4</span></div>
+            <div class="pgroup-h">ACE 2 Pro — Unit A</div>
+            <div class="prow"><span class="sw" style="background:#83afff"></span><span><span class="nm">A1 · PETG</span> <span class="meta">Kingroon · idle</span></span><span class="chip ace rt">ACE</span></div>
+            <div class="prow"><span class="sw none"></span><span><span class="nm">Assign None</span></span><span class="chip none rt">None</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- right: preview -->
+      <div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Mapped model</div>
+        <div style="aspect-ratio:1;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);display:grid;place-items:center;color:var(--faint);font-size:12px">preview</div>
+        <div class="note" style="margin-top:10px">Only filament types and colours are synced; nozzle assignments are not.</div>
+      </div>
+    </div>
+
+    <div class="addrow"><input type="checkbox" checked> Add unused U1 toolheads &amp; ACE spools to the filament list</div>
+
+    <div class="foot"><button class="btn">Reset</button><button class="btn primary">Sync Now</button></div>
+  </div>
+
+  <p class="note"><b>What's new vs today.</b> The picker groups the machine filaments into <b>U1 Toolheads</b> and
+  <b>ACE — Unit A</b>. T4 is shown once as <span class="chip ace">● ACE A4</span> (fed by that slot) — no more
+  duplicate row. Empty heads (T3) offer <span class="chip none">None</span>. Idle ACE spools (A1) appear under the
+  ACE group. Because the printer gives no head→slot id, the ACE-fed head is matched to its slot by colour+type.
+  <br><br><b>Open question for you:</b> should mapping target the <i>toolhead</i> (what's physically at each head)
+  or the <i>ACE slot</i> directly? In head mode the toolhead is the natural target; in multi mode the ACE slots are
+  (<code>T = ace*4 + slot</code>). The grouping above lets both be expressed.</p>
+</div>
+
+<script>
+  document.getElementById('theme').addEventListener('click', function(){
+    var r=document.documentElement,c=r.getAttribute('data-theme');
+    if(!c)c=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+    r.setAttribute('data-theme',c==='dark'?'light':'dark');
+  });
+  document.querySelectorAll('.seg .s').forEach(function(s){s.addEventListener('click',function(){document.querySelectorAll('.seg .s').forEach(function(x){x.removeAttribute('aria-selected')});s.setAttribute('aria-selected','true')})});
+  document.querySelectorAll('.picker .prow').forEach(function(p){p.addEventListener('click',function(){document.querySelectorAll('.picker .prow').forEach(function(x){x.removeAttribute('aria-selected')});p.setAttribute('aria-selected','true')})});
+</script>
