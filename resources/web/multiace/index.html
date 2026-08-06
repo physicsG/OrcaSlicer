@@ -304,9 +304,9 @@
         if(btn.getAttribute('aria-pressed')==='true'){
           btn.setAttribute('aria-pressed','false'); btn.textContent='◈ Dry';
           var s=document.querySelector('#dryerstat'+u+' b'); if(s)s.textContent='Off'; if(bar)bar.hidden=true;
+          window.sendGcode('ACE_STOP_DRYING ACE='+u);
         } else if(bar){ bar.hidden=!bar.hidden; }
         requestAnimationFrame(drawWires);
-        window.__notify && window.__notify('heat:'+u);
       });
     });
     document.querySelectorAll('.drystart').forEach(function(btn){
@@ -314,18 +314,21 @@
       btn.addEventListener('click',function(){
         var sets=bar.querySelectorAll('.pillset');
         var t=sets[0]&&sets[0].querySelector('.p.on'), h=sets[1]&&sets[1].querySelector('.p.on');
+        var temp=t?parseInt(t.textContent,10):45, hours=h?parseInt(h.textContent,10):4;
         var s=document.querySelector('#dryerstat'+u+' b');
-        if(s)s.textContent=(t?t.textContent.trim():'45°C')+' · '+(h?h.textContent.trim():'4 h');
+        if(s)s.textContent=temp+'°C · '+hours+' h';
         var hb=document.querySelector('.heatbtn[data-unit="'+u+'"]');
         if(hb){hb.setAttribute('aria-pressed','true'); hb.textContent='■ Stop';}
         bar.hidden=true; requestAnimationFrame(drawWires);
-        window.__notify && window.__notify('dry:'+u);
+        window.sendGcode('ACE_DRY ACE='+u+' TEMP='+temp+' DURATION='+(hours*60));
       });
     });
   }
 
   // bridge to the C++ host via the "wx" script-message handler CreateWebView registers
   window.__notify=function(m){ try{ if(window.wx&&window.wx.postMessage) window.wx.postMessage(String(m)); }catch(e){} };
+  // send a Klipper G-code via the host, then refresh state to reflect the result
+  window.sendGcode=function(script){ if(window.wx&&window.wx.postMessage){ window.__notify('gcode:'+script); setTimeout(function(){ window.__notify('refresh'); },1600); } };
   document.getElementById('refresh').addEventListener('click',function(){ if(window.wx&&window.wx.postMessage) window.__notify('refresh'); else render(DEMO); });
 
   // ---- entry point called by the host (C++), with a demo fallback ----

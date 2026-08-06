@@ -26,6 +26,7 @@ public:
 private:
     void        push_state();       // fetch snapshot -> inject (or cache until loaded)
     std::string build_state_json(); // serialise the current snapshot for the page
+    void        send_gcode(const std::string& script); // via the Klipper connection
 
     MachineObject* m_obj    = nullptr; // optional: keep its amsList in sync
     wxWebView*     m_web    = nullptr;

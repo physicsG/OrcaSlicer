@@ -5,6 +5,7 @@
 #include "Widgets/WebView.hpp"
 #include "libslic3r/AceMmuState.hpp"
 #include "libslic3r/Utils.hpp"
+#include "slic3r/Utils/PrintHost.hpp"
 
 #include <wx/sizer.h>
 #include <wx/webview.h>
@@ -50,8 +51,10 @@ AceMmuPanel::AceMmuPanel(wxWindow* parent, MachineObject* obj) : wxPanel(parent,
         const std::string msg = e.GetString().ToStdString();
         if (msg == "refresh")
             push_state();
+        else if (msg.rfind("gcode:", 0) == 0)
+            send_gcode(msg.substr(6));
         else
-            BOOST_LOG_TRIVIAL(info) << "AceMmuPanel: page action '" << msg << "' (control endpoint not wired)";
+            BOOST_LOG_TRIVIAL(info) << "AceMmuPanel: page action '" << msg << "'";
     }, m_web->GetId());
 }
 
@@ -117,6 +120,18 @@ std::string AceMmuPanel::build_state_json()
     }
 
     return j.dump();
+}
+
+void AceMmuPanel::send_gcode(const std::string& script)
+{
+    std::shared_ptr<PrintHost> host;
+    wxGetApp().get_connect_host(host);
+    if (!host) {
+        BOOST_LOG_TRIVIAL(warning) << "AceMmuPanel: no connected host for gcode '" << script << "'";
+        return;
+    }
+    BOOST_LOG_TRIVIAL(info) << "AceMmuPanel: send gcode '" << script << "'";
+    host->async_send_gcodes({script}, [](const nlohmann::json&) {});
 }
 
 void AceMmuPanel::push_state()
