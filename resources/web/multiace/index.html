@@ -27,11 +27,9 @@
   html,body{margin:0;height:100%;}
   body{font-family:var(--font-sans);color:var(--text);background:var(--page);font-size:14px;line-height:1.4;-webkit-font-smoothing:antialiased;}
   .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
-  .wrap{padding:14px;height:100%;box-sizing:border-box;}
+  .wrap{padding:14px;box-sizing:border-box;}
 
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;min-height:0;}
-  /* each panel: fixed header, scrollable body so the four quarters stay equal */
-  .panel>.pbody,.panel>.feedmap{flex:1;min-height:0;overflow:auto;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;}
   .phead{display:flex;align-items:center;gap:10px;height:44px;padding:0 14px;background:var(--hbar);border-bottom:1px solid var(--hbar-line);}
   .phead .title{font-size:13.5px;font-weight:600;}
   .phead .right{margin-left:auto;display:flex;align-items:center;gap:10px;color:var(--dim);}
@@ -127,7 +125,8 @@
   .swgrid .sw.sel{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--blue);}
 
   /* Control + Printing Task panels (styled per the mockup) */
-  .grid2{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:14px;height:100%;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;}
+  @media (max-width:900px){.grid2{grid-template-columns:1fr;}}
   .pbody{padding:14px;}
   /* Printing Task tabs + file browser */
   .ttab{cursor:pointer;padding:3px 10px;border-radius:6px;font-size:12px;color:var(--dim);}
@@ -187,6 +186,35 @@
   .task .meta{font-size:12px;color:var(--faint);}
   .pbar{height:6px;border-radius:999px;background:var(--inset);overflow:hidden;margin-top:10px;}
   .pbar>i{display:block;height:100%;width:0;background:var(--teal);transition:width .3s;}
+
+  /* --- Bambu-style Control --- */
+  .cwrap{padding:14px;display:flex;flex-direction:column;gap:14px;}
+  .ctools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .cmain{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;}
+  .crail{display:flex;flex-direction:column;gap:11px;min-width:104px;}
+  .crow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);}
+  .crow .ci{width:18px;text-align:center;color:var(--faint);font-size:14px;}
+  .crow .cv{color:var(--text);font-variant-numeric:tabular-nums;font-size:12.5px;}
+  .crow.clk{cursor:pointer;} .crow.clk:hover .cv,.crow.clk:hover b{color:var(--teal);}
+  .crail-bot{display:flex;gap:18px;margin-top:2px;padding-top:11px;border-top:1px solid var(--line-soft);}
+  .cbtn{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--dim);cursor:pointer;}
+  .cbtn .ci{font-size:18px;color:var(--faint);}
+  .cbtn.on,.cbtn.on .ci{color:var(--warn);} .cbtn:hover,.cbtn:hover .ci{color:var(--teal);}
+  .ccenter{display:flex;flex-direction:column;align-items:center;gap:12px;}
+  .dial{width:210px;height:210px;position:relative;flex:none;}
+  .dial svg{width:100%;height:100%;display:block;}
+  .dial .wg{fill:var(--inset);stroke:var(--panel);stroke-width:2;cursor:pointer;}
+  .dial .wg:hover{fill:var(--teal-soft);}
+  .dial .wl{fill:var(--dim);font-size:11px;font-weight:600;text-anchor:middle;dominant-baseline:central;pointer-events:none;}
+  .dial .ax{fill:var(--faint);font-size:11px;text-anchor:middle;dominant-baseline:central;pointer-events:none;}
+  .dial-home{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--teal);font-size:22px;}
+  .dial-home:hover{background:var(--teal-soft);}
+  .bedz{display:flex;align-items:center;gap:8px;}
+  .zb{min-width:44px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;color:var(--text);font-size:12px;display:grid;place-items:center;padding:0 6px;}
+  .zb:hover{border-color:var(--teal);color:var(--teal);}
+  .zlab{font-size:12px;color:var(--dim);}
+  .cright{display:flex;flex-direction:column;align-items:center;gap:10px;}
+  .cright .elab{font-size:11px;color:var(--dim);}
   #toolsel .p{cursor:pointer;}
   .tdot{color:var(--teal);font-size:9px;margin-left:4px;}
   .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);max-width:80vw;background:#e5533c;color:#fff;padding:11px 16px;border-radius:9px;box-shadow:0 12px 34px -12px rgba(0,0,0,.55);font-size:13px;z-index:80;display:none;white-space:pre-line;line-height:1.4;}
@@ -259,36 +287,52 @@
   // live refresh; updateMachine() only writes the dynamic values.
   var __ctrlBuilt=false, __jogStep=10, __tool=0;
   function jog(code){
-    var d=__jogStep, axis=code.charAt(0), amt=(code.charAt(1)==='-'?'-':'+')+d;
+    if(code==='home'){ window.sendGcode('G28'); return; }
+    var m=/^([XYZE])([+-]\d+)$/.exec(code); if(!m) return;
+    var axis=m[1], amt=m[2];
     if(axis==='E'){ window.sendGcode('M83\nG1 E'+amt+' F300\nM82'); }
     else { window.sendGcode('G91\nG1 '+axis+amt+' F'+(axis==='Z'?1200:6000)+'\nG90'); }
+  }
+  // circular XY dial (Bambu-style): 4 directions x 2 rings (+-10 / +-1) + home
+  function makeDial(){
+    var el=document.getElementById('dial'); if(!el) return;
+    var cx=105,cy=105,R=95,mid=62,ho=34,gap=5;
+    function pol(r,deg){ var a=(deg-90)*Math.PI/180; return [cx+r*Math.cos(a), cy+r*Math.sin(a)]; }
+    function wedge(r1,r2,a1,a2){ var p1=pol(r2,a1),p2=pol(r2,a2),p3=pol(r1,a2),p4=pol(r1,a1);
+      return 'M'+p1[0].toFixed(1)+' '+p1[1].toFixed(1)+' A'+r2+' '+r2+' 0 0 1 '+p2[0].toFixed(1)+' '+p2[1].toFixed(1)
+        +' L'+p3[0].toFixed(1)+' '+p3[1].toFixed(1)+' A'+r1+' '+r1+' 0 0 0 '+p4[0].toFixed(1)+' '+p4[1].toFixed(1)+' Z'; }
+    var dirs=[{deg:0,ax:'Y',s:1,lbl:'Y'},{deg:90,ax:'X',s:1,lbl:'X'},{deg:180,ax:'Y',s:-1,lbl:'-Y'},{deg:270,ax:'X',s:-1,lbl:'-X'}];
+    var svg='<svg viewBox="0 0 210 210">';
+    dirs.forEach(function(d){
+      var a1=d.deg-45+gap, a2=d.deg+45-gap;
+      var o=(d.s>0?'+':'')+(d.s*10), i=(d.s>0?'+':'')+(d.s*1);
+      svg+='<path class="wg" data-jog="'+d.ax+o+'" d="'+wedge(mid,R,a1,a2)+'"></path>';
+      svg+='<path class="wg" data-jog="'+d.ax+i+'" d="'+wedge(ho,mid,a1,a2)+'"></path>';
+      var lo=pol(78,d.deg), li=pol(48,d.deg), la=pol(89,d.deg);
+      svg+='<text class="wl" x="'+lo[0].toFixed(1)+'" y="'+lo[1].toFixed(1)+'">'+o+'</text>';
+      svg+='<text class="wl" x="'+li[0].toFixed(1)+'" y="'+li[1].toFixed(1)+'">'+i+'</text>';
+      svg+='<text class="ax" x="'+la[0].toFixed(1)+'" y="'+la[1].toFixed(1)+'">'+d.lbl+'</text>';
+    });
+    svg+='</svg><div class="dial-home" data-jog="home">&#8962;</div>';
+    el.innerHTML=svg;
   }
   function buildControls(){
     if(__ctrlBuilt) return;
     var cb=document.getElementById('ctrlbody'), tb=document.getElementById('taskbody');
     if(!cb||!tb) return;
-    cb.innerHTML='<div class="ctrl"><div class="trail">'
-      +'<div class="r"><span class="ic">①</span><span class="mono" data-k="e0">–</span></div>'
-      +'<div class="r"><span class="ic">②</span><span class="mono" data-k="e1">–</span></div>'
-      +'<div class="r"><span class="ic">③</span><span class="mono" data-k="e2">–</span></div>'
-      +'<div class="r"><span class="ic">④</span><span class="mono" data-k="e3">–</span></div>'
-      +'<div class="r"><span class="ic">♨</span><span class="mono" data-k="bed">–</span></div>'
-      +'<div class="r"><span class="ic">◈</span><span class="mono" data-k="cav">–</span></div>'
-      +'</div><div class="ctrlmain">'
-      +'<div class="row"><div class="pillset" id="toolsel"><span class="p" data-tool="0">Tool1<b class="tdot"></b></span><span class="p" data-tool="1">Tool2<b class="tdot"></b></span><span class="p" data-tool="2">Tool3<b class="tdot"></b></span><span class="p" data-tool="3">Tool4<b class="tdot"></b></span></div>'
-      +'<div class="pillset" id="stepsel"><span class="p on" data-step="10">10mm</span><span class="p" data-step="1">1mm</span><span class="p" data-step="0.1">0.1mm</span></div>'
-      +'<div class="homebtn" id="homebtn" title="Home all">⌂</div></div>'
-      +'<div class="jog">'
-      +'<div class="axis"><div class="jbtn" data-jog="E+">▲</div>Extruder<div class="jbtn" data-jog="E-">▼</div></div>'
-      +'<div class="axis"><div class="xy"><span>XY</span><span class="a up" data-jog="Y+">▲</span><span class="a dn" data-jog="Y-">▼</span><span class="a lf" data-jog="X-">◀</span><span class="a rt" data-jog="X+">▶</span></div></div>'
-      +'<div class="axis"><div class="jbtn" data-jog="Z-">▲</div>Z&nbsp;/&nbsp;Bed<div class="jbtn" data-jog="Z+">▼</div></div>'
+    cb.innerHTML='<div class="cwrap">'
+      +'<div class="ctools"><div class="pillset" id="toolsel"><span class="p" data-tool="0">Tool1<b class="tdot"></b></span><span class="p" data-tool="1">Tool2<b class="tdot"></b></span><span class="p" data-tool="2">Tool3<b class="tdot"></b></span><span class="p" data-tool="3">Tool4<b class="tdot"></b></span></div><div class="pick" id="pickbtn">Pick Extruder</div></div>'
+      +'<div class="cmain">'
+      +'<div class="crail">'
+      +'<div class="crow"><span class="ci">&#9211;</span><span class="cv" data-k="e0">– / – °C</span></div>'
+      +'<div class="crow"><span class="ci">&#9832;</span><span class="cv" data-k="bed">– / – °C</span></div>'
+      +'<div class="crow"><span class="ci">&#9636;</span><span class="cv" data-k="cav">– / – °C</span></div>'
+      +'<div class="crow clk" id="fanrow"><span class="ci">&#10047;</span><b>Fan</b> <span class="cv" id="fanval">–</span></div>'
+      +'<div class="crail-bot"><div class="cbtn" id="speedbtn"><span class="ci">&#920;</span><span id="spdval">100%</span></div><div class="cbtn" id="ledbtn"><span class="ci">&#128161;</span>Lamp</div></div>'
       +'</div>'
-      +'<div class="row devrow">'
-      +'<button class="ctlbtn" id="ledbtn">&#128161; Light</button>'
-      +'<div class="ctlgrp"><span>Fan</span><button class="stp" data-fan="-">–</button><span class="val" id="fanval">0%</span><button class="stp" data-fan="+">+</button></div>'
-      +'<div class="ctlgrp"><span>Speed</span><button class="stp" data-spd="-">–</button><span class="val" id="spdval">100%</span><button class="stp" data-spd="+">+</button></div>'
-      +'</div>'
-      +'<div class="pick" id="pickbtn">Pick Extruder</div></div></div>';
+      +'<div class="ccenter"><div class="dial" id="dial"></div><div class="bedz"><div class="zb" data-jog="Z-10">&#8593;10</div><div class="zb" data-jog="Z-1">&#8593;1</div><span class="zlab">Bed</span><div class="zb" data-jog="Z+1">&#8595;1</div><div class="zb" data-jog="Z+10">&#8595;10</div></div></div>'
+      +'<div class="cright"><div class="jbtn" data-jog="E+10">&#9650;</div><div class="elab">Extruder</div><div class="jbtn" data-jog="E-10">&#9660;</div></div>'
+      +'</div></div>';
     tb.innerHTML='<div id="taskinfo"><div style="margin-bottom:12px"><span class="badge" id="jobbadge">idle</span> <b style="margin-left:6px">U1</b></div>'
       +'<div class="task"><div class="thumb">▧</div><div style="flex:1">'
       +'<div style="font-size:14px;color:var(--dim)" id="jobfile">No active job</div>'
@@ -304,41 +348,37 @@
       document.getElementById('filesbody').hidden=!files;
       if(files && !__filesLoaded){ __filesLoaded=true; window.__notify('files'); }
     }); });
-    var ss=document.getElementById('stepsel');
-    ss.querySelectorAll('.p').forEach(function(p){ p.addEventListener('click',function(){ ss.querySelectorAll('.p').forEach(function(x){x.classList.remove('on');}); p.classList.add('on'); __jogStep=parseFloat(p.getAttribute('data-step'))||10; }); });
-    document.getElementById('homebtn').addEventListener('click',function(){ window.sendGcode('G28'); });
-    cb.querySelectorAll('[data-jog]').forEach(function(b){ b.addEventListener('click',function(){ jog(b.getAttribute('data-jog')); }); });
+    makeDial();
+    // jog delegation: dial wedges + home + bed Z + extruder all carry data-jog
+    cb.addEventListener('click',function(e){ var t=e.target.closest&&e.target.closest('[data-jog]'); if(t) jog(t.getAttribute('data-jog')); });
     // tool selection (used by Pick Extruder); default Tool1
     var ts=document.getElementById('toolsel');
     function selTool(i){ __tool=i; ts.querySelectorAll('.p').forEach(function(p,j){ p.classList.toggle('on', j===i); }); }
     ts.querySelectorAll('.p').forEach(function(p){ p.addEventListener('click',function(){ selTool(parseInt(p.getAttribute('data-tool'),10)); }); });
     selTool(0);
     document.getElementById('pickbtn').addEventListener('click',function(){ window.sendGcode('T'+__tool); });
-    // LED toggle
-    document.getElementById('ledbtn').addEventListener('click',function(){
-      var on=this.classList.contains('on'), v=on?0:1;
-      window.sendGcode('SET_LED LED=cavity_led RED='+v+' GREEN='+v+' BLUE='+v);
+    // fan toggle (0<->100), speed cycle, lamp toggle
+    document.getElementById('fanrow').addEventListener('click',function(){
+      var cur=parseInt((document.getElementById('fanval').textContent||'0'),10)||0;
+      window.sendGcode(cur>0?'M107':'M106 S255');
     });
-    // fan +/- (part cooling, M106 0-255) and print speed +/- (M220 %)
-    cb.querySelectorAll('[data-fan]').forEach(function(b){ b.addEventListener('click',function(){
-      var cur=parseInt(document.getElementById('fanval').textContent,10)||0;
-      var v=Math.max(0,Math.min(100, cur+(b.getAttribute('data-fan')==='+'?10:-10)));
-      window.sendGcode(v<=0?'M107':'M106 S'+Math.round(v*2.55));
-    }); });
-    cb.querySelectorAll('[data-spd]').forEach(function(b){ b.addEventListener('click',function(){
-      var cur=parseInt(document.getElementById('spdval').textContent,10)||100;
-      var v=Math.max(10,Math.min(300, cur+(b.getAttribute('data-spd')==='+'?10:-10)));
-      window.sendGcode('M220 S'+v);
-    }); });
+    document.getElementById('speedbtn').addEventListener('click',function(){
+      var seq=[100,150,200,50], cur=parseInt((document.getElementById('spdval').textContent||'100'),10)||100;
+      var next=seq[(seq.indexOf(cur)+1)%seq.length]; window.sendGcode('M220 S'+next);
+    });
+    document.getElementById('ledbtn').addEventListener('click',function(){
+      var on=this.classList.contains('on'), v=on?0:1; window.sendGcode('SET_LED LED=cavity_led RED='+v+' GREEN='+v+' BLUE='+v);
+    });
     __ctrlBuilt=true;
   }
   function updateMachine(m){
     buildControls();
     var cb=document.getElementById('ctrlbody'); if(!cb) return;
-    function setT(k,t,tg){ var el=cb.querySelector('[data-k="'+k+'"]'); if(el) el.textContent=(t==null?'–':Math.round(t))+(tg!=null&&tg>0?('/'+Math.round(tg)):'')+'°'; }
-    if(!m){ ['e0','e1','e2','e3','bed','cav'].forEach(function(k){ setT(k,null,null); }); return; }
+    function setT(k,t,tg){ var el=cb.querySelector('[data-k="'+k+'"]'); if(el) el.textContent=(t==null?'–':Math.round(t))+' / '+(tg==null?'–':Math.round(tg))+' °C'; }
+    if(!m){ ['e0','bed','cav'].forEach(function(k){ setT(k,null,null); }); return; }
     var ex=m.extruders||[];
-    for(var i=0;i<4;i++){ var e=ex[i]||{}; setT('e'+i, e.t, e.target); }
+    var act=0; for(var i=0;i<ex.length;i++){ if(ex[i].active){ act=i; break; } }
+    setT('e0', ex[act]&&ex[act].t, ex[act]&&ex[act].target); // nozzle = active toolhead
     if(m.bed) setT('bed', m.bed.t, m.bed.target); if(m.chamber) setT('cav', m.chamber.t, null);
     var ts=document.getElementById('toolsel'); if(ts){ ts.querySelectorAll('.tdot').forEach(function(d,i){ d.textContent=(ex[i]&&ex[i].active)?' ●':''; }); }
     var fv=document.getElementById('fanval'); if(fv&&m.fan!=null) fv.textContent=Math.round(m.fan*100)+'%';
@@ -642,7 +682,7 @@
 
   var DEMO={dark:false,mode:'head',
     machine:{extruders:[{t:30,target:0,active:false},{t:30,target:0,active:false},{t:29,target:0,active:false},{t:31,target:210,active:true}],
-             bed:{t:28,target:60},chamber:{t:31},print:{state:'printing',file:'benchy.gcode',progress:0.42,elapsed:2730}},
+             bed:{t:28,target:60},chamber:{t:31},fan:0.4,speed:1.0,led:true,print:{state:'printing',file:'benchy.gcode',progress:0.42,elapsed:2730}},
     toolheads:[
       {idx:0,material:'PLA',color:'#f0483d',brand:'Jayo',source:'rfid',filament_detected:true,feeder:true,ace:null,nozzle:'190°C – 230°C',bed:'45°C',colorname:'Red'},
       {idx:1,material:'PETG',color:'#c23a6b',brand:'KINGROON',source:'rfid',filament_detected:true,feeder:true,ace:null,nozzle:'230°C – 260°C',bed:'50°C',colorname:'Ruby'},
