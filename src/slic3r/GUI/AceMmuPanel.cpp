@@ -87,8 +87,40 @@ nlohmann::json fetch_machine_json(const std::string& host)
     return out;
 }
 
+// All enabled webcams Moonraker knows about -> [{name,url}]. Worker-safe.
+nlohmann::json fetch_cams(const std::string& host)
+{
+    nlohmann::json arr = nlohmann::json::array();
+    Http::get("http://" + host + ":7125/server/webcams/list")
+        .timeout_connect(3)
+        .timeout_max(6)
+        .on_error([](std::string, std::string, unsigned) {})
+        .on_complete([&](std::string body, unsigned) {
+            const nlohmann::json doc = nlohmann::json::parse(body, nullptr, false);
+            if (!doc.is_object() || !doc.contains("result") || !doc["result"].contains("webcams"))
+                return;
+            const nlohmann::json& cams = doc["result"]["webcams"];
+            if (!cams.is_array())
+                return;
+            for (const nlohmann::json& w : cams) {
+                if (!w.is_object())
+                    continue;
+                if (w.contains("enabled") && w["enabled"].is_boolean() && !w["enabled"].get<bool>())
+                    continue;
+                const std::string snap = w.value("snapshot_url", std::string());
+                if (snap.empty())
+                    continue;
+                const std::string url = (snap.rfind("http", 0) == 0) ? snap : ("http://" + host + snap);
+                arr.push_back({{"name", w.value("name", std::string("cam"))}, {"url", url}});
+            }
+        })
+        .perform_sync();
+    return arr;
+}
+
 // Serialise the ACE snapshot + machine state for the page. Pure (no GUI/network).
-std::string serialize_state(const Slic3r::AceMmu::AceSnapshot& snap, bool fetched, bool dark, const nlohmann::json& machine)
+std::string serialize_state(const Slic3r::AceMmu::AceSnapshot& snap, bool fetched, bool dark, const nlohmann::json& machine,
+                            const nlohmann::json& cams)
 {
     nlohmann::json j;
     j["dark"]      = dark;
@@ -96,6 +128,8 @@ std::string serialize_state(const Slic3r::AceMmu::AceSnapshot& snap, bool fetche
     j["connected"] = fetched;
     if (!machine.is_null())
         j["machine"] = machine;
+    if (cams.is_array() && !cams.empty())
+        j["cams"] = cams;
 
     j["toolheads"] = nlohmann::json::array();
     for (const auto& t : snap.toolheads) {
@@ -241,7 +275,8 @@ void AceMmuPanel::push_state()
                 snap = prov.snapshot();
         }
         nlohmann::json machine = host.empty() ? nlohmann::json() : fetch_machine_json(host);
-        std::string    json    = serialize_state(snap, fetched, dark, machine);
+        nlohmann::json cams    = host.empty() ? nlohmann::json::array() : fetch_cams(host);
+        std::string    json    = serialize_state(snap, fetched, dark, machine, cams);
 
         wxGetApp().CallAfter([this, alive, snap, fetched, json]() {
             if (!*alive)
