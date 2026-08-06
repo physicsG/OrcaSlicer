@@ -27,9 +27,11 @@
   html,body{margin:0;height:100%;}
   body{font-family:var(--font-sans);color:var(--text);background:var(--page);font-size:14px;line-height:1.4;-webkit-font-smoothing:antialiased;}
   .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
-  .wrap{padding:14px;}
+  .wrap{padding:14px;height:100%;box-sizing:border-box;}
 
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;min-height:0;}
+  /* each panel: fixed header, scrollable body so the four quarters stay equal */
+  .panel>.pbody,.panel>.feedmap{flex:1;min-height:0;overflow:auto;}
   .phead{display:flex;align-items:center;gap:10px;height:44px;padding:0 14px;background:var(--hbar);border-bottom:1px solid var(--hbar-line);}
   .phead .title{font-size:13.5px;font-weight:600;}
   .phead .right{margin-left:auto;display:flex;align-items:center;gap:10px;color:var(--dim);}
@@ -125,8 +127,7 @@
   .swgrid .sw.sel{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--blue);}
 
   /* Control + Printing Task panels (styled per the mockup) */
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;}
-  @media (max-width:900px){.grid2{grid-template-columns:1fr;}}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:14px;height:100%;}
   .pbody{padding:14px;}
   /* Printing Task tabs + file browser */
   .ttab{cursor:pointer;padding:3px 10px;border-radius:6px;font-size:12px;color:var(--dim);}
