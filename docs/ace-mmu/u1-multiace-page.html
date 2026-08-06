@@ -140,12 +140,20 @@
   .camtab{cursor:pointer;padding:3px 9px;border-radius:6px;font-size:11.5px;color:var(--dim);}
   .camtab.on{background:var(--teal);color:#fff;}
   .cam{position:relative;aspect-ratio:16/9;background:#000;border-radius:8px;overflow:hidden;display:grid;place-items:center;}
-  .cam img{width:100%;height:100%;object-fit:contain;display:none;}
-  .cam img.on{display:block;}
+  .cam img,.cam video{width:100%;height:100%;object-fit:contain;display:none;}
+  .cam img.on,.cam video.on{display:block;}
   .camplay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;}
   .playbtn{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.16);position:relative;}
   .playbtn::after{content:"";position:absolute;left:54%;top:50%;transform:translate(-50%,-50%);border-left:16px solid #fff;border-top:10px solid transparent;border-bottom:10px solid transparent;}
   .camoff{color:#9aa0a6;font-size:12px;}
+  .camcfg{position:absolute;inset:0;background:rgba(0,0,0,.72);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:2;color:#fff;}
+  .camcfg[hidden]{display:none;}
+  .camcfg .ccrow{display:flex;align-items:center;gap:10px;}
+  .camcfg .ccl{font-size:12px;color:#cfd3d7;}
+  .camcfg .pillset{border-color:rgba(255,255,255,.28);}
+  .camcfg .pillset .p{color:#cfd3d7;}
+  .camcfg .pillset .p.on{color:#fff;background:var(--teal);box-shadow:none;}
+  .camcfg .cchint{font-size:11px;color:#9aa0a6;max-width:80%;text-align:center;}
   .muted{color:var(--dim);font-size:13px;}
   .ctrl{display:grid;grid-template-columns:62px 1fr;gap:14px;}
   .trail{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 6px;display:flex;flex-direction:column;gap:12px;align-items:center;font-size:11px;color:var(--dim);}
@@ -198,8 +206,9 @@
 </style>
 <div class="wrap">
   <div class="grid2">
-    <div class="panel"><div class="phead"><span class="title">Camera</span><span class="right"><span class="camtabs" id="camtabs"></span><span class="rbtn" id="camtoggle" title="Start / stop">&#9654;</span></span></div>
-      <div class="pbody"><div class="cam"><img id="camimg" alt=""><div class="camplay" id="camplay"><div class="playbtn"></div><div class="camoff">Camera not on</div></div></div></div></div>
+    <div class="panel"><div class="phead"><span class="title">Camera</span><span class="right"><span class="camtabs" id="camtabs"></span><span class="rbtn" id="camcfg" title="Camera settings">&#9881;</span><span class="rbtn" id="camtoggle" title="Start / stop">&#9654;</span></span></div>
+      <div class="pbody"><div class="cam"><video id="camvideo" autoplay muted playsinline></video><img id="camimg" alt=""><div class="camplay" id="camplay"><div class="playbtn"></div><div class="camoff">Camera not on</div></div>
+        <div class="camcfg" id="camcfgpanel" hidden><div class="ccrow"><span class="ccl">Stream</span><div class="pillset" id="cammode"><span class="p" data-m="auto">Auto</span><span class="p" data-m="webrtc">WebRTC</span><span class="p" data-m="snapshot">Snapshot</span></div></div><div class="cchint">WebRTC = smooth live video (like the printer UI); Snapshot = periodic JPEG. Auto prefers WebRTC.</div></div></div></div></div>
     <div class="panel"><div class="phead"><span class="title">Control</span></div><div id="ctrlbody" class="pbody"><div class="muted">Connecting…</div></div></div>
     <div class="panel"><div class="phead"><span class="title">Printing Task</span><span class="right"><span class="ttab on" data-tt="task">Task</span><span class="ttab" data-tt="files">Files</span></span></div><div id="taskbody" class="pbody"><div class="muted">—</div></div></div>
     <div class="panel">
@@ -339,7 +348,10 @@
   function render(state){
     document.documentElement.setAttribute('data-theme', state && state.dark ? 'dark' : 'light');
     updateMachine(state && state.machine);
-    setCams(state && state.cams);
+    var cams=(state && state.cams) || [];
+    if(!cams.length && state && state.host)
+      cams=[{name:'case', snapshot:'http://'+state.host+'/webcam/snapshot.jpg', webrtc:'http://'+state.host+'/webcam/webrtc'}];
+    setCams(cams);
     var map=document.getElementById('feedmap'), empty=document.getElementById('empty');
     var heads=(state&&state.toolheads)||[], units=(state&&state.units)||[];
     var hasAce = units.length>0;
@@ -548,11 +560,37 @@
     el.innerHTML=__cams.map(function(c,i){ return '<span class="camtab'+(i===__camIdx?' on':'')+'" data-ci="'+i+'">'+esc(c.name||('cam'+(i+1)))+'</span>'; }).join('');
     el.querySelectorAll('.camtab').forEach(function(t){ t.addEventListener('click',function(){ __camIdx=parseInt(t.getAttribute('data-ci'),10)||0; renderCamTabs(); if(__camOn) startStream(); }); });
   }
-  // No MJPEG endpoint on this firmware (only snapshot + webrtc), so stream = a
-  // chained snapshot poll: request the next frame as soon as the last one loads.
-  function tickCam(){ var c=curCam(), img=document.getElementById('camimg'); if(!__camOn||!c||!img) return; var u=c.snapshot||c.stream; if(!u) return; img.src=u+(u.indexOf('?')>=0?'&':'?')+'t='+Date.now(); }
-  function startStream(){ var c=curCam(), img=document.getElementById('camimg'), pl=document.getElementById('camplay'); if(!img) return; if(!c){ stopStream(); return; } img.classList.add('on'); if(pl) pl.style.display='none'; tickCam(); }
-  function stopStream(){ var img=document.getElementById('camimg'), pl=document.getElementById('camplay'); if(img){ img.classList.remove('on'); img.removeAttribute('src'); } if(pl) pl.style.display=''; }
+  // Prefer WebRTC (camera-streamer, like the Klipper UI) for smooth video; fall back
+  // to chained snapshot polling if WebRTC is unsupported or fails.
+  var __pc=null;
+  var __camMode=(function(){ try{ return localStorage.getItem('aceCamMode')||'auto'; }catch(e){ return 'auto'; } })();
+  function tickCam(){ var c=curCam(), img=document.getElementById('camimg'); if(!__camOn||!c||!img) return; var u=c.snapshot; if(!u) return; img.src=u+(u.indexOf('?')>=0?'&':'?')+'t='+Date.now(); }
+  function startSnapshot(){ var c=curCam(), img=document.getElementById('camimg'), v=document.getElementById('camvideo'), pl=document.getElementById('camplay');
+    if(!c||!c.snapshot||!img){ if(pl){ pl.style.display=''; var off=pl.querySelector('.camoff'); if(off)off.textContent='No camera'; } return; }
+    if(v){ v.classList.remove('on'); } img.classList.add('on'); if(pl)pl.style.display='none'; tickCam(); }
+  function stopWebrtc(){ if(__pc){ try{__pc.close();}catch(e){} __pc=null; } var v=document.getElementById('camvideo'); if(v){ try{v.srcObject=null;}catch(e){} v.classList.remove('on'); } }
+  function startWebrtc(c){
+    if(!window.RTCPeerConnection || !c || !c.webrtc || !window.wx) return false;
+    try{
+      stopWebrtc();
+      var v=document.getElementById('camvideo'), img=document.getElementById('camimg'), pl=document.getElementById('camplay');
+      __pc=new RTCPeerConnection();
+      __pc.addTransceiver('video',{direction:'recvonly'});
+      __pc.ontrack=function(e){ if(!__camOn)return; v.srcObject=e.streams[0]; v.classList.add('on'); if(img)img.classList.remove('on'); if(pl)pl.style.display='none'; };
+      __pc.oniceconnectionstatechange=function(){ if(__pc && (__pc.iceConnectionState==='failed') && __camOn){ stopWebrtc(); startSnapshot(); } };
+      __pc.createOffer().then(function(o){ return __pc.setLocalDescription(o); }).then(function(){
+        window.__notify('webrtc\n'+c.webrtc+'\n'+__pc.localDescription.sdp);
+      }).catch(function(){ if(__camOn){ stopWebrtc(); startSnapshot(); } });
+      return true;
+    }catch(e){ return false; }
+  }
+  window.__webrtcAnswer=function(sdp){ if(!__pc)return; __pc.setRemoteDescription({type:'answer',sdp:sdp}).catch(function(){ if(__camOn){ stopWebrtc(); startSnapshot(); } }); };
+  window.__webrtcFail=function(){ if(__camOn){ stopWebrtc(); startSnapshot(); } };
+  function startStream(){ var c=curCam(); if(!c){ stopStream(); return; }
+    if(__camMode==='snapshot'){ startSnapshot(); return; }
+    if(!startWebrtc(c)) startSnapshot();  // auto / webrtc: prefer WebRTC, fall back
+  }
+  function stopStream(){ stopWebrtc(); var img=document.getElementById('camimg'), pl=document.getElementById('camplay'); if(img){ img.classList.remove('on'); img.removeAttribute('src'); } if(pl){ pl.style.display=''; var off=pl.querySelector('.camoff'); if(off)off.textContent='Camera not on'; } }
   function setCamOn(on){ __camOn=on; var tb=document.getElementById('camtoggle'); if(tb) tb.innerHTML=on?'&#9632;':'&#9654;'; if(on) startStream(); else stopStream(); }
   function setCams(cams){
     cams=cams||[]; var sig=cams.map(function(c){return c.stream||c.snapshot;}).join('|');
@@ -566,6 +604,17 @@
     }
     if(tb) tb.addEventListener('click',function(){ setCamOn(!__camOn); });
     if(pl) pl.addEventListener('click',function(){ setCamOn(true); });
+    // stream-mode config (Auto / WebRTC / Snapshot), persisted
+    var cfg=document.getElementById('camcfg'), panel=document.getElementById('camcfgpanel'), modes=document.getElementById('cammode');
+    if(cfg&&panel) cfg.addEventListener('click',function(){ panel.hidden=!panel.hidden; });
+    if(modes){ modes.querySelectorAll('.p').forEach(function(p){
+      p.classList.toggle('on', p.getAttribute('data-m')===__camMode);
+      p.addEventListener('click',function(){
+        __camMode=p.getAttribute('data-m'); try{localStorage.setItem('aceCamMode',__camMode);}catch(e){}
+        modes.querySelectorAll('.p').forEach(function(x){x.classList.remove('on');}); p.classList.add('on');
+        if(panel)panel.hidden=true; if(__camOn){ stopStream(); startStream(); }
+      });
+    }); }
   })();
 
   // file browser (host provides the U1's gcode files with thumbnails)

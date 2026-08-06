@@ -112,14 +112,12 @@ nlohmann::json fetch_cams(const std::string& host)
                 if (snap.empty())
                     continue;
                 const std::string snapUrl = (snap.rfind("http", 0) == 0) ? snap : ("http://" + host + snap);
-                // camera-streamer serves MJPEG at "<dir>/stream" (same dir as the
-                // snapshot) — a live <img> feed, much smoother than polling JPEGs.
-                std::string streamUrl = snapUrl;
-                if (snap.rfind("http", 0) != 0) {
-                    const size_t sl = snap.find_last_of('/');
-                    streamUrl = "http://" + host + (sl != std::string::npos ? snap.substr(0, sl + 1) : "/") + "stream";
-                }
-                arr.push_back({{"name", w.value("name", std::string("cam"))}, {"snapshot", snapUrl}, {"stream", streamUrl}});
+                nlohmann::json cam = {{"name", w.value("name", std::string("cam"))}, {"snapshot", snapUrl}};
+                // WebRTC stream (camera-streamer) — the high-fps path the Klipper UI uses.
+                const std::string surl = w.value("stream_url", std::string());
+                if (!surl.empty() && surl.find("webrtc") != std::string::npos)
+                    cam["webrtc"] = (surl.rfind("http", 0) == 0) ? surl : ("http://" + host + surl);
+                arr.push_back(cam);
             }
         })
         .perform_sync();
@@ -227,12 +225,14 @@ std::string response_error(const nlohmann::json& resp)
 
 // Serialise the ACE snapshot + machine state for the page. Pure (no GUI/network).
 std::string serialize_state(const Slic3r::AceMmu::AceSnapshot& snap, bool fetched, bool dark, const nlohmann::json& machine,
-                            const nlohmann::json& cams)
+                            const nlohmann::json& cams, const std::string& host)
 {
     nlohmann::json j;
     j["dark"]      = dark;
     j["mode"]      = snap.mode;
     j["connected"] = fetched;
+    if (!host.empty())
+        j["host"] = host;
     if (!machine.is_null())
         j["machine"] = machine;
     if (cams.is_array() && !cams.empty())
@@ -311,6 +311,8 @@ AceMmuPanel::AceMmuPanel(wxWindow* parent, MachineObject* obj) : wxPanel(parent,
             send_gcode(msg.substr(6));
         else if (msg.rfind("print:", 0) == 0)
             start_print(msg.substr(6));
+        else if (msg.rfind("webrtc\n", 0) == 0)
+            webrtc_offer(msg.substr(7)); // "<url>\n<offer-sdp>"
         else
             BOOST_LOG_TRIVIAL(info) << "AceMmuPanel: page action '" << msg << "'";
     }, m_web->GetId());
@@ -397,6 +399,46 @@ void AceMmuPanel::start_print(const std::string& filename)
     });
 }
 
+void AceMmuPanel::webrtc_offer(const std::string& payload)
+{
+    // payload = "<webrtc-url>\n<offer sdp>". Proxy the SDP exchange to the printer's
+    // camera-streamer (no CORS from file://); media then flows browser<->printer.
+    const size_t nl = payload.find('\n');
+    if (nl == std::string::npos)
+        return;
+    const std::string url = payload.substr(0, nl);
+    const std::string sdp = payload.substr(nl + 1);
+    if (url.rfind("http", 0) != 0)
+        return;
+    auto alive = m_alive;
+    std::thread([this, alive, url, sdp]() {
+        nlohmann::json body;
+        body["type"] = "offer";
+        body["sdp"]  = sdp;
+        std::string answer;
+        Http::post(url)
+            .header("Content-Type", "application/json")
+            .set_post_body(body.dump())
+            .timeout_connect(4)
+            .timeout_max(8)
+            .on_error([](std::string, std::string, unsigned) {})
+            .on_complete([&](std::string b, unsigned) {
+                const nlohmann::json doc = nlohmann::json::parse(b, nullptr, false);
+                if (doc.is_object() && doc.contains("sdp") && doc["sdp"].is_string())
+                    answer = doc["sdp"].get<std::string>();
+            })
+            .perform_sync();
+        wxGetApp().CallAfter([this, alive, answer]() {
+            if (!*alive || !m_web || !m_loaded)
+                return;
+            if (answer.empty())
+                WebView::RunScript(m_web, "window.__webrtcFail()");
+            else
+                WebView::RunScript(m_web, "window.__webrtcAnswer(" + nlohmann::json(answer).dump() + ")");
+        });
+    }).detach();
+}
+
 void AceMmuPanel::push_state()
 {
     if (m_fetching.exchange(true))
@@ -420,7 +462,7 @@ void AceMmuPanel::push_state()
         }
         nlohmann::json machine = host.empty() ? nlohmann::json() : fetch_machine_json(host);
         nlohmann::json cams    = host.empty() ? nlohmann::json::array() : fetch_cams(host);
-        std::string    json    = serialize_state(snap, fetched, dark, machine, cams);
+        std::string    json    = serialize_state(snap, fetched, dark, machine, cams, host);
 
         wxGetApp().CallAfter([this, alive, snap, fetched, json]() {
             if (!*alive)
