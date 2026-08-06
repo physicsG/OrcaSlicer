@@ -124,24 +124,38 @@
   .swgrid .sw.white{box-shadow:inset 0 0 0 1px var(--line);}
   .swgrid .sw.sel{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--blue);}
 
-  /* Control (temps) + Printing Task panels */
+  /* Control + Printing Task panels (styled per the mockup) */
   .toprow{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
-  @media (max-width:760px){.toprow{grid-template-columns:1fr;}}
+  @media (max-width:820px){.toprow{grid-template-columns:1fr;}}
   .pbody{padding:14px;}
   .muted{color:var(--dim);font-size:13px;}
-  .tgrid{display:flex;gap:10px;flex-wrap:wrap;}
-  .ttile{min-width:74px;background:var(--inset);border:1px solid var(--line);border-radius:10px;padding:9px 11px;}
-  .ttile.active{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal);}
-  .ttile .tlab{font-size:11px;color:var(--dim);}
-  .ttile .tval{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px;}
-  .ttile .tgt{font-size:12px;color:var(--faint);font-weight:400;}
-  .jobrow{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
-  .pbadge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#fff;background:var(--dim);border-radius:5px;padding:2px 8px;flex:none;}
-  .pbadge.printing,.pbadge.complete{background:var(--teal);} .pbadge.paused{background:var(--warn);} .pbadge.error{background:#e5533c;}
-  .pfile{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .pbar{height:7px;border-radius:999px;background:var(--inset);overflow:hidden;}
-  .pbar>i{display:block;height:100%;background:var(--teal);width:0;transition:width .3s;}
-  .pmeta{font-size:12px;color:var(--dim);margin-top:8px;font-variant-numeric:tabular-nums;}
+  .ctrl{display:grid;grid-template-columns:62px 1fr;gap:14px;}
+  .trail{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 6px;display:flex;flex-direction:column;gap:12px;align-items:center;font-size:11px;color:var(--dim);}
+  .trail .r{display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .trail .r .ic{color:var(--faint);font-size:12px;}
+  .ctrlmain{display:flex;flex-direction:column;gap:16px;}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .homebtn{width:38px;height:34px;border:1px solid var(--line);border-radius:9px;display:grid;place-items:center;color:var(--dim);cursor:pointer;}
+  .homebtn:hover{border-color:var(--teal);color:var(--teal);}
+  #toolsel .p{cursor:default;}
+  #toolsel .p.on{color:var(--teal);background:var(--teal-soft);box-shadow:inset 0 0 0 1px var(--teal);border-radius:8px;}
+  .jog{display:flex;justify-content:space-around;align-items:center;padding:6px 0 2px;gap:8px;flex-wrap:wrap;}
+  .axis{display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--dim);font-size:11px;}
+  .jbtn{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;color:var(--text);cursor:pointer;user-select:none;}
+  .jbtn:hover{border-color:var(--teal);color:var(--teal);}
+  .xy{position:relative;width:120px;height:120px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;color:var(--dim);font-size:12px;}
+  .xy .a{position:absolute;color:var(--text);cursor:pointer;padding:5px;user-select:none;} .xy .a:hover{color:var(--teal);}
+  .xy .up{top:5px;} .xy .dn{bottom:5px;} .xy .lf{left:7px;} .xy .rt{right:7px;}
+  .pick{align-self:center;border:1px solid var(--line);border-radius:9px;padding:9px 22px;font-size:12.5px;color:var(--text);cursor:pointer;}
+  .pick:hover{border-color:var(--teal);color:var(--teal);}
+  .task{display:flex;gap:14px;}
+  .task .thumb{width:110px;height:110px;border-radius:10px;background:var(--inset);display:grid;place-items:center;color:var(--faint);flex:none;font-size:28px;}
+  .badge{display:inline-block;font-size:10px;font-weight:700;color:#fff;background:var(--dim);border-radius:5px;padding:2px 8px;text-transform:uppercase;letter-spacing:.4px;}
+  .badge.printing,.badge.complete{background:var(--teal);} .badge.paused{background:var(--warn);} .badge.error{background:#e5533c;}
+  .task .big{font-size:34px;font-weight:300;color:var(--dim);margin:2px 0;font-variant-numeric:tabular-nums;}
+  .task .meta{font-size:12px;color:var(--faint);}
+  .pbar{height:6px;border-radius:999px;background:var(--inset);overflow:hidden;margin-top:10px;}
+  .pbar>i{display:block;height:100%;width:0;background:var(--teal);transition:width .3s;}
 </style>
 </head>
 <body>
@@ -178,29 +192,66 @@
   var CONNS=[];
 
   function fmtElapsed(sec){ sec=Math.round(sec||0); var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60); return h>0?(h+'h '+m+'m'):(m+'m'); }
-  function tempTile(label,t,target,active){
-    var tv=(t==null)?'—':Math.round(t)+'°';
-    var tg=(target!=null&&target>0)?' <span class="tgt">/ '+Math.round(target)+'°</span>':'';
-    return '<div class="ttile'+(active?' active':'')+'"><div class="tlab">'+esc(label)+'</div><div class="tval">'+tv+tg+'</div></div>';
+
+  // Build the static Control + Task markup once, so jog/step UI state survives the
+  // live refresh; updateMachine() only writes the dynamic values.
+  var __ctrlBuilt=false, __jogStep=10;
+  function jog(code){
+    var d=__jogStep, axis=code.charAt(0), amt=(code.charAt(1)==='-'?'-':'+')+d;
+    if(axis==='E'){ window.sendGcode('M83\nG1 E'+amt+' F300\nM82'); }
+    else { window.sendGcode('G91\nG1 '+axis+amt+' F'+(axis==='Z'?1200:6000)+'\nG90'); }
   }
-  function renderMachine(m){
+  function buildControls(){
+    if(__ctrlBuilt) return;
     var cb=document.getElementById('ctrlbody'), tb=document.getElementById('taskbody');
-    if(!m){ if(cb)cb.innerHTML='<div class="muted">Not connected</div>'; if(tb)tb.innerHTML='<div class="muted">—</div>'; return; }
-    var tiles='';
-    (m.extruders||[]).forEach(function(e,i){ tiles+=tempTile('T'+(i+1), e.t, e.target, !!e.active); });
-    if(m.bed) tiles+=tempTile('Bed', m.bed.t, m.bed.target, false);
-    if(m.chamber) tiles+=tempTile('Chamber', m.chamber.t, null, false);
-    if(cb) cb.innerHTML='<div class="tgrid">'+tiles+'</div>';
+    if(!cb||!tb) return;
+    cb.innerHTML='<div class="ctrl"><div class="trail">'
+      +'<div class="r"><span class="ic">①</span><span class="mono" data-k="e0">–</span></div>'
+      +'<div class="r"><span class="ic">②</span><span class="mono" data-k="e1">–</span></div>'
+      +'<div class="r"><span class="ic">③</span><span class="mono" data-k="e2">–</span></div>'
+      +'<div class="r"><span class="ic">④</span><span class="mono" data-k="e3">–</span></div>'
+      +'<div class="r"><span class="ic">♨</span><span class="mono" data-k="bed">–</span></div>'
+      +'<div class="r"><span class="ic">◈</span><span class="mono" data-k="cav">–</span></div>'
+      +'</div><div class="ctrlmain">'
+      +'<div class="row"><div class="pillset" id="toolsel"><span class="p" data-tool="0">Tool1</span><span class="p" data-tool="1">Tool2</span><span class="p" data-tool="2">Tool3</span><span class="p" data-tool="3">Tool4</span></div>'
+      +'<div class="pillset" id="stepsel"><span class="p on" data-step="10">10mm</span><span class="p" data-step="1">1mm</span><span class="p" data-step="0.1">0.1mm</span></div>'
+      +'<div class="homebtn" id="homebtn" title="Home all">⌂</div></div>'
+      +'<div class="jog">'
+      +'<div class="axis"><div class="jbtn" data-jog="E+">▲</div>Extruder<div class="jbtn" data-jog="E-">▼</div></div>'
+      +'<div class="axis"><div class="xy"><span>XY</span><span class="a up" data-jog="Y+">▲</span><span class="a dn" data-jog="Y-">▼</span><span class="a lf" data-jog="X-">◀</span><span class="a rt" data-jog="X+">▶</span></div></div>'
+      +'<div class="axis"><div class="jbtn" data-jog="Z+">▲</div>Z&nbsp;/&nbsp;Bed<div class="jbtn" data-jog="Z-">▼</div></div>'
+      +'</div><div class="pick" id="pickbtn">Pick Extruder</div></div></div>';
+    tb.innerHTML='<div style="margin-bottom:12px"><span class="badge" id="jobbadge">idle</span> <b style="margin-left:6px">U1</b></div>'
+      +'<div class="task"><div class="thumb">▧</div><div style="flex:1">'
+      +'<div style="font-size:14px;color:var(--dim)" id="jobfile">No active job</div>'
+      +'<div class="big" id="jobpct">0%</div><div class="meta" id="jobmeta">—</div>'
+      +'<div class="pbar"><i id="jobbar"></i></div></div></div>';
+    var ss=document.getElementById('stepsel');
+    ss.querySelectorAll('.p').forEach(function(p){ p.addEventListener('click',function(){ ss.querySelectorAll('.p').forEach(function(x){x.classList.remove('on');}); p.classList.add('on'); __jogStep=parseFloat(p.getAttribute('data-step'))||10; }); });
+    document.getElementById('homebtn').addEventListener('click',function(){ window.sendGcode('G28'); });
+    cb.querySelectorAll('[data-jog]').forEach(function(b){ b.addEventListener('click',function(){ jog(b.getAttribute('data-jog')); }); });
+    __ctrlBuilt=true;
+  }
+  function updateMachine(m){
+    buildControls();
+    var cb=document.getElementById('ctrlbody'); if(!cb) return;
+    function setT(k,t,tg){ var el=cb.querySelector('[data-k="'+k+'"]'); if(el) el.textContent=(t==null?'–':Math.round(t))+(tg!=null&&tg>0?('/'+Math.round(tg)):'')+'°'; }
+    if(!m){ ['e0','e1','e2','e3','bed','cav'].forEach(function(k){ setT(k,null,null); }); return; }
+    var ex=m.extruders||[];
+    for(var i=0;i<4;i++){ var e=ex[i]||{}; setT('e'+i, e.t, e.target); }
+    if(m.bed) setT('bed', m.bed.t, m.bed.target); if(m.chamber) setT('cav', m.chamber.t, null);
+    var ts=document.getElementById('toolsel'); if(ts){ ts.querySelectorAll('.p').forEach(function(p,i){ p.classList.toggle('on', !!(ex[i]&&ex[i].active)); }); }
     var p=m.print||{}, st=(p.state||'standby'), prog=Math.round((p.progress||0)*100);
-    var file=p.file||''; var label=file?file.replace(/\.[^.]+$/,''):'No active job';
-    if(tb) tb.innerHTML='<div class="jobrow"><span class="pbadge '+esc(st)+'">'+esc(st)+'</span><span class="pfile">'+esc(label)+'</span></div>'
-      +'<div class="pbar"><i style="width:'+prog+'%"></i></div>'
-      +'<div class="pmeta">'+prog+'%'+(p.elapsed?(' · '+fmtElapsed(p.elapsed)):'')+'</div>';
+    var b=document.getElementById('jobbadge'); if(b){ b.textContent=st; b.className='badge '+st; }
+    var jf=document.getElementById('jobfile'); if(jf) jf.textContent=(p.file?p.file.replace(/\.[^.]+$/,''):'No active job');
+    var jp=document.getElementById('jobpct'); if(jp) jp.textContent=prog+'%';
+    var jm=document.getElementById('jobmeta'); if(jm) jm.textContent=(p.elapsed?fmtElapsed(p.elapsed):'—');
+    var jb=document.getElementById('jobbar'); if(jb) jb.style.width=prog+'%';
   }
 
   function render(state){
     document.documentElement.setAttribute('data-theme', state && state.dark ? 'dark' : 'light');
-    renderMachine(state && state.machine);
+    updateMachine(state && state.machine);
     var map=document.getElementById('feedmap'), empty=document.getElementById('empty');
     var heads=(state&&state.toolheads)||[], units=(state&&state.units)||[];
     var hasAce = units.length>0;
