@@ -156,6 +156,10 @@
   .task .meta{font-size:12px;color:var(--faint);}
   .pbar{height:6px;border-radius:999px;background:var(--inset);overflow:hidden;margin-top:10px;}
   .pbar>i{display:block;height:100%;width:0;background:var(--teal);transition:width .3s;}
+  #toolsel .p{cursor:pointer;}
+  .tdot{color:var(--teal);font-size:9px;margin-left:4px;}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);max-width:80vw;background:#e5533c;color:#fff;padding:11px 16px;border-radius:9px;box-shadow:0 12px 34px -12px rgba(0,0,0,.55);font-size:13px;z-index:80;display:none;white-space:pre-line;line-height:1.4;}
+  .toast.show{display:block;}
 </style>
 </head>
 <body>
@@ -173,6 +177,7 @@
 </div>
 
 <div class="scrim" id="scrim"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
 
 <script>
   var ICONS={
@@ -195,7 +200,7 @@
 
   // Build the static Control + Task markup once, so jog/step UI state survives the
   // live refresh; updateMachine() only writes the dynamic values.
-  var __ctrlBuilt=false, __jogStep=10;
+  var __ctrlBuilt=false, __jogStep=10, __tool=0;
   function jog(code){
     var d=__jogStep, axis=code.charAt(0), amt=(code.charAt(1)==='-'?'-':'+')+d;
     if(axis==='E'){ window.sendGcode('M83\nG1 E'+amt+' F300\nM82'); }
@@ -213,13 +218,13 @@
       +'<div class="r"><span class="ic">♨</span><span class="mono" data-k="bed">–</span></div>'
       +'<div class="r"><span class="ic">◈</span><span class="mono" data-k="cav">–</span></div>'
       +'</div><div class="ctrlmain">'
-      +'<div class="row"><div class="pillset" id="toolsel"><span class="p" data-tool="0">Tool1</span><span class="p" data-tool="1">Tool2</span><span class="p" data-tool="2">Tool3</span><span class="p" data-tool="3">Tool4</span></div>'
+      +'<div class="row"><div class="pillset" id="toolsel"><span class="p" data-tool="0">Tool1<b class="tdot"></b></span><span class="p" data-tool="1">Tool2<b class="tdot"></b></span><span class="p" data-tool="2">Tool3<b class="tdot"></b></span><span class="p" data-tool="3">Tool4<b class="tdot"></b></span></div>'
       +'<div class="pillset" id="stepsel"><span class="p on" data-step="10">10mm</span><span class="p" data-step="1">1mm</span><span class="p" data-step="0.1">0.1mm</span></div>'
       +'<div class="homebtn" id="homebtn" title="Home all">⌂</div></div>'
       +'<div class="jog">'
       +'<div class="axis"><div class="jbtn" data-jog="E+">▲</div>Extruder<div class="jbtn" data-jog="E-">▼</div></div>'
       +'<div class="axis"><div class="xy"><span>XY</span><span class="a up" data-jog="Y+">▲</span><span class="a dn" data-jog="Y-">▼</span><span class="a lf" data-jog="X-">◀</span><span class="a rt" data-jog="X+">▶</span></div></div>'
-      +'<div class="axis"><div class="jbtn" data-jog="Z+">▲</div>Z&nbsp;/&nbsp;Bed<div class="jbtn" data-jog="Z-">▼</div></div>'
+      +'<div class="axis"><div class="jbtn" data-jog="Z-">▲</div>Z&nbsp;/&nbsp;Bed<div class="jbtn" data-jog="Z+">▼</div></div>'
       +'</div><div class="pick" id="pickbtn">Pick Extruder</div></div></div>';
     tb.innerHTML='<div style="margin-bottom:12px"><span class="badge" id="jobbadge">idle</span> <b style="margin-left:6px">U1</b></div>'
       +'<div class="task"><div class="thumb">▧</div><div style="flex:1">'
@@ -230,6 +235,12 @@
     ss.querySelectorAll('.p').forEach(function(p){ p.addEventListener('click',function(){ ss.querySelectorAll('.p').forEach(function(x){x.classList.remove('on');}); p.classList.add('on'); __jogStep=parseFloat(p.getAttribute('data-step'))||10; }); });
     document.getElementById('homebtn').addEventListener('click',function(){ window.sendGcode('G28'); });
     cb.querySelectorAll('[data-jog]').forEach(function(b){ b.addEventListener('click',function(){ jog(b.getAttribute('data-jog')); }); });
+    // tool selection (used by Pick Extruder); default Tool1
+    var ts=document.getElementById('toolsel');
+    function selTool(i){ __tool=i; ts.querySelectorAll('.p').forEach(function(p,j){ p.classList.toggle('on', j===i); }); }
+    ts.querySelectorAll('.p').forEach(function(p){ p.addEventListener('click',function(){ selTool(parseInt(p.getAttribute('data-tool'),10)); }); });
+    selTool(0);
+    document.getElementById('pickbtn').addEventListener('click',function(){ window.sendGcode('T'+__tool); });
     __ctrlBuilt=true;
   }
   function updateMachine(m){
@@ -240,7 +251,7 @@
     var ex=m.extruders||[];
     for(var i=0;i<4;i++){ var e=ex[i]||{}; setT('e'+i, e.t, e.target); }
     if(m.bed) setT('bed', m.bed.t, m.bed.target); if(m.chamber) setT('cav', m.chamber.t, null);
-    var ts=document.getElementById('toolsel'); if(ts){ ts.querySelectorAll('.p').forEach(function(p,i){ p.classList.toggle('on', !!(ex[i]&&ex[i].active)); }); }
+    var ts=document.getElementById('toolsel'); if(ts){ ts.querySelectorAll('.tdot').forEach(function(d,i){ d.textContent=(ex[i]&&ex[i].active)?' ●':''; }); }
     var p=m.print||{}, st=(p.state||'standby'), prog=Math.round((p.progress||0)*100);
     var b=document.getElementById('jobbadge'); if(b){ b.textContent=st; b.className='badge '+st; }
     var jf=document.getElementById('jobfile'); if(jf) jf.textContent=(p.file?p.file.replace(/\.[^.]+$/,''):'No active job');
@@ -442,6 +453,9 @@
   window.__notify=function(m){ try{ if(window.wx&&window.wx.postMessage) window.wx.postMessage(String(m)); }catch(e){} };
   // send a Klipper G-code via the host, then refresh state to reflect the result
   window.sendGcode=function(script){ if(window.wx&&window.wx.postMessage){ window.__notify('gcode:'+script); setTimeout(function(){ window.__notify('refresh'); },1600); } };
+  // error/notice popup (the host calls this with Klipper errors)
+  var __toastT=null;
+  window.showToast=function(msg){ var t=document.getElementById('toast'); if(!t)return; t.textContent=String(msg); t.classList.add('show'); if(__toastT)clearTimeout(__toastT); __toastT=setTimeout(function(){ t.classList.remove('show'); },6000); };
   document.getElementById('refresh').addEventListener('click',function(){ if(window.wx&&window.wx.postMessage) window.__notify('refresh'); else render(DEMO); });
 
   // ---- entry point called by the host (C++), with a demo fallback ----

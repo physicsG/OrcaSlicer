@@ -181,7 +181,27 @@ void AceMmuPanel::send_gcode(const std::string& script)
         return;
     }
     BOOST_LOG_TRIVIAL(info) << "AceMmuPanel: send gcode '" << script << "'";
-    host->async_send_gcodes({script}, [](const nlohmann::json&) {});
+    auto alive = m_alive;
+    host->async_send_gcodes({script}, [this, alive](const nlohmann::json& resp) {
+        std::string err;
+        if (resp.is_object() && resp.contains("error") && !resp["error"].is_null()) {
+            const nlohmann::json& e = resp["error"];
+            if (e.is_string())
+                err = e.get<std::string>();
+            else if (e.is_object() && e.contains("message") && e["message"].is_string())
+                err = e["message"].get<std::string>();
+            else
+                err = e.dump();
+        }
+        if (err.empty())
+            return;
+        wxGetApp().CallAfter([this, alive, err]() {
+            if (!*alive)
+                return;
+            if (m_web && m_loaded)
+                WebView::RunScript(m_web, "window.showToast(" + nlohmann::json(err).dump() + ")");
+        });
+    });
 }
 
 void AceMmuPanel::push_state()
