@@ -2,27 +2,35 @@
 #define slic3r_GUI_AceMmuPanel_hpp_
 
 #include <wx/panel.h>
+#include <wx/string.h>
+#include <string>
+
+class wxWebView;
 
 namespace Slic3r {
 class MachineObject;
 namespace GUI {
 
-// Native ACE MMU view: an ACE-unit header (humidity/temp/protocol/mode) over four
-// slot cards (colour, material, brand, RFID/override chip, hex) and a toolhead
-// strip, with a Refresh button. Resolves the printer host itself (works with no
-// MachineObject), so it can be used both as a top-level tab and inside a dialog.
-// Modelled on docs/ace-mmu/device-page-mockup.html. Display only for now.
+// Native "U1 + multiACE" page. Rendered as a wxWebView loading
+// resources/web/multiace/index.html (the same design iterated in
+// docs/ace-mmu/u1-multiace-page.html) — the Flutter-like path Snapmaker uses.
+// C++ fetches the live AceSnapshot, serialises it to JSON, and injects it via
+// window.setAceState(...). Resolves the printer host itself, so it works both as
+// a top-level tab and inside a dialog.
 class AceMmuPanel : public wxPanel
 {
 public:
     explicit AceMmuPanel(wxWindow* parent, MachineObject* obj = nullptr);
-    void refresh(); // re-fetch the inventory and rebuild
+    void refresh(); // re-fetch the inventory and push it to the page
 
 private:
-    void rebuild();
+    void        push_state();       // fetch snapshot -> inject (or cache until loaded)
+    std::string build_state_json(); // serialise the current snapshot for the page
 
-    MachineObject* m_obj  = nullptr; // optional: keep its amsList in sync
-    wxPanel*       m_body = nullptr;
+    MachineObject* m_obj    = nullptr; // optional: keep its amsList in sync
+    wxWebView*     m_web    = nullptr;
+    bool           m_loaded = false;
+    wxString       m_pending;          // last JSON, injected once the page is loaded
 };
 
 } // namespace GUI

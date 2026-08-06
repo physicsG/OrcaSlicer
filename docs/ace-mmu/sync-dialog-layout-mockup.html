@@ -1,0 +1,194 @@
+<title>Sync Filament — layout redesign (mockup)</title>
+<style>
+  :root{
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --bg:#eef1f3; --panel:#fff; --panel-2:#f5f7f9; --line:#dde3e8;
+    --text:#182027; --dim:#5b6770; --faint:#98a2ab;
+    --accent:#0f9c78; --accent-soft:rgba(15,156,120,.12);
+    --none:#8a949c; --radius:12px;
+  }
+  @media (prefers-color-scheme: dark){:root{--bg:#0e1114;--panel:#181c21;--panel-2:#1f252b;--line:#2a333b;--text:#e9edf0;--dim:#9aa5ad;--faint:#6c7982;--accent:#17b890;--accent-soft:rgba(23,184,144,.16);--none:#7d8791;}}
+  :root[data-theme="dark"]{--bg:#0e1114;--panel:#181c21;--panel-2:#1f252b;--line:#2a333b;--text:#e9edf0;--dim:#9aa5ad;--faint:#6c7982;--accent:#17b890;--accent-soft:rgba(23,184,144,.16);--none:#7d8791;}
+  :root[data-theme="light"]{--bg:#eef1f3;--panel:#fff;--panel-2:#f5f7f9;--line:#dde3e8;--text:#182027;--dim:#5b6770;--faint:#98a2ab;--accent:#0f9c78;--accent-soft:rgba(15,156,120,.12);--none:#8a949c;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);line-height:1.45;}
+  .wrap{max-width:900px;margin:0 auto;padding:22px clamp(12px,3vw,26px) 60px;}
+  .toggle{float:right;font:inherit;cursor:pointer;background:var(--panel);border:1px solid var(--line);color:var(--dim);border-radius:8px;padding:6px 10px;}
+  h1{font-size:20px;margin:0 0 6px;}
+  .lead{color:var(--dim);font-size:13px;max-width:70ch;margin:0 0 18px;}
+  .lead b{color:var(--text);}
+
+  .dialog{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 20px 50px -24px rgba(0,0,0,.5);overflow:hidden;margin-bottom:26px;}
+  .dlg-head{display:flex;align-items:center;justify-content:center;position:relative;padding:12px;border-bottom:1px solid var(--line);font-weight:700;font-size:14px;}
+  .dlg-head .x{position:absolute;right:14px;color:var(--faint);}
+  .seg{display:flex;justify-content:center;gap:2px;padding:12px;}
+  .seg .s{font-size:12.5px;font-weight:600;color:var(--dim);padding:7px 16px;border-radius:8px;cursor:pointer;}
+  .seg .s[aria-selected="true"]{background:var(--accent);color:#fff;}
+
+  /* shared bits */
+  .sw{width:16px;height:16px;border-radius:5px;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.28);}
+  .sw.lg{width:22px;height:22px;border-radius:6px;}
+  .sw.none{background:repeating-linear-gradient(135deg,var(--none) 0 4px,transparent 4px 8px);box-shadow:inset 0 0 0 1px var(--none);}
+  .idx{width:20px;height:20px;border-radius:5px;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;flex:none;}
+  .chev{color:var(--faint);}
+  .dim{color:var(--dim);} .faint{color:var(--faint);}
+  .pill{font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px;color:var(--accent);background:var(--accent-soft);}
+
+  .subhead{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--faint);padding:14px 18px 0;}
+
+  /* ---------- Option A: responsive card grid ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;padding:10px 18px 18px;}
+  .card{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:10px;display:flex;flex-direction:column;gap:8px;}
+  .card.sel{border-color:var(--accent);}
+  .card .from{display:flex;align-items:center;gap:8px;}
+  .card .from .nm{font-weight:700;font-size:12.5px;}
+  .card .arrow{display:flex;align-items:center;gap:8px;color:var(--faint);font-size:11px;}
+  .card .arrow::before,.card .arrow::after{content:"";height:1px;background:var(--line);flex:1;}
+  .card .to{display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:7px 8px;background:var(--panel);}
+  .card .to .nm{font-weight:600;}
+  .card .to .chev{margin-left:auto;}
+  .to.isnone .nm{color:var(--none);}
+
+  /* ---------- Option B: compact list ---------- */
+  .list{padding:6px 18px 18px;}
+  .lrow{display:grid;grid-template-columns:26px 1fr 22px 1.2fr;align-items:center;gap:10px;padding:9px 8px;border-bottom:1px solid var(--line);}
+  .lrow:last-child{border-bottom:0;}
+  .lhead{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--faint);border-bottom:1px solid var(--line);padding:8px;}
+  .lrow .src{display:flex;align-items:center;gap:9px;} .lrow .src .nm{font-weight:700;font-size:12.5px;}
+  .lrow .to{display:flex;align-items:center;gap:9px;font-size:12.5px;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--panel-2);}
+  .lrow .to .chev{margin-left:auto;} .lrow .to .nm{font-weight:600;} .to.isnone .nm{color:var(--none);}
+  .arrowcell{color:var(--faint);text-align:center;}
+
+  .foot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 18px;border-top:1px solid var(--line);}
+  .foot .cnt{font-size:12px;color:var(--dim);}
+  .btns{display:flex;gap:10px;}
+  .btn{font:inherit;font-size:13px;font-weight:600;border-radius:9px;padding:9px 18px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--text);}
+  .btn.primary{background:var(--accent);color:#fff;border-color:transparent;}
+  .note{font-size:12px;color:var(--faint);margin-top:14px;line-height:1.6;max-width:70ch;}
+  .hidden{display:none;}
+</style>
+
+<div class="wrap">
+  <button class="toggle" id="theme">◐ theme</button>
+  <h1>Sync Filament — layout redesign</h1>
+  <p class="lead">Today the dialog has two fixed left labels — <b>Source Filament</b> / <b>Printer Filament</b> —
+  beside a wrapping grid of mapping cards. With more than 4 filaments the cards wrap to a second row that the
+  labels no longer line up with, so it reads as broken. Two redesigns below make each card <b>self-describing</b>
+  (top = project filament → bottom = printer filament) and scale to any number of filaments. Data = your live 6.</p>
+
+  <div style="text-align:center;margin-bottom:14px">
+    <span class="seg" style="display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px">
+      <span class="s" data-view="grid" aria-selected="true">Option A · Card grid</span>
+      <span class="s" data-view="list">Option B · Compact list</span>
+    </span>
+  </div>
+
+  <!-- ============ Option A : responsive card grid ============ -->
+  <div class="dialog" id="view-grid">
+    <div class="dlg-head">Sync Filament Information <span class="x">✕</span></div>
+    <div class="seg"><div class="s" aria-selected="true">Match Mapping</div><div class="s">Direct Override</div></div>
+    <div class="subhead">Project filament&nbsp; →&nbsp; Printer filament</div>
+    <div class="grid">
+      <div class="card">
+        <div class="from"><span class="idx" style="background:#e5533c">1</span><span class="sw" style="background:#f44336"></span><span class="nm">PLA</span></div>
+        <div class="arrow">maps to</div>
+        <div class="to"><span class="sw" style="background:#f44336"></span><span class="nm">T1 · PLA</span><span class="chev">▾</span></div>
+      </div>
+      <div class="card">
+        <div class="from"><span class="idx" style="background:#8a3b57">2</span><span class="sw" style="background:#bd4068"></span><span class="nm">PETG</span></div>
+        <div class="arrow">maps to</div>
+        <div class="to"><span class="sw" style="background:#bd4068"></span><span class="nm">T2 · PETG</span><span class="chev">▾</span></div>
+      </div>
+      <div class="card">
+        <div class="from"><span class="idx" style="background:#5b7fa6">3</span><span class="sw" style="background:#8fa7c8"></span><span class="nm">PETG</span></div>
+        <div class="arrow">maps to</div>
+        <div class="to isnone"><span class="sw none"></span><span class="nm">None</span><span class="chev">▾</span></div>
+      </div>
+      <div class="card sel">
+        <div class="from"><span class="idx" style="background:#5f7488">4</span><span class="sw" style="background:#83afff"></span><span class="nm">PETG</span></div>
+        <div class="arrow">maps to</div>
+        <div class="to"><span class="sw" style="background:#83afff"></span><span class="nm">A1-S4 · PETG</span><span class="chev">▾</span></div>
+      </div>
+      <div class="card">
+        <div class="from"><span class="idx" style="background:#2aa889">5</span><span class="sw" style="background:#37c9a6"></span><span class="nm">PETG</span></div>
+        <div class="arrow">maps to</div>
+        <div class="to"><span class="sw" style="background:#37c9a6"></span><span class="nm">A1-S1 · PETG</span><span class="chev">▾</span></div>
+      </div>
+      <div class="card">
+        <div class="from"><span class="idx" style="background:#c9a96b">6</span><span class="sw" style="background:#e6c893"></span><span class="nm">PETG</span></div>
+        <div class="arrow">maps to</div>
+        <div class="to isnone"><span class="sw none"></span><span class="nm">None</span><span class="chev">▾</span></div>
+      </div>
+    </div>
+    <div class="foot"><span class="cnt">6 project filaments</span><span class="btns"><button class="btn">Reset</button><button class="btn primary">Sync</button></span></div>
+  </div>
+
+  <!-- ============ Option B : compact list ============ -->
+  <div class="dialog hidden" id="view-list">
+    <div class="dlg-head">Sync Filament Information <span class="x">✕</span></div>
+    <div class="seg"><div class="s" aria-selected="true">Match Mapping</div><div class="s">Direct Override</div></div>
+    <div class="list">
+      <div class="lrow lhead"><span>#</span><span>Project filament</span><span></span><span>Printer filament</span></div>
+      <div class="lrow">
+        <span class="idx" style="background:#e5533c">1</span>
+        <span class="src"><span class="sw lg" style="background:#f44336"></span><span class="nm">PLA</span></span>
+        <span class="arrowcell">→</span>
+        <span class="to"><span class="sw" style="background:#f44336"></span><span class="nm">T1 · PLA</span><span class="chev">▾</span></span>
+      </div>
+      <div class="lrow">
+        <span class="idx" style="background:#8a3b57">2</span>
+        <span class="src"><span class="sw lg" style="background:#bd4068"></span><span class="nm">PETG</span></span>
+        <span class="arrowcell">→</span>
+        <span class="to"><span class="sw" style="background:#bd4068"></span><span class="nm">T2 · PETG</span><span class="chev">▾</span></span>
+      </div>
+      <div class="lrow">
+        <span class="idx" style="background:#5b7fa6">3</span>
+        <span class="src"><span class="sw lg" style="background:#8fa7c8"></span><span class="nm">PETG</span></span>
+        <span class="arrowcell">→</span>
+        <span class="to isnone"><span class="sw none"></span><span class="nm">None</span><span class="chev">▾</span></span>
+      </div>
+      <div class="lrow">
+        <span class="idx" style="background:#5f7488">4</span>
+        <span class="src"><span class="sw lg" style="background:#83afff"></span><span class="nm">PETG</span></span>
+        <span class="arrowcell">→</span>
+        <span class="to"><span class="sw" style="background:#83afff"></span><span class="nm">A1-S4 · PETG</span><span class="chev">▾</span></span>
+      </div>
+      <div class="lrow">
+        <span class="idx" style="background:#2aa889">5</span>
+        <span class="src"><span class="sw lg" style="background:#37c9a6"></span><span class="nm">PETG</span></span>
+        <span class="arrowcell">→</span>
+        <span class="to"><span class="sw" style="background:#37c9a6"></span><span class="nm">A1-S1 · PETG</span><span class="chev">▾</span></span>
+      </div>
+      <div class="lrow">
+        <span class="idx" style="background:#c9a96b">6</span>
+        <span class="src"><span class="sw lg" style="background:#e6c893"></span><span class="nm">PETG</span></span>
+        <span class="arrowcell">→</span>
+        <span class="to isnone"><span class="sw none"></span><span class="nm">None</span><span class="chev">▾</span></span>
+      </div>
+    </div>
+    <div class="foot"><span class="cnt">6 project filaments</span><span class="btns"><button class="btn">Reset</button><button class="btn primary">Sync</button></span></div>
+  </div>
+
+  <p class="note"><b>Both drop the fixed left labels</b> and describe the mapping per row instead, so any number of
+  filaments lays out cleanly. <b>Option A</b> keeps today's card look (least code change — reuse the existing
+  <code>FilamentColorMapBox</code>, just remove the label column and let the grid flow). <b>Option B</b> is a
+  denser table that reads top-to-bottom and stays compact even with 10+ filaments (more work — a new row widget).
+  My recommendation: <b>Option A</b> first (small, safe), Option B later if you want the density.</p>
+</div>
+
+<script>
+  document.getElementById('theme').addEventListener('click',function(){
+    var r=document.documentElement,c=r.getAttribute('data-theme');
+    if(!c)c=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+    r.setAttribute('data-theme',c==='dark'?'light':'dark');
+  });
+  document.querySelectorAll('.seg .s[data-view]').forEach(function(s){
+    s.addEventListener('click',function(){
+      document.querySelectorAll('.seg .s[data-view]').forEach(function(x){x.removeAttribute('aria-selected')});
+      s.setAttribute('aria-selected','true');
+      var v=s.getAttribute('data-view');
+      document.getElementById('view-grid').classList.toggle('hidden',v!=='grid');
+      document.getElementById('view-list').classList.toggle('hidden',v!=='list');
+    });
+  });
+</script>

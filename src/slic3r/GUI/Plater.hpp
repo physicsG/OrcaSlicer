@@ -228,7 +228,6 @@ private:
     ScalableButton* connection_btn = nullptr;
     ScalableButton* machine_connecting_btn = nullptr;
     ScalableButton* ams_btn = nullptr;
-    wxButton*       ace_btn = nullptr; // Snapmaker U1: open the ACE MMU page
 };
 
 class Plater: public wxPanel

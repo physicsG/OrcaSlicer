@@ -170,7 +170,7 @@ SyncFilamentColorDialog::SyncFilamentColorDialog(wxWindow* parent,
             loadCoverPreview();
         });
 
-        m_bNeedScroll = m_pFilamentColorMapBoxGroup->exceedsRowCount(2);
+        m_bNeedScroll = m_pFilamentColorMapBoxGroup->exceedsRowCount(3);
 
         // --- Preview wrapper (was Block 3) ---
         auto* previewWrapper = new wxPanel(block, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
@@ -232,7 +232,7 @@ SyncFilamentColorDialog::SyncFilamentColorDialog(wxWindow* parent,
         // Assemble: scroll widgets are always created so the scrollbar
         //           can be shown / hidden when the mode changes.
         // ============================================================
-        m_maxViewportHeight  = m_pFilamentColorMapBoxGroup->getHeightForRowCount(2);
+        m_maxViewportHeight  = m_pFilamentColorMapBoxGroup->getHeightForRowCount(3);
         {
             int boxCount   = m_pFilamentColorMapBoxGroup->getVisibleBoxCount();
             int gridCols   = FilamentColorMapBoxGroup::GetGridCols();
@@ -816,11 +816,11 @@ void SyncFilamentColorDialog::updateScrollState()
     if (!m_pFilamentColorMapBoxGroup || !m_pScrollBar || !m_pScrollGap || !m_pScrollViewport)
         return;
 
-    bool needScroll = m_pFilamentColorMapBoxGroup->exceedsRowCount(2);
+    bool needScroll = m_pFilamentColorMapBoxGroup->exceedsRowCount(3);
     m_bNeedScroll = needScroll;
 
     // Recalculate heights (visible count may have changed)
-    m_maxViewportHeight  = m_pFilamentColorMapBoxGroup->getHeightForRowCount(2);
+    m_maxViewportHeight  = m_pFilamentColorMapBoxGroup->getHeightForRowCount(3);
     {
         int boxCount   = m_pFilamentColorMapBoxGroup->getVisibleBoxCount();
         int gridCols   = FilamentColorMapBoxGroup::GetGridCols();

@@ -289,6 +289,20 @@ inline AceSnapshot parse_ace_state(const nlohmann::json& j)
         }
     }
 
+    // "head_ace" maps head index -> feeding ACE unit (object with string keys, e.g.
+    // {"0":0,"3":0}). Fill any toolhead whose own "ace" was null so an ACE-fed head
+    // knows which unit feeds it (the per-head "ace"/"slot" fields are often null).
+    if (j.contains("head_ace") && j.at("head_ace").is_object()) {
+        const nlohmann::json& ha = j.at("head_ace");
+        for (AceToolhead& th : snap.toolheads) {
+            if (th.ace.has_value())
+                continue;
+            const std::string key = std::to_string(th.idx);
+            if (ha.contains(key) && ha.at(key).is_number_integer())
+                th.ace = ha.at(key).get<int>();
+        }
+    }
+
     // device_count is authoritative; if absent, fall back to the array length.
     if (snap.device_count == 0)
         snap.device_count = static_cast<int>(snap.units.size());

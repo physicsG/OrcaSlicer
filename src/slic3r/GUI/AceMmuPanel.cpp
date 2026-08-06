@@ -1,177 +1,66 @@
 #include "AceMmuPanel.hpp"
 #include "DeviceManager.hpp"
 #include "AceMmuProvider.hpp"
+#include "GUI_App.hpp"
+#include "Widgets/WebView.hpp"
 #include "libslic3r/AceMmuState.hpp"
+#include "libslic3r/Utils.hpp"
 
 #include <wx/sizer.h>
-#include <wx/wrapsizer.h>
-#include <wx/stattext.h>
-#include <wx/statline.h>
-#include <wx/panel.h>
-#include <wx/button.h>
-#include <wx/settings.h>
-#include <wx/font.h>
+#include <wx/webview.h>
+#include <boost/filesystem.hpp>
 #include <boost/log/trivial.hpp>
+#include "nlohmann/json.hpp"
 
 namespace Slic3r { namespace GUI {
 
 namespace {
-
-// Fixed "device dashboard" palette from docs/ace-mmu/device-page-mockup.html — the
-// page commits to the mockup's dark look regardless of the app's light/dark theme.
-const wxColour kAccent(23, 184, 144); // teal
-const wxColour kWarn(230, 162, 60);   // amber
-const wxColour kPageBg(14, 17, 20);   // page ground
-const wxColour kSurface(24, 28, 33);  // cards
-const wxColour kSurface2(31, 37, 43); // tiles / slot cards
-const wxColour kText(233, 237, 240);  // primary text
-const wxColour kDim(154, 165, 173);   // muted text
-
-wxColour card_bg() { return kSurface; }
-wxColour panel_bg() { return kSurface2; }
-
-const wxColour& dim_text_ref()
+// file:// URL of the bundled page (same pattern as WebGuideDialog).
+wxString page_url()
 {
-    static wxColour c = kDim;
-    return c;
+    boost::filesystem::path p = boost::filesystem::path(resources_dir()) / "web" / "multiace" / "index.html";
+    return wxString("file://") + wxString::FromUTF8(p.make_preferred().string().c_str());
 }
-
-wxStaticText* label(wxWindow* p, const wxString& text, int dpt = 0, bool bold = false, const wxColour* col = nullptr)
-{
-    wxStaticText* t = new wxStaticText(p, wxID_ANY, text);
-    wxFont        f = t->GetFont();
-    if (dpt)
-        f.SetPointSize(f.GetPointSize() + dpt);
-    if (bold)
-        f.MakeBold();
-    t->SetFont(f);
-    t->SetForegroundColour(col ? *col : kText); // page is dark -> default to light text
-    return t;
-}
-
-wxStaticText* chip(wxWindow* p, const wxString& text, const wxColour& col) { return label(p, text, -1, true, &col); }
-
-// multiACE protocol -> ACE model name ("" unknown, v1 = ACE Pro, v2 = ACE 2 Pro).
-wxString ace_model_name(const std::string& protocol)
-{
-    if (protocol == "v2")
-        return "ACE 2 Pro";
-    if (protocol == "v1")
-        return "ACE Pro";
-    return "ACE";
-}
-
-wxString head_material(const Slic3r::AceMmu::AceToolhead& t)
-{
-    if (!t.material.empty())
-        return wxString::FromUTF8(t.material.c_str());
-    return t.filament_detected ? wxString("Loaded") : wxString("Empty");
-}
-
-// A titled card container (returns the card; its content sizer is on `out_sizer`).
-wxPanel* make_card(wxWindow* parent, const wxString& title, wxBoxSizer*& out_sizer)
-{
-    wxPanel* card = new wxPanel(parent);
-    card->SetBackgroundColour(card_bg());
-    wxBoxSizer* v = new wxBoxSizer(wxVERTICAL);
-    if (!title.empty())
-        v->Add(label(card, title.Upper(), -1, true, &dim_text_ref()), 0, wxLEFT | wxRIGHT | wxTOP, card->FromDIP(12));
-    out_sizer = new wxBoxSizer(wxVERTICAL);
-    v->Add(out_sizer, 1, wxEXPAND | wxALL, card->FromDIP(12));
-    card->SetSizer(v);
-    return card;
-}
-
-// A small "key / value" metric tile.
-wxPanel* make_metric(wxWindow* parent, const wxString& key, const wxString& value)
-{
-    wxPanel* tile = new wxPanel(parent);
-    tile->SetBackgroundColour(panel_bg());
-    tile->SetMinSize(parent->FromDIP(wxSize(120, 52)));
-    wxBoxSizer* v = new wxBoxSizer(wxVERTICAL);
-    v->Add(label(tile, key, -1, false, &dim_text_ref()), 0, wxLEFT | wxRIGHT | wxTOP, tile->FromDIP(8));
-    v->Add(label(tile, value, 1, true), 0, wxLEFT | wxRIGHT | wxBOTTOM, tile->FromDIP(8));
-    tile->SetSizer(v);
-    return tile;
-}
-
-// One slot card: slot label, colour swatch, material, brand, identity chip + hex.
-wxPanel* make_slot_card(wxWindow* parent, const Slic3r::AceMmu::AceSlot& slot)
-{
-    wxPanel* card = new wxPanel(parent);
-    card->SetMinSize(parent->FromDIP(wxSize(132, 172)));
-    card->SetBackgroundColour(panel_bg());
-
-    wxBoxSizer* s = new wxBoxSizer(wxVERTICAL);
-    s->Add(label(card, wxString::Format("Slot %d", slot.idx + 1), 0, true), 0, wxLEFT | wxTOP, card->FromDIP(8));
-
-    wxPanel* swatch = new wxPanel(card);
-    swatch->SetMinSize(card->FromDIP(wxSize(58, 58)));
-    if (slot.occupied) {
-        wxColour c = slot.color_rrggbb.empty() ? wxColour(150, 150, 150) : wxColour(wxString::FromUTF8(slot.color_rrggbb.c_str()));
-        swatch->SetBackgroundColour(c.IsOk() ? c : wxColour(150, 150, 150));
-    } else {
-        swatch->SetBackgroundColour(card_bg());
-    }
-    s->Add(swatch, 0, wxALIGN_CENTER | wxTOP | wxBOTTOM, card->FromDIP(12));
-
-    if (slot.occupied) {
-        wxString mat = slot.material.empty() ? wxString("Loaded") : wxString::FromUTF8(slot.material.c_str());
-        s->Add(label(card, mat, 0, true), 0, wxALIGN_CENTER);
-        if (!slot.brand.empty())
-            s->Add(label(card, wxString::FromUTF8(slot.brand.c_str()), -1, false, &dim_text_ref()), 0, wxALIGN_CENTER | wxTOP,
-                   card->FromDIP(1));
-
-        wxBoxSizer* foot = new wxBoxSizer(wxHORIZONTAL);
-        if (slot.source == "rfid")
-            foot->Add(chip(card, "RFID", kAccent), 0, wxRIGHT, card->FromDIP(6));
-        else if (slot.source == "override")
-            foot->Add(chip(card, "OVERRIDE", kWarn), 0, wxRIGHT, card->FromDIP(6));
-        if (!slot.color_rrggbb.empty())
-            foot->Add(label(card, wxString::FromUTF8(slot.color_rrggbb.c_str()).Upper(), -1, false, &dim_text_ref()), 0);
-        s->Add(foot, 0, wxALIGN_CENTER | wxTOP, card->FromDIP(8));
-    } else {
-        s->Add(label(card, "Empty", 0, false, &dim_text_ref()), 0, wxALIGN_CENTER);
-    }
-
-    card->SetSizer(s);
-    return card;
-}
-
 } // namespace
 
 AceMmuPanel::AceMmuPanel(wxWindow* parent, MachineObject* obj) : wxPanel(parent, wxID_ANY), m_obj(obj)
 {
-    SetBackgroundColour(kPageBg);
     wxBoxSizer* top = new wxBoxSizer(wxVERTICAL);
-
-    wxBoxSizer* headbar = new wxBoxSizer(wxHORIZONTAL);
-    headbar->Add(label(this, "Snapmaker U1 · ACE MMU", 3, true), 0, wxALIGN_CENTER_VERTICAL);
-    headbar->Add(chip(this, "  ● LAN  ", kAccent), 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(10));
-    headbar->AddStretchSpacer();
-    wxButton* refresh_btn = new wxButton(this, wxID_ANY, "Refresh");
-    refresh_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { rebuild(); });
-    headbar->Add(refresh_btn, 0, wxALIGN_CENTER_VERTICAL);
-    top->Add(headbar, 0, wxEXPAND | wxALL, FromDIP(16));
-
-    m_body = new wxPanel(this);
-    m_body->SetBackgroundColour(kPageBg);
-    top->Add(m_body, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
-
     SetSizer(top);
-    rebuild();
+    m_web = WebView::CreateWebView(this, page_url());
+    if (m_web == nullptr) {
+        BOOST_LOG_TRIVIAL(error) << "AceMmuPanel: could not create webview";
+        return;
+    }
+    top->Add(m_web, 1, wxEXPAND);
+
+    m_web->Bind(wxEVT_WEBVIEW_LOADED, [this](wxWebViewEvent&) {
+        m_loaded = true;
+        if (m_pending.empty())
+            push_state();
+        else
+            WebView::RunScript(m_web, "window.setAceState(" + m_pending + ")");
+    });
+
+    // The page posts via window.wx.postMessage(msg) — the "wx" handler that
+    // CreateWebView already registers (do NOT add another handler; that races with
+    // its deferred registration and crashes). "refresh" re-pulls the inventory; write
+    // actions are logged for now (the multiACE control endpoint is not wired yet).
+    m_web->Bind(wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED, [this](wxWebViewEvent& e) {
+        const std::string msg = e.GetString().ToStdString();
+        if (msg == "refresh")
+            push_state();
+        else
+            BOOST_LOG_TRIVIAL(info) << "AceMmuPanel: page action '" << msg << "' (control endpoint not wired)";
+    }, m_web->GetId());
 }
 
-void AceMmuPanel::refresh() { rebuild(); }
+void AceMmuPanel::refresh() { push_state(); }
 
-void AceMmuPanel::rebuild()
+std::string AceMmuPanel::build_state_json()
 {
-    Freeze();
-    m_body->DestroyChildren();
-
-    // Resolve the connected printer host and fetch a fresh snapshot.
     Slic3r::AceMmu::AceSnapshot snap;
-    std::string                 host = AceMmuProvider::resolve_connected_host();
+    std::string host = AceMmuProvider::resolve_connected_host();
     if (host.empty() && m_obj)
         host = m_obj->dev_ip;
     bool fetched = false;
@@ -185,111 +74,56 @@ void AceMmuPanel::rebuild()
     if (m_obj && !snap.units.empty())
         m_obj->apply_ace_snapshot(snap);
 
-    wxBoxSizer* cols = new wxBoxSizer(wxHORIZONTAL);
+    nlohmann::json j;
+    j["dark"]      = GUI_App::dark_mode();
+    j["mode"]      = snap.mode;
+    j["connected"] = fetched;
 
-    // ---- Left column: printer status ----
-    wxBoxSizer* pbox  = nullptr;
-    wxPanel*    pcard = make_card(m_body, "Printer", pbox);
-    pcard->SetMinSize(m_body->FromDIP(wxSize(300, -1)));
-    {
-        wxPanel* cam = new wxPanel(pcard);
-        cam->SetMinSize(pcard->FromDIP(wxSize(260, 150)));
-        cam->SetBackgroundColour(wxColour(24, 28, 33));
-        wxBoxSizer* cs = new wxBoxSizer(wxVERTICAL);
-        cs->AddStretchSpacer();
-        cs->Add(label(cam, "Camera preview", 0, false, &dim_text_ref()), 0, wxALIGN_CENTER);
-        cs->AddStretchSpacer();
-        cam->SetSizer(cs);
-        pbox->Add(cam, 0, wxEXPAND | wxBOTTOM, m_body->FromDIP(10));
-
-        wxWrapSizer* metrics = new wxWrapSizer(wxHORIZONTAL);
-        metrics->Add(make_metric(pcard, "State",
-                                 snap.printer_state.empty() ? wxString("—") : wxString::FromUTF8(snap.printer_state.c_str())),
-                     0, wxALL, m_body->FromDIP(4));
-        metrics->Add(make_metric(pcard, "Mode", snap.mode.empty() ? wxString("—") : wxString::FromUTF8(snap.mode.c_str())), 0, wxALL,
-                     m_body->FromDIP(4));
-        metrics->Add(make_metric(pcard, "ACE temp", snap.ace_temp ? wxString::Format("%.0f °C", *snap.ace_temp) : wxString("—")), 0, wxALL,
-                     m_body->FromDIP(4));
-        metrics->Add(make_metric(pcard, "Units", wxString::Format("%d", snap.device_count)), 0, wxALL, m_body->FromDIP(4));
-        pbox->Add(metrics, 0, wxEXPAND);
+    j["toolheads"] = nlohmann::json::array();
+    for (const auto& t : snap.toolheads) {
+        nlohmann::json o;
+        o["idx"]               = t.idx;
+        o["material"]          = t.material;
+        o["color"]             = t.color_rrggbb;
+        o["brand"]             = std::string();
+        o["source"]            = t.source;
+        o["filament_detected"] = t.filament_detected;
+        o["feeder"]            = t.feeder;
+        o["ace"]               = t.ace.has_value() ? nlohmann::json(t.ace.value()) : nlohmann::json(nullptr);
+        j["toolheads"].push_back(std::move(o));
     }
-    cols->Add(pcard, 0, wxEXPAND | wxRIGHT, m_body->FromDIP(12));
 
-    // ---- Right column: ACE inventory ----
-    wxBoxSizer* abox  = nullptr;
-    wxPanel*    acard = make_card(m_body, "", abox);
-
-    if (snap.units.empty()) {
-        abox->Add(label(acard, "No ACE unit detected.\nConnect the Snapmaker U1 over LAN and make sure multiACE is running.", 0, false,
-                        &dim_text_ref()),
-                  0, wxALL, m_body->FromDIP(8));
-    } else {
-        for (const auto& unit : snap.units) {
-            wxBoxSizer* uh = new wxBoxSizer(wxHORIZONTAL);
-            uh->Add(label(acard, ace_model_name(unit.protocol), 2, true), 0, wxALIGN_CENTER_VERTICAL);
-            wxString meta = wxString::Format("Unit %c · ", char('A' + unit.idx));
-            meta += unit.connected ? "connected" : "offline";
-            uh->Add(label(acard, "   " + meta, -1, false, &dim_text_ref()), 0, wxALIGN_CENTER_VERTICAL);
-            uh->AddStretchSpacer();
-            if (unit.humidity)
-                uh->Add(make_metric(acard, "Humidity", wxString::Format("%d%%", *unit.humidity)), 0, wxRIGHT, m_body->FromDIP(6));
-            if (unit.temp)
-                uh->Add(make_metric(acard, "Temp", wxString::Format("%.0f °C", *unit.temp)), 0, wxRIGHT, m_body->FromDIP(6));
-            uh->Add(make_metric(acard, "Dryer",
-                                unit.dryer_remaining_minutes && *unit.dryer_remaining_minutes > 0 ?
-                                    wxString::Format("%d min", *unit.dryer_remaining_minutes) :
-                                    wxString("Off")),
-                    0);
-            abox->Add(uh, 0, wxEXPAND | wxBOTTOM, m_body->FromDIP(8));
-            abox->Add(new wxStaticLine(acard), 0, wxEXPAND | wxBOTTOM, m_body->FromDIP(8));
-
-            wxBoxSizer* row = new wxBoxSizer(wxHORIZONTAL);
-            for (int i = 0; i < 4; ++i) {
-                Slic3r::AceMmu::AceSlot slot;
-                slot.idx      = i;
-                slot.occupied = false;
-                for (const auto& sl : unit.slots)
-                    if (sl.idx == i)
-                        slot = sl;
-                row->Add(make_slot_card(acard, slot), 0, wxRIGHT | wxBOTTOM, m_body->FromDIP(10));
-            }
-            abox->Add(row, 0);
+    j["units"] = nlohmann::json::array();
+    for (const auto& u : snap.units) {
+        nlohmann::json o;
+        o["idx"]       = u.idx;
+        o["protocol"]  = u.protocol;
+        o["connected"] = u.connected;
+        o["humidity"]  = u.humidity ? nlohmann::json(*u.humidity) : nlohmann::json(nullptr);
+        o["temp"]      = u.temp ? nlohmann::json(*u.temp) : nlohmann::json(nullptr);
+        o["dryer_min"] = u.dryer_remaining_minutes.value_or(0);
+        o["slots"]     = nlohmann::json::array();
+        for (const auto& s : u.slots) {
+            nlohmann::json so;
+            so["idx"]      = s.idx;
+            so["occupied"] = s.occupied;
+            so["material"] = s.material;
+            so["color"]    = s.color_rrggbb;
+            so["brand"]    = s.brand;
+            so["source"]   = s.source;
+            o["slots"].push_back(std::move(so));
         }
-
-        if (!snap.toolheads.empty()) {
-            abox->Add(label(acard, "TOOLHEADS", -1, true, &dim_text_ref()), 0, wxTOP | wxBOTTOM, m_body->FromDIP(6));
-            wxBoxSizer* hrow = new wxBoxSizer(wxHORIZONTAL);
-            for (const auto& th : snap.toolheads) {
-                wxPanel* hp = new wxPanel(acard);
-                hp->SetBackgroundColour(th.idx == snap.ace_head ? kAccent : panel_bg());
-                wxBoxSizer* hs = new wxBoxSizer(wxHORIZONTAL);
-                wxPanel*    sw = new wxPanel(hp);
-                sw->SetMinSize(hp->FromDIP(wxSize(14, 14)));
-                wxColour c = th.color_rrggbb.empty() ? wxColour(120, 120, 120) : wxColour(wxString::FromUTF8(th.color_rrggbb.c_str()));
-                sw->SetBackgroundColour(c.IsOk() ? c : wxColour(120, 120, 120));
-                hs->Add(sw, 0, wxALIGN_CENTER_VERTICAL | wxALL, hp->FromDIP(6));
-                hs->Add(label(hp, wxString::Format("T%d  %s", th.idx + 1, head_material(th))), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT,
-                        hp->FromDIP(8));
-                hp->SetSizer(hs);
-                hrow->Add(hp, 0, wxRIGHT, m_body->FromDIP(8));
-            }
-            abox->Add(hrow, 0, wxBOTTOM, m_body->FromDIP(8));
-        }
-
-        // Legend
-        wxBoxSizer* legend = new wxBoxSizer(wxHORIZONTAL);
-        legend->Add(chip(acard, "RFID", kAccent), 0, wxRIGHT, m_body->FromDIP(4));
-        legend->Add(label(acard, "trusted    ", -1, false, &dim_text_ref()), 0);
-        legend->Add(chip(acard, "OVERRIDE", kWarn), 0, wxRIGHT, m_body->FromDIP(4));
-        legend->Add(label(acard, "manual", -1, false, &dim_text_ref()), 0);
-        abox->Add(legend, 0, wxTOP, m_body->FromDIP(4));
+        j["units"].push_back(std::move(o));
     }
-    cols->Add(acard, 1, wxEXPAND);
 
-    m_body->SetSizer(cols, /*deleteOld*/ true);
-    Layout();
-    Thaw();
-    Refresh();
+    return j.dump();
+}
+
+void AceMmuPanel::push_state()
+{
+    m_pending = wxString::FromUTF8(build_state_json().c_str());
+    if (m_loaded && m_web)
+        WebView::RunScript(m_web, "window.setAceState(" + m_pending + ")");
 }
 
 }} // namespace Slic3r::GUI

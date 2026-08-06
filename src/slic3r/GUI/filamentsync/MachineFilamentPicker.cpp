@@ -104,7 +104,7 @@ public:
             wxClientDC dc(this);
             dc.SetFont(Label::Body_10);
             for (const auto& data : m_dataList) {
-                wxString typeStr = wxString::FromUTF8(data.m_type);
+                wxString typeStr = wxString::FromUTF8(data.m_label.empty() ? data.m_type : data.m_label);
                 int tw = dc.GetTextExtent(typeStr).x;
                 if (tw > maxTextWidthPx) {
                     maxTextWidthPx = tw;
@@ -115,7 +115,17 @@ public:
         int contentWidthPx = FromDIP(g_textX + g_contentOffsetX) + maxTextWidthPx + FromDIP(g_textRightPadding);
         int actualWidthPx = std::max(minWidthPx, contentWidthPx);
 
-        wxSize sz(actualWidthPx, FromDIP(g_popupHeight));
+        // Height grows with the row count so every entry is visible (the popup has no
+        // scrolling — the mouse wheel dismisses it). Matches the row layout used in
+        // render()/hitTestRow: symmetric g_firstRowY padding top and bottom. Falls back
+        // to the original fixed height for an empty list; capped as a sanity bound.
+        const int rowCount   = std::max(1, static_cast<int>(m_dataList.size()));
+        const int cappedRows = std::min(rowCount, 16);
+        int heightDip = g_firstRowY * 2 + (cappedRows - 1) * g_itemStepY + g_itemRowH;
+        if (m_dataList.empty())
+            heightDip = g_popupHeight;
+
+        wxSize sz(actualWidthPx, FromDIP(heightDip));
         SetSize(sz);
         SetMinSize(sz);
         SetMaxSize(sz);
@@ -199,7 +209,8 @@ private:
             drawCheckmark(dc, cx, cy, cw, ch);
         }
 
-        bool isNone = isNoneEntry(data);
+        // Disabled rows (e.g. an ACE-fed toolhead) are greyed like NONE entries.
+        bool isNone = isNoneEntry(data) || data.m_disabled;
 
         // ---- Colour circle (bitmap) ----
         int circleCxPx = FromDIP(g_circleCx + g_contentOffsetX);
@@ -224,7 +235,8 @@ private:
         // ---- Filament type text ----
         dc.SetFont(labelFont);
         dc.SetTextForeground(isNone ? wxColour(0xBB, 0xBB, 0xBB) : g_textColor);
-        wxString typeStr = wxString::FromUTF8(data.m_type.empty() ? "NONE" : data.m_type);
+        wxString typeStr = !data.m_label.empty() ? wxString::FromUTF8(data.m_label)
+                                                 : wxString::FromUTF8(data.m_type.empty() ? "NONE" : data.m_type);
         int textX = FromDIP(g_textX + g_contentOffsetX);
         int textH = dc.GetTextExtent(typeStr).y;
         int textY = FromDIP(y) + static_cast<int>(std::round((FromDIP(g_itemRowH) - textH) / 2.0));
@@ -264,8 +276,9 @@ private:
             return;
         }
 
-        // Ignore clicks on NONE (empty slot) entries
-        if (isNoneEntry(m_dataList[row])) {
+        // Ignore clicks on NONE (empty slot) and disabled (e.g. ACE-fed toolhead)
+        // entries, unless the row is an explicit "Assign None" action.
+        if ((isNoneEntry(m_dataList[row]) || m_dataList[row].m_disabled) && !m_dataList[row].m_assign_none) {
             return;
         }
 

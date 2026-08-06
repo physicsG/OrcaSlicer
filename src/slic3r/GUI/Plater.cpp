@@ -130,7 +130,6 @@
 #include "Jobs/BoostThreadWorker.hpp"
 #include "BackgroundSlicingProcess.hpp"
 #include "SelectMachine.hpp"
-#include "AceMmuDialog.hpp"
 #include "AceMmuProvider.hpp"
 #include "libslic3r/AceMmuState.hpp"
 #include "SendMultiMachinePage.hpp"
@@ -784,39 +783,79 @@ void append_ace_filament_list(std::vector<FilamentData>& out_list)
     for (const auto& fd : out_list)
         next_index = std::max(next_index, fd.m_index + 1);
 
-    // An ACE slot loaded at an ACE-fed head is reported twice: once as that
-    // toolhead's filament (from the machine list above) and once as the ACE slot.
-    // The printer doesn't expose the head->slot binding, so dedupe by material +
-    // colour: skip an ACE slot whose material/colour already appears as a toolhead.
-    auto already_present = [&out_list](const std::string& material, const std::string& hex) {
-        for (const auto& fd : out_list) {
-            if (fd.m_type != material)
-                continue;
-            const std::string a = NormalizeFilamentHexColor(fd.m_color.PrimaryColor());
-            const std::string b = NormalizeFilamentHexColor(hex);
-            if (!a.empty() && a == b)
-                return true;
+    // Relabel the U1 toolhead entries (already in out_list) with their source, so the
+    // picker distinguishes a directly-loaded head from an ACE-fed head. Match by head
+    // index (fd.m_index == toolhead.idx). ACE slots are appended afterwards.
+    // Built as UTF-8 std::string; "\xC2\xB7" is the middot separator.
+    const std::string kSep = " \xC2\xB7 ";
+    for (auto& fd : out_list) {
+        const Slic3r::AceMmu::AceToolhead* th = nullptr;
+        for (const auto& t : snap.toolheads) {
+            if (static_cast<unsigned>(t.idx) == fd.m_index) {
+                th = &t;
+                break;
+            }
         }
-        return false;
-    };
+        std::string label = "T" + std::to_string(static_cast<int>(fd.m_index) + 1);
+        if (!th) {
+            if (!fd.m_type.empty())
+                label += kSep + fd.m_type;
+        } else if (!th->filament_detected) {
+            label += kSep + "empty";
+        } else if (th->manual) {
+            label += kSep + th->material + kSep + "manual";
+        } else if (!th->feeder) {
+            // Fed by the ACE: shown for context but not selectable — the user maps the
+            // ACE slot instead of the head. The head->slot binding isn't exposed, so we
+            // name the feeding unit only ("from A1"), matching the "A<unit>-S<slot>" tags.
+            if (th->ace.has_value())
+                label += kSep + "from A" + std::to_string(th->ace.value() + 1);
+            else
+                label += kSep + "from ACE";
+            fd.m_disabled = true;
+        } else {
+            label += kSep + th->material;
+        }
+        fd.m_label = label;
+    }
 
+    // Append every ACE slot (occupied and empty) so the full ACE inventory is visible,
+    // like the U1's own empty heads. Naming: "A<unit>-S<slot>" (1-based). Empty slots
+    // are rendered greyed and non-selectable (NONE-typed), mirroring an empty head.
     for (const auto& unit : snap.units) {
-        const char letter = char('A' + unit.idx);
         for (const auto& slot : unit.slots) {
-            if (!slot.occupied)
-                continue;
-            if (!slot.color_rrggbb.empty() && already_present(slot.material, slot.color_rrggbb))
-                continue; // already shown as the toolhead it feeds
+            const std::string tag = "A" + std::to_string(unit.idx + 1) + "-S" + std::to_string(slot.idx + 1);
             FilamentData fd;
             fd.m_index = next_index++;
-            fd.m_name  = wxString::Format("ACE %c%d", letter, slot.idx + 1).ToStdString();
+            fd.m_name  = tag;
+            if (!slot.occupied) {
+                fd.m_type  = ""; // NONE -> greyed, not selectable
+                fd.m_label = tag + kSep + "empty";
+                fd.m_color = FilamentColor::FromColors({ "#CCCCCC" }, FilamentColorMode::Segment);
+                out_list.push_back(std::move(fd));
+                continue;
+            }
             fd.m_type  = slot.material;
+            fd.m_label = tag + kSep + slot.material;
             std::vector<std::string> colors;
             if (!slot.color_rrggbb.empty())
                 colors.push_back(slot.color_rrggbb);
             fd.m_color = FilamentColor::FromColors(colors, FilamentColorMode::Segment);
             out_list.push_back(std::move(fd));
         }
+    }
+
+    // Explicit, selectable "Assign None" action (unmap the project filament). Placed
+    // last; marked so the picker lets it be clicked (empty-slot NONE rows are not).
+    {
+        FilamentData none;
+        none.m_index       = next_index++;
+        none.m_name        = "NONE";
+        none.m_type        = "NONE";
+        none.m_label       = "None";
+        none.m_assign_none = true;
+        none.m_color       = FilamentColor::FromColors({ "#CCCCCC" }, FilamentColorMode::Segment);
+        out_list.push_back(std::move(none));
     }
 }
 
@@ -2605,17 +2644,6 @@ Sidebar::Sidebar(Plater *parent)
     p->m_bpButton_ams_filament = ams_btn;
 
     bSizer39->Add(ams_btn, 0, wxALIGN_CENTER | wxLEFT, FromDIP(SidebarProps::IconSpacing()));
-
-    // Snapmaker U1: open the native ACE MMU page (shown only for the U1, below).
-    ace_btn = new wxButton(p->m_panel_filament_title, wxID_ANY, _L("ACE"), wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-    ace_btn->SetToolTip(_L("Show the ACE MMU units and slots"));
-    ace_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-        auto obj = wxGetApp().getDeviceManager() ? wxGetApp().getDeviceManager()->get_selected_machine() : nullptr;
-        AceMmuDialog dlg(this, obj);
-        dlg.ShowModal();
-    });
-    ace_btn->Hide();
-    bSizer39->Add(ace_btn, 0, wxALIGN_CENTER | wxLEFT, FromDIP(SidebarProps::IconSpacing()));
     //bSizer39->Add(FromDIP(10), 0, 0, 0, 0 );
 
     ScalableButton* set_btn = new ScalableButton(p->m_panel_filament_title, wxID_ANY, "settings");
@@ -3182,18 +3210,13 @@ void Sidebar::update_all_preset_comboboxes(bool reload_printer_view)
 
     if (preset_bundle.use_bbl_network()) {
         ams_btn->Show();
-        if (ace_btn) ace_btn->Hide();
         p_mainframe->set_print_button_to_default(MainFrame::PrintSelectType::ePrintPlate);
     } else {
-        // Snapmaker U1 reuses the "Sync from AMS" button to pull its multiACE
-        // inventory into the filament list (see Sidebar::sync_ams_list), and adds
-        // an "ACE" button that opens the native ACE MMU page.
         // For the U1, hide the legacy (destructive) "Sync from AMS": it replaces the
         // whole filament list and would drop the U1 toolhead filaments. Users sync via
         // the non-destructive "Sync Filament Information" button, which now includes
         // the ACE slots (see append_ace_filament_list / show_sync_filament_dialog).
         ams_btn->Hide();
-        if (ace_btn) ace_btn->Show(is_snapmaker_u1);
         auto print_btn_type = MainFrame::PrintSelectType::eExportGcode;
 
         const auto& edit_preset = preset_bundle.printers.get_edited_preset();
