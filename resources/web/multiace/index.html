@@ -175,7 +175,7 @@
         srcHTML+='<div class="sp" id="src'+t.idx+'" style="--c:'+esc(t.color||'#8fa7c8')+'"'+attr(data)+'>'
               +'<div class="spool"></div><div class="nm">'+esc(t.material||'?')+'</div><span class="role">Feeder</span>'
               +'<div class="spacts"><span class="act">'+ICONS[iconFor(doo)]+'</span></div></div>';
-        CONNS.push({from:'src'+t.idx,to:'h'+t.idx,c:t.color||'#8fa7c8'});
+        CONNS.push({fx:'src'+t.idx,fy:'src'+t.idx,to:'h'+t.idx,c:t.color||'#8fa7c8'});
       }
     });
     srcHTML+='<div class="grow"></div>';
@@ -189,7 +189,7 @@
         if(s.occupied){
           var doo=actionFor(s.source);
           var data={brand:s.brand,mat:s.material,color:s.color,colorname:s.colorname,nozzle:s.nozzle,bed:s.bed,do:doo};
-          slots+='<div class="sp" style="--c:'+esc(s.color||'#8fa7c8')+'"'+attr(data)+'>'
+          slots+='<div class="sp" id="aceU'+u.idx+'S'+s.idx+'" style="--c:'+esc(s.color||'#8fa7c8')+'"'+attr(data)+'>'
               +'<div class="spool"></div><div class="nm">'+esc(s.material||'?')+'</div><div class="tag">'+letter+'-S'+(s.idx+1)+'</div>'
               +'<div class="spacts"><span class="act">'+ICONS[iconFor(doo)]+'</span></div></div>';
         } else {
@@ -222,14 +222,29 @@
              +'<div class="neck"></div><div class="body"><div class="disc">'+(t.idx+1)+'</div>'
              +'<div class="matband">'+mat+'</div></div><div class="nozzle"></div></div>'
              +'<div class="tlab">T'+(t.idx+1)+'</div></div>';
-      // ACE-fed head -> wire from its unit box
+      // ACE-fed head -> wire drops from below the loaded slot (matched by colour),
+      // but at the tray's bottom edge (y); falls back to the tray box if unmatched.
       if(!t.feeder && t.filament_detected && t.ace!=null){
-        CONNS.push({from:'aceU'+t.ace,to:'h'+t.idx,c:t.color||'#8fa7c8'});
+        var fx='aceU'+t.ace, unit=null;
+        for(var ui=0; ui<units.length; ui++){ if(units[ui].idx===t.ace){ unit=units[ui]; break; } }
+        if(unit){
+          var slotsArr=unit.slots||[];
+          for(var si=0; si<slotsArr.length; si++){
+            var sl=slotsArr[si];
+            if(sl.occupied && String(sl.color||'').toLowerCase()===String(t.color||'').toLowerCase()){ fx='aceU'+t.ace+'S'+sl.idx; break; }
+          }
+        }
+        CONNS.push({fx:fx,fy:'aceU'+t.ace,to:'h'+t.idx,c:t.color||'#8fa7c8'});
       }
     });
 
+    // preserve any drybar the user has open, so a post-action refresh doesn't
+    // collapse it mid-interaction
+    var openDry=[];
+    document.querySelectorAll('.drybar:not([hidden])').forEach(function(d){ if(d.id) openDry.push(d.id); });
     map.innerHTML='<div class="feed-sources">'+srcHTML+'</div><svg class="wires" id="wires"></svg><div class="feed-heads">'+headHTML+'</div>';
     bindDynamic();
+    openDry.forEach(function(id){ var d=document.getElementById(id); if(d) d.hidden=false; });
     requestAnimationFrame(drawWires);
   }
 
@@ -240,10 +255,10 @@
     svg.setAttribute('viewBox','0 0 '+box.width+' '+box.height);
     var out='';
     CONNS.forEach(function(k){
-      var a=document.getElementById(k.from), b=document.getElementById(k.to);
-      if(!a||!b) return;
-      var ra=a.getBoundingClientRect(), rb=b.getBoundingClientRect();
-      var x1=ra.left+ra.width/2-box.left, y1=ra.bottom-box.top;
+      var ax=document.getElementById(k.fx), ay=document.getElementById(k.fy)||ax, b=document.getElementById(k.to);
+      if(!ax||!ay||!b) return;
+      var rax=ax.getBoundingClientRect(), ray=ay.getBoundingClientRect(), rb=b.getBoundingClientRect();
+      var x1=rax.left+rax.width/2-box.left, y1=ray.bottom-box.top;
       var x2=rb.left+rb.width/2-box.left, y2=rb.top-box.top;
       var my=(y1+y2)/2;
       var d='M'+x1+' '+y1+' C '+x1+' '+my+' '+x2+' '+my+' '+x2+' '+y2;
