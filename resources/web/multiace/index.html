@@ -160,6 +160,23 @@
   .tdot{color:var(--teal);font-size:9px;margin-left:4px;}
   .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);max-width:80vw;background:#e5533c;color:#fff;padding:11px 16px;border-radius:9px;box-shadow:0 12px 34px -12px rgba(0,0,0,.55);font-size:13px;z-index:80;display:none;white-space:pre-line;line-height:1.4;}
   .toast.show{display:block;}
+  /* error modal (styled after Snapmaker's) */
+  .errmodal{position:fixed;inset:0;background:rgba(0,0,0,.34);display:none;align-items:center;justify-content:center;z-index:90;padding:20px;}
+  .errmodal.show{display:flex;}
+  .errcard{width:min(390px,92vw);background:var(--panel);border-radius:16px;box-shadow:0 30px 70px -18px rgba(0,0,0,.5);padding:26px 24px 22px;text-align:center;}
+  .erricon{width:66px;height:66px;border-radius:50%;margin:0 auto 16px;background:var(--blue-soft);color:var(--blue);display:grid;place-items:center;font-size:30px;}
+  .errtitle{font-size:16px;font-weight:600;margin-bottom:8px;color:var(--text);}
+  .errmsg{font-size:13.5px;color:var(--blue);margin-bottom:20px;white-space:pre-line;line-height:1.45;}
+  .errbtn{background:var(--blue);color:#fff;border:0;border-radius:999px;padding:11px 42px;font:inherit;font-size:14px;font-weight:600;cursor:pointer;}
+  .errbtn:hover{filter:brightness(1.05);}
+  /* device controls row (LED / fan / speed) */
+  .devrow{gap:16px;}
+  .ctlbtn{border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:7px 12px;font:inherit;font-size:12.5px;cursor:pointer;color:var(--text);}
+  .ctlbtn.on{border-color:var(--warn);color:var(--warn);background:var(--warn-soft);}
+  .ctlgrp{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);}
+  .ctlgrp .val{min-width:38px;text-align:center;color:var(--text);font-variant-numeric:tabular-nums;}
+  .stp{width:24px;height:24px;border:1px solid var(--line);background:var(--panel);border-radius:6px;cursor:pointer;color:var(--text);font-size:14px;line-height:1;padding:0;}
+  .stp:hover{border-color:var(--teal);color:var(--teal);}
 </style>
 </head>
 <body>
@@ -178,6 +195,12 @@
 
 <div class="scrim" id="scrim"><div class="sheet" id="sheet"></div></div>
 <div class="toast" id="toast"></div>
+<div class="errmodal" id="errmodal"><div class="errcard">
+  <div class="erricon">&#9888;</div>
+  <div class="errtitle" id="errtitle">Printer error</div>
+  <div class="errmsg" id="errmsg"></div>
+  <button class="errbtn" id="errok">Got it</button>
+</div></div>
 
 <script>
   var ICONS={
@@ -225,7 +248,13 @@
       +'<div class="axis"><div class="jbtn" data-jog="E+">▲</div>Extruder<div class="jbtn" data-jog="E-">▼</div></div>'
       +'<div class="axis"><div class="xy"><span>XY</span><span class="a up" data-jog="Y+">▲</span><span class="a dn" data-jog="Y-">▼</span><span class="a lf" data-jog="X-">◀</span><span class="a rt" data-jog="X+">▶</span></div></div>'
       +'<div class="axis"><div class="jbtn" data-jog="Z-">▲</div>Z&nbsp;/&nbsp;Bed<div class="jbtn" data-jog="Z+">▼</div></div>'
-      +'</div><div class="pick" id="pickbtn">Pick Extruder</div></div></div>';
+      +'</div>'
+      +'<div class="row devrow">'
+      +'<button class="ctlbtn" id="ledbtn">&#128161; Light</button>'
+      +'<div class="ctlgrp"><span>Fan</span><button class="stp" data-fan="-">–</button><span class="val" id="fanval">0%</span><button class="stp" data-fan="+">+</button></div>'
+      +'<div class="ctlgrp"><span>Speed</span><button class="stp" data-spd="-">–</button><span class="val" id="spdval">100%</span><button class="stp" data-spd="+">+</button></div>'
+      +'</div>'
+      +'<div class="pick" id="pickbtn">Pick Extruder</div></div></div>';
     tb.innerHTML='<div style="margin-bottom:12px"><span class="badge" id="jobbadge">idle</span> <b style="margin-left:6px">U1</b></div>'
       +'<div class="task"><div class="thumb">▧</div><div style="flex:1">'
       +'<div style="font-size:14px;color:var(--dim)" id="jobfile">No active job</div>'
@@ -241,6 +270,22 @@
     ts.querySelectorAll('.p').forEach(function(p){ p.addEventListener('click',function(){ selTool(parseInt(p.getAttribute('data-tool'),10)); }); });
     selTool(0);
     document.getElementById('pickbtn').addEventListener('click',function(){ window.sendGcode('T'+__tool); });
+    // LED toggle
+    document.getElementById('ledbtn').addEventListener('click',function(){
+      var on=this.classList.contains('on'), v=on?0:1;
+      window.sendGcode('SET_LED LED=cavity_led RED='+v+' GREEN='+v+' BLUE='+v);
+    });
+    // fan +/- (part cooling, M106 0-255) and print speed +/- (M220 %)
+    cb.querySelectorAll('[data-fan]').forEach(function(b){ b.addEventListener('click',function(){
+      var cur=parseInt(document.getElementById('fanval').textContent,10)||0;
+      var v=Math.max(0,Math.min(100, cur+(b.getAttribute('data-fan')==='+'?10:-10)));
+      window.sendGcode(v<=0?'M107':'M106 S'+Math.round(v*2.55));
+    }); });
+    cb.querySelectorAll('[data-spd]').forEach(function(b){ b.addEventListener('click',function(){
+      var cur=parseInt(document.getElementById('spdval').textContent,10)||100;
+      var v=Math.max(10,Math.min(300, cur+(b.getAttribute('data-spd')==='+'?10:-10)));
+      window.sendGcode('M220 S'+v);
+    }); });
     __ctrlBuilt=true;
   }
   function updateMachine(m){
@@ -252,6 +297,9 @@
     for(var i=0;i<4;i++){ var e=ex[i]||{}; setT('e'+i, e.t, e.target); }
     if(m.bed) setT('bed', m.bed.t, m.bed.target); if(m.chamber) setT('cav', m.chamber.t, null);
     var ts=document.getElementById('toolsel'); if(ts){ ts.querySelectorAll('.tdot').forEach(function(d,i){ d.textContent=(ex[i]&&ex[i].active)?' ●':''; }); }
+    var fv=document.getElementById('fanval'); if(fv&&m.fan!=null) fv.textContent=Math.round(m.fan*100)+'%';
+    var sv=document.getElementById('spdval'); if(sv&&m.speed!=null) sv.textContent=Math.round(m.speed*100)+'%';
+    var lb=document.getElementById('ledbtn'); if(lb&&m.led!=null) lb.classList.toggle('on', !!m.led);
     var p=m.print||{}, st=(p.state||'standby'), prog=Math.round((p.progress||0)*100);
     var b=document.getElementById('jobbadge'); if(b){ b.textContent=st; b.className='badge '+st; }
     var jf=document.getElementById('jobfile'); if(jf) jf.textContent=(p.file?p.file.replace(/\.[^.]+$/,''):'No active job');
@@ -456,6 +504,10 @@
   // error/notice popup (the host calls this with Klipper errors)
   var __toastT=null;
   window.showToast=function(msg){ var t=document.getElementById('toast'); if(!t)return; t.textContent=String(msg); t.classList.add('show'); if(__toastT)clearTimeout(__toastT); __toastT=setTimeout(function(){ t.classList.remove('show'); },6000); };
+  // error popup (host calls this with Klipper errors), styled after Snapmaker's
+  window.showError=function(msg){ var m=document.getElementById('errmodal'), t=document.getElementById('errmsg'); if(!m||!t)return; t.textContent=String(msg); m.classList.add('show'); };
+  document.getElementById('errok').addEventListener('click',function(){ document.getElementById('errmodal').classList.remove('show'); });
+  document.getElementById('errmodal').addEventListener('click',function(e){ if(e.target.id==='errmodal') this.classList.remove('show'); });
   document.getElementById('refresh').addEventListener('click',function(){ if(window.wx&&window.wx.postMessage) window.__notify('refresh'); else render(DEMO); });
 
   // ---- entry point called by the host (C++), with a demo fallback ----

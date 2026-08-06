@@ -29,7 +29,7 @@ wxString page_url()
 // (only Http, no GUI). Returns a compact object, or null on failure.
 nlohmann::json fetch_machine_json(const std::string& host)
 {
-    const std::string url = "http://" + host + ":7125/printer/objects/query?extruder&extruder1&extruder2&extruder3&heater_bed&temperature_sensor%20cavity&print_stats&display_status";
+    const std::string url = "http://" + host + ":7125/printer/objects/query?extruder&extruder1&extruder2&extruder3&heater_bed&temperature_sensor%20cavity&print_stats&display_status&fan&gcode_move&led%20cavity_led";
     nlohmann::json out; // null unless we get a good body
     Http::get(url)
         .timeout_connect(3)
@@ -66,6 +66,21 @@ nlohmann::json fetch_machine_json(const std::string& host)
             if (s.contains("display_status") && s["display_status"].is_object())
                 pr["progress"] = s["display_status"].value("progress", 0.0);
             m["print"] = pr;
+            if (s.contains("fan") && s["fan"].is_object())
+                m["fan"] = s["fan"].value("speed", 0.0);
+            if (s.contains("gcode_move") && s["gcode_move"].is_object())
+                m["speed"] = s["gcode_move"].value("speed_factor", 1.0);
+            if (s.contains("led cavity_led") && s["led cavity_led"].is_object()) {
+                bool                  on  = false;
+                const nlohmann::json& led = s["led cavity_led"];
+                if (led.contains("color_data") && led["color_data"].is_array())
+                    for (const auto& ch : led["color_data"])
+                        if (ch.is_array())
+                            for (const auto& v : ch)
+                                if (v.is_number() && v.get<double>() > 0.001)
+                                    on = true;
+                m["led"] = on;
+            }
             out = m;
         })
         .perform_sync();
@@ -199,7 +214,7 @@ void AceMmuPanel::send_gcode(const std::string& script)
             if (!*alive)
                 return;
             if (m_web && m_loaded)
-                WebView::RunScript(m_web, "window.showToast(" + nlohmann::json(err).dump() + ")");
+                WebView::RunScript(m_web, "window.showError(" + nlohmann::json(err).dump() + ")");
         });
     });
 }
