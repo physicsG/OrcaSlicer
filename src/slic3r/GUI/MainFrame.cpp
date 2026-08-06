@@ -1263,7 +1263,7 @@ void MainFrame::init_tabpanel() {
     // we can't extend). Appended last so existing tab indices are unaffected.
     m_ace_panel = new AceMmuPanel(m_tabpanel);
     m_ace_panel->SetBackgroundColour(*wxWHITE);
-    m_tabpanel->AddPage(m_ace_panel, _L("MMU"), std::string("tab_monitor_active"), std::string("tab_monitor_active"), false);
+    m_tabpanel->AddPage(m_ace_panel, _L("U1 + ACE"), std::string("tab_monitor_active"), std::string("tab_monitor_active"), false);
 
     if (m_plater) {
         // load initial config
