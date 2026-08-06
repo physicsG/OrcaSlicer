@@ -97,6 +97,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/AceMmuDialog.hpp
     GUI/AceMmuPanel.cpp
     GUI/AceMmuPanel.hpp
+    GUI/SMAccountPersist.cpp
+    GUI/SMAccountPersist.hpp
     GUI/DeviceManager.cpp
     GUI/DeviceManager.hpp
     GUI/Downloader.cpp

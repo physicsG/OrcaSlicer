@@ -1,6 +1,7 @@
 #include "libslic3r/Technologies.hpp"
 #include "libslic3r/FilamentHotBedNozzleRules.hpp"
 #include "GUI_App.hpp"
+#include "SMAccountPersist.hpp"
 #include "GUI_Init.hpp"
 #include "GUI_ObjectList.hpp"
 #include "GUI_Factories.hpp"
@@ -1143,7 +1144,7 @@ void GUI_App::post_init()
     // Neither wxShowEvent nor wxWindowCreateEvent work reliably.
     if (this->preset_updater) { // G-Code Viewer does not initialize preset_updater.
         CallAfter([this] {
-           
+
             bool cw_showed = this->config_wizard_startup();
 
             SSWCP_MqttAgent_Instance::m_dialog = new WebPresetDialog(this);
@@ -1712,6 +1713,7 @@ void GUI_App::restart_networking()
 {
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__<< boost::format(" enter, mainframe %1%")%mainframe;
     on_init_network(true);
+    sm_restore_login(); // restore a saved Snapmaker account/session across restarts
     if(m_agent) {
         init_networking_callbacks();
         m_agent->set_on_ssdp_msg_fn(
@@ -2311,7 +2313,7 @@ void GUI_App::report_flutter_web_copy_failure(FlutterWebCopyStatus status)
     else if (status == FlutterWebCopyStatus::UpgradeFailed &&
              m_flutter_web_copy_status != FlutterWebCopyStatus::InstallFailed)
         m_flutter_web_copy_status = FlutterWebCopyStatus::UpgradeFailed;
-    else 
+    else
         BOOST_LOG_TRIVIAL(error) << "FlutterWebCopyStatus not exit " << static_cast<int>(status);
 }
 
@@ -2336,7 +2338,7 @@ void GUI_App::do_notify_flutter_web_copy_failure()
                 _u8L("Failed to update Web UI resources. The application will continue using the previous version."));
         }
         break;
-    default: 
+    default:
         BOOST_LOG_TRIVIAL(error) << "FlutterWebCopyStatus other status" << static_cast<int>(m_flutter_web_copy_status);
         break;
     }
@@ -4299,6 +4301,9 @@ void GUI_App::sm_request_user_logout()
     } catch (std::exception&) {
         ;
     }
+    // Forget the persisted session (after the revoke used the token above).
+    m_login_userinfo.clear();
+    sm_persist_login();
 }
 
 //BBS
@@ -7174,7 +7179,7 @@ bool GUI_App::config_wizard_startup()
     auto isAgree = wxGetApp().app_config->get("app", PRIVACY_POLICY_FLAGS);
     user_update_privacy_notify(isAgree == "true");
     BOOST_LOG_TRIVIAL(warning) << "config_wizard_startup changed the privacy policy with: " << (isAgree);
-    
+
         if (!m_app_conf_exists || preset_bundle->printers.only_default_printers()) {
             BOOST_LOG_TRIVIAL(info) << "run wizard...";
             run_wizard(ConfigWizard::RR_DATA_EMPTY);

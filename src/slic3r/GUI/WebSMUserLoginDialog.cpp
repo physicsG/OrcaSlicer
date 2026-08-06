@@ -5,6 +5,7 @@
 #include "libslic3r/AppConfig.hpp"
 #include "slic3r/GUI/wxExtensions.hpp"
 #include "slic3r/GUI/GUI_App.hpp"
+#include "slic3r/GUI/SMAccountPersist.hpp"
 #include "common_func/common_func.hpp"
 
 #include <wx/sizer.h>
@@ -176,13 +177,13 @@ void SMUserLogin::OnIdle(wxIdleEvent &WXUNUSED(evt))
  * when the user clicks a link)
  */
 void SMUserLogin::OnNavigationRequest(wxWebViewEvent &evt)
-{   
+{
     wxString tmpUrl = evt.GetURL();
-    
+
     size_t start = tmpUrl.find("token=");
     if (start != std::string::npos) {
         std::string token;
-        
+
         start += std::string("token=").size(); // 跳过"token="的长度
         size_t end = tmpUrl.find("?", start);
         if (end != std::string::npos) {
@@ -221,13 +222,14 @@ void SMUserLogin::OnNavigationRequest(wxWebViewEvent &evt)
                         sentryReportLog(SENTRY_LOG_TRACE, userInfo, BP_LOGIN);
                         wxGetApp().sm_get_userinfo()->set_user_token(token);
                         wxGetApp().sm_get_userinfo()->set_user_login(true);
+                        Slic3r::GUI::sm_persist_login(); // remember the session across restarts
                     }
                 })
                 .on_error([&](std::string body, std::string error, unsigned status) {
                     std::string http_code = BP_LOGIN_HTTP_CODE + string(":") + std::to_string(status) + "\n" + error + "\n" + body;
                     sentryReportLog(SENTRY_LOG_TRACE, http_code, BP_LOGIN);
                 })
-                .perform_sync(); 
+                .perform_sync();
         });
     }
     UpdateState();
@@ -400,7 +402,7 @@ void SMUserLogin::OnError(wxWebViewEvent &event)
     case wxWEBVIEW_NAV_ERR_OTHER: e = "wxWEBVIEW_NAV_ERR_OTHER"; break;
     }
     BOOST_LOG_TRIVIAL(fatal) << __FUNCTION__<< boost::format(":SMUserLogin error loading page %1% %2% %3% %4%") % event.GetURL() % event.GetTarget() %e % event.GetString();
-    
+
 }
 
 void SMUserLogin::OnScriptResponseMessage(wxCommandEvent &WXUNUSED(evt))
@@ -426,4 +428,3 @@ bool  SMUserLogin::ShowErrorPage()
 }
 
 }} // namespace Slic3r::GUI
-
