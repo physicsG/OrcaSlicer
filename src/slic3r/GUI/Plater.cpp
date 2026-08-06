@@ -784,11 +784,29 @@ void append_ace_filament_list(std::vector<FilamentData>& out_list)
     for (const auto& fd : out_list)
         next_index = std::max(next_index, fd.m_index + 1);
 
+    // An ACE slot loaded at an ACE-fed head is reported twice: once as that
+    // toolhead's filament (from the machine list above) and once as the ACE slot.
+    // The printer doesn't expose the head->slot binding, so dedupe by material +
+    // colour: skip an ACE slot whose material/colour already appears as a toolhead.
+    auto already_present = [&out_list](const std::string& material, const std::string& hex) {
+        for (const auto& fd : out_list) {
+            if (fd.m_type != material)
+                continue;
+            const std::string a = NormalizeFilamentHexColor(fd.m_color.PrimaryColor());
+            const std::string b = NormalizeFilamentHexColor(hex);
+            if (!a.empty() && a == b)
+                return true;
+        }
+        return false;
+    };
+
     for (const auto& unit : snap.units) {
         const char letter = char('A' + unit.idx);
         for (const auto& slot : unit.slots) {
             if (!slot.occupied)
                 continue;
+            if (!slot.color_rrggbb.empty() && already_present(slot.material, slot.color_rrggbb))
+                continue; // already shown as the toolhead it feeds
             FilamentData fd;
             fd.m_index = next_index++;
             fd.m_name  = wxString::Format("ACE %c%d", letter, slot.idx + 1).ToStdString();
