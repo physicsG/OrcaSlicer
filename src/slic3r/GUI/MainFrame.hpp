@@ -50,6 +50,7 @@ class PrintHostQueueDialog;
 class Plater;
 class MainFrame;
 class ParamsDialog;
+class AceMmuPanel;
 
 enum QuickSlice
 {
@@ -352,8 +353,8 @@ public:
     void        refresh_plugin_tips();
     void        RunScript(wxString js);
 
-    void        downloadOpenProject(const std::string& fileUrl, 
-                                    const std::string& fileName, 
+    void        downloadOpenProject(const std::string& fileUrl,
+                                    const std::string& fileName,
                                     std::string completeFilePath = "");
 
     //SoftFever
@@ -382,6 +383,7 @@ public:
     CalibrationPanel*     m_calibration{ nullptr };
     WebViewPanel*         m_webview { nullptr };
     PrinterWebView*       m_printer_view{nullptr};
+    AceMmuPanel*          m_ace_panel{ nullptr }; // Snapmaker U1 ACE MMU tab
     wxLogWindow*          m_log_window { nullptr };
     // BBS
     //wxBookCtrlBase*       m_tabpanel { nullptr };
@@ -395,7 +397,7 @@ public:
     wxWindow*             m_plater_page{ nullptr };
     PrintHostQueueDialog* m_printhost_queue_dlg;
 
-    
+
     mutable int m_print_select{ ePrintAll };
     mutable int m_slice_select{ eSliceAll };
     // Button* m_publish_btn{ nullptr };

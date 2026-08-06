@@ -31,6 +31,7 @@
 #include "ProgressStatusBar.hpp"
 #include "3DScene.hpp"
 #include "ParamsDialog.hpp"
+#include "AceMmuPanel.hpp"
 #include "PrintHostDialogs.hpp"
 #include "wxExtensions.hpp"
 #include "GUI_ObjectList.hpp"
@@ -1135,6 +1136,10 @@ void MainFrame::init_tabpanel() {
         else if (panel == m_monitor) {
             //monitor
         }
+        else if (panel == m_ace_panel) {
+            // Fetch fresh ACE inventory each time the MMU tab is opened.
+            if (m_ace_panel) m_ace_panel->refresh();
+        }
 #ifndef __APPLE__
         if (sel == tp3DEditor) {
             m_topbar->EnableUndoRedoItems();
@@ -1215,7 +1220,7 @@ void MainFrame::init_tabpanel() {
         });
         m_tabpanel->AddPage(m_webview, "", "tab_home_active", "tab_home_active", false);
         m_param_panel = new ParamsPanel(m_tabpanel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBK_LEFT | wxTAB_TRAVERSAL);
-      
+
     }
     m_plater = new Plater(this, this);
     m_plater->SetBackgroundColour(*wxWHITE);
@@ -1253,6 +1258,12 @@ void MainFrame::init_tabpanel() {
     m_calibration = new CalibrationPanel(m_tabpanel, wxID_ANY, wxDefaultPosition, wxDefaultSize);
     m_calibration->SetBackgroundColour(*wxWHITE);
     m_tabpanel->AddPage(m_calibration, _L("Calibration"), std::string("tab_calibration_active"), std::string("tab_calibration_active"), false);
+
+    // Snapmaker U1 ACE MMU: a persistent native page (the Device tab is a webview
+    // we can't extend). Appended last so existing tab indices are unaffected.
+    m_ace_panel = new AceMmuPanel(m_tabpanel);
+    m_ace_panel->SetBackgroundColour(*wxWHITE);
+    m_tabpanel->AddPage(m_ace_panel, _L("MMU"), std::string("tab_monitor_active"), std::string("tab_monitor_active"), false);
 
     if (m_plater) {
         // load initial config
@@ -1627,7 +1638,7 @@ bool MainFrame::can_send_gcode() const
             if (const auto* print_host_opt = cfg.option<ConfigOptionString>("print_host"); print_host_opt)
                 return !print_host_opt->value.empty();
         }
-        
+
     }
     return true;
 }
@@ -2343,7 +2354,7 @@ static wxMenu* generate_help_menu()
 
     append_menu_item(
         helpMenu, wxID_ANY, _L("Check for Process Preset Updates"), _L("Check for Process Preset Updates"),
-        [](wxCommandEvent&) { 
+        [](wxCommandEvent&) {
             wxGetApp().check_preset_version();
 
         },
@@ -2351,7 +2362,7 @@ static wxMenu* generate_help_menu()
 
     append_menu_item(
         helpMenu, wxID_ANY, _L("Check for Web Resource Updates"), _L("Check for Web Resource Updates"),
-        [](wxCommandEvent&) { 
+        [](wxCommandEvent&) {
             wxGetApp().check_web_version();
         },
         "", nullptr, []() { return true; });
@@ -2914,7 +2925,7 @@ void MainFrame::init_menubar_as_editor()
     auto preference_item = new wxMenuItem(parent_menu, ConfigMenuPreferences + config_id_base, _L("Preferences") + "\t" + ctrl + "P", "");
 
 #endif
-   
+
 
 #ifdef __APPLE__
     wxString about_title = wxString::Format(_L("&About %s"), SLIC3R_APP_FULL_NAME);
@@ -3230,7 +3241,7 @@ void MainFrame::set_max_recent_count(int max)
         json data;
         wxGetApp().mainframe->get_recent_projects(data, INT_MAX);
         wxGetApp().recent_file_notify(data);
-        
+
     }
 }
 
@@ -3757,7 +3768,7 @@ void MainFrame::add_to_recent_projects(const wxString& filename)
     }
 }
 
-std::string MainFrame::FileHistory::GetThumbnailUrl_str(int index) const 
+std::string MainFrame::FileHistory::GetThumbnailUrl_str(int index) const
 {
     if (m_thumbnails[index].empty())
         return "";
@@ -3825,7 +3836,7 @@ void MainFrame::get_recent_projects(nlohmann::json& data, int images) {
     for (size_t i = 0; i < m_recent_projects.GetCount(); ++i) {
         json item;
         std::string proj    = m_recent_projects.GetHistoryFile(i).ToStdString(wxConvUTF8);
-        
+
         item["project_name"] = proj.substr(proj.find_last_of("/\\") + 1);
         item["path"]  = proj;
         boost::system::error_code ec;
@@ -3835,8 +3846,8 @@ void MainFrame::get_recent_projects(nlohmann::json& data, int images) {
         }
         catch (std::exception& e) {
             std::string e_msg = e.what();
-            BOOST_LOG_TRIVIAL(error) << e.what(); 
-        }        
+            BOOST_LOG_TRIVIAL(error) << e.what();
+        }
         if (!ec) {
             std::string time = wxDateTime(t).FormatISOCombined(' ').ToStdString();
             item["time"]      = time;
@@ -3932,7 +3943,7 @@ void MainFrame::sm_remove_recent_project(wxString const& filename) {
     json data;
     wxGetApp().mainframe->get_recent_projects(data, INT_MAX);
     wxGetApp().recent_file_notify(data);
-    
+
 
 }
 
@@ -4066,7 +4077,7 @@ void MainFrame::downloadOpenProject(const std::string& fileUrl, const std::strin
         MessageDialog(this, msg, _L("Invalid File"), wxOK | wxICON_WARNING).ShowModal();
     }
 
-    
+
 }
 
 void MainFrame::technology_changed()

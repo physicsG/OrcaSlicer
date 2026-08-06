@@ -34,12 +34,12 @@ repos:
     hooks:
       - id: clang-format
         types_or: [c, c++]
-        # Legacy Orca/Bambu files predate this .clang-format; a small functional
-        # edit would otherwise trigger a whole-file reformat (thousands of lines,
-        # merge hell). Exclude the legacy files we touch for the ACE MMU feature;
-        # new files (src/libslic3r/AceMmu*, src/slic3r/GUI/AceMmuProvider.*) stay
-        # formatted. Extend this list as more legacy files are touched.
-        exclude: '^(deps/|deps_src/|sandboxes/|src/slic3r/GUI/DeviceManager\.(cpp|hpp)$|src/slic3r/GUI/StatusPanel\.cpp$|src/slic3r/GUI/Plater\.(cpp|hpp)$)'
+        # Legacy Orca/Bambu files predate this .clang-format, so formatting a file
+        # we make a small functional edit to would rewrite thousands of unrelated
+        # lines (merge hell). Restrict clang-format to the NEW ACE MMU files, which
+        # are authored to the style; legacy files touched by the feature are left
+        # as-is. Widen this allowlist if the feature adds more new files.
+        files: '^(src/libslic3r/AceMmu|src/slic3r/GUI/AceMmu)'
 
   # ── Shell scripts ──────────────────────────────────────────────────────────
   - repo: https://github.com/shellcheck-py/shellcheck-py
