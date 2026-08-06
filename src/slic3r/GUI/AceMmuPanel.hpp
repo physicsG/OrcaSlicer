@@ -31,6 +31,8 @@ public:
 private:
     void push_state();                                 // fetch (worker) -> inject
     void send_gcode(const std::string& script);        // via the Klipper connection
+    void request_files();                              // fetch U1 gcode list -> page
+    void start_print(const std::string& filename);     // start printing a U1 file
 
     MachineObject* m_obj    = nullptr; // optional: keep its amsList in sync
     wxWebView*     m_web    = nullptr;

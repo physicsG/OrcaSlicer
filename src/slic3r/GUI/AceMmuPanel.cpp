@@ -14,6 +14,7 @@
 #include <boost/log/trivial.hpp>
 #include "nlohmann/json.hpp"
 #include <thread>
+#include <algorithm>
 
 namespace Slic3r { namespace GUI {
 
@@ -118,6 +119,51 @@ nlohmann::json fetch_cams(const std::string& host)
     return arr;
 }
 
+// The U1's gcode files -> [{name,path,modified}], newest first. Worker-safe.
+nlohmann::json fetch_files(const std::string& host)
+{
+    nlohmann::json arr = nlohmann::json::array();
+    Http::get("http://" + host + ":7125/server/files/list?root=gcodes")
+        .timeout_connect(3)
+        .timeout_max(8)
+        .on_error([](std::string, std::string, unsigned) {})
+        .on_complete([&](std::string body, unsigned) {
+            const nlohmann::json doc = nlohmann::json::parse(body, nullptr, false);
+            if (!doc.is_object() || !doc.contains("result") || !doc["result"].is_array())
+                return;
+            for (const nlohmann::json& f : doc["result"]) {
+                if (!f.is_object())
+                    continue;
+                const std::string path = f.value("path", std::string());
+                if (path.empty())
+                    continue;
+                std::string  name  = path;
+                const size_t slash = name.find_last_of('/');
+                if (slash != std::string::npos)
+                    name = name.substr(slash + 1);
+                arr.push_back({{"name", name}, {"path", path}, {"modified", f.value("modified", 0.0)}});
+            }
+            std::sort(arr.begin(), arr.end(), [](const nlohmann::json& a, const nlohmann::json& b) {
+                return a.value("modified", 0.0) > b.value("modified", 0.0);
+            });
+        })
+        .perform_sync();
+    return arr;
+}
+
+// Extract a human error from a Moonraker gcode/print response ("" if none).
+std::string response_error(const nlohmann::json& resp)
+{
+    if (!resp.is_object() || !resp.contains("error") || resp["error"].is_null())
+        return {};
+    const nlohmann::json& e = resp["error"];
+    if (e.is_string())
+        return e.get<std::string>();
+    if (e.is_object() && e.contains("message") && e["message"].is_string())
+        return e["message"].get<std::string>();
+    return e.dump();
+}
+
 // Serialise the ACE snapshot + machine state for the page. Pure (no GUI/network).
 std::string serialize_state(const Slic3r::AceMmu::AceSnapshot& snap, bool fetched, bool dark, const nlohmann::json& machine,
                             const nlohmann::json& cams)
@@ -198,8 +244,12 @@ AceMmuPanel::AceMmuPanel(wxWindow* parent, MachineObject* obj) : wxPanel(parent,
         const std::string msg = e.GetString().ToStdString();
         if (msg == "refresh")
             push_state();
+        else if (msg == "files")
+            request_files();
         else if (msg.rfind("gcode:", 0) == 0)
             send_gcode(msg.substr(6));
+        else if (msg.rfind("print:", 0) == 0)
+            start_print(msg.substr(6));
         else
             BOOST_LOG_TRIVIAL(info) << "AceMmuPanel: page action '" << msg << "'";
     }, m_web->GetId());
@@ -232,16 +282,7 @@ void AceMmuPanel::send_gcode(const std::string& script)
     BOOST_LOG_TRIVIAL(info) << "AceMmuPanel: send gcode '" << script << "'";
     auto alive = m_alive;
     host->async_send_gcodes({script}, [this, alive](const nlohmann::json& resp) {
-        std::string err;
-        if (resp.is_object() && resp.contains("error") && !resp["error"].is_null()) {
-            const nlohmann::json& e = resp["error"];
-            if (e.is_string())
-                err = e.get<std::string>();
-            else if (e.is_object() && e.contains("message") && e["message"].is_string())
-                err = e["message"].get<std::string>();
-            else
-                err = e.dump();
-        }
+        const std::string err = response_error(resp);
         if (err.empty())
             return;
         wxGetApp().CallAfter([this, alive, err]() {
@@ -249,6 +290,48 @@ void AceMmuPanel::send_gcode(const std::string& script)
                 return;
             if (m_web && m_loaded)
                 WebView::RunScript(m_web, "window.showError(" + nlohmann::json(err).dump() + ")");
+        });
+    });
+}
+
+void AceMmuPanel::request_files()
+{
+    std::string host = AceMmuProvider::resolve_connected_host();
+    if (host.empty() && m_obj)
+        host = m_obj->dev_ip;
+    if (host.empty())
+        return;
+    auto alive = m_alive;
+    std::thread([this, host, alive]() {
+        const std::string j = fetch_files(host).dump();
+        wxGetApp().CallAfter([this, alive, j]() {
+            if (!*alive)
+                return;
+            if (m_web && m_loaded)
+                WebView::RunScript(m_web, "window.setFiles(" + j + ")");
+        });
+    }).detach();
+}
+
+void AceMmuPanel::start_print(const std::string& filename)
+{
+    std::shared_ptr<PrintHost> host;
+    wxGetApp().get_connect_host(host);
+    if (!host) {
+        BOOST_LOG_TRIVIAL(warning) << "AceMmuPanel: no connected host to print '" << filename << "'";
+        return;
+    }
+    BOOST_LOG_TRIVIAL(info) << "AceMmuPanel: start print '" << filename << "'";
+    auto alive = m_alive;
+    host->async_start_print_job(filename, [this, alive](const nlohmann::json& resp) {
+        const std::string err = response_error(resp);
+        wxGetApp().CallAfter([this, alive, err]() {
+            if (!*alive)
+                return;
+            if (!err.empty() && m_web && m_loaded)
+                WebView::RunScript(m_web, "window.showError(" + nlohmann::json(err).dump() + ")");
+            else
+                push_state(); // reflect the newly started job
         });
     });
 }
