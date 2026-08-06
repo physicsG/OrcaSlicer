@@ -1,5 +1,11 @@
 # 08 · Filament Management split (U1 toolheads + ACE slots) — plan
 
+> **Status: v1 implemented (2026-08-06).** ACE slots are appended to the
+> non-destructive "Sync Filament Information" machine list (`append_ace_filament_list`
+> in `Plater.cpp`), and the destructive "Sync from AMS" (`ams_btn`) is hidden for the
+> U1. Sources are distinguished by name prefix ("ACE A1"). Remaining: grouped/labelled
+> layout in `FilamentColorMapBoxGroup`; send-time tool→(ace,slot) (Phase 4).
+
 **Goal.** Prepare's "Filament Management" should show project filaments alongside
 **both** filament sources — the **U1 toolheads** (directly loaded at each head) and
 the **ACE slots** (spools in the ACE) — and let the user map project filaments to

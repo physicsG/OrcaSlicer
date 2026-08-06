@@ -766,6 +766,42 @@ void build_machine_filament_list(PresetBundle* preset_bundle, std::vector<Filame
     }
 }
 
+// Append the ACE unit's occupied slots to the machine filament list, so the
+// non-destructive filament sync shows U1 toolheads AND ACE slots together (the
+// U1's toolhead filaments come from build_machine_filament_list above; this adds
+// the ACE spools). Fetches a fresh snapshot over LAN; no-op if unavailable.
+void append_ace_filament_list(std::vector<FilamentData>& out_list)
+{
+    const std::string host = AceMmuProvider::resolve_connected_host();
+    if (host.empty())
+        return;
+    AceMmuProvider prov(host);
+    if (!prov.fetch_once())
+        return;
+    const Slic3r::AceMmu::AceSnapshot snap = prov.snapshot();
+
+    unsigned next_index = 0;
+    for (const auto& fd : out_list)
+        next_index = std::max(next_index, fd.m_index + 1);
+
+    for (const auto& unit : snap.units) {
+        const char letter = char('A' + unit.idx);
+        for (const auto& slot : unit.slots) {
+            if (!slot.occupied)
+                continue;
+            FilamentData fd;
+            fd.m_index = next_index++;
+            fd.m_name  = wxString::Format("ACE %c%d", letter, slot.idx + 1).ToStdString();
+            fd.m_type  = slot.material;
+            std::vector<std::string> colors;
+            if (!slot.color_rrggbb.empty())
+                colors.push_back(slot.color_rrggbb);
+            fd.m_color = FilamentColor::FromColors(colors, FilamentColorMode::Segment);
+            out_list.push_back(std::move(fd));
+        }
+    }
+}
+
 } // namespace
 
 bool Plater::has_illegal_filename_characters(const wxString& wxs_name)
@@ -3134,7 +3170,11 @@ void Sidebar::update_all_preset_comboboxes(bool reload_printer_view)
         // Snapmaker U1 reuses the "Sync from AMS" button to pull its multiACE
         // inventory into the filament list (see Sidebar::sync_ams_list), and adds
         // an "ACE" button that opens the native ACE MMU page.
-        ams_btn->Show(is_snapmaker_u1);
+        // For the U1, hide the legacy (destructive) "Sync from AMS": it replaces the
+        // whole filament list and would drop the U1 toolhead filaments. Users sync via
+        // the non-destructive "Sync Filament Information" button, which now includes
+        // the ACE slots (see append_ace_filament_list / show_sync_filament_dialog).
+        ams_btn->Hide();
         if (ace_btn) ace_btn->Show(is_snapmaker_u1);
         auto print_btn_type = MainFrame::PrintSelectType::eExportGcode;
 
@@ -8454,6 +8494,7 @@ void Sidebar::show_sync_filament_dialog()
 
     std::vector<FilamentData> machineFilamentList;
     build_machine_filament_list(preset_bundle, machineFilamentList);
+    append_ace_filament_list(machineFilamentList); // U1 toolheads + ACE slots
     auto nonEmptyFilaments = [](const std::vector<FilamentData>& filamentDatas) {
         for (const auto& filament : filamentDatas) {
             if (!is_none_filament(filament))
