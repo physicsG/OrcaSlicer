@@ -94,6 +94,28 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 
 Newest first. One block per session: date, what changed (files), result, next.
 
+### 2026-08-06 — Native MMU tab, login persistence, fast-build tooling
+- **Device + MMU tab:** extracted the ACE view into a reusable `AceMmuPanel`
+  (`src/slic3r/GUI/AceMmuPanel.{hpp,cpp}`) and added it as a persistent top-level
+  **"MMU"** tab in `MainFrame` (appended last; selected by pointer comparison — no
+  new `TabPosition` enum). `AceMmuDialog` now just wraps the same panel. Host is
+  resolved via `AceMmuProvider::resolve_connected_host()` so it works with no
+  MachineObject. Runtime not yet verified on the printer.
+- **Host resolution fix** (earlier this session): the webview U1 has no dev_ip, so
+  resolve now also reads the connect-host and the `print_host` config; logs the
+  resolved host + fetch result. (Fixes the "No ACE detected" popup.)
+- **Snapmaker login persistence:** account was memory-only; added `SMAccountPersist`
+  (save on login, restore in `GUI_App::on_init_inner`, clear on logout) via
+  `app_config` section `sm_account`. Free functions in a tiny header (not
+  `GUI_App.hpp`) to avoid a full rebuild. Token stored plaintext — keychain = future.
+- **Build tooling:** clang-format hook switched to an allowlist (ACE files only);
+  fast-build loop documented in [DEV-BUILD.md](DEV-BUILD.md) incl. the header-fanout
+  gotcha (why touching `MainFrame.hpp` triggers a big rebuild).
+- **Result:** both features build green (MMU tab + login). Binaries relink in ~15 s
+  for `.cpp`-only edits. **Not yet runtime-verified** (headless here).
+- **Next:** user verifies the MMU tab + login-persist on the printer; then style the
+  tab closer to Bambu's AMS UI; `setting_id` preset match; write actions (deferred).
+
 ### 2026-08-06 — Phase 3 native UI: Prepare sync + native ACE page + mockup
 - **Prepare "Sync from AMS" for the U1:** `ams_btn` now shown for the U1
   (`Plater.cpp` visibility block); `Sidebar::sync_ams_list()` calls new

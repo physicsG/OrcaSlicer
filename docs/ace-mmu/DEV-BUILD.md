@@ -42,6 +42,16 @@ pay the ~15 s mold link.
 
 Measured: 28 min first/warm build; **~15 s** incremental (one small file + mold link).
 
+### Why a rebuild is sometimes long again
+Editing a **widely-included header** invalidates every TU that includes it, so ccache
+can't help (their input changed) and hundreds of files recompile. Examples in this
+tree: `MainFrame.hpp` (~93 includers), `GUI_App.hpp` / `DeviceManager.hpp` (more).
+A `.cpp` edit only recompiles that one TU. Keep changes in `.cpp` files and the
+narrow `AceMmu*` headers; when a header edit is unavoidable (e.g. adding a member to
+`MainFrame`), it's a one-time broad rebuild — the next `.cpp`-only edit is fast again.
+The Snapmaker-account persistence was implemented as free functions in a tiny
+`SMAccountPersist.hpp` (not `GUI_App.hpp`) specifically to avoid that fan-out.
+
 ## Windows — Ninja + sccache (+ optional lld-link)
 
 Use [`../../build_fast_win.bat`](../../build_fast_win.bat) (canonical
