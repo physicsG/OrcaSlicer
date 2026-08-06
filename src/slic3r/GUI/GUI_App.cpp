@@ -1004,6 +1004,10 @@ void GUI_App::post_init()
     m_open_method = "double_click";
     bool switch_to_3d = false;
 
+    // Restore a saved Snapmaker account/session (token) once at startup. app_config
+    // was loaded in the ctor (init_app_config), so the saved section is available.
+    sm_restore_login();
+
     if (!this->init_params->input_files.empty()) {
 
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(", init with input files, size %1%, input_gcode %2%")
@@ -1713,7 +1717,6 @@ void GUI_App::restart_networking()
 {
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__<< boost::format(" enter, mainframe %1%")%mainframe;
     on_init_network(true);
-    sm_restore_login(); // restore a saved Snapmaker account/session across restarts
     if(m_agent) {
         init_networking_callbacks();
         m_agent->set_on_ssdp_msg_fn(
