@@ -17,16 +17,22 @@ namespace Slic3r { namespace GUI {
 
 namespace {
 
-const wxColour kAccent(23, 184, 144);
-const wxColour kWarn(214, 152, 60);
+// Fixed "device dashboard" palette from docs/ace-mmu/device-page-mockup.html — the
+// page commits to the mockup's dark look regardless of the app's light/dark theme.
+const wxColour kAccent(23, 184, 144); // teal
+const wxColour kWarn(230, 162, 60);   // amber
+const wxColour kPageBg(14, 17, 20);   // page ground
+const wxColour kSurface(24, 28, 33);  // cards
+const wxColour kSurface2(31, 37, 43); // tiles / slot cards
+const wxColour kText(233, 237, 240);  // primary text
+const wxColour kDim(154, 165, 173);   // muted text
 
-wxColour dim_text() { return wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT); }
-wxColour card_bg() { return wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE); }
-wxColour panel_bg() { return wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW); }
+wxColour card_bg() { return kSurface; }
+wxColour panel_bg() { return kSurface2; }
 
 const wxColour& dim_text_ref()
 {
-    static wxColour c = dim_text();
+    static wxColour c = kDim;
     return c;
 }
 
@@ -39,8 +45,7 @@ wxStaticText* label(wxWindow* p, const wxString& text, int dpt = 0, bool bold = 
     if (bold)
         f.MakeBold();
     t->SetFont(f);
-    if (col)
-        t->SetForegroundColour(*col);
+    t->SetForegroundColour(col ? *col : kText); // page is dark -> default to light text
     return t;
 }
 
@@ -137,6 +142,7 @@ wxPanel* make_slot_card(wxWindow* parent, const Slic3r::AceMmu::AceSlot& slot)
 
 AceMmuPanel::AceMmuPanel(wxWindow* parent, MachineObject* obj) : wxPanel(parent, wxID_ANY), m_obj(obj)
 {
+    SetBackgroundColour(kPageBg);
     wxBoxSizer* top = new wxBoxSizer(wxVERTICAL);
 
     wxBoxSizer* headbar = new wxBoxSizer(wxHORIZONTAL);
@@ -149,6 +155,7 @@ AceMmuPanel::AceMmuPanel(wxWindow* parent, MachineObject* obj) : wxPanel(parent,
     top->Add(headbar, 0, wxEXPAND | wxALL, FromDIP(16));
 
     m_body = new wxPanel(this);
+    m_body->SetBackgroundColour(kPageBg);
     top->Add(m_body, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 
     SetSizer(top);
