@@ -131,7 +131,7 @@
   /* Printing Task tabs + file browser */
   .ttab{cursor:pointer;padding:3px 10px;border-radius:6px;font-size:12px;color:var(--dim);}
   .ttab.on{background:var(--teal);color:#fff;}
-  .filegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px;align-content:start;}
+  .filegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:12px;align-content:start;max-height:56vh;overflow:auto;}
   .filecard{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--inset);display:flex;flex-direction:column;}
   .fthumb{aspect-ratio:1;background:var(--panel);display:grid;place-items:center;overflow:hidden;}
   .fthumb img{width:100%;height:100%;object-fit:contain;}
@@ -382,7 +382,9 @@
       var next=seq[(seq.indexOf(cur)+1)%seq.length]; window.sendGcode('M220 S'+next);
     });
     document.getElementById('ledsw').addEventListener('click',function(){
-      var on=this.classList.contains('on'), v=on?0:1; window.sendGcode('SET_LED LED=cavity_led RED='+v+' GREEN='+v+' BLUE='+v);
+      var on=this.classList.contains('on'), v=on?0:1; this.classList.toggle('on', !on); // optimistic
+      // cavity_led is RGBW — drive the white channel too or the case light won't light
+      window.sendGcode('SET_LED LED=cavity_led RED='+v+' GREEN='+v+' BLUE='+v+' WHITE='+v);
     });
     // editable target temps: click the target -> inline input -> SET_HEATER_TEMPERATURE
     cb.querySelectorAll('.tt[data-set]').forEach(function(sp){
