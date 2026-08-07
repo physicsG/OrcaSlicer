@@ -344,3 +344,23 @@ Newest first. One block per session: date, what changed (files), result, next.
   alone, from `PresetComboBox::update_selection`). Cosmetic today.
 - `FontConfigHelp.cpp:32` calls `FcConfigDestroy(fc)` on the `reload_fonts` path
   while the config may still be referenced. Not on the print path.
+
+### 2026-08-07 — ACE slicing reaches the gcode (config UI + U1 template)
+- Changed: `ace_head_capacity` added to `m_extruder_option_keys` (PrintConfig.cpp) so
+  it resizes with the extruder count, and exposed per-head in Printer Settings ->
+  Extruder N -> Size (Tab.cpp). Set it to e.g. `1,1,1,4` for a head-mode U1 (three
+  stock feeders + a 4-slot ACE on head 4); the default of 1 everywhere keeps every
+  other printer a plain toolchanger with the planner inert.
+- `set_num_extruders` now seeds a missing per-extruder option from its default
+  instead of asserting, so projects saved before this option exists still load.
+- U1 profiles (0.2/0.4/0.6/0.8) now emit, inside `change_filament_gcode` right after
+  the `T<n>` tool change and guarded by `{if ace_swap}`:
+  `ACE_SET_PURGE LENGTH=<flush_length>` + `ACE_SWAP_HEAD HEAD=<ace_head> SLOT=<ace_slot>`.
+  Inert unless the plan says this change needs a spool swap on the target head.
+- **Unverified against firmware:** the exact `ACE_SWAP_HEAD` / `ACE_SET_PURGE`
+  argument spelling still has to be confirmed on a live U1 (`/printer/gcode/help`),
+  as does whether an explicit `ACE_PRELOAD` is needed at start (currently the plan is
+  only published as `ace_plan_head`/`ace_plan_slot`/`ace_plan_summary` placeholders,
+  not emitted, precisely because the syntax is unconfirmed).
+- Next: the filament assignment dialog (mockup: `docs/ace-mmu/load-plan-mockup.html`)
+  as a real webview dialog + pins persisted per plate.

@@ -6439,7 +6439,7 @@ void PrintConfigDef::init_extruder_option_keys()
 {
     // ConfigOptionFloats, ConfigOptionPercents, ConfigOptionBools, ConfigOptionStrings
     m_extruder_option_keys = {
-        "nozzle_diameter", "min_layer_height", "max_layer_height", "extruder_offset",
+        "nozzle_diameter", "ace_head_capacity", "min_layer_height", "max_layer_height", "extruder_offset",
         "retraction_length", "z_hop", "z_hop_types", "z_hop_when_prime", "travel_slope", "retract_lift_above", "retract_lift_below", "retract_lift_enforce", "retraction_speed", "deretraction_speed",
         "retract_before_wipe", "retract_restart_extra", "retraction_minimum_travel", "wipe", "wipe_distance",
         "retract_when_changing_layer", "retract_length_toolchange", "retract_restart_extra_toolchange", "extruder_colour",
@@ -7615,7 +7615,15 @@ void DynamicPrintConfig::set_num_extruders(unsigned int num_extruders)
             // empty fields there, if not defined by the system profile.
             continue;
         auto *opt = this->option(key, false);
-        assert(opt != nullptr);
+        if (opt == nullptr) {
+            // Config predates this option (e.g. a project saved before it existed):
+            // seed it from the default instead of asserting, as the filament path does.
+            const ConfigOption *default_opt = defaults.option(key);
+            if (default_opt == nullptr)
+                continue;
+            this->set_key_value(key, default_opt->clone());
+            opt = this->option(key, false);
+        }
         assert(opt->is_vector());
         if (opt != nullptr && opt->is_vector())
             static_cast<ConfigOptionVectorBase*>(opt)->resize(num_extruders, defaults.option(key));
