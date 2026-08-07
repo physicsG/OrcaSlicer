@@ -2746,7 +2746,26 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
         }
         this->placeholder_parser().set("ace_plan_head", plan_heads);
         this->placeholder_parser().set("ace_plan_slot", plan_slots);
+        // Ready-to-emit initial load, one line per ACE-fed head, using the slot the
+        // head presents first (plan_loading assigns slot 0 to the first-used colour).
+        std::string preload;
+        if (m_ace_plan.feasible) {
+            for (size_t c = 0; c < m_ace_plan.head_of.size(); ++c) {
+                const int h = m_ace_plan.head_of[c];
+                if (h < 0 || m_ace_plan.slot_of[c] != 0)
+                    continue;
+                const int cap  = (h < int(print.config().ace_head_capacity.values.size()))
+                                     ? print.config().ace_head_capacity.get_at(h) : 1;
+                if (cap <= 1)
+                    continue;   // stock feeder: nothing for the ACE to load
+                const int unit = (h < int(print.config().ace_head_unit.values.size()))
+                                     ? print.config().ace_head_unit.get_at(h) : 0;
+                preload += "ACE_LOAD_HEAD HEAD=" + std::to_string(h) + " ACE=" + std::to_string(unit) +
+                           " SLOT=0\n";
+            }
+        }
         this->placeholder_parser().set("ace_plan_summary", new ConfigOptionString(plan_summary));
+        this->placeholder_parser().set("ace_plan_preload", new ConfigOptionString(preload));
     }
 
     std::string machine_start_gcode = this->placeholder_parser_process("machine_start_gcode", print.config().machine_start_gcode.value,
@@ -8455,6 +8474,7 @@ std::string GCode::retract(bool toolchange, bool is_last_retraction, LiftType li
 void GCode::set_ace_toolchange_vars(DynamicConfig &config, unsigned int new_extruder_id, int previous_extruder_id)
 {
     int  head = -1, slot = -1, prev_head = -1, prev_slot = -1;
+    int  unit = -1, prev_unit = -1;
     bool swap = false;
     if (m_ace_plan.feasible) {
         if (size_t(new_extruder_id) < m_ace_plan.head_of.size()) {
@@ -8472,10 +8492,20 @@ void GCode::set_ace_toolchange_vars(DynamicConfig &config, unsigned int new_extr
             m_ace_loaded[head] = int(new_extruder_id);
         }
     }
+    // Each ACE-fed head is wired to exactly one unit (ACE_SET_HEAD_ACE); ACE_SWAP_HEAD
+    // requires it, so resolve it from the printer config rather than guessing.
+    auto unit_of_head = [this](int h) {
+        return (h >= 0 && h < int(m_config.ace_head_unit.values.size())) ? m_config.ace_head_unit.get_at(h) : -1;
+    };
+    unit      = unit_of_head(head);
+    prev_unit = unit_of_head(prev_head);
+
     config.set_key_value("ace_head", new ConfigOptionInt(head));
     config.set_key_value("ace_slot", new ConfigOptionInt(slot));
+    config.set_key_value("ace_unit", new ConfigOptionInt(unit));
     config.set_key_value("prev_ace_head", new ConfigOptionInt(prev_head));
     config.set_key_value("prev_ace_slot", new ConfigOptionInt(prev_slot));
+    config.set_key_value("prev_ace_unit", new ConfigOptionInt(prev_unit));
     config.set_key_value("ace_swap", new ConfigOptionBool(swap));
 }
 

@@ -29,9 +29,9 @@ stock feeder or ACE-fed:
 - A change between two colours on **different heads** is a **tool change** — fast, no
   purge beyond a wipe, no filament wasted on the swap itself.
 - A change between two colours on **the same ACE head** is an **ACE swap** — retract
-  ~1.4 m of filament, load the next slot, purge (length set via `ACE_SET_PURGE`; the
-  exact firmware config key is still to be confirmed from the multiACE config). Slow,
-  wasteful.
+  ~1.4 m of filament, load the next slot, purge (length set per colour pair via
+  `ACE_SET_PURGE LENGTH=<mm>`, falling back to the firmware's `swap_purge_length`
+  config value). Slow, wasteful.
 
 multiACE has three run modes (`SET_ACE_MODE`, live via the Config tab):
 - **normal** — every head uses its stock side feeder (1 spool/head). Pure
@@ -82,14 +82,18 @@ colour each head **currently has loaded** (exactly like `simulate_swaps` in
   feeder colour, then Y on head A → returning to A still requires the A-swap) — the
   decision depends on the target head's loaded state, never on sequence adjacency.
 
-The multiACE Klipper macros Orca emits (as observed live in the U1's
-`/printer/gcode/help` — re-verify against the firmware before shipping, since the
-multiACE macro surface is still evolving):
+The multiACE Klipper macros Orca emits. **Verified against the live firmware**
+(`/printer/gcode/help`, 333 macros, 83 ACE-related) on 2026-08-07:
 - `ACE_PRELOAD` / `ACE_SEQ` — preload every head at the start from the computed plan.
 - `ACE_LOAD_HEAD HEAD=n [ACE=] [SLOT=]` / `ACE_UNLOAD_HEAD` — load/unload a head.
 - `ACE_SWAP_HEAD HEAD=n ACE=n [SLOT=n]` — mid-print swap of an ACE head's spool.
+  **`ACE=` is required**, and the unit is *not* derivable from the head index: each
+  ACE-fed head is wired to exactly one unit via `ACE_SET_HEAD_ACE HEAD=0..3 ACE=0..3`.
+  Orca takes it from the per-head `ace_head_unit` printer setting.
 - `ACE_SET_PURGE LENGTH=<mm>` — per-colour-pair purge, straight from Orca's flush
-  matrix (the field the firmware documents as "per-colour-pair purge from the slicer").
+  matrix (the field the firmware documents as "per-colour-pair purge from the
+  slicer"). `LENGTH=0` means "use the stock 80 mm default", and `RESET=1` falls back
+  to the `swap_purge_length` config value.
 - `ACE_PICKUP_CLEAN`, `SET_ACE_MODE`, etc. as needed.
 
 These hang off the existing gcode hooks — `change_filament_gcode` / the toolchanger

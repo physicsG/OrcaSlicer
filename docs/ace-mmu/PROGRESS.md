@@ -364,3 +364,41 @@ Newest first. One block per session: date, what changed (files), result, next.
   not emitted, precisely because the syntax is unconfirmed).
 - Next: the filament assignment dialog (mockup: `docs/ace-mmu/load-plan-mockup.html`)
   as a real webview dialog + pins persisted per plate.
+
+### 2026-08-07 — ACE macro syntax VERIFIED against live firmware
+- Queried `http://192.168.2.242/printer/gcode/help` (333 macros, 83 ACE-related).
+  Two corrections to what was committed an hour earlier:
+  1. **`ACE_SWAP_HEAD HEAD=0 ACE=1 [SLOT=0]` — `ACE=` is REQUIRED.** The emitted
+     macro was missing it and would have failed on the printer.
+  2. **The ACE unit is not the head index.** `ACE_SET_HEAD_ACE HEAD=0..3 ACE=0..3`:
+     "each ACE head is wired to exactly one ACE and can only load/swap that unit's
+     slots". The live mapping here is head_ace={0:0,1:1,2:2,3:0}, so head 3 is fed by
+     ACE 0 — the old `ace_unit = head index` assumption was wrong.
+  Fixed by adding a per-head `ace_head_unit` printer setting (Printer Settings ->
+  Extruder N -> Size), feeding it into `PlanHead::ace_unit`, publishing `ace_unit` /
+  `prev_ace_unit` placeholders, and emitting `ACE=` in the template.
+- Confirmed correct as already written: `ACE_SET_PURGE LENGTH=<mm>` (LENGTH=0 = stock
+  80mm default, RESET=1 = config value).
+- `ACE_PRELOAD` takes an `ACE_SEQ`-style `PLAN=head:ace` list, which does NOT carry a
+  slot. So instead of guessing, Orca publishes `ace_plan_preload` — ready-to-emit
+  `ACE_LOAD_HEAD HEAD=n ACE=u SLOT=0` lines (documented syntax, slot-precise, one per
+  ACE-fed head, using the slot the head presents first). It is NOT yet inserted into
+  `machine_start_gcode`: where in that template the initial load belongs (relative to
+  preheat and the start line) is unverified, and the firmware may already load heads
+  on tool select. Add `{ace_plan_preload}` to the start gcode to switch it on.
+- Also confirmed relevant to the design: `ACE_SET_HEAD_MANUAL` (TPU/manual bypass per
+  head — do not plan ACE spools onto such a head) and
+  `ACE_SET_HEAD_FEEDER HEAD=n ENABLE=0|1` (stock-feeder heads), which map directly
+  onto `ace_head_capacity = 1`.
+
+### 2026-08-07 — Pre-existing flake found: second Print in one process
+- Slicing a SECOND `Print` in the same process intermittently (~20%) throws
+  `"Coordinate outside allowed range"` from `TreeSupport3D::validate_range`
+  (Support/TreeSupport3D.cpp:73). Support-necessity detection runs even with
+  `enable_support = false` and is TBB-parallel, so the throw is nondeterministic.
+- Attribution (measured, not assumed): each of the two ACE e2e scenarios passes
+  12/12 **in isolation**; only the sequence flakes. Nothing in the ACE path touches
+  geometry or supports - the plan is computed after tool ordering.
+- Handling: the second scenario tolerates that one exact message and SUCCEEDs with a
+  note; any other exception still fails the test. 15/15 green afterwards. The
+  underlying fork bug is untouched and still worth fixing separately.

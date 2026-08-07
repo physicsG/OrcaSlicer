@@ -3978,6 +3978,15 @@ void PrintConfigDef::init_fff_params()
     def->max = 100;
     def->set_default_value(new ConfigOptionFloats { 0.4 });
 
+    def = this->add("ace_head_unit", coInts);
+    def->label = L("ACE unit feeding this head");
+    def->tooltip = L("Which multiACE unit feeds this toolhead (0-based). Each ACE-fed head is wired to "
+                     "exactly one unit and can only load or swap that unit's slots. Ignored when the head "
+                     "uses its stock feeder (capacity 1).");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->set_default_value(new ConfigOptionInts { 0 });
+
     def = this->add("ace_head_capacity", coInts);
     def->label = L("ACE head capacity");
     def->tooltip = L("Spool positions available to each toolhead. 1 means the stock side feeder; a larger "
@@ -6439,7 +6448,7 @@ void PrintConfigDef::init_extruder_option_keys()
 {
     // ConfigOptionFloats, ConfigOptionPercents, ConfigOptionBools, ConfigOptionStrings
     m_extruder_option_keys = {
-        "nozzle_diameter", "ace_head_capacity", "min_layer_height", "max_layer_height", "extruder_offset",
+        "nozzle_diameter", "ace_head_capacity", "ace_head_unit", "min_layer_height", "max_layer_height", "extruder_offset",
         "retraction_length", "z_hop", "z_hop_types", "z_hop_when_prime", "travel_slope", "retract_lift_above", "retract_lift_below", "retract_lift_enforce", "retraction_speed", "deretraction_speed",
         "retract_before_wipe", "retract_restart_extra", "retraction_minimum_travel", "wipe", "wipe_distance",
         "retract_when_changing_layer", "retract_length_toolchange", "retract_restart_extra_toolchange", "extruder_colour",
@@ -8774,7 +8783,7 @@ static std::map<t_custom_gcode_key, t_config_option_keys> s_CustomGcodeSpecificP
                                "old_retract_length_toolchange", "relative_e_axis", "second_flush_volume", "toolchange_count", "toolchange_z",
                                "travel_point_1_x", "travel_point_1_y", "travel_point_2_x", "travel_point_2_y", "travel_point_3_x",
                                "travel_point_3_y", "x_after_toolchange", "y_after_toolchange", "z_after_toolchange", "next_wipe_x", "next_wipe_y",
-                               "ace_head", "ace_slot", "prev_ace_head", "prev_ace_slot", "ace_swap"}},
+                               "ace_head", "ace_slot", "ace_unit", "prev_ace_head", "prev_ace_slot", "prev_ace_unit", "ace_swap"}},
     {"change_extrusion_role_gcode", {"layer_num", "layer_z", "extrusion_role", "last_extrusion_role"}},
     {"printing_by_object_gcode",    {}},
     {"machine_pause_gcode",         {}},
@@ -8843,6 +8852,8 @@ CustomGcodeSpecificConfigDef::CustomGcodeSpecificConfigDef()
     new_def("next_wipe_y", coFloat, "Next Wipe Y", "For Snapmaker Artision, next y after toolchange");
     new_def("ace_head", coInt, "ACE head", "multiACE: toolhead the incoming filament lives on (0-based; -1 = no plan)");
     new_def("ace_slot", coInt, "ACE slot", "multiACE: slot of the incoming filament within its head (0-based; -1 = no plan)");
+    new_def("ace_unit", coInt, "ACE unit", "multiACE: unit feeding the incoming filament's head (0-based; -1 = none)");
+    new_def("prev_ace_unit", coInt, "Previous ACE unit", "multiACE: unit feeding the outgoing filament's head (0-based; -1 = none)");
     new_def("prev_ace_head", coInt, "Previous ACE head", "multiACE: toolhead the outgoing filament lives on (0-based; -1 = none)");
     new_def("prev_ace_slot", coInt, "Previous ACE slot", "multiACE: slot of the outgoing filament within its head (0-based; -1 = none)");
     new_def("ace_swap", coBool, "ACE swap", "multiACE: true when this change requires the target head to swap its loaded spool (rather than a free toolchange)");

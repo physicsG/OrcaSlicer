@@ -2568,6 +2568,7 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
         m_ace_plan = AceMmu::LoadingPlan{};
         {
             const std::vector<int>& caps    = m_config.ace_head_capacity.values;
+            const std::vector<int>& units   = m_config.ace_head_unit.values;
             const size_t            n_heads = m_config.nozzle_diameter.values.size();
             const bool any_ace = std::any_of(caps.begin(), caps.end(), [](int c) { return c > 1; });
             if (any_ace && n_heads > 0 && !m_tool_ordering.empty()) {
@@ -2575,7 +2576,10 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
                 heads.reserve(n_heads);
                 for (size_t h = 0; h < n_heads; ++h) {
                     const int cap = h < caps.size() ? std::max(1, caps[h]) : 1;
-                    heads.push_back(AceMmu::PlanHead{int(h), cap, cap > 1, cap > 1 ? int(h) : -1});
+                    // Each ACE-fed head is wired to exactly one unit (ACE_SET_HEAD_ACE);
+                    // the mapping is configured, not derivable from the head index.
+                    const int unit = (cap > 1 && h < units.size()) ? std::max(0, units[h]) : -1;
+                    heads.push_back(AceMmu::PlanHead{int(h), cap, cap > 1, unit});
                 }
                 std::vector<int> seq;
                 for (const LayerTools& lt : m_tool_ordering.layer_tools())

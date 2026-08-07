@@ -4828,6 +4828,7 @@ if (is_marlin_flavor)
                 optgroup->append_single_option_line("nozzle_diameter", "", extruder_idx);
                 // multiACE: how many spools this head can present (1 = stock feeder)
                 optgroup->append_single_option_line("ace_head_capacity", "", extruder_idx);
+                optgroup->append_single_option_line("ace_head_unit", "", extruder_idx);
 
                 optgroup->m_on_change = [this, extruder_idx](const t_config_option_key& opt_key, boost::any value)
                 {
