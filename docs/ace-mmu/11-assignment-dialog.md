@@ -51,7 +51,10 @@ Queried live on 2026-08-07 (`/printer/objects/query?configfile`, `?print_task_co
 **Consequence for the design.** The optimiser's output *is* this mapping. Our job is
 to fill the table the machine already understands, not to invent a parallel mechanism.
 
-> **Open question (blocking the slot half).** `extruder_map_table` carries
+> **RESOLVED — see §2b. The question below is answered: the preflight rewrites the
+> gcode itself, so no slicer-side slot mechanism is needed.**
+>
+> ~~**Open question (blocking the slot half).**~~ `extruder_map_table` carries
 > virtual-tool → **head** only; it has no slot. For 4 colours sharing one ACE head,
 > something must still select the slot per change — either `SET_MAP`'s lane binding or
 > multiACE's own layer. **To be pinned down on the printer before writing the
@@ -59,6 +62,51 @@ to fill the table the machine already understands, not to invent a parallel mech
 > already committed in the U1 `change_filament_gcode`: if the firmware resolves swaps
 > through the map, that emission may be redundant or conflicting. It is inert today
 > (guarded by `{if ace_swap}`, and nothing sets `ace_head_capacity` by default).
+
+## 2b. RESOLVED: multiACE's preflight already does the mapping (and the planning)
+
+Read the source (`decay71/multiACE`, `multiace/web/backend/preflight_core.py` +
+`main.py`). The preflight is not a thin macro-stamper — it is a full planner and
+gcode rewriter that runs **on the printer**:
+
+- `parse_meta()` scans the sliced file for `; Change Tool N -> Tool M` comments —
+  which the U1's stock `change_filament_gcode` already emits — to recover the
+  colour-change sequence.
+- `_head_proposal_plan()` / `plan_loadout_from_file()` compute a **colour → head**
+  assignment; `head_plan` selects `loadout | optimize | layer`.
+- `_layout_from_head_assignment()` turns that into `(ace, slot)` per colour;
+  `_real_swap_count()` prices it; `_bg_stats_for()` accounts for background swaps
+  (`ACE_BG_SWAP`).
+- `head_mode_targets()` is literally "the dropdown universe: each pin-able feeder +
+  each ACE slot on a wired ACE" — multiACE already has a pinning assignment UI.
+- `rewrite_pipeline()` **rewrites the gcode** into a print-ready file and uploads it.
+
+So the slot dimension never needed a slicer-side mechanism: the preflight rewrites the
+file. **Consequences, stated plainly:**
+
+1. Our optimiser (`AceMmuPlan.hpp`) **duplicates** multiACE's planner. It is still
+   useful — it is exact/optimal and runs at slice time — but it is no longer the only
+   implementation, and we should not pretend otherwise.
+2. The `ACE_SWAP_HEAD` / `ACE_SET_PURGE` emission committed into the U1
+   `change_filament_gcode` is **probably the wrong mechanism**: multiACE rewrites the
+   file rather than relying on slicer-stamped macros. Candidate for reverting.
+3. **The API accepts an externally computed assignment** — this is the opening:
+
+   | endpoint | purpose |
+   |---|---|
+   | `POST /api/preflight` | upload + analyse, returns the plan preview |
+   | `POST /api/preflight/print` | run it; body takes **`head_assignment`** and `head_plan` |
+   | `POST /api/upload-and-print` | upload + print |
+   | `POST /api/head-ace`, `/api/head-feeder`, `/api/head-manual` | topology |
+
+### Direction (recommended)
+
+**Orca owns the UX and the plan; multiACE owns the rewrite.** Our dialog does the
+assignment (with the exact optimiser, pins, live swap pricing) inside the slicer, then
+hands `head_assignment` to `POST /api/preflight/print`. We do not re-implement the
+gcode rewrite, and we stop bouncing the user to the printer's web UI. This keeps a
+single source of truth for the risky part (file rewriting) with its maintainer, and
+puts our effort where it is additive.
 
 ## 3. Architecture
 
@@ -137,8 +185,8 @@ cross-check that the two agree.
 | 2 | `AceMmuPlanDialog` webview host + state serialisation | next |
 | 3 | Feed real data (plan, filament colours, live ACE state) | |
 | 4 | Persist pins + mode per plate (`filament_map` / plate config) | |
-| 5 | Pin down the slot half of the mapping on the printer (§2) | **blocking** |
-| 6 | Push the mapping (`SET_PRINT_EXTRUDER_MAP`, lane binding) | after 5 |
+| 5 | ~~Pin down the slot half~~ — resolved: preflight rewrites the file (§2b) | **done** |
+| 6 | Hand `head_assignment` to `POST /api/preflight/print` (§2b) | next after 2-4 |
 | 7 | Insert into `send_gcode_legacy` ahead of the Flutter page; keep the existing `PrintHostJob` upload | |
 | 8 | Pre-print spool readiness checklist (see `10-slicing-plan.md` §6) | |
 
@@ -150,9 +198,8 @@ cross-check that the two agree.
   reimplement uploading, progress or printer selection.
 - **Decided:** the shipped page is derived from the mockup, so design review and
   implementation cannot drift apart.
-- **Open:** slot selection mechanism (§2) — blocks the push code.
-- **Open:** whether the committed `ACE_SWAP_HEAD` emission is the right mechanism on
-  this machine, or redundant with the map + `SWITCH_OF_EXTENDED_EXTRUDER`.
+- **Likely revert:** the committed `ACE_SWAP_HEAD`/`ACE_SET_PURGE` emission - multiACE
+  rewrites the gcode itself, so slicer-stamped macros are not its contract (§2b).
 - **Open:** what happens to Snapmaker's *Print Preferences* toggles (flow calibration,
   time-lapse, auto-leveling) if we bypass their page — replicate the ones that matter
   or keep their page as a second step.
