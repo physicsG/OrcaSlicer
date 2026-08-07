@@ -129,6 +129,16 @@ endif (MINGW)
 if (NOT WIN32 AND NOT APPLE)
     # Binary name on unix like systems (Linux, Unix)
     set_target_properties(Snapmaker_Orca PROPERTIES OUTPUT_NAME "snapmaker-orca")
+
+    # We statically link our own FreeType (deps), but GTK pulls in the system
+    # libfreetype.so.6 through fontconfig/pangoft2/cairo. An executable's symbols
+    # preempt those of shared libraries, so without this the system libraries end up
+    # calling OUR FreeType instead of the one they were compiled against - different
+    # versions, different struct layouts, and pangoft2 segfaults dereferencing a
+    # bogus face/library (crash when a GtkEntry lays out text, e.g. the "Send G-code
+    # to printer host" dialog). Keep the static copy for our own use, but out of the
+    # dynamic symbol table so the system libraries bind to their own FreeType.
+    target_link_options(Snapmaker_Orca PRIVATE "-Wl,--exclude-libs,libfreetype.a")
     set(SLIC3R_APP_CMD "snapmaker-orca")
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/dev-utils/platform/unix/build_linux_image.sh.in ${CMAKE_CURRENT_BINARY_DIR}/build_linux_image.sh USE_SOURCE_PERMISSIONS @ONLY)
 endif ()

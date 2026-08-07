@@ -305,3 +305,42 @@ Newest first. One block per session: date, what changed (files), result, next.
 - New decisions: slicing is native in Orca (no printer-side preflight for our files);
   capability-gated via `ace_head_capacity`, no printer-name checks; >4-filament
   enablement on the U1 profile still to verify in GUI.
+
+### 2026-08-07 — Known issue: Send crashes on non-Latin filenames (NOT slicing-related)
+- Symptom: clicking Print/Send on a sliced plate segfaults; a
+  `gtk_widget_set_size_request: assertion 'width >= -1' failed` critical appears
+  just before. Plain "Export G-code" to disk is unaffected.
+- Root cause (from core-dump forensics + a live LD_PRELOAD backtrace): the send
+  flow pre-fills `PrintHostSendDialog`'s filename field
+  (`PrintHostDialogs.cpp:114`, `txt_filename->SetValue(recent_path)`) with the
+  output filename. When that name contains characters the host font stack cannot
+  render — e.g. a CJK project name, `彩虹小鸡3_PLA_10h41m.gcode` — GTK re-measures
+  the entry, pango itemizes the text, finds no font covering the codepoints and
+  walks the fontconfig fallback chain. `pango_fc_font_map_new_font()` returns NULL
+  for a family that is *configured but not installed*, and
+  `pango_fc_fontset_foreach` passes that NULL to its callback, which dereferences
+  it: `libpangoft2+0xe204`, `mov 0x38(%rdi),%r8d` with `%rdi = 0`. The negative
+  `set_size_request` widths are a symptom of the same failed layout, not a cause.
+- Reproduces on any machine with no CJK font (`fc-list :lang=zh` empty) whenever
+  the plate's output filename has non-Latin characters.
+- Workarounds: install a CJK font (`fonts-noto-cjk`), or use an ASCII project name.
+- Proper fixes (not done, deliberately deferred): sanitize/transliterate the
+  pre-filled upload name, and/or null-guard the value before it reaches the entry.
+- Dead ends ruled out by experiment, recorded so nobody re-treads them: private
+  HarmonyOS fonts via `AddPrivateFont` (minimal wx repro survives), WebKit
+  initialisation order (minimal GTK+WebKit repro survives), negative widget widths
+  (clamping them at the GTK boundary did not prevent the crash), and the
+  WebDeviceDialog raw-delete (that path is never reached — the crash happens two
+  statements earlier, before any webview dialog is constructed).
+- Also fixed independently while investigating: the executable exported 73 `FT_*`
+  symbols from its statically linked FreeType 2.12.1, which preempted the system
+  FreeType 2.14.2 that pango/fontconfig/cairo are built against. Hardening only —
+  it is NOT the fix for this crash.
+
+### 2026-08-07 — Latent GUI bugs found while debugging (unfixed, low priority)
+- `TextInput::DoSetSize` (`Widgets/TextInput.cpp:173`) and `SpinInput::messureSize`
+  (`Widgets/SpinInput.cpp:217`) compute `size.x - ... - labelSize.x - N` without
+  clamping, pushing negative widths into GTK (12 criticals fire during startup
+  alone, from `PresetComboBox::update_selection`). Cosmetic today.
+- `FontConfigHelp.cpp:32` calls `FcConfigDestroy(fc)` on the `reload_fonts` path
+  while the config may still be referenced. Not on the print path.
