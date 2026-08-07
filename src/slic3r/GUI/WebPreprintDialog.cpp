@@ -57,9 +57,17 @@ WebPreprintDialog::WebPreprintDialog()
 
     wxGetApp().UpdateDlgDarkUI(this);
 
-    auto ptr = wxGetApp().get_web_device_dialog();
-    if (ptr) {
-        delete ptr;
+    // Close any open device page. Never raw-delete a live top-level window — GTK
+    // still holds references and pending events target it (raw delete here produced
+    // gtk_widget_set_size_request criticals followed by a use-after-free crash when
+    // Send was clicked with the device page open). Destroy() defers deletion to
+    // idle time; clearing the app's pointer first keeps everyone off the dead dialog.
+    if (auto* device_dlg = wxGetApp().get_web_device_dialog()) {
+        wxGetApp().web_device_dialog = nullptr;
+        if (device_dlg->IsModal())
+            device_dlg->EndModal(wxID_CANCEL);
+        device_dlg->Hide();
+        device_dlg->Destroy();
     }
 
     wxGetApp().set_web_preprint_dialog(this);

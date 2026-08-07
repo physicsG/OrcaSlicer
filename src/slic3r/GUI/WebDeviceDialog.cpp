@@ -57,6 +57,9 @@ WebDeviceDialog::WebDeviceDialog()
 WebDeviceDialog::~WebDeviceDialog()
 {
     SSWCP::on_webview_delete(m_browser);
+    // The app caches this dialog (SSWCP creates it); never leave a dangling pointer.
+    if (wxGetApp().get_web_device_dialog() == this)
+        wxGetApp().web_device_dialog = nullptr;
 }
 
 void WebDeviceDialog::reload()

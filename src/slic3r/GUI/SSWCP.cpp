@@ -4978,8 +4978,17 @@ void SSWCP_MachineManage_Instance::sw_AddDevice()
 {
     try {
         wxGetApp().CallAfter([] {
-            if (wxGetApp().web_device_dialog)
-                delete wxGetApp().web_device_dialog;
+            // Never raw-delete a live top-level window (GTK use-after-free — same
+            // crash class as the Send-with-device-page-open segfault). Destroy()
+            // defers deletion; the dialog dtor's `== this` guard cannot null the
+            // pointer we reassign below, because the deferred dtor runs after it.
+            if (auto* old_dlg = wxGetApp().get_web_device_dialog()) {
+                wxGetApp().web_device_dialog = nullptr;
+                if (old_dlg->IsModal())
+                    old_dlg->EndModal(wxID_CANCEL);
+                old_dlg->Hide();
+                old_dlg->Destroy();
+            }
 
             wxGetApp().web_device_dialog = new WebDeviceDialog;
             wxGetApp().web_device_dialog->run();
