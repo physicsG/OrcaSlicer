@@ -1,5 +1,19 @@
 # 06 · Slicing, Virtual Tool Indices & G-code
 
+> **Superseded in part — read [10-slicing-plan.md](10-slicing-plan.md) and
+> [11-assignment-dialog.md](11-assignment-dialog.md) for the current design.**
+> This document describes multiACE's **multi mode** encoding, and its formulas were
+> confirmed against the firmware source on 2026-08-07: `post_process_virtual_toolheads.py`
+> `_expand_swap()` really does compute `head = T % 4`, `ace = T // 4` and emit
+> `ACE_SWAP_HEAD HEAD=head ACE=ace SLOT=head` — i.e. slot == head, the 1:1 wiring.
+>
+> What it does **not** cover is **head mode**, which is what the optimiser targets: an
+> ACE-fed head holding *several* slots, so `slot` is no longer tied to the head index
+> and the tool number alone cannot encode the assignment. There the contract is
+> `rewrite_head_mode_to_file()` — remap `T<n>` to the assigned head and emit an
+> explicit `ACE_SWAP_HEAD HEAD= ACE= SLOT=` when that head's loaded slot changes
+> (spec table in [11-assignment-dialog.md](11-assignment-dialog.md) §2b).
+
 This is where the integration pays off: how a filament placed in ACE `a`, slot
 `s` becomes the right tool change in the printed gcode.
 

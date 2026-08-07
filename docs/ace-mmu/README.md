@@ -57,6 +57,10 @@ mapping algorithm or gcode T-numbering are required — only a data provider.
 | 5 | [05-implementation-plan.md](05-implementation-plan.md) | Phased, file-by-file implementation plan with concrete touch points |
 | 6 | [06-slicing-gcode-mapping.md](06-slicing-gcode-mapping.md) | Filament→slot mapping, virtual tool indices, gcode/post-processing, send-to-printer |
 | 7 | [07-testing-risks-open-questions.md](07-testing-risks-open-questions.md) | Test strategy, edge cases, risks, and questions to resolve before/while coding |
+| 8 | [08-filament-management-split.md](08-filament-management-split.md) | Splitting filament management: sync dialog, per-source pickers |
+| 9 | [09-u1-multiace-page.md](09-u1-multiace-page.md) | The "U1 + multiACE" page: whole-page spec, every control and its behaviour |
+| 10 | [10-slicing-plan.md](10-slicing-plan.md) | **Multi-colour slicing**: the machine model, the exact swap objective, the spool-loading optimiser (`AceMmuPlan`), pins/Auto-Manual, verified macro syntax, integration recon |
+| 11 | [11-assignment-dialog.md](11-assignment-dialog.md) | **Filament assignment dialog** (living doc): why we replace Snapmaker's page, the verified mapping contract, the native-emission spec taken from multiACE's rewriter, build order & status |
 
 ### For implementers / agents
 
