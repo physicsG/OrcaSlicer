@@ -154,8 +154,11 @@ Plater::send_gcode_legacy
                   PrintHostJob / schedule_upload path runs unchanged
 ```
 
-- **Page:** `resources/web/aceplan/index.html` — derived from the reviewed mockup
-  (`docs/ace-mmu/load-plan-mockup.html`) so the shipped UI *is* the approved design.
+- **Page:** `resources/web/aceplan/index.html`. The mockup
+  (`docs/ace-mmu/load-plan-mockup.html`) is now **regenerated from this file** — same
+  markup, same CSS, same JS, plus demo data and explanatory notes — so the reviewed
+  design and the shipped UI cannot drift apart. Regenerate after changing the page:
+  copy it over, retitle, and re-add the note block (see the commit that introduced it).
 - **Dialog:** `src/slic3r/GUI/AceMmuPlanDialog.{hpp,cpp}` (to build), modelled on
   `AceMmuPanel` (webview creation, `window.wx.postMessage` handler, worker-thread
   fetch + `CallAfter`).

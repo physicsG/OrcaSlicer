@@ -167,57 +167,96 @@
     <div class="actions">
       <button class="btn" id="useAuto" hidden>Copy auto layout</button>
       <button class="btn" id="clearPins">Clear pins</button>
-      <button class="btn primary">Apply to plate</button>
+      <button class="btn primary" id="applyBtn">Apply to plate</button>
     </div>
   </div>
 </div>
 
-<p class="note"><b>Mockup notes.</b> This is the assignment dialog for U1 + multiACE slicing.
-<b>Auto</b> runs the swap-minimising optimiser; click any placed spool to <b>pin</b> it to its
-position (amber badge) — pins are hard constraints and the plan re-optimises live around them.
-Amber (PETG) starts pinned because A1 is <b>drying</b> it: a drying spool must stay in its ACE.
-<b>Manual</b> hands you the layout: <b>drag spools between positions</b> (a displaced spool swaps
-into the old spot) and the dialog prices your layout against the auto optimum; click-to-move
-works as a fallback. Dragging in Auto pins the spool where it lands. Swap counts come from the
-same algorithm as the slicer (<span class="mono">AceMmuPlan</span>, ported to JS for this demo,
-exact search).</p>
+
+
+
+<p class="note"><b>Design mockup — this is the shipped page.</b> It is the same file as
+<span class="mono">resources/web/aceplan/index.html</span>, rendered here with demo data, so the
+design and the implementation cannot drift apart. In the app, C++ replaces the demo via
+<span class="mono">window.setPlanState(&hellip;)</span> with the project's real filaments, the machine's
+head topology and the sliced colour-change sequence.</p>
+
+<p class="note"><b>Reading the layout.</b> Sources sit on top, toolheads along the bottom, wires show
+what feeds what. Every source is the same kind of box: a stock feeder shows its head badge
+(<span class="mono">T1</span>&hellip;), an ACE tray shows the <b>unit that feeds that head</b>
+(<span class="mono">A1 &middot; multiACE &rarr; T4</span>). That mapping is real hardware wiring &mdash;
+each ACE-fed head is bound to exactly one unit (<span class="mono">ACE_SET_HEAD_ACE</span>) &mdash; so the
+badge is not decoration: it is the <span class="mono">ACE=</span> argument the swap macro needs. Several
+ACE units render as several trays.</p>
+
+<p class="note"><b>Auto vs Manual.</b> <b>Auto</b> runs the swap-minimising optimiser
+(<span class="mono">AceMmuPlan</span>, ported to JS here; the demo's 3 swaps is the proven optimum for
+this scenario). Drag a spool onto a position to <b>pin</b> it there &mdash; a hard constraint the optimiser
+plans around &mdash; or click it to pin/unpin; "Clear pins" is Auto-only. Amber starts pinned because its
+ACE is <b>drying</b> it, and a drying spool must not be optimised out of its slot. <b>Manual</b> hands you
+the layout: drag spools between positions (a displaced spool swaps into the old spot) and the header prices
+your layout against the Auto optimum. Apply writes the assignment back to the slicer.</p>
 
 <script>
 "use strict";
-/* ---- demo scenario: the 7-colour test case from AceMmuPlan ---- */
-const FIL = [
-  {name:"Onyx Black",  hex:"#26282b", mat:"PLA"},
-  {name:"Snow White",  hex:"#eceff1", mat:"PLA"},
-  {name:"Signal Red",  hex:"#d64541", mat:"PLA"},
-  {name:"Cobalt Blue", hex:"#2e5fa3", mat:"PLA"},
-  {name:"Amber",       hex:"#e2953a", mat:"PETG", drying:true},
-  {name:"Forest",      hex:"#2f7d4f", mat:"PLA"},
-  {name:"Violet",      hex:"#7a4fb3", mat:"PLA"},
-];
-const N = FIL.length;
-const SEQ = [];
-for (let r = 0; r < 8; r++) SEQ.push(0,1,2,3);
-SEQ.push(4,0,5,1,6,2);
-const CAPS = [1,1,1,4];                       // T1..T3 feeders, T4 = A1 (4 slots)
-const HEADS = ["T1","T2","T3","T4"];
-const GRAMS_PER_SWAP = 7;                     // ~purge estimate for the waste stat
+/* ---- state injected by C++ via window.setPlanState(json) ----------------
+   Falls back to a small demo so the page can be opened standalone. */
+var FIL = [], SEQ = [], CAPS = [], HEADS = [], UNITS = [];
+var GRAMS_PER_SWAP = 7;
+function applyState(st){
+  FIL   = st.filaments || [];
+  SEQ   = st.sequence  || [];
+  CAPS  = st.capacities|| [];
+  UNITS = st.units     || [];
+  HEADS = CAPS.map(function(_, i){ return "T" + (i + 1); });
+  if (typeof st.grams_per_swap === "number") GRAMS_PER_SWAP = st.grams_per_swap;
+  state.pins     = new Array(FIL.length).fill(-1);
+  state.slotPins = new Array(FIL.length).fill(-1);
+  (st.pins || []).forEach(function(p){
+    if (p && p.filament >= 0) { state.pins[p.filament] = p.head; state.slotPins[p.filament] = (p.slot === undefined ? -1 : p.slot); }
+  });
+  state.manual = null; state.sel = -1; state.drag = -1;
+  state.mode = st.mode === "manual" ? "manual" : "auto";
+  sync();
+}
+window.setPlanState = function(json){
+  try { applyState(typeof json === "string" ? JSON.parse(json) : json); }
+  catch (e) { document.getElementById("hint").textContent = "Failed to read plan: " + e; }
+};
+function notify(msg){ if (window.wx && window.wx.postMessage) window.wx.postMessage(msg); }
+var DEMO = {
+  filaments: [
+    {name:"Onyx Black",  hex:"#26282b", mat:"PLA"},
+    {name:"Snow White",  hex:"#eceff1", mat:"PLA"},
+    {name:"Signal Red",  hex:"#d64541", mat:"PLA"},
+    {name:"Cobalt Blue", hex:"#2e5fa3", mat:"PLA"},
+    {name:"Amber",       hex:"#e2953a", mat:"PETG", drying:true},
+    {name:"Forest",      hex:"#2f7d4f", mat:"PLA"},
+    {name:"Violet",      hex:"#7a4fb3", mat:"PLA"}
+  ],
+  capacities: [1,1,1,4], units: [-1,-1,-1,0],
+  sequence: (function(){ var q=[]; for (var r=0;r<8;r++) q.push(0,1,2,3); q.push(4,0,5,1,6,2); return q; })(),
+  pins: [{filament:4, head:3, slot:1}],
+  mode: "auto"
+};
 
 /* ---- the optimiser, ported from AceMmuPlan.hpp ---- */
+function N(){ return FIL.length; }
 function collapse(seq){ const c=[]; let p=-1; for(const x of seq){ if(x!==p){c.push(x);p=x;} } return c; }
-const COLL = collapse(SEQ);
 function simulate(headOf){
-  const loaded=[-1,-1,-1,-1]; let s=0;
+  const loaded=CAPS.map(function(){return -1;}); let s=0;
+  const COLL = collapse(SEQ);
   for(const c of COLL){ const h=headOf[c]; if(h<0) continue;
     if(loaded[h]!==c){ if(loaded[h]!==-1) s++; loaded[h]=c; } }
   return s;
 }
 function optimise(pins){ // exact search, pins: colour -> head or -1
-  const assign=new Array(N).fill(-1), load=[0,0,0,0];
+  const n=N(); const assign=new Array(n).fill(-1), load=CAPS.map(function(){return 0;});
   let best=Infinity, bestA=null;
   (function dfs(c){
-    if(c===N){ const s=simulate(assign); if(s<best){best=s;bestA=assign.slice();} return; }
+    if(c===n){ const s=simulate(assign); if(s<best){best=s;bestA=assign.slice();} return; }
     const forced=pins[c];
-    for(let h=0;h<4;h++){
+    for(let h=0;h<CAPS.length;h++){
       if(forced>=0 && h!==forced) continue;
       if(load[h]>=CAPS[h]) continue;
       assign[c]=h; load[h]++; dfs(c+1); load[h]--; assign[c]=-1;
@@ -226,27 +265,27 @@ function optimise(pins){ // exact search, pins: colour -> head or -1
   return bestA ? {headOf:bestA, swaps:best} : null;
 }
 function slotsFor(headOf, slotPins){ // first-use order, honouring pinned slots
-  const slot=new Array(N).fill(-1), taken=[[],[],[],[]];
-  for(let c=0;c<N;c++){ const s=slotPins[c]; if(s>=0 && headOf[c]===3){ slot[c]=s; taken[3][s]=true; } }
+  const n=N(); const COLL = collapse(SEQ);
+  const slot=new Array(n).fill(-1), taken=CAPS.map(function(){return [];});
+  for(let c=0;c<n;c++){ const s=slotPins[c], h=headOf[c]; if(s>=0 && h>=0 && CAPS[h]>1){ slot[c]=s; taken[h][s]=true; } }
   const place=c=>{ const h=headOf[c]; if(h<0||slot[c]>=0) return;
-    if(h<3){ slot[c]=0; return; }
-    for(let s=0;s<4;s++) if(!taken[3][s]){ slot[c]=s; taken[3][s]=true; return; } };
+    if(CAPS[h]<=1){ slot[c]=0; return; }
+    for(let s=0;s<CAPS[h];s++) if(!taken[h][s]){ slot[c]=s; taken[h][s]=true; return; } };
   for(const c of COLL) place(c);
-  for(let c=0;c<N;c++) place(c);
+  for(let c=0;c<n;c++) place(c);
   return slot;
 }
 
 /* ---- state ---- */
 const state = {
   mode:"auto",
-  pins:new Array(N).fill(-1),      // colour -> pinned head (-1 free)
-  slotPins:new Array(N).fill(-1),  // colour -> pinned A1 slot
+  pins:[],                         // colour -> pinned head (-1 free)
+  slotPins:[],                     // colour -> pinned slot
   manual:null,                     // colour -> head (manual layout)
   sel:-1,                          // colour selected for click-to-move (manual)
   drag:-1,                         // colour currently being dragged
   plan:null, slots:null, autoSwaps:0,
 };
-state.pins[4]=3; state.slotPins[4]=1;  // Amber dries in A1 slot 2 -> pinned
 
 /* ---- rendering ---- */
 const $=id=>document.getElementById(id);
@@ -264,14 +303,15 @@ function posCard(colour, whereTag, roleTxt){
 }
 function currentLayout(){ return state.mode==="auto" ? state.plan : state.manual; }
 function render(){
+  const COLL = collapse(SEQ);
   // plan
   const auto = optimise(state.pins);
-  const autoFree = optimise(new Array(N).fill(-1));
+  const autoFree = optimise(new Array(N()).fill(-1));
   state.autoSwaps = autoFree ? autoFree.swaps : 0;
   const feasible = !!auto;
   if(feasible) state.plan = auto.headOf;
   if(!state.manual && state.plan) state.manual = state.plan.slice();
-  const layout = currentLayout() || new Array(N).fill(-1);
+  const layout = currentLayout() || new Array(N()).fill(-1);
   const swaps = feasible||state.mode==="manual" ? simulate(layout) : null;
   state.slots = slotsFor(layout, state.slotPins);
 
@@ -297,7 +337,7 @@ function render(){
 
   // sources row — feeders get the same box + header band treatment as the ACE
   const src=$("srcrow"); src.innerHTML="";
-  for(let h=0;h<3;h++){
+  for(let h=0;h<CAPS.length;h++){ if(CAPS[h]>1) continue;
     const card=document.createElement("div"); card.className="acebox single";
     card.innerHTML='<div class="aceband"><span class="acebadge">'+HEADS[h]+'</span><span class="nm">Feeder</span></div>';
     const body=document.createElement("div"); body.className="slots";
@@ -306,23 +346,38 @@ function render(){
     hookPos(pos, c, h, -1);
     body.appendChild(pos); card.appendChild(body); src.appendChild(card);
   }
-  const ace=document.createElement("div"); ace.className="acebox main";
-  ace.innerHTML='<div class="aceband"><span class="acebadge">A1</span><span class="nm">multiACE</span>'+
-    '<span class="right"><span class="drychip"><span class="dot"></span>Drying · 55&nbsp;&deg;C · 2&nbsp;h&nbsp;40&nbsp;m left</span></span></div>';
-  const slots=document.createElement("div"); slots.className="slots";
-  for(let s=0;s<4;s++){
-    let colour=-1;
-    for(let c=0;c<N;c++) if(layout[c]===3 && state.slots[c]===s){ colour=c; break; }
-    const role = colour>=0 && FIL[colour].drying ? "DRYING" : null;
-    const pos=posCard(colour, "A1 · S"+(s+1), role);
-    hookPos(pos, colour, 3, s);
-    slots.appendChild(pos);
-  }
-  ace.appendChild(slots); src.appendChild(ace);
+  // One tray per ACE-fed head (capacity > 1). Works for a single combiner or
+  // several units; the badge shows the unit the head is wired to.
+  const aceHeads = [];
+  for (let h = 0; h < CAPS.length; h++) if (CAPS[h] > 1) aceHeads.push(h);
+  aceHeads.forEach(function(h){
+    const unit  = (UNITS[h] === undefined || UNITS[h] < 0) ? 0 : UNITS[h];
+    const label = "A" + (unit + 1);
+    const ace = document.createElement("div");
+    ace.className = "acebox " + (aceHeads.length === 1 ? "main" : "single");
+    const drying = FIL.some(function(f, c){ return f.drying && layout[c] === h; });
+    ace.innerHTML =
+      '<div class="aceband"><span class="acebadge">' + label + '</span>' +
+      '<span class="nm">multiACE &rarr; ' + HEADS[h] + '</span>' +
+      (drying ? '<span class="right"><span class="drychip"><span class="dot"></span>Drying</span></span>' : '') +
+      '</div>';
+    const slots = document.createElement("div");
+    slots.className = "slots";
+    for (let sl = 0; sl < CAPS[h]; sl++) {
+      let colour = -1;
+      for (let c = 0; c < N(); c++) if (layout[c] === h && state.slots[c] === sl) { colour = c; break; }
+      const role = (colour >= 0 && FIL[colour].drying) ? "DRYING" : null;
+      const pos = posCard(colour, label + " \u00b7 S" + (sl + 1), role);
+      hookPos(pos, colour, h, sl);
+      slots.appendChild(pos);
+    }
+    ace.appendChild(slots);
+    src.appendChild(ace);
+  });
 
   // toolheads
   const hr=$("headrow"); hr.innerHTML="";
-  for(let h=0;h<4;h++){
+  for(let h=0;h<CAPS.length;h++){
     const first = COLL.find(c=>layout[c]===h);
     const t=document.createElement("div"); t.className="tool";
     t.innerHTML='<div class="noz"></div><div class="tn">'+HEADS[h]+"</div>"+
@@ -333,7 +388,7 @@ function render(){
 
   // load list
   const ll=$("loadlist"); ll.innerHTML="";
-  for(let c=0;c<N;c++){
+  for(let c=0;c<N();c++){
     const h=layout[c]; if(h<0) continue;
     const where = h<3 ? "<b>"+HEADS[h]+"</b> feeder" : "<b>A1 · S"+(state.slots[c]+1)+"</b>";
     const li=document.createElement("div"); li.className="li";
@@ -424,6 +479,15 @@ function sync(){ $("mAuto").setAttribute("aria-pressed", state.mode==="auto");
   $("mManual").setAttribute("aria-pressed", state.mode==="manual"); render(); }
 $("clearPins").addEventListener("click", ()=>{ state.pins.fill(-1); state.slotPins.fill(-1); render(); });
 $("useAuto").addEventListener("click", ()=>{ if(state.plan) state.manual=state.plan.slice(); render(); });
+$("applyBtn").addEventListener("click", function(){
+  const layout = currentLayout() || [];
+  const out = { mode: state.mode, swaps: simulate(layout), assign: [] };
+  for (let c = 0; c < N(); c++)
+    out.assign.push({ filament:c, head:layout[c], slot:state.slots[c],
+                      unit:(layout[c]>=0 ? (UNITS[layout[c]] === undefined ? -1 : UNITS[layout[c]]) : -1),
+                      pinned: state.mode === "auto" && state.pins[c] >= 0 });
+  notify("apply:" + JSON.stringify(out));
+});
 window.addEventListener("resize", ()=>requestAnimationFrame(drawWires));
-render();
+applyState(DEMO);   // replaced as soon as C++ calls window.setPlanState(...)
 </script>
