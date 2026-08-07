@@ -278,3 +278,30 @@ Newest first. One block per session: date, what changed (files), result, next.
 - Next: <one concrete action>
 - New decisions/blockers: <if any; also add to the tables above>
 -->
+
+### 2026-08-07 — ACE slicing: optimiser + wiring (branch feat/ace-mmu-slicing)
+- Changed: `libslic3r/AceMmuPlan.hpp` (new: exact swap model + branch-and-bound
+  `plan_loading` with pins/manual `evaluate_assignment`, work budget, `optimal` flag);
+  `tests/libslic3r/test_ace_mmu_plan.cpp` (20 cases / 140 assertions, incl. pins,
+  budget contract, 16-colour stress); design doc `docs/ace-mmu/10-slicing-plan.md`
+  (+§8 verified integration recon); UX mockup `docs/ace-mmu/load-plan-mockup.html`
+  (assignment dialog, Auto/Manual + pinning, live JS port of the optimiser; artifact
+  3129e7ee-de72-430a-8d28-277db9bc8d8e).
+- Wiring (phase A): `ace_head_capacity` (coInts, printer option, default {1}; in
+  `s_Preset_printer_options`); plan computed at end of `psWipeTower`
+  (Print.cpp, stored `Print::m_ace_plan`, accessor `ace_plan()`); start-gcode
+  placeholders `ace_plan_head`/`ace_plan_slot`/`ace_plan_summary` (GCode.cpp, before
+  `machine_start_gcode` expansion); per-change `ace_head`/`ace_slot`/`prev_ace_head`/
+  `prev_ace_slot`/`ace_swap` via `GCode::set_ace_toolchange_vars` (tracks per-head
+  loaded spool like `simulate_swaps`) in both `set_extruder` and
+  `WipeTowerIntegration::append_tcr`; whitelist + defs in PrintConfig.cpp;
+  e2e test `tests/fff_print/test_ace_mmu_gcode.cpp`.
+- Result: libslic3r builds; libslic3r_tests green (ace_mmu_plan 140 asserts). Full
+  app + fff_print e2e building at time of writing.
+- Next: confirm firmware macro syntax (ACE_PRELOAD/ACE_SEQ args) against the live
+  U1, then put `{if ace_swap}` handling into the U1 `change_filament_gcode` template;
+  GUI: assignment dialog (webview, from mockup) + pins persistence + filament_map
+  registration (currently dead plumbing, see §8).
+- New decisions: slicing is native in Orca (no printer-side preflight for our files);
+  capability-gated via `ace_head_capacity`, no printer-name checks; >4-filament
+  enablement on the U1 profile still to verify in GUI.
