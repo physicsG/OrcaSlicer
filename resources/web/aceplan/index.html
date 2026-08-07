@@ -1,0 +1,470 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filament assignment</title>
+<style>
+  :root{
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --page:#e6e7e9; --panel:#ffffff; --hbar:#eef0f1; --hbar-line:#e2e4e6;
+    --line:#e4e6e8; --line-soft:#eef0f1; --inset:#f4f5f6;
+    --text:#2f3336; --dim:#7d868d; --faint:#a7aeb4;
+    --teal:#14b8a6; --teal-ink:#fff; --teal-soft:rgba(20,184,166,.12);
+    --blue:#4a90d9; --blue-soft:rgba(74,144,217,.12);
+    --warn:#e2953a; --warn-soft:rgba(226,149,58,.14);
+    --empty:#e7e9eb;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 26px -18px rgba(16,24,32,.4);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --page:#0f1215; --panel:#181c20; --hbar:#1f242a; --hbar-line:#262c32; --line:#272d33; --line-soft:#20262b; --inset:#1e242a;
+      --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d; --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+      --blue:#5aa0e6; --blue-soft:rgba(90,160,230,.16); --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+      --empty:#232a30; --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"]{
+    --page:#0f1215; --panel:#181c20; --hbar:#1f242a; --hbar-line:#262c32; --line:#272d33; --line-soft:#20262b; --inset:#1e242a;
+    --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d; --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+    --blue:#5aa0e6; --blue-soft:rgba(90,160,230,.16); --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+    --empty:#232a30; --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+  }
+  :root[data-theme="light"]{
+    --page:#e6e7e9; --panel:#ffffff; --hbar:#eef0f1; --hbar-line:#e2e4e6;
+    --line:#e4e6e8; --line-soft:#eef0f1; --inset:#f4f5f6;
+    --text:#2f3336; --dim:#7d868d; --faint:#a7aeb4;
+    --teal:#14b8a6; --teal-ink:#fff; --teal-soft:rgba(20,184,166,.12);
+    --blue:#4a90d9; --blue-soft:rgba(74,144,217,.12);
+    --warn:#e2953a; --warn-soft:rgba(226,149,58,.14);
+    --empty:#e7e9eb;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 26px -18px rgba(16,24,32,.4);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{font-family:var(--font-sans);color:var(--text);background:var(--page);font-size:14px;line-height:1.4;-webkit-font-smoothing:antialiased;padding:22px 14px 40px;}
+  .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+  .dialog{max-width:880px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;}
+  .dhead{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--hbar);border-bottom:1px solid var(--hbar-line);flex-wrap:wrap;}
+  .dhead .title{font-size:14.5px;font-weight:700;}
+  .dhead .sub{font-size:11.5px;color:var(--dim);}
+  .dhead .right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+
+  .pillset{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel);}
+  .pillset button{font:inherit;font-size:12px;font-weight:600;color:var(--dim);padding:6px 14px;cursor:pointer;border:0;background:transparent;border-right:1px solid var(--line);}
+  .pillset button:last-child{border-right:0;}
+  .pillset button[aria-pressed="true"]{color:var(--teal);background:var(--teal-soft);box-shadow:inset 0 0 0 1px var(--teal);}
+  .pillset button:focus-visible{outline:2px solid var(--blue);outline-offset:-2px;}
+
+  .stat{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dim);background:var(--inset);border:1px solid var(--line);border-radius:999px;padding:4px 10px;}
+  .stat b{color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+  .stat.good b{color:var(--teal);}
+  .stat.bad{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));background:var(--warn-soft);}
+  .stat.bad b{color:var(--warn);}
+
+  .hint{padding:9px 16px;border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--dim);background:color-mix(in srgb,var(--blue) 4%,var(--panel));}
+  .hint b{color:var(--text);font-weight:600;}
+
+  /* machine map */
+  .map{position:relative;padding:18px 18px 8px;}
+  .srcrow{position:relative;z-index:1;display:flex;align-items:stretch;gap:14px;flex-wrap:wrap;}
+  .headrow{position:relative;z-index:1;display:flex;justify-content:space-around;gap:12px;margin-top:56px;padding-bottom:12px;}
+  .wires{position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:0;}
+  .wires path{fill:none;stroke:var(--line);stroke-width:2;}
+  .wires path.flow{stroke:color-mix(in srgb,var(--teal) 55%,var(--line));stroke-dasharray:2 9;stroke-linecap:round;animation:flow 1.1s linear infinite;}
+  @keyframes flow{to{stroke-dashoffset:-11;}}
+  @media (prefers-reduced-motion:reduce){.wires path.flow{animation:none;stroke-dasharray:none;}}
+
+  /* every filament source — feeder or ACE — is the same kind of box */
+  .acebox{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);box-shadow:inset 0 1px 0 rgba(255,255,255,.30), var(--shadow);}
+  .acebox.main{flex:1;min-width:430px;}
+  .acebox.single{flex:0 0 auto;}
+  .aceband{display:flex;align-items:center;gap:10px;padding:9px 13px;background:color-mix(in srgb,var(--teal) 7%,var(--inset));border-bottom:1px solid var(--line);}
+  .acebadge{width:24px;height:24px;border-radius:7px;background:var(--teal-soft);color:var(--teal);display:grid;place-items:center;font-weight:800;font-size:11px;border:1px solid color-mix(in srgb,var(--teal) 30%,transparent);}
+  .aceband .nm{font-size:13px;font-weight:600;}
+  .aceband .right{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .drychip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--warn);background:var(--warn-soft);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent);border-radius:999px;padding:3px 10px;}
+  .drychip .dot{width:7px;height:7px;border-radius:50%;background:var(--warn);}
+  .slots{display:flex;gap:10px;padding:12px;justify-content:space-around;}
+
+  /* one placeable position (feeder body or ACE slot) */
+  .pos{position:relative;width:96px;border:1px dashed transparent;border-radius:11px;padding:8px 4px 7px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;background:transparent;}
+  .pos:hover{border-color:color-mix(in srgb,var(--teal) 45%,var(--line));}
+  .pos:focus-visible{outline:2px solid var(--blue);outline-offset:1px;border-radius:11px;}
+  .pos.droptarget{border-color:var(--blue);background:var(--blue-soft);}
+  .pos.dragging{opacity:.45;}
+  .pos.dragover{border-color:var(--blue);border-style:solid;background:var(--blue-soft);}
+  .pos[draggable="true"]{cursor:grab;}
+  .pos .spool{width:54px;height:54px;border-radius:50%;position:relative;display:grid;place-items:center;
+    background:radial-gradient(circle at 50% 50%, var(--panel) 0 30%, var(--c,#8fa7c8) 30.5%);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);}
+  .pos .spool::after{content:"";width:13px;height:13px;border-radius:50%;background:var(--inset);box-shadow:inset 0 0 0 2px var(--line);}
+  .pos.empty .spool{background:repeating-linear-gradient(135deg,var(--empty) 0 7px,transparent 7px 14px);box-shadow:inset 0 0 0 2px var(--line);}
+  .pos .nm{font-size:11.5px;font-weight:600;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pos.empty .nm{color:var(--faint);font-weight:500;}
+  .pos .tag{font-size:9.5px;color:var(--faint);font-family:var(--font-mono);}
+  .pin{position:absolute;top:2px;right:6px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;
+    background:var(--warn);color:#fff;font-size:11px;box-shadow:0 1px 3px rgba(0,0,0,.3);}
+  .pin[hidden]{display:none;}
+  .roleband{position:absolute;top:2px;left:6px;font-size:8px;font-weight:800;letter-spacing:.4px;color:var(--warn);background:var(--warn-soft);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent);border-radius:999px;padding:1px 6px;}
+  .roleband[hidden]{display:none;}
+
+  .tool{width:110px;background:var(--inset);border:1px solid var(--line);border-radius:11px;padding:9px 10px;display:flex;flex-direction:column;align-items:center;gap:5px;}
+  .tool .noz{width:26px;height:20px;border:2px solid var(--dim);border-bottom-width:0;border-radius:5px 5px 0 0;position:relative;}
+  .tool .noz::after{content:"";position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--dim);}
+  .tool .tn{font-size:11px;font-weight:700;}
+  .tool .cur{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--dim);}
+  .tool .cur .c{width:10px;height:10px;border-radius:3px;background:var(--c,transparent);box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);}
+
+  /* footer: plan + actions */
+  .planrow{display:flex;gap:14px;padding:12px 16px 14px;border-top:1px solid var(--line-soft);flex-wrap:wrap;}
+  .plan{flex:1;min-width:300px;}
+  .plan h3{margin:2px 0 7px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--dim);}
+  .loadlist{display:flex;flex-direction:column;gap:4px;font-size:12.5px;}
+  .loadlist .li{display:flex;align-items:center;gap:8px;}
+  .loadlist .c{width:12px;height:12px;border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);}
+  .loadlist .where{margin-left:auto;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--dim);}
+  .loadlist .where b{color:var(--text);font-weight:600;}
+  .actions{display:flex;flex-direction:column;justify-content:flex-end;gap:8px;min-width:150px;}
+  .btn{font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border-radius:8px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);color:var(--text);}
+  .btn:hover{border-color:var(--teal);color:var(--teal);}
+  .btn:focus-visible{outline:2px solid var(--blue);outline-offset:1px;}
+  .btn.primary{background:var(--teal);color:var(--teal-ink);border-color:transparent;}
+  .btn.primary:hover{color:var(--teal-ink);filter:brightness(1.06);}
+
+  .note{max-width:880px;margin:14px auto 0;font-size:11.5px;color:var(--dim);line-height:1.5;}
+  .note b{color:var(--text);}
+</style>
+
+<div class="dialog" id="dlg">
+  <div class="dhead">
+    <div>
+      <div class="title">Filament assignment</div>
+      <div class="sub">Snapmaker U1 · multiACE (head mode: 3 feeders + A1)</div>
+    </div>
+    <div class="right">
+      <div class="pillset" role="group" aria-label="Assignment mode">
+        <button id="mAuto" aria-pressed="true">Auto</button>
+        <button id="mManual" aria-pressed="false">Manual</button>
+      </div>
+      <div class="stat" id="stSwaps">Swaps <b>–</b></div>
+      <div class="stat" id="stWaste">Waste <b>–</b></div>
+      <div class="stat" id="stAuto" hidden>Auto would need <b>–</b></div>
+    </div>
+  </div>
+
+  <div class="hint" id="hint"></div>
+
+  <div class="map" id="map">
+    <svg class="wires" id="wires" aria-hidden="true"></svg>
+    <div class="srcrow" id="srcrow"></div>
+    <div class="headrow" id="headrow"></div>
+  </div>
+
+  <div class="planrow">
+    <div class="plan">
+      <h3>Load plan</h3>
+      <div class="loadlist" id="loadlist"></div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="useAuto" hidden>Copy auto layout</button>
+      <button class="btn" id="clearPins">Clear pins</button>
+      <button class="btn primary" id="applyBtn">Apply to plate</button>
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+"use strict";
+/* ---- state injected by C++ via window.setPlanState(json) ----------------
+   Falls back to a small demo so the page can be opened standalone. */
+var FIL = [], SEQ = [], CAPS = [], HEADS = [], UNITS = [];
+var GRAMS_PER_SWAP = 7;
+function applyState(st){
+  FIL   = st.filaments || [];
+  SEQ   = st.sequence  || [];
+  CAPS  = st.capacities|| [];
+  UNITS = st.units     || [];
+  HEADS = CAPS.map(function(_, i){ return "T" + (i + 1); });
+  if (typeof st.grams_per_swap === "number") GRAMS_PER_SWAP = st.grams_per_swap;
+  state.pins     = new Array(FIL.length).fill(-1);
+  state.slotPins = new Array(FIL.length).fill(-1);
+  (st.pins || []).forEach(function(p){
+    if (p && p.filament >= 0) { state.pins[p.filament] = p.head; state.slotPins[p.filament] = (p.slot === undefined ? -1 : p.slot); }
+  });
+  state.manual = null; state.sel = -1; state.drag = -1;
+  state.mode = st.mode === "manual" ? "manual" : "auto";
+  sync();
+}
+window.setPlanState = function(json){
+  try { applyState(typeof json === "string" ? JSON.parse(json) : json); }
+  catch (e) { document.getElementById("hint").textContent = "Failed to read plan: " + e; }
+};
+function notify(msg){ if (window.wx && window.wx.postMessage) window.wx.postMessage(msg); }
+var DEMO = {
+  filaments: [
+    {name:"Onyx Black",  hex:"#26282b", mat:"PLA"},
+    {name:"Snow White",  hex:"#eceff1", mat:"PLA"},
+    {name:"Signal Red",  hex:"#d64541", mat:"PLA"},
+    {name:"Cobalt Blue", hex:"#2e5fa3", mat:"PLA"},
+    {name:"Amber",       hex:"#e2953a", mat:"PETG", drying:true},
+    {name:"Forest",      hex:"#2f7d4f", mat:"PLA"},
+    {name:"Violet",      hex:"#7a4fb3", mat:"PLA"}
+  ],
+  capacities: [1,1,1,4], units: [-1,-1,-1,0],
+  sequence: (function(){ var q=[]; for (var r=0;r<8;r++) q.push(0,1,2,3); q.push(4,0,5,1,6,2); return q; })(),
+  pins: [{filament:4, head:3, slot:1}],
+  mode: "auto"
+};
+
+/* ---- the optimiser, ported from AceMmuPlan.hpp ---- */
+function N(){ return FIL.length; }
+function collapse(seq){ const c=[]; let p=-1; for(const x of seq){ if(x!==p){c.push(x);p=x;} } return c; }
+function simulate(headOf){
+  const loaded=CAPS.map(function(){return -1;}); let s=0;
+  const COLL = collapse(SEQ);
+  for(const c of COLL){ const h=headOf[c]; if(h<0) continue;
+    if(loaded[h]!==c){ if(loaded[h]!==-1) s++; loaded[h]=c; } }
+  return s;
+}
+function optimise(pins){ // exact search, pins: colour -> head or -1
+  const n=N(); const assign=new Array(n).fill(-1), load=CAPS.map(function(){return 0;});
+  let best=Infinity, bestA=null;
+  (function dfs(c){
+    if(c===n){ const s=simulate(assign); if(s<best){best=s;bestA=assign.slice();} return; }
+    const forced=pins[c];
+    for(let h=0;h<CAPS.length;h++){
+      if(forced>=0 && h!==forced) continue;
+      if(load[h]>=CAPS[h]) continue;
+      assign[c]=h; load[h]++; dfs(c+1); load[h]--; assign[c]=-1;
+    }
+  })(0);
+  return bestA ? {headOf:bestA, swaps:best} : null;
+}
+function slotsFor(headOf, slotPins){ // first-use order, honouring pinned slots
+  const n=N(); const COLL = collapse(SEQ);
+  const slot=new Array(n).fill(-1), taken=CAPS.map(function(){return [];});
+  for(let c=0;c<n;c++){ const s=slotPins[c], h=headOf[c]; if(s>=0 && h>=0 && CAPS[h]>1){ slot[c]=s; taken[h][s]=true; } }
+  const place=c=>{ const h=headOf[c]; if(h<0||slot[c]>=0) return;
+    if(CAPS[h]<=1){ slot[c]=0; return; }
+    for(let s=0;s<CAPS[h];s++) if(!taken[h][s]){ slot[c]=s; taken[h][s]=true; return; } };
+  for(const c of COLL) place(c);
+  for(let c=0;c<n;c++) place(c);
+  return slot;
+}
+
+/* ---- state ---- */
+const state = {
+  mode:"auto",
+  pins:[],                         // colour -> pinned head (-1 free)
+  slotPins:[],                     // colour -> pinned slot
+  manual:null,                     // colour -> head (manual layout)
+  sel:-1,                          // colour selected for click-to-move (manual)
+  drag:-1,                         // colour currently being dragged
+  plan:null, slots:null, autoSwaps:0,
+};
+
+/* ---- rendering ---- */
+const $=id=>document.getElementById(id);
+function posCard(colour, whereTag, roleTxt){
+  const d=document.createElement("div");
+  d.className="pos"+(colour<0?" empty":""); d.tabIndex=0;
+  const pinShown = colour>=0 && state.mode==="auto" && state.pins[colour]>=0;
+  d.innerHTML =
+    '<span class="roleband"'+(roleTxt?'':' hidden')+'>'+(roleTxt||"")+'</span>' +
+    '<span class="pin"'+(pinShown?'':' hidden')+'>&#9679;</span>' +
+    '<div class="spool"'+(colour>=0?' style="--c:'+FIL[colour].hex+'"':'')+'></div>' +
+    '<div class="nm">'+(colour>=0?FIL[colour].name:"Empty")+'</div>' +
+    '<div class="tag">'+whereTag+(colour>=0?" · "+FIL[colour].mat:"")+'</div>';
+  return d;
+}
+function currentLayout(){ return state.mode==="auto" ? state.plan : state.manual; }
+function render(){
+  const COLL = collapse(SEQ);
+  // plan
+  const auto = optimise(state.pins);
+  const autoFree = optimise(new Array(N()).fill(-1));
+  state.autoSwaps = autoFree ? autoFree.swaps : 0;
+  const feasible = !!auto;
+  if(feasible) state.plan = auto.headOf;
+  if(!state.manual && state.plan) state.manual = state.plan.slice();
+  const layout = currentLayout() || new Array(N()).fill(-1);
+  const swaps = feasible||state.mode==="manual" ? simulate(layout) : null;
+  state.slots = slotsFor(layout, state.slotPins);
+
+  // stats
+  const stS=$("stSwaps"), stW=$("stWaste"), stA=$("stAuto");
+  stS.innerHTML="Swaps <b>"+(swaps==null?"—":swaps)+"</b>";
+  stS.className="stat "+(swaps!=null && swaps<=state.autoSwaps?"good":"bad");
+  stW.innerHTML="Waste <b>~"+(swaps==null?"—":swaps*GRAMS_PER_SWAP)+" g</b>";
+  const showAuto = state.mode==="manual";
+  stA.hidden=!showAuto;
+  if(showAuto) stA.innerHTML="Auto would need <b>"+state.autoSwaps+"</b>";
+  $("useAuto").hidden = state.mode!=="manual";
+  $("clearPins").hidden = state.mode!=="auto"; // pins only constrain the Auto plan
+
+  // hint line
+  $("hint").innerHTML = state.mode==="auto"
+    ? (feasible
+        ? "Auto plan honours <b>"+state.pins.filter(p=>p>=0).length+" pin(s)</b>. Drag a spool to pin it to a position, or click it to pin/unpin in place — pinned spools never move."
+        : "<b>These pins cannot all be satisfied.</b> Unpin something to get a plan.")
+    : (state.sel>=0
+        ? "Moving <b>"+FIL[state.sel].name+"</b> — click a destination (feeder or A1 slot)."
+        : "Manual layout: drag spools between positions (occupants swap places). Clicking a spool, then a destination, works too.");
+
+  // sources row — feeders get the same box + header band treatment as the ACE
+  const src=$("srcrow"); src.innerHTML="";
+  for(let h=0;h<CAPS.length;h++){ if(CAPS[h]>1) continue;
+    const card=document.createElement("div"); card.className="acebox single";
+    card.innerHTML='<div class="aceband"><span class="acebadge">'+HEADS[h]+'</span><span class="nm">Feeder</span></div>';
+    const body=document.createElement("div"); body.className="slots";
+    const c=layout.indexOf(h);
+    const pos=posCard(c, HEADS[h], null);
+    hookPos(pos, c, h, -1);
+    body.appendChild(pos); card.appendChild(body); src.appendChild(card);
+  }
+  // One tray per ACE-fed head (capacity > 1). Works for a single combiner or
+  // several units; the badge shows the unit the head is wired to.
+  const aceHeads = [];
+  for (let h = 0; h < CAPS.length; h++) if (CAPS[h] > 1) aceHeads.push(h);
+  aceHeads.forEach(function(h){
+    const unit  = (UNITS[h] === undefined || UNITS[h] < 0) ? 0 : UNITS[h];
+    const label = "A" + (unit + 1);
+    const ace = document.createElement("div");
+    ace.className = "acebox " + (aceHeads.length === 1 ? "main" : "single");
+    const drying = FIL.some(function(f, c){ return f.drying && layout[c] === h; });
+    ace.innerHTML =
+      '<div class="aceband"><span class="acebadge">' + label + '</span>' +
+      '<span class="nm">multiACE &rarr; ' + HEADS[h] + '</span>' +
+      (drying ? '<span class="right"><span class="drychip"><span class="dot"></span>Drying</span></span>' : '') +
+      '</div>';
+    const slots = document.createElement("div");
+    slots.className = "slots";
+    for (let sl = 0; sl < CAPS[h]; sl++) {
+      let colour = -1;
+      for (let c = 0; c < N(); c++) if (layout[c] === h && state.slots[c] === sl) { colour = c; break; }
+      const role = (colour >= 0 && FIL[colour].drying) ? "DRYING" : null;
+      const pos = posCard(colour, label + " \u00b7 S" + (sl + 1), role);
+      hookPos(pos, colour, h, sl);
+      slots.appendChild(pos);
+    }
+    ace.appendChild(slots);
+    src.appendChild(ace);
+  });
+
+  // toolheads
+  const hr=$("headrow"); hr.innerHTML="";
+  for(let h=0;h<CAPS.length;h++){
+    const first = COLL.find(c=>layout[c]===h);
+    const t=document.createElement("div"); t.className="tool";
+    t.innerHTML='<div class="noz"></div><div class="tn">'+HEADS[h]+"</div>"+
+      '<div class="cur"><span class="c"'+(first!=null?' style="--c:'+FIL[first].hex+'"':'')+'></span>'+
+      (first!=null?FIL[first].name:"—")+"</div>";
+    hr.appendChild(t);
+  }
+
+  // load list
+  const ll=$("loadlist"); ll.innerHTML="";
+  for(let c=0;c<N();c++){
+    const h=layout[c]; if(h<0) continue;
+    const where = h<3 ? "<b>"+HEADS[h]+"</b> feeder" : "<b>A1 · S"+(state.slots[c]+1)+"</b>";
+    const li=document.createElement("div"); li.className="li";
+    li.innerHTML='<span class="c" style="background:'+FIL[c].hex+'"></span>'+FIL[c].name+
+      (state.mode==="auto"&&state.pins[c]>=0?' <span class="tag" style="color:var(--warn)">pinned</span>':"")+
+      '<span class="where">'+where+"</span>";
+    ll.appendChild(li);
+  }
+  requestAnimationFrame(drawWires);
+}
+// Move `moving` onto (head, slot) in the manual layout; an occupant swaps into the
+// moving spool's old position (taking its old slot when that was an ACE slot).
+function manualMove(moving, occupant, head, slot){
+  const fromHead=state.manual[moving], fromSlot=state.slots[moving];
+  if(occupant>=0 && occupant!==moving){
+    state.manual[occupant]=fromHead;
+    state.slotPins[occupant]=fromHead===3?fromSlot:-1;
+  }
+  state.manual[moving]=head;
+  state.slotPins[moving]=head===3?slot:-1;
+}
+function pinTo(colour, head, slot){
+  state.pins[colour]=head;
+  state.slotPins[colour]=head===3?slot:-1;
+}
+function hookPos(el, colour, head, slot){
+  el.addEventListener("click", ()=>{
+    if(state.mode==="auto"){
+      if(colour<0) return;
+      if(state.pins[colour]>=0){ state.pins[colour]=-1; state.slotPins[colour]=-1; }
+      else pinTo(colour, head, slot);
+    } else {
+      if(state.sel<0){ if(colour>=0) state.sel=colour; }
+      else { manualMove(state.sel, colour, head, slot); state.sel=-1; }
+    }
+    render();
+  });
+  el.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); el.click(); } });
+  // Drag & drop: the primary interaction. Manual = move the spool; Auto = pin it
+  // where it lands (the optimiser re-plans around the pin).
+  if(colour>=0){
+    el.draggable=true;
+    el.addEventListener("dragstart", e=>{
+      state.drag=colour; el.classList.add("dragging");
+      e.dataTransfer.effectAllowed="move";
+      e.dataTransfer.setData("text/plain", String(colour));
+    });
+    el.addEventListener("dragend", ()=>{ state.drag=-1; el.classList.remove("dragging"); });
+  }
+  el.addEventListener("dragover", e=>{
+    if(state.drag<0) return;
+    e.preventDefault(); e.dataTransfer.dropEffect="move";
+    el.classList.add("dragover");
+  });
+  el.addEventListener("dragleave", ()=>el.classList.remove("dragover"));
+  el.addEventListener("drop", e=>{
+    e.preventDefault(); el.classList.remove("dragover");
+    const moving=state.drag>=0?state.drag:parseInt(e.dataTransfer.getData("text/plain"),10);
+    state.drag=-1;
+    if(isNaN(moving)||moving<0) return;
+    if(state.mode==="auto") pinTo(moving, head, slot);
+    else manualMove(moving, colour, head, slot);
+    render();
+  });
+  if(state.mode==="manual" && state.sel>=0 && colour<0) el.classList.add("droptarget");
+}
+function drawWires(){
+  const svg=$("wires"), map=$("map"), mb=map.getBoundingClientRect();
+  svg.setAttribute("width", mb.width); svg.setAttribute("height", mb.height);
+  svg.innerHTML="";
+  const tools=[...document.querySelectorAll(".tool")];
+  const srcs=[...document.querySelectorAll("#srcrow > .acebox")];
+  srcs.forEach((s,i)=>{
+    const h=i; const sb=s.getBoundingClientRect(), tb=tools[h].getBoundingClientRect();
+    const x1=sb.left+sb.width/2-mb.left, y1=sb.bottom-mb.top;
+    const x2=tb.left+tb.width/2-mb.left, y2=tb.top-mb.top;
+    const p=document.createElementNS("http://www.w3.org/2000/svg","path");
+    p.setAttribute("d",`M ${x1} ${y1} C ${x1} ${y1+30}, ${x2} ${y2-30}, ${x2} ${y2}`);
+    p.setAttribute("class","flow");
+    svg.appendChild(p);
+  });
+}
+
+/* ---- controls ---- */
+$("mAuto").addEventListener("click", ()=>{ state.mode="auto"; state.sel=-1; sync(); });
+$("mManual").addEventListener("click", ()=>{ state.mode="manual"; if(state.plan) state.manual=state.plan.slice(); sync(); });
+function sync(){ $("mAuto").setAttribute("aria-pressed", state.mode==="auto");
+  $("mManual").setAttribute("aria-pressed", state.mode==="manual"); render(); }
+$("clearPins").addEventListener("click", ()=>{ state.pins.fill(-1); state.slotPins.fill(-1); render(); });
+$("useAuto").addEventListener("click", ()=>{ if(state.plan) state.manual=state.plan.slice(); render(); });
+$("applyBtn").addEventListener("click", function(){
+  const layout = currentLayout() || [];
+  const out = { mode: state.mode, swaps: simulate(layout), assign: [] };
+  for (let c = 0; c < N(); c++)
+    out.assign.push({ filament:c, head:layout[c], slot:state.slots[c],
+                      unit:(layout[c]>=0 ? (UNITS[layout[c]] === undefined ? -1 : UNITS[layout[c]]) : -1),
+                      pinned: state.mode === "auto" && state.pins[c] >= 0 });
+  notify("apply:" + JSON.stringify(out));
+});
+window.addEventListener("resize", ()=>requestAnimationFrame(drawWires));
+applyState(DEMO);   // replaced as soon as C++ calls window.setPlanState(...)
+</script>
