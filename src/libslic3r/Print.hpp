@@ -12,6 +12,7 @@
 #include "Slicing.hpp"
 #include "TriangleMeshSlicer.hpp"
 #include "GCode/ToolOrdering.hpp"
+#include "AceMmuPlan.hpp"
 #include "GCode/WipeTower.hpp"
 #include "GCode/WipeTower2.hpp"
 #include "GCode/ThumbnailData.hpp"
@@ -1001,6 +1002,9 @@ public:
     bool                        has_wipe_tower() const;
     const WipeTowerData&        wipe_tower_data(size_t filaments_cnt = 0) const;
     const ToolOrdering& 		tool_ordering() const { return m_tool_ordering; }
+    // multiACE filament -> (head, slot) plan; empty/infeasible when the printer has
+    // no ACE-fed head (ace_head_capacity all 1) or the plate is single-filament.
+    const AceMmu::LoadingPlan&  ace_plan() const { return m_ace_plan; }
 
     bool                        enable_timelapse_print() const;
 
@@ -1098,6 +1102,7 @@ private:
     PrintObjectConfig                       m_default_object_config;
     PrintRegionConfig                       m_default_region_config;
     MixedFilamentManager                    m_mixed_filament_mgr;
+    AceMmu::LoadingPlan                     m_ace_plan;
     PrintObjectPtrs                         m_objects;
     PrintRegionPtrs                         m_print_regions;
     

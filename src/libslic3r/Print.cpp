@@ -2562,6 +2562,29 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
             if (m_tool_ordering.empty() || m_tool_ordering.last_extruder() == unsigned(-1))
                 throw Slic3r::SlicingError("The print is empty. The model is not printable with current print settings.");
         }
+        // multiACE: plan filament -> (head, slot) for toolchangers with ACE-fed heads
+        // (ace_head_capacity > 1 somewhere). An empty plan means a plain toolchanger
+        // and everything downstream is a no-op.
+        m_ace_plan = AceMmu::LoadingPlan{};
+        {
+            const std::vector<int>& caps    = m_config.ace_head_capacity.values;
+            const size_t            n_heads = m_config.nozzle_diameter.values.size();
+            const bool any_ace = std::any_of(caps.begin(), caps.end(), [](int c) { return c > 1; });
+            if (any_ace && n_heads > 0 && !m_tool_ordering.empty()) {
+                std::vector<AceMmu::PlanHead> heads;
+                heads.reserve(n_heads);
+                for (size_t h = 0; h < n_heads; ++h) {
+                    const int cap = h < caps.size() ? std::max(1, caps[h]) : 1;
+                    heads.push_back(AceMmu::PlanHead{int(h), cap, cap > 1, cap > 1 ? int(h) : -1});
+                }
+                std::vector<int> seq;
+                for (const LayerTools& lt : m_tool_ordering.layer_tools())
+                    for (unsigned int e : lt.extruders)
+                        seq.push_back(int(e));
+                const int n_filaments = int(m_config.filament_diameter.values.size());
+                m_ace_plan = AceMmu::plan_loading(heads, seq, n_filaments);
+            }
+        }
         this->set_done(psWipeTower);
     }
     if (this->set_started(psSkirtBrim)) {

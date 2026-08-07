@@ -14,6 +14,7 @@
 #include "GCode/RetractWhenCrossingPerimeters.hpp"
 #include "GCode/SpiralVase.hpp"
 #include "GCode/ToolOrdering.hpp"
+#include "AceMmuPlan.hpp"
 #include "GCode/WipeTower.hpp"
 #include "GCode/SeamPlacer.hpp"
 #include "GCode/GCodeProcessor.hpp"
@@ -571,6 +572,14 @@ private:
     // SM_Orca
     float                               m_next_wipe_x {0.0f};
     float                               m_next_wipe_y {0.0f};
+
+    // multiACE: filament -> (head, slot) plan, copied from Print at export start.
+    // m_ace_loaded tracks which filament each head currently holds (index = head,
+    // value = filament id, -1 = none) so a change can be classified as a free
+    // toolchange vs an ACE spool swap. Empty plan = plain toolchanger, no-op.
+    AceMmu::LoadingPlan                 m_ace_plan;
+    std::vector<int>                    m_ace_loaded;
+    void set_ace_toolchange_vars(DynamicConfig &config, unsigned int new_extruder_id, int previous_extruder_id);
 #if ENABLE_GCODE_VIEWER_DATA_CHECKING
     double                              m_last_mm3_per_mm;
 #endif // ENABLE_GCODE_VIEWER_DATA_CHECKING

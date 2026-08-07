@@ -592,6 +592,8 @@ std::string WipeTowerIntegration::append_tcr(GCode& gcodegen, const WipeTower::T
                 config.set_key_value(key_value, new ConfigOptionFloat(0.f));
             }
         }
+        // multiACE
+        gcodegen.set_ace_toolchange_vars(config, (unsigned int) new_extruder_id, previous_extruder_id);
         toolchange_gcode_str = gcodegen.placeholder_parser_process("change_filament_gcode", change_filament_gcode, new_extruder_id, &config);
         check_add_eol(toolchange_gcode_str);
 
@@ -2719,6 +2721,32 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
             }
         }
         this->placeholder_parser().set("chamber_cooling_mode", new ConfigOptionInt(chamber_cooling_mode));
+    }
+
+    // multiACE: copy the loading plan and publish it, so machine_start_gcode can emit
+    // the preload plan (e.g. ACE_PRELOAD). Vectors are filament-indexed, 0-based,
+    // -1 = filament not loaded; always set, so templates may reference them freely.
+    m_ace_plan = print.ace_plan();
+    m_ace_loaded.clear();
+    {
+        auto* plan_heads = new ConfigOptionInts();
+        auto* plan_slots = new ConfigOptionInts();
+        std::string plan_summary;
+        if (m_ace_plan.feasible) {
+            plan_heads->values = m_ace_plan.head_of;
+            plan_slots->values = m_ace_plan.slot_of;
+            for (size_t i = 0; i < m_ace_plan.head_of.size(); ++i) {
+                if (m_ace_plan.head_of[i] < 0)
+                    continue;
+                if (!plan_summary.empty())
+                    plan_summary += " ";
+                plan_summary += "T" + std::to_string(i) + ":H" + std::to_string(m_ace_plan.head_of[i]) +
+                                "S" + std::to_string(m_ace_plan.slot_of[i]);
+            }
+        }
+        this->placeholder_parser().set("ace_plan_head", plan_heads);
+        this->placeholder_parser().set("ace_plan_slot", plan_slots);
+        this->placeholder_parser().set("ace_plan_summary", new ConfigOptionString(plan_summary));
     }
 
     std::string machine_start_gcode = this->placeholder_parser_process("machine_start_gcode", print.config().machine_start_gcode.value,
@@ -8418,6 +8446,39 @@ std::string GCode::retract(bool toolchange, bool is_last_retraction, LiftType li
     return gcode;
 }
 
+// multiACE: expose where the incoming/outgoing filament lives per the loading plan,
+// and classify this change as a free toolchange vs an ACE spool swap. The swap
+// decision depends on the target head's currently-loaded spool — never on sequence
+// adjacency (returning to a head across other-head extrusions still swaps), so the
+// per-head loaded state is tracked here exactly like AceMmu::simulate_swaps. The
+// first filament a head presents is the preloaded one: not a swap.
+void GCode::set_ace_toolchange_vars(DynamicConfig &config, unsigned int new_extruder_id, int previous_extruder_id)
+{
+    int  head = -1, slot = -1, prev_head = -1, prev_slot = -1;
+    bool swap = false;
+    if (m_ace_plan.feasible) {
+        if (size_t(new_extruder_id) < m_ace_plan.head_of.size()) {
+            head = m_ace_plan.head_of[new_extruder_id];
+            slot = m_ace_plan.slot_of[new_extruder_id];
+        }
+        if (previous_extruder_id >= 0 && size_t(previous_extruder_id) < m_ace_plan.head_of.size()) {
+            prev_head = m_ace_plan.head_of[previous_extruder_id];
+            prev_slot = m_ace_plan.slot_of[previous_extruder_id];
+        }
+        if (head >= 0) {
+            if (int(m_ace_loaded.size()) <= head)
+                m_ace_loaded.resize(head + 1, -1);
+            swap = m_ace_loaded[head] != -1 && m_ace_loaded[head] != int(new_extruder_id);
+            m_ace_loaded[head] = int(new_extruder_id);
+        }
+    }
+    config.set_key_value("ace_head", new ConfigOptionInt(head));
+    config.set_key_value("ace_slot", new ConfigOptionInt(slot));
+    config.set_key_value("prev_ace_head", new ConfigOptionInt(prev_head));
+    config.set_key_value("prev_ace_slot", new ConfigOptionInt(prev_slot));
+    config.set_key_value("ace_swap", new ConfigOptionBool(swap));
+}
+
 std::string GCode::set_extruder(unsigned int extruder_id, double print_z, bool by_object)
 {
     if (!m_writer.need_toolchange(extruder_id))
@@ -8589,6 +8650,9 @@ std::string GCode::set_extruder(unsigned int extruder_id, double print_z, bool b
     // For Snapmaker Artisian
     dyn_config.set_key_value("next_wipe_x", new ConfigOptionFloat(m_next_wipe_x));
     dyn_config.set_key_value("next_wipe_y", new ConfigOptionFloat(m_next_wipe_y));
+
+    // multiACE
+    set_ace_toolchange_vars(dyn_config, extruder_id, previous_extruder_id);
 
     // Process the custom change_filament_gcode.
     const std::string& change_filament_gcode = m_config.change_filament_gcode.value;
