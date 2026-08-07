@@ -282,7 +282,9 @@ void init_and_process_print(std::initializer_list<TriangleMesh> meshes, Slic3r::
 
 std::string gcode(Print & print)
 {
-	boost::filesystem::path temp = boost::filesystem::unique_path();
+	// Absolute path: the exporter derives (and creates) directories from the parent
+	// path, which is empty for a bare relative filename.
+	boost::filesystem::path temp = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path();
     print.set_status_silent();
     print.process();
     print.export_gcode(temp.string(), nullptr, nullptr);
