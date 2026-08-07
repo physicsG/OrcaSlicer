@@ -99,14 +99,46 @@ file. **Consequences, stated plainly:**
    | `POST /api/upload-and-print` | upload + print |
    | `POST /api/head-ace`, `/api/head-feeder`, `/api/head-manual` | topology |
 
-### Direction (recommended)
+### Direction (DECIDED: native in Orca)
 
-**Orca owns the UX and the plan; multiACE owns the rewrite.** Our dialog does the
-assignment (with the exact optimiser, pins, live swap pricing) inside the slicer, then
-hands `head_assignment` to `POST /api/preflight/print`. We do not re-implement the
-gcode rewrite, and we stop bouncing the user to the printer's web UI. This keeps a
-single source of truth for the risky part (file rewriting) with its maintainer, and
-puts our effort where it is additive.
+**Decided: Orca emits print-ready ACE gcode natively** (option B), bypassing the
+preflight. The alternative (hand `head_assignment` to `POST /api/preflight/print` and
+let multiACE rewrite) was recommended but not chosen; it remains available as a
+fallback since the endpoint accepts an external assignment.
+
+Going native makes multiACE's rewriter our **specification**. It is
+`multiace/tools/post_process_virtual_toolheads.py` ->
+`rewrite_head_mode_to_file(in_path, out_path, assignment, ...)`, and the contract is:
+
+| rule | what Orca must emit |
+|---|---|
+| feeder colour (`'pin'`) | `T<pin_head>` - remapped, **no swap** |
+| ACE colour (`'ace'`) | `T<entry_head>` **+** `ACE_SWAP_HEAD HEAD=<head> ACE=<a> SLOT=<s>` |
+| dedupe | emit the swap only when that head's loaded `(ace,slot)` actually changes |
+| temperatures | `M104`/`M109 T<n>` remapped to the **assigned physical head** |
+| initial tool | pre-body tool selection remapped to the head |
+| priming | `SM_PRINT_PREEXTRUDE_FILAMENT` is **DROPPED for ACE colours** - a real swap flushes anyway, and per-swap primes stacked ooze drops on the tower whose `SKIP_POS_RESTORE` coupling knocked docked heads off (their note: HW 2026-07-04). Instead **one forced prime per ACE head at its first body use**; pinned colours keep the stock line remapped to the head (first one `FORCE=1`) |
+| cleaning | `ACE_PICKUP_CLEAN HEAD=n` after a bare-T pickup, when pickup-cleaning is on |
+
+Two things this **validates** in what we already have: the emitted form
+`ACE_SWAP_HEAD HEAD= ACE= SLOT=` is exactly right, and our per-head loaded-spool
+tracking in `GCode::set_ace_toolchange_vars` implements precisely their dedupe rule.
+
+**Gotcha found while reading our own code (must fix for native mode).** The exported
+tool index has to become the *head*, not the filament index - but `GCode::set_extruder`
+(GCode.cpp:8721-8723) does:
+
+```cpp
+std::string toolchange_command = m_writer.toolchange(extruder_id);
+if (!custom_gcode_changes_tool(toolchange_gcode_parsed, m_writer.toolchange_prefix(), extruder_id))
+    gcode += toolchange_command;      // appends T<extruder_id> if the template didn't
+```
+
+If the template emits `T{ace_head}` (say `T3`) while `extruder_id` is 5, that check
+looks for `T5`, does not find it, and Orca appends a **second** tool change - emitting
+both `T3` and `T5`. So the remap cannot live only in the template: it must be central
+(`m_writer.toolchange()`, the `custom_gcode_changes_tool` probe, and the `M104/M109 T`
+emitters) so every site agrees on the physical head.
 
 ## 3. Architecture
 
@@ -186,7 +218,7 @@ cross-check that the two agree.
 | 3 | Feed real data (plan, filament colours, live ACE state) | |
 | 4 | Persist pins + mode per plate (`filament_map` / plate config) | |
 | 5 | ~~Pin down the slot half~~ — resolved: preflight rewrites the file (§2b) | **done** |
-| 6 | Hand `head_assignment` to `POST /api/preflight/print` (§2b) | next after 2-4 |
+| 6 | Native export: remap tool index + temps to the head, drop ACE preextrude, one prime per ACE head (§2b) | **next** |
 | 7 | Insert into `send_gcode_legacy` ahead of the Flutter page; keep the existing `PrintHostJob` upload | |
 | 8 | Pre-print spool readiness checklist (see `10-slicing-plan.md` §6) | |
 
@@ -198,8 +230,8 @@ cross-check that the two agree.
   reimplement uploading, progress or printer selection.
 - **Decided:** the shipped page is derived from the mockup, so design review and
   implementation cannot drift apart.
-- **Likely revert:** the committed `ACE_SWAP_HEAD`/`ACE_SET_PURGE` emission - multiACE
-  rewrites the gcode itself, so slicer-stamped macros are not its contract (§2b).
+- **Keep** the `ACE_SWAP_HEAD` emission - the spec confirms the exact form and the
+  dedupe rule we already implement. Native mode (B) is the chosen path.
 - **Open:** what happens to Snapmaker's *Print Preferences* toggles (flow calibration,
   time-lapse, auto-leveling) if we bypass their page — replicate the ones that matter
   or keep their page as a second step.
