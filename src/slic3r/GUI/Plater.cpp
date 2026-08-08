@@ -14535,8 +14535,9 @@ void Plater::priv::on_process_completed(SlicingProcessCompletedEvent &evt)
     // flushed volume per filament, but never says how many swaps produced it or that a
     // different assignment would produce fewer - and by the time gcode exists it is too
     // late to reconsider cheaply. Say it once, right after slicing, with a way to act on it.
-    if (evt.success()) {
-        const Print &print = q->fff_print();
+    const Print *sliced = background_process.fff_print();
+    if (evt.success() && sliced != nullptr) {
+        const Print &print = *sliced;
         const auto  &plan  = print.ace_plan();
         if (plan.feasible && plan.swaps > 0 && AcePlanDialog::worth_showing(print)) {
             // total_wipe_tower_filament is mm of filament and is 0 when purging happens
@@ -19422,21 +19423,28 @@ void Plater::apply_cut_object_to_model(size_t obj_idx, const ModelObjectPtrs& ne
 
 bool Plater::review_ace_assignment()
 {
-    // Only when there is something to decide: an ACE-fed head, more than one filament in
-    // the sequence, and a sliced plate - the plan and its cost both come from slicing.
-    if (!AcePlanDialog::worth_showing(fff_print()))
+    // The plate that was sliced belongs to the background process. Plater::fff_print() is a
+    // different Print object that never runs process(), so it carries no plan - reading it
+    // here silently disabled this dialog and the post-slice notification alike.
+    Print *print = p->background_process.fff_print();
+    if (print == nullptr)
         return false;
 
-    AcePlanDialog dlg(this, fff_print());
+    // Only when there is something to decide: an ACE-fed head, more than one filament in
+    // the sequence, and a sliced plate - the plan and its cost both come from slicing.
+    if (!AcePlanDialog::worth_showing(*print))
+        return false;
+
+    AcePlanDialog dlg(this, *print);
     if (dlg.ShowModal() != wxID_OK || !dlg.result().applied)
         return false;
 
-    const size_t              n      = fff_print().config().filament_diameter.values.size();
+    const size_t              n      = print->config().filament_diameter.values.size();
     const AceMmu::LoadingPlan chosen = dlg.as_plan(n);
     if (!chosen.feasible)
         return false;   // a layout that leaves a filament unplaced must never reach gcode
 
-    fff_print().set_ace_plan_override(chosen);
+    print->set_ace_plan_override(chosen);
     return true;
 }
 

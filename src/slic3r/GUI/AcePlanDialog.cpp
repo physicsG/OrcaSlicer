@@ -33,7 +33,10 @@ AcePlanDialog::AcePlanDialog(wxWindow *parent, const Print &print)
                 wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
     , m_print(print)
 {
-    const wxString url = from_u8((boost::filesystem::path(resources_dir()) / "web/aceplan/index.html")
+    // WebKit needs a scheme: a bare filesystem path renders as "The URL can't be shown".
+    // Same pattern as AceMmuPanel and WebGuideDialog.
+    const wxString url = wxString("file://") +
+                         from_u8((boost::filesystem::path(resources_dir()) / "web/aceplan/index.html")
                                      .make_preferred()
                                      .string());
     m_browser = WebView::CreateWebView(this, url);
