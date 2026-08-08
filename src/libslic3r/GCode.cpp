@@ -629,7 +629,8 @@ std::string WipeTowerIntegration::append_tcr(GCode& gcodegen, const WipeTower::T
     std::string toolchange_command;
     if (tcr.priming || (new_extruder_id >= 0 && gcodegen.writer().need_toolchange(new_extruder_id)))
         toolchange_command = gcodegen.writer().toolchange(new_extruder_id);
-    if (!custom_gcode_changes_tool(toolchange_gcode_str, gcodegen.writer().toolchange_prefix(), new_extruder_id))
+    if (!custom_gcode_changes_tool(toolchange_gcode_str, gcodegen.writer().toolchange_prefix(),
+                                   (unsigned) gcodegen.writer().emit_tool(int(new_extruder_id))))
         toolchange_gcode_str += toolchange_command;
     else {
         // We have informed the m_writer about the current extruder_id, we can ignore the generated G-code.
@@ -2728,6 +2729,10 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
     // -1 = filament not loaded; always set, so templates may reference them freely.
     m_ace_plan = print.ace_plan();
     m_ace_loaded.clear();
+    // Native multiACE export: the emitted tool index must be the PHYSICAL head, while
+    // the logical filament still drives per-filament settings. Remapping in the writer
+    // keeps every emission site (T<n>, M104/M109 T<n>) in agreement.
+    m_writer.set_tool_remap(m_ace_plan.feasible ? m_ace_plan.head_of : std::vector<int>{});
     {
         auto* plan_heads = new ConfigOptionInts();
         auto* plan_slots = new ConfigOptionInts();
@@ -2746,22 +2751,33 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
         }
         this->placeholder_parser().set("ace_plan_head", plan_heads);
         this->placeholder_parser().set("ace_plan_slot", plan_slots);
-        // Ready-to-emit initial load, one line per ACE-fed head, using the slot the
-        // head presents first (plan_loading assigns slot 0 to the first-used colour).
+        // Initial load block, in multiACE's own format (post_process_virtual_toolheads.py
+        // inject_auto_load_to_file): marker comments around one ACE_SWAP_HEAD per
+        // ACE-fed head, using the slot that head presents first (plan_loading assigns
+        // slot 0 to a head's first-used colour). ACE_SWAP_HEAD - not ACE_LOAD_HEAD - is
+        // what their auto-load emits. The profile places this before the prime-line
+        // section so the load completes before the runout sensor fires on the prime.
         std::string preload;
         if (m_ace_plan.feasible) {
+            std::vector<std::string> lines;
             for (size_t c = 0; c < m_ace_plan.head_of.size(); ++c) {
                 const int h = m_ace_plan.head_of[c];
                 if (h < 0 || m_ace_plan.slot_of[c] != 0)
                     continue;
-                const int cap  = (h < int(print.config().ace_head_capacity.values.size()))
-                                     ? print.config().ace_head_capacity.get_at(h) : 1;
+                const int cap = (h < int(print.config().ace_head_capacity.values.size()))
+                                    ? print.config().ace_head_capacity.get_at(h) : 1;
                 if (cap <= 1)
-                    continue;   // stock feeder: nothing for the ACE to load
+                    continue;   // stock feeder: the ACE never touches it
                 const int unit = (h < int(print.config().ace_head_unit.values.size()))
                                      ? print.config().ace_head_unit.get_at(h) : 0;
-                preload += "ACE_LOAD_HEAD HEAD=" + std::to_string(h) + " ACE=" + std::to_string(unit) +
-                           " SLOT=0\n";
+                lines.push_back("ACE_SWAP_HEAD HEAD=" + std::to_string(h) + " ACE=" + std::to_string(unit) +
+                                " SLOT=0");
+            }
+            if (!lines.empty()) {
+                preload = "; multiACE auto-load: load initial filaments\n";
+                for (const std::string &l : lines)
+                    preload += l + "\n";
+                preload += "; multiACE auto-load: end\n";
             }
         }
         this->placeholder_parser().set("ace_plan_summary", new ConfigOptionString(plan_summary));
@@ -8475,7 +8491,7 @@ void GCode::set_ace_toolchange_vars(DynamicConfig &config, unsigned int new_extr
 {
     int  head = -1, slot = -1, prev_head = -1, prev_slot = -1;
     int  unit = -1, prev_unit = -1;
-    bool swap = false;
+    bool swap = false, is_ace = false, first_use = false;
     if (m_ace_plan.feasible) {
         if (size_t(new_extruder_id) < m_ace_plan.head_of.size()) {
             head = m_ace_plan.head_of[new_extruder_id];
@@ -8488,7 +8504,10 @@ void GCode::set_ace_toolchange_vars(DynamicConfig &config, unsigned int new_extr
         if (head >= 0) {
             if (int(m_ace_loaded.size()) <= head)
                 m_ace_loaded.resize(head + 1, -1);
-            swap = m_ace_loaded[head] != -1 && m_ace_loaded[head] != int(new_extruder_id);
+            swap      = m_ace_loaded[head] != -1 && m_ace_loaded[head] != int(new_extruder_id);
+            first_use = m_ace_loaded[head] == -1;   // this head has not been loaded yet
+            is_ace    = head < int(m_config.ace_head_capacity.values.size()) &&
+                        m_config.ace_head_capacity.get_at(head) > 1;
             m_ace_loaded[head] = int(new_extruder_id);
         }
     }
@@ -8507,6 +8526,8 @@ void GCode::set_ace_toolchange_vars(DynamicConfig &config, unsigned int new_extr
     config.set_key_value("prev_ace_slot", new ConfigOptionInt(prev_slot));
     config.set_key_value("prev_ace_unit", new ConfigOptionInt(prev_unit));
     config.set_key_value("ace_swap", new ConfigOptionBool(swap));
+    config.set_key_value("ace_is_ace", new ConfigOptionBool(is_ace));
+    config.set_key_value("ace_first_use", new ConfigOptionBool(first_use));
 }
 
 std::string GCode::set_extruder(unsigned int extruder_id, double print_z, bool by_object)
@@ -8719,7 +8740,11 @@ std::string GCode::set_extruder(unsigned int extruder_id, double print_z, bool b
 
     // We inform the writer about what is happening, but we may not use the resulting gcode.
     std::string toolchange_command = m_writer.toolchange(extruder_id);
-    if (!custom_gcode_changes_tool(toolchange_gcode_parsed, m_writer.toolchange_prefix(), extruder_id))
+    // Probe for the tool number we actually emit: with a multiACE plan the template
+    // writes T<head>, so probing for T<extruder_id> would miss and append a SECOND
+    // tool change.
+    if (!custom_gcode_changes_tool(toolchange_gcode_parsed, m_writer.toolchange_prefix(),
+                                   (unsigned) m_writer.emit_tool(int(extruder_id))))
         gcode += toolchange_command;
     else {
         // user provided his own toolchange gcode, no need to do anything

@@ -4675,6 +4675,7 @@ void TabPrinter::build_unregular_pages(bool from_initial_build/* = false*/)
             m_pages.insert(m_pages.begin() + n_before_extruders, page);
     }
 
+
 if (is_marlin_flavor)
     n_before_extruders++;
     size_t		n_after_single_extruder_MM = 2; //	Count of pages after single_extruder_multi_material page
@@ -4693,6 +4694,18 @@ if (is_marlin_flavor)
         def.mode    = comAdvanced;
         Option option(def, "extruders_count");
         optgroup->append_single_option_line(option);
+
+        // multiACE: per-toolhead spool topology. Grouped per head so it is obvious
+        // which source feeds which toolhead - these two values used to sit in each
+        // Extruder page's Size group, where a "unit feeding this head" field showed up
+        // even for heads with no ACE at all. Rows are built for the extruder count
+        // known at page creation; changing that count needs a restart to re-lay them.
+        for (size_t head = 0; head < m_extruders_count; ++head) {
+            auto ace_og = page->new_optgroup(wxString::Format(_L("multiACE - Toolhead %d"), int(head) + 1),
+                                             "param_multi_material");
+            ace_og->append_single_option_line("ace_head_capacity", "", head);
+            ace_og->append_single_option_line("ace_head_unit", "", head);
+        }
 
         // Orca: rebuild missed extruder pages
         optgroup->m_on_change = [this, optgroup_wk = ConfigOptionsGroupWkp(optgroup)](t_config_option_key opt_key, boost::any value) {
@@ -4826,9 +4839,6 @@ if (is_marlin_flavor)
 
                 auto optgroup = page->new_optgroup(L("Size"), L"param_extruder_size");
                 optgroup->append_single_option_line("nozzle_diameter", "", extruder_idx);
-                // multiACE: how many spools this head can present (1 = stock feeder)
-                optgroup->append_single_option_line("ace_head_capacity", "", extruder_idx);
-                optgroup->append_single_option_line("ace_head_unit", "", extruder_idx);
 
                 optgroup->m_on_change = [this, extruder_idx](const t_config_option_key& opt_key, boost::any value)
                 {

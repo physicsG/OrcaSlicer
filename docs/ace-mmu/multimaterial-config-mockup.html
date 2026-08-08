@@ -1,0 +1,273 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Printer settings · Multimaterial (multiACE) — mockup</title>
+<style>
+  :root{
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --chrome:#efefef; --chrome-line:#d7d7d7; --chrome-ink:#2b2f31;
+    --page:#ffffff; --ink:#2f3336; --ink-dim:#6d757a; --ink-faint:#9aa1a6;
+    --rule:#e6e8e9; --field:#ffffff; --field-line:#cfd4d6; --field-disabled:#f4f5f6;
+    --teal:#00a89b; --teal-soft:rgba(0,168,155,.10);
+    --new:#e2953a;                 /* marks the rows this design adds */
+    --shadow:0 1px 2px rgba(16,24,32,.06), 0 14px 34px -20px rgba(16,24,32,.45);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --chrome:#232830; --chrome-line:#161a20; --chrome-ink:#e8ecef;
+      --page:#1b1f24; --ink:#e8ecef; --ink-dim:#9aa4ac; --ink-faint:#6d777f;
+      --rule:#2b3138; --field:#22272d; --field-line:#3a424a; --field-disabled:#20252a;
+      --teal:#17b8a6; --teal-soft:rgba(23,184,166,.14);
+      --shadow:0 1px 0 rgba(255,255,255,.03), 0 16px 36px -20px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"]{
+    --chrome:#232830; --chrome-line:#161a20; --chrome-ink:#e8ecef;
+    --page:#1b1f24; --ink:#e8ecef; --ink-dim:#9aa4ac; --ink-faint:#6d777f;
+    --rule:#2b3138; --field:#22272d; --field-line:#3a424a; --field-disabled:#20252a;
+    --teal:#17b8a6; --teal-soft:rgba(23,184,166,.14);
+    --shadow:0 1px 0 rgba(255,255,255,.03), 0 16px 36px -20px rgba(0,0,0,.8);
+  }
+  :root[data-theme="light"]{
+    --chrome:#efefef; --chrome-line:#d7d7d7; --chrome-ink:#2b2f31;
+    --page:#ffffff; --ink:#2f3336; --ink-dim:#6d757a; --ink-faint:#9aa1a6;
+    --rule:#e6e8e9; --field:#ffffff; --field-line:#cfd4d6; --field-disabled:#f4f5f6;
+    --teal:#00a89b; --teal-soft:rgba(0,168,155,.10);
+    --shadow:0 1px 2px rgba(16,24,32,.06), 0 14px 34px -20px rgba(16,24,32,.45);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{font-family:var(--font);font-size:13.5px;color:var(--ink);background:#c9ccce;padding:20px 14px 44px;-webkit-font-smoothing:antialiased;}
+  @media (prefers-color-scheme: dark){ body{background:#101317;} }
+  :root[data-theme="dark"] body{background:#101317;}
+  :root[data-theme="light"] body{background:#c9ccce;}
+
+  .win{max-width:920px;margin:0 auto;background:var(--page);border-radius:5px;overflow:hidden;box-shadow:var(--shadow);}
+  .titlebar{display:flex;align-items:center;height:34px;background:var(--chrome);border-bottom:1px solid var(--chrome-line);padding:0 8px;}
+  .titlebar .t{flex:1;text-align:center;font-weight:700;font-size:13px;color:var(--chrome-ink);}
+  .titlebar .sq{width:15px;height:13px;border:1.5px solid var(--chrome-ink);border-radius:2px;opacity:.75;}
+  .titlebar .x{width:26px;height:20px;display:grid;place-items:center;font-size:15px;color:var(--chrome-ink);border:1px solid var(--chrome-line);border-radius:3px;background:var(--page);}
+
+  .presetbar{display:flex;align-items:center;gap:10px;padding:12px 14px 4px;}
+  .preset{flex:1;display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;border:1px solid var(--field-line);border-radius:5px;background:var(--field);}
+  .preset .chev{color:var(--ink-dim);font-size:11px;}
+  .icons{display:flex;align-items:center;gap:10px;color:var(--ink-dim);}
+  .icons svg{width:16px;height:16px;display:block;}
+  .adv{display:flex;align-items:center;gap:7px;font-size:12.5px;}
+  .toggle{width:34px;height:18px;border-radius:999px;background:var(--teal);position:relative;}
+  .toggle::after{content:"";position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;background:#fff;}
+
+  .tabs{display:flex;gap:20px;padding:8px 16px 0;border-bottom:1px solid var(--rule);overflow-x:auto;}
+  .tabs .tab{padding:6px 2px 9px;font-size:13px;color:var(--ink-dim);white-space:nowrap;border-bottom:2px solid transparent;}
+  .tabs .tab.on{color:var(--teal);font-weight:600;border-bottom-color:var(--teal);}
+
+  .body{padding:4px 0 18px;max-height:none;}
+  .sect{padding:14px 16px 0;}
+  .sect .head{display:flex;align-items:center;gap:8px;padding-bottom:7px;}
+  .sect .head .ico{width:16px;height:16px;color:var(--teal);flex:none;}
+  .sect .head .ico svg{width:16px;height:16px;display:block;}
+  .sect .head .nm{font-size:13.5px;font-weight:600;}
+  .sect .head.newgrp .nm{color:var(--ink);}
+  .sect .head.newgrp .ico{color:var(--new);}
+  .sect .rule{height:1px;background:var(--rule);}
+
+  .row{display:flex;align-items:center;gap:12px;padding:7px 0;}
+  .row .lbl{width:248px;flex:none;font-size:13px;color:var(--ink);line-height:1.25;}
+  .row .lbl.multi{line-height:1.2;}
+  .row.newrow .lbl{color:var(--ink);}
+  .ctl{width:146px;flex:none;position:relative;}
+  .ctl input[type=text]{width:100%;height:28px;border:1px solid var(--field-line);border-radius:4px;background:var(--field);color:var(--ink);
+       font:inherit;font-size:13px;padding:0 34px 0 9px;}
+  .ctl .unit{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:11.5px;color:var(--ink-faint);}
+  .ctl.spin input{padding-left:24px;}
+  .ctl .spinner{position:absolute;left:8px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:2px;color:var(--ink-dim);font-size:8px;line-height:6px;}
+  .cb{width:15px;height:15px;border:1px solid var(--field-line);border-radius:3px;background:var(--field);display:grid;place-items:center;}
+  .cb.on{background:var(--teal);border-color:var(--teal);}
+  .cb.on::after{content:"";width:8px;height:4px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translate(1px,-1px);}
+  .cb.off{background:var(--field-disabled);}
+  .revert{margin-left:6px;color:var(--new);font-size:13px;}
+
+  .note{max-width:920px;margin:16px auto 0;font-size:12.5px;color:#3c4247;line-height:1.55;background:#fff;border:1px solid #dfe2e4;border-radius:8px;padding:12px 14px;}
+  @media (prefers-color-scheme: dark){ .note{background:#1b1f24;border-color:#2b3138;color:#c3cad0;} }
+  :root[data-theme="dark"] .note{background:#1b1f24;border-color:#2b3138;color:#c3cad0;}
+  :root[data-theme="light"] .note{background:#fff;border-color:#dfe2e4;color:#3c4247;}
+  .note b{color:var(--ink);}
+  .note .k{font-family:var(--mono);font-size:11.5px;background:rgba(0,0,0,.05);padding:1px 5px;border-radius:4px;}
+  @media (prefers-color-scheme: dark){ .note .k{background:rgba(255,255,255,.08);} }
+  .select{width:100%;height:28px;border:1px solid var(--field-line);border-radius:4px;background:var(--field);
+      color:var(--ink);font:inherit;font-size:13px;padding:0 24px 0 9px;display:flex;align-items:center;position:relative;}
+  .select::after{content:"\25BE";position:absolute;right:8px;color:var(--ink-dim);font-size:10px;}
+  .ctl.wide{width:196px;} .ctl.wider{width:224px;}
+  .syncbar{display:flex;align-items:center;gap:10px;padding:8px 0 2px;flex-wrap:wrap;}
+  .btn{height:26px;padding:0 12px;border:1px solid var(--field-line);border-radius:4px;background:var(--field);
+      color:var(--ink);font-size:12.5px;display:inline-flex;align-items:center;gap:6px;}
+  .btn.primary{border-color:transparent;background:var(--teal);color:#fff;}
+  .status{font-size:12px;color:var(--ink-dim);display:inline-flex;align-items:center;gap:6px;}
+  .status .dot{width:7px;height:7px;border-radius:50%;background:var(--teal);}
+  .status.warn{color:var(--new);} .status.warn .dot{background:var(--new);}
+  .status .link{color:var(--teal);text-decoration:underline;}
+  .hint{font-size:11.5px;color:var(--ink-faint);padding:2px 0 0 260px;}
+  .swatch{display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--new);vertical-align:baseline;}
+</style>
+
+<div class="win">
+  <div class="titlebar"><span class="sq"></span><span class="t">Printer settings</span><span class="x">&times;</span></div>
+
+  <div class="presetbar">
+    <div class="preset"><span class="chev">&#9662;</span><span>Snapmaker U1 (0.4 nozzle)</span></div>
+    <div class="icons">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+    </div>
+    <div class="adv"><span>Advance</span><span class="toggle"></span></div>
+  </div>
+
+  <div class="tabs">
+    <span class="tab">Basic information</span>
+    <span class="tab">Machine G-code</span>
+    <span class="tab on">Multimaterial</span>
+    <span class="tab">Extruder 1</span>
+    <span class="tab">Extruder 2</span>
+    <span class="tab">Extruder 3</span>
+    <span class="tab">Extruder 4</span>
+    <span class="tab">Motion ability</span>
+    <span class="tab">Notes</span>
+  </div>
+
+  <div class="body" id="body"></div>
+</div>
+
+<p class="note"><b>Mockup &mdash; Printer settings &rsaquo; Multimaterial, proposed multiACE topology UX.</b>
+The <span class="swatch"></span> group is the addition; everything else is the page as it ships today.
+See <span class="k">docs/ace-mmu/12-topology-config-ux.md</span> for the full options and trade-offs.</p>
+
+<p class="note"><b>What changed and why.</b> The previous version asked for two raw numbers per toolhead, and all
+three of its problems bit us in practice. <b>(1)</b> <span class="k">slots = 1</span> was a magic value: it reads as
+a quantity but actually means <i>no ACE</i>. It is now spelled <b>&ldquo;Stock feeder&rdquo;</b>. <b>(2)</b> The unit
+was 0-based while every other surface calls the first unit <b>ACE&nbsp;1</b>. The UI that showed you the answer
+disagreed with the field that wanted it, which is exactly how a head wired to the first ACE got configured as
+<span class="k">1</span>. Labels are now 1-based everywhere, and they name the <b>ACE unit</b> &mdash; the hardware,
+which may be an ACE Pro, an ACE 2 Pro, and so on. <b>multiACE</b> is the layer that drives them, so it appears in
+the group header and nowhere else. <b>(3)</b> The unit field appeared on heads with no ACE, where it means nothing; the slot count
+now appears only when a head is actually ACE-fed.</p>
+
+<p class="note"><b>Consolidating the config.</b> The same topology currently lives in three places: multiACE&rsquo;s
+own page on the printer (authoritative &mdash; <span class="k">ACE_SET_HEAD_ACE</span> and friends persist it), the
+U1&nbsp;+&nbsp;multiACE device page (a live mirror), and here (hand-typed, and therefore able to disagree). The
+printer already reports all of it via <span class="k">/multiace/api/state</span>, so <b>Sync from printer</b> makes
+the machine the source of truth in one click, and Orca&rsquo;s copy becomes a cache that keeps offline slicing
+working. The second group shows the case that matters: when the preset and the machine disagree, it is stated
+plainly with a one-click fix &mdash; instead of silently emitting <span class="k">ACE=</span> pointing at the wrong
+unit. The end state (option&nbsp;D) moves authoring to the device page entirely, leaving this as a read-only
+summary.</p>
+
+<script>
+"use strict";
+var ICON = {
+  semm:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16M4 12h16M4 19h16"/></svg>',
+  ace:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="9" rx="2"/><path d="M7 13v4M12 13v4M17 13v4M5 21h14"/></svg>',
+  tower: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 21V6l5-3 5 3v15"/><path d="M7 11h10M7 16h10"/></svg>',
+  param: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>',
+  adv:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L4.8 8.3l5-.7z"/></svg>'
+};
+// value kinds: cb(on|off|dim) | txt | spin ; unit optional
+function rows(list){
+  return list.map(function(r){
+    var ctl;
+    if (r.k === "cb")
+      ctl = '<span class="cb ' + (r.v === "on" ? "on" : (r.v === "dim" ? "off" : "")) + '"></span>';
+    else
+      ctl = '<div class="ctl' + (r.k === "spin" ? " spin" : "") + '">' +
+            (r.k === "spin" ? '<span class="spinner"><span>&#9650;</span><span>&#9660;</span></span>' : '') +
+            '<input type="text" value="' + r.v + '" readonly>' +
+            (r.unit ? '<span class="unit">' + r.unit + '</span>' : '') + '</div>';
+    return '<div class="row' + (r.neu ? ' newrow' : '') + '">' +
+             '<div class="lbl' + (r.lbl.length > 34 ? ' multi' : '') + '">' + r.lbl + '</div>' + ctl +
+             (r.revert ? '<span class="revert">&#8634;</span>' : '') +
+           '</div>';
+  }).join("");
+}
+function section(icon, title, list, neu){
+  return '<div class="sect"><div class="head' + (neu ? ' newgrp' : '') + '">' +
+         '<span class="ico">' + icon + '</span><span class="nm">' + title + '</span></div>' +
+         '<div class="rule"></div>' + rows(list) + '</div>';
+}
+
+// The machine under test: three stock feeders + a 4-slot ACE on toolhead 4 (unit 0).
+var HEADS = [
+  {slots:"1", unit:"0"}, {slots:"1", unit:"0"}, {slots:"1", unit:"0"},
+  {slots:"4", unit:"0", model:"ACE Pro"}
+];
+
+var html = section(ICON.semm, "Single extruder multi-material setup", [
+  {lbl:"Single Extruder Multi Material", k:"cb", v:"off"},
+  {lbl:"Extruders",                      k:"spin", v:"4"},
+  {lbl:"Manual Filament Change",         k:"cb", v:"dim"}
+]);
+
+// Proposed (option C + A): say what it means, and let the machine fill it in.
+//  - "Fed by" replaces the magic 1 = no ACE
+//  - unit labels are 1-based (A1), matching the device page and multiACE's own UI
+//  - "Slots" only exists when the head is ACE-fed
+var fedRows = HEADS.map(function(h, i){
+  var ace = h.slots !== "1";
+  var r = '<div class="row newrow"><div class="lbl">Toolhead ' + (i + 1) + '</div>' +
+          '<div class="ctl wider"><div class="select">' +
+          (ace ? "ACE " + (parseInt(h.unit, 10) + 1) + (h.model ? " \u00b7 " + h.model : "")
+               : "Stock feeder") + '</div></div>';
+  if (ace)
+    r += '<div class="ctl" style="width:96px;margin-left:10px"><div class="select">' + h.slots + ' slots</div></div>';
+  r += '</div>';
+  return r;
+}).join("");
+
+html += '<div class="sect"><div class="head newgrp"><span class="ico">' + ICON.ace + '</span>' +
+        '<span class="nm">multiACE &mdash; how each toolhead is fed</span></div><div class="rule"></div>' +
+        '<div class="syncbar">' +
+          '<span class="btn primary">Sync from printer</span>' +
+          '<span class="status"><span class="dot"></span>Matches printer &middot; synced 2 min ago</span>' +
+        '</div>' +
+        fedRows +
+        '<div class="hint">&ldquo;Stock feeder&rdquo; means the head&rsquo;s own side feeder. ' +
+        'ACE units are numbered as they appear everywhere else &mdash; ACE&nbsp;1 is the first unit &mdash; ' +
+        'and each may be a different model.</div>' +
+        '</div>';
+
+// The same group when the preset and the machine disagree - the failure this design
+// is meant to make impossible to miss.
+html += '<div class="sect"><div class="head newgrp"><span class="ico">' + ICON.ace + '</span>' +
+        '<span class="nm">multiACE &mdash; how each toolhead is fed <span style="font-weight:400;color:var(--ink-faint)">(divergence example)</span></span>' +
+        '</div><div class="rule"></div>' +
+        '<div class="syncbar">' +
+          '<span class="btn">Sync from printer</span>' +
+          '<span class="status warn"><span class="dot"></span>Toolhead 4 is set to <b>ACE 2</b>, printer reports <b>ACE 1</b> &middot; ' +
+          '<span class="link">Use the printer&rsquo;s</span></span>' +
+        '</div>' +
+        '<div class="row newrow"><div class="lbl">Toolhead 4</div>' +
+        '<div class="ctl wider"><div class="select" style="border-color:var(--new)">ACE 2</div></div>' +
+        '<div class="ctl" style="width:96px;margin-left:10px"><div class="select">4 slots</div></div></div>' +
+        '</div>';
+
+html += section(ICON.tower, "Wipe tower", [
+  {lbl:"Purge in prime tower",                        k:"cb", v:"dim"},
+  {lbl:"Enable filament ramming",                     k:"cb", v:"off"},
+  {lbl:"Ramming line width ratio",                    k:"txt", v:"2"},
+  {lbl:"Enable change pressure advance when wiping",  k:"cb", v:"on"},
+  {lbl:"Pressure advance value when ramming",         k:"txt", v:"0.02"}
+]);
+
+html += section(ICON.param, "Single extruder multi-material parameters", [
+  {lbl:"Cooling tube position",             k:"txt", v:"91.5", unit:"mm"},
+  {lbl:"Cooling tube length",               k:"txt", v:"5",    unit:"mm"},
+  {lbl:"Filament parking position",         k:"txt", v:"92",   unit:"mm"},
+  {lbl:"Extra loading distance",            k:"txt", v:"-2",   unit:"mm"},
+  {lbl:"High extruder current on filament swap", k:"cb", v:"off"}
+]);
+
+html += section(ICON.adv, "Advanced", [
+  {lbl:"Filament load time",   k:"txt", v:"0", unit:"s"},
+  {lbl:"Filament unload time", k:"txt", v:"0", unit:"s"}
+]);
+
+document.getElementById("body").innerHTML = html;
+</script>

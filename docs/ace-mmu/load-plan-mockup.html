@@ -174,7 +174,6 @@
 
 
 
-
 <p class="note"><b>Design mockup — this is the shipped page.</b> It is the same file as
 <span class="mono">resources/web/aceplan/index.html</span>, rendered here with demo data, so the
 design and the implementation cannot drift apart. In the app, C++ replaces the demo via
@@ -196,6 +195,7 @@ plans around &mdash; or click it to pin/unpin; "Clear pins" is Auto-only. Amber 
 ACE is <b>drying</b> it, and a drying spool must not be optimised out of its slot. <b>Manual</b> hands you
 the layout: drag spools between positions (a displaced spool swaps into the old spot) and the header prices
 your layout against the Auto optimum. Apply writes the assignment back to the slicer.</p>
+
 
 <script>
 "use strict";
@@ -352,13 +352,13 @@ function render(){
   for (let h = 0; h < CAPS.length; h++) if (CAPS[h] > 1) aceHeads.push(h);
   aceHeads.forEach(function(h){
     const unit  = (UNITS[h] === undefined || UNITS[h] < 0) ? 0 : UNITS[h];
-    const label = "A" + (unit + 1);
+    const label = "ACE " + (unit + 1);
     const ace = document.createElement("div");
     ace.className = "acebox " + (aceHeads.length === 1 ? "main" : "single");
     const drying = FIL.some(function(f, c){ return f.drying && layout[c] === h; });
     ace.innerHTML =
-      '<div class="aceband"><span class="acebadge">' + label + '</span>' +
-      '<span class="nm">multiACE &rarr; ' + HEADS[h] + '</span>' +
+      '<div class="aceband"><span class="acebadge">' + (unit + 1) + '</span>' +
+      '<span class="nm">' + label + ' &rarr; ' + HEADS[h] + '</span>' +
       (drying ? '<span class="right"><span class="drychip"><span class="dot"></span>Drying</span></span>' : '') +
       '</div>';
     const slots = document.createElement("div");

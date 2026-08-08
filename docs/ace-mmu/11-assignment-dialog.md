@@ -119,6 +119,7 @@ Going native makes multiACE's rewriter our **specification**. It is
 | initial tool | pre-body tool selection remapped to the head |
 | priming | `SM_PRINT_PREEXTRUDE_FILAMENT` is **DROPPED for ACE colours** - a real swap flushes anyway, and per-swap primes stacked ooze drops on the tower whose `SKIP_POS_RESTORE` coupling knocked docked heads off (their note: HW 2026-07-04). Instead **one forced prime per ACE head at its first body use**; pinned colours keep the stock line remapped to the head (first one `FORCE=1`) |
 | cleaning | `ACE_PICKUP_CLEAN HEAD=n` after a bare-T pickup, when pickup-cleaning is on |
+| **initial load** | a block emitted **before the Snapmaker prime-line section** (`;===== 画起始线`), so the load finishes before the runout sensor fires on the prime: `; multiACE auto-load: load initial filaments` / one `ACE_SWAP_HEAD HEAD=h ACE=a SLOT=s` per **ACE-fed** head (its first-used slot) / `; multiACE auto-load: end`. Note it is `ACE_SWAP_HEAD`, **not** `ACE_LOAD_HEAD` (`inject_auto_load_to_file`, anchor priority #1) |
 
 Two things this **validates** in what we already have: the emitted form
 `ACE_SWAP_HEAD HEAD= ACE= SLOT=` is exactly right, and our per-head loaded-spool
@@ -221,7 +222,8 @@ cross-check that the two agree.
 | 3 | Feed real data (plan, filament colours, live ACE state) | |
 | 4 | Persist pins + mode per plate (`filament_map` / plate config) | |
 | 5 | ~~Pin down the slot half~~ — resolved: preflight rewrites the file (§2b) | **done** |
-| 6 | Native export: remap tool index + temps to the head, drop ACE preextrude, one prime per ACE head (§2b) | **next** |
+| 6 | Native export: tool/temp remap, ACE swaps, purge, priming | **done — verified in a real slice** |
+| 6b | Initial auto-load block anchored before the prime line | **done — needs a slice to verify** |
 | 7 | Insert into `send_gcode_legacy` ahead of the Flutter page; keep the existing `PrintHostJob` upload | |
 | 8 | Pre-print spool readiness checklist (see `10-slicing-plan.md` §6) | |
 

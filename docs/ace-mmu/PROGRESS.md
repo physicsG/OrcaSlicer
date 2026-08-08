@@ -402,3 +402,35 @@ Newest first. One block per session: date, what changed (files), result, next.
 - Handling: the second scenario tolerates that one exact message and SUCCEEDs with a
   note; any other exception still fails the test. 15/15 green afterwards. The
   underlying fork bug is untouched and still worth fixing separately.
+
+### 2026-08-08 — Native ACE export works end-to-end (verified in a real slice)
+- First real ACE-enabled slice (7 colours, `ace_head_capacity = 1,1,1,4`,
+  `ace_head_unit = 0,0,0,0`) produced correct native gcode:
+  - tool numbers are **physical heads only** (T0-T3; no T4-T6 leaking through) —
+    the central remap in `GCodeWriter` (`m_tool_remap`/`emit_tool`) works, and the
+    `custom_gcode_changes_tool` probes were fixed to look for the *emitted* tool so
+    Orca does not append a second tool change;
+  - `ACE_SWAP_HEAD HEAD=3 ACE=0 SLOT=0..3` — correct head and correct **unit 0**
+    (the value the firmware requires and that the head-index guess got wrong);
+  - 301 head-3 uses -> **300 swaps**: first load free, every revisit swaps, i.e. the
+    dedupe rule holds;
+  - `ACE_SET_PURGE` lengths vary per colour pair from the flush matrix;
+  - `SM_PRINT_PREEXTRUDE_FILAMENT` emitted for the three feeder heads and **never**
+    for the ACE head, per multiACE's hardware-learned rule.
+- Added the missing **initial auto-load**, in multiACE's own format and position
+  (`inject_auto_load_to_file`): marker comments + one `ACE_SWAP_HEAD` per ACE-fed head
+  at its first-used slot, injected before the `画起始线` prime-line section so the load
+  completes before the runout sensor fires. It emits `ACE_SWAP_HEAD`, not
+  `ACE_LOAD_HEAD` — the guess I had staged was wrong; reading their implementation
+  corrected it.
+- UI: the two settings moved off the per-extruder Size groups onto a dedicated
+  **multiACE** page grouped per toolhead. On the extruder pages a "unit feeding this
+  head" field appeared even for heads with no ACE, which is what led to setting the
+  unit instead of the capacity.
+- Profile/vendor versions bumped again (vendor 02.02.55.04, U1 leaves 2.2.0.6) —
+  **required**, or the app keeps using its cached copy in
+  `~/.config/Snapmaker_Orca/system/` and profile edits silently never apply.
+- Caveat worth stating: this cube prices at **300 swaps ~ 15-20 m of purge**. That is
+  inherent to 7 colours all used every layer on 3 feeders + one 4-slot ACE head, not a
+  planner failure — but it is exactly the number the assignment dialog must surface
+  before the user commits.

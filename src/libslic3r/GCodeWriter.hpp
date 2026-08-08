@@ -15,6 +15,11 @@ class GCodeWriter {
 public:
     GCodeConfig config;
     bool multiple_extruders;
+    // multiACE: see m_tool_remap. Pass the plan's filament->head vector, or {} to clear.
+    void set_tool_remap(const std::vector<int> &remap) { m_tool_remap = remap; }
+    int  emit_tool(int tool) const {
+        return (tool >= 0 && tool < int(m_tool_remap.size()) && m_tool_remap[tool] >= 0) ? m_tool_remap[tool] : tool;
+    }
     
     GCodeWriter() : 
         multiple_extruders(false), m_extruder(nullptr),
@@ -124,6 +129,10 @@ public:
   private:
 	// Extruders are sorted by their ID, so that binary search is possible.
     std::vector<Extruder> m_extruders;
+    // multiACE: logical filament index -> physical toolhead to EMIT (T<n>, M104/M109
+    // T<n>). Only the emitted number is remapped; the logical extruder still selects
+    // per-filament settings. Empty = identity (every other printer).
+    std::vector<int>      m_tool_remap;
     bool            m_single_extruder_multi_material;
     Extruder*       m_extruder;
     unsigned int    m_last_acceleration;
