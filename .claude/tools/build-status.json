@@ -2,7 +2,7 @@
   "title": "Snapmaker Orca \u00b7 multiACE build",
   "branch": "feat/ace-mmu-slicing",
   "state_when_idle": "done",
-  "summary": "Native multiACE emission is verified in a real slice. This chain adds the initial auto-load block and moves the topology settings onto the Multimaterial page.",
+  "summary": "Clean build of the app and both test suites: 0 errors, 207 unit assertions and the 2 end-to-end slicing scenarios green. Ready to try.",
   "features": [
     {
       "what": "Initial auto-load block before the prime line",
@@ -34,29 +34,16 @@
   ],
   "builds": [
     {
-      "name": "2 \u00b7 settings labels",
-      "target": "Snapmaker_Orca",
-      "log": "/tmp/orca_build2.log",
+      "name": "app + tests",
+      "target": "Snapmaker_Orca, libslic3r_tests, fff_print_tests",
+      "log": "/tmp/orca_build.log",
       "errors": 0,
-      "lines": 0
-    },
-    {
-      "name": "3 \u00b7 auto-load block",
-      "target": "Snapmaker_Orca + tests",
-      "log": "/tmp/orca_build3.log",
-      "errors": 0,
-      "lines": 0
-    },
-    {
-      "name": "4 \u00b7 Multimaterial page",
-      "target": "Snapmaker_Orca",
-      "log": "/tmp/orca_build4.log",
-      "errors": 0,
-      "lines": 0
+      "lines": 157
     }
   ],
-  "running": true,
-  "state": "building",
-  "binary": "2026-08-08 10:26",
-  "generated": "2026-08-08 12:00"
+  "running": false,
+  "state": "done",
+  "binary": "2026-08-08 12:06",
+  "generated": "2026-08-08 12:07",
+  "tests": "207 unit assertions \u00b7 2 e2e scenarios \u00b7 all passing"
 }

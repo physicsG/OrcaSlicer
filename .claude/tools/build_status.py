@@ -19,7 +19,7 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent      # .claude/tools
 REPO = HERE.parent.parent
 STATE = HERE / "build-status.json"
-OUT = REPO / "docs/ace-mmu/build-status.html"
+OUT = HERE / "build-status.html"
 
 E = lambda s: (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 

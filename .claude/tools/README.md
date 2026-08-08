@@ -6,7 +6,7 @@ Run from a terminal or from VS Code (**Ctrl+Shift+P → Tasks: Run Task**, or
 
 | command | what it does |
 |---|---|
-| `./.claude/tools/start.sh status` | regenerate `docs/ace-mmu/build-status.html` from live state |
+| `./.claude/tools/start.sh status` | regenerate `build-status.html` (here) from live state |
 | `… open` | regenerate and open it in a browser |
 | `… watch [secs]` | refresh until the build finishes, then report per-log errors |
 | `… check <page.html>` | load a page in WebKit and report JS errors |
@@ -31,6 +31,8 @@ Run from a terminal or from VS Code (**Ctrl+Shift+P → Tasks: Run Task**, or
 
 - `.gitignore` excludes `.claude/*` but re-includes this folder, so these tools are
   tracked. They were lost once when a scratchpad was wiped; that is why.
+- `bin/` and the generated `build-status.html` are ignored by git; the sources
+  and `build-status.json` are tracked.
 - The status page is a **snapshot**, not live: a published artifact cannot reach this
   machine. Re-run `status` and reload to refresh.
 - `check` needs `libgtk-3-dev` and `libwebkit2gtk-4.1-dev`; it says so if they are

@@ -12,7 +12,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-PAGE="$REPO/docs/ace-mmu/build-status.html"
+PAGE="$HERE/build-status.html"
 BIN="$HERE/bin"
 
 c() { printf '\033[%sm%s\033[0m\n' "$1" "$2"; }

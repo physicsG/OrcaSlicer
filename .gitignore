@@ -47,5 +47,7 @@ resources/profiles/user/default
 deps_src/build/
 .claude/*
 !.claude/tools/
+.claude/tools/bin/
+.claude/tools/build-status.html
 .hermes/
 CLAUDE.md
