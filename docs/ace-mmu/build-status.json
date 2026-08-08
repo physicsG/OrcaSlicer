@@ -1,0 +1,62 @@
+{
+  "title": "Snapmaker Orca \u00b7 multiACE build",
+  "branch": "feat/ace-mmu-slicing",
+  "state_when_idle": "done",
+  "summary": "Native multiACE emission is verified in a real slice. This chain adds the initial auto-load block and moves the topology settings onto the Multimaterial page.",
+  "features": [
+    {
+      "what": "Initial auto-load block before the prime line",
+      "why": "One ACE_SWAP_HEAD per ACE-fed head at its first slot, in multiACE's own format and position, so head 3 no longer assumes it already holds the right colour."
+    },
+    {
+      "what": "multiACE topology moved to Printer settings \u2192 Multimaterial",
+      "why": "Grouped per toolhead. The unit field no longer appears on heads with no ACE, which is what made the wrong field the obvious one to click."
+    },
+    {
+      "what": "Clearer labels for the two settings",
+      "why": "\"multiACE slots on this head (1 = stock feeder)\" spells out that 1 means no ACE."
+    },
+    {
+      "what": "Central tool + temperature remap (already in the 10:26 binary)",
+      "why": "T<n> and M104/M109 T<n> emit the physical head while per-filament settings still use the logical index."
+    }
+  ],
+  "verify": [
+    "Restart Orca \u2014 the vendor version bump re-imports the U1 profiles (otherwise the cached copy in ~/.config/Snapmaker_Orca/system/ keeps winning).",
+    "Printer settings \u2192 Multimaterial: the four multiACE toolhead groups appear; Extruder pages no longer show them.",
+    "Slice the 7-colour cube and grep the gcode: '; multiACE auto-load' appears once, before ';===== \u753b\u8d77\u59cb\u7ebf'.",
+    "Tool numbers stay T0\u2013T3, and ACE_SWAP_HEAD carries ACE=0 for head 3."
+  ],
+  "open": [
+    "Assignment dialog: page and optimiser are built and verified, but the C++ webview host and its slot in the send flow are not written yet.",
+    "Swap cost is not surfaced anywhere in the UI \u2014 the test cube prices at 300 swaps \u2248 15\u201320 m of purge.",
+    "\"Fed by\" pickers and Sync from printer are mockup-only (docs/ace-mmu/12-topology-config-ux.md)."
+  ],
+  "builds": [
+    {
+      "name": "2 \u00b7 settings labels",
+      "target": "Snapmaker_Orca",
+      "log": "/tmp/orca_build2.log",
+      "errors": 0,
+      "lines": 0
+    },
+    {
+      "name": "3 \u00b7 auto-load block",
+      "target": "Snapmaker_Orca + tests",
+      "log": "/tmp/orca_build3.log",
+      "errors": 0,
+      "lines": 0
+    },
+    {
+      "name": "4 \u00b7 Multimaterial page",
+      "target": "Snapmaker_Orca",
+      "log": "/tmp/orca_build4.log",
+      "errors": 0,
+      "lines": 0
+    }
+  ],
+  "running": true,
+  "state": "building",
+  "binary": "2026-08-08 10:26",
+  "generated": "2026-08-08 11:55"
+}
