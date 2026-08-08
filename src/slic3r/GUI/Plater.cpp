@@ -19579,6 +19579,11 @@ void Plater::export_gcode_3mf(bool export_all)
         show_error(this, ex.what(), false);
         return;
     }
+    // multiACE: same review as the plain gcode export. This is the path the toolbar,
+    // Ctrl+G and the menu all take, so the hook has to be here too - putting it only on
+    // Plater::export_gcode meant the dialog never appeared in the actual UI.
+    review_ace_assignment();
+
     default_output_file.replace_extension(".gcode.3mf");
     default_output_file = fs::path(Slic3r::fold_utf8_to_ascii(default_output_file.string()));
 
