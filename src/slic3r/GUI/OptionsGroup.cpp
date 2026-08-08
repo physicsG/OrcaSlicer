@@ -233,6 +233,12 @@ Line* OptionsGroup::get_line(const std::string& opt_key)
     {
         if(l.is_separator())
             continue;
+        // A line carrying only a widget (a button, a description) has no options, and
+        // get_first_option_key() indexes m_options[0] unchecked. Such a line cannot match
+        // an option key by definition, so skip it rather than reading past the end -
+        // Tab::decorate() walks every option through here on each page activation.
+        if (l.get_options().empty())
+            continue;
         if (l.get_first_option_key() == opt_key)
             return &l;
     }
