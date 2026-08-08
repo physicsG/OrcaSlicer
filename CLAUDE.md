@@ -255,3 +255,66 @@ Run individual test suites:
 - **Performance benchmarks** help catch performance regressions
 - **Memory leak** detection important for long-running GUI application
 - **Cross-platform** testing required before releases
+## Local dev tooling (`.claude/tools`)
+
+Run `./.claude/tools/start.sh` with no arguments for the full list. VS Code tasks wrap the
+same commands (Ctrl+Shift+P → "Tasks: Run Task" → "multiACE: …").
+
+### Debugging GUI crashes without a human
+
+There is no gdb in this environment, and a headless agent cannot reach the user's X
+session. Two tools close that gap; **use them instead of guessing at a crash.**
+
+    ./.claude/tools/start.sh run        # real display, crash catcher armed (user drives)
+    ./.claude/tools/start.sh trace      # resolve the last crash to file:line via addr2line
+
+    ./.claude/tools/start.sh headless   # Xvfb :99 + Orca, crash catcher armed
+    ./.claude/tools/start.sh shot x.png # screenshot the virtual display - readable as an image
+    ./.claude/tools/start.sh click X Y  # click on the virtual display
+    ./.claude/tools/start.sh stop       # stop both
+
+`headless` needs `xvfb` and `xdotool` (installed 2026-08-08). It runs against a **copy** of
+`~/.config/Snapmaker_Orca` in `/tmp/orca-headless-datadir`, so it cannot disturb real presets
+and can run while the user has Orca open. Coordinates in a screenshot map 1:1 to click
+coordinates. The first click into an unfocused window is swallowed - `click` handles that.
+
+This loop found a crash that three rounds of code reading had misdiagnosed. Reproduce, don't
+theorise: a wrong fix that ships is worse than an hour of reading.
+
+### Settings-page traps (learned the hard way)
+
+- A `Line` carrying **only a widget** must set `full_width = 1`. `OptionsGroup::activate_line`
+  returns early only for full-width widget lines; anything else falls through to
+  `get_options().front()` on an empty vector and segfaults as the page activates.
+- `full_width` lines draw **no label column**, so put any label inside the widget itself, and
+  keep it short - it is clipped, not ellipsised.
+- `i_enum_open` (labelled dropdowns) now works for **vector** `coInts` too. Support needed a
+  `coInts` case beside `coInt` in *five* places in `Field.cpp` - miss one and it fails far from
+  the cause: `Field::get_value_by_opt_type`, `Choice::set_value`, `Choice::get_value`,
+  `Choice::set_selection`, and `Choice::propagate_value`. The last one is the nastiest: without
+  it a `coInts` value falls into the float default and `boost::any_cast<double>` throws on focus
+  change, which escapes the wx handler and aborts the app during teardown - so the crash
+  backtrace shows only destructors. Use `THROW_LOG=1` to find throw sites.
+  Prefer labelled choices over raw numbers whose meaning must be spelled out in the label.
+  Combo fields are ~146px, so keep enum labels short or they are clipped.
+- Do not rebuild a page from inside a field's own change handler; it destroys the field
+  mid-event.
+
+### Build status page
+
+    ./.claude/tools/start.sh status     # regenerate
+    ./.claude/tools/start.sh watch      # regenerate every 10s while a build runs
+    ./.claude/tools/start.sh open       # open it
+
+Shows a ninja step counter, ETA over a moving window, and whether the binary on disk is
+**older than the newest source file** - the trap being a binary that does not contain the
+change under test. Build detection matches `ninja` by name: `cmake --build` is only a wrapper
+and a build whose wrapper died still has a live ninja.
+
+### Builds
+
+`build/` is a **Ninja Multi-Config** dir, so Debug builds alongside Release without disturbing
+it: `cmake --build build --config Debug --target snapmaker-orca`. Run builds detached
+(`setsid nohup`) - they outlive the session. When killing builds, never put the kill pattern in
+the same command line that runs the build; `pkill -f` will match your own shell. Use
+`pkill -x ninja`.

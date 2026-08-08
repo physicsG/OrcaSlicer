@@ -38,3 +38,28 @@ Run from a terminal or from VS Code (**Ctrl+Shift+P → Tasks: Run Task**, or
 - `check` needs `libgtk-3-dev` and `libwebkit2gtk-4.1-dev`; it says so if they are
   missing.
 - On WSL the openers fall back to `explorer.exe` with a converted path.
+
+## Headless GUI testing
+
+`Xvfb` + `xdotool` + `xshot` let a crash be reproduced and *seen* without the user
+touching anything. This is the loop that found the Multimaterial segfault after three
+wrong diagnoses from code reading.
+
+    ./start.sh headless        # Xvfb :99, Orca, crash catcher armed
+    ./start.sh shot out.png    # screenshot - coordinates map 1:1 to click coordinates
+    ./start.sh click X Y       # focus-then-click (the first click is otherwise swallowed)
+    ./start.sh trace /tmp/orca_headless_crash.log
+    ./start.sh stop
+
+The instance runs against a copy of the real config in `/tmp/orca-headless-datadir`, so it
+cannot disturb presets and can run alongside the user's own Orca.
+
+Requires `sudo apt install -y xvfb xdotool` (done 2026-08-08). `xshot.c` writes PNG directly
+via zlib so imagemagick is not needed.
+
+## Crash catcher
+
+`crash_catcher.c` is an LD_PRELOAD signal handler: there is no gdb here. It records a
+module+offset backtrace, registers, and any readable strings near the top frames;
+`start.sh trace` resolves it with addr2line. Release symbols give function names, and the
+Debug config (`start.sh run --debug`) gives exact lines.

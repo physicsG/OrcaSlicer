@@ -10,11 +10,14 @@ asking.
     python3 .claude/tools/build_status.py --probe
 """
 import datetime as dt
+import glob
 import json
+import os
 import pathlib
 import re
 import subprocess
 import sys
+import time
 
 HERE = pathlib.Path(__file__).resolve().parent      # .claude/tools
 REPO = HERE.parent.parent
@@ -24,22 +27,121 @@ OUT = HERE / "build-status.html"
 E = lambda s: (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
+def ago(ts: float) -> str:
+    d = int(time.time() - ts)
+    if d < 60:
+        return f"{d}s ago"
+    if d < 3600:
+        return f"{d // 60}m ago"
+    if d < 86400:
+        return f"{d // 3600}h {d % 3600 // 60}m ago"
+    return f"{d // 86400}d ago"
+
+
+def tail(path: pathlib.Path, n: int = 400_000) -> str:
+    """Build logs reach tens of MB; only the end carries the current step."""
+    with open(path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        f.seek(max(0, f.tell() - n))
+        return f.read().decode("utf-8", "replace")
+
+
+def active_log() -> pathlib.Path | None:
+    """The log being written right now - the newest of everything we might build into."""
+    cands = [pathlib.Path(p) for p in glob.glob("/tmp/orca_build*.log")]
+    cands = [p for p in cands if p.exists()]
+    return max(cands, key=lambda p: p.stat().st_mtime) if cands else None
+
+
+def newest_source() -> tuple[str, float] | None:
+    """Newest source edit, so a binary older than it can be called out as stale."""
+    best, best_t = None, 0.0
+    for root, dirs, files in os.walk(REPO / "src"):
+        dirs[:] = [d for d in dirs if d not in (".git", "build")]
+        for fn in files:
+            if fn.endswith((".cpp", ".hpp", ".h", ".c", ".cc")):
+                try:
+                    t = os.stat(os.path.join(root, fn)).st_mtime
+                except OSError:
+                    continue
+                if t > best_t:
+                    best, best_t = fn, t
+    return (best, best_t) if best else None
+
+
 def probe(state: dict) -> dict:
-    """Fill in what can be measured: is a build running, binary mtime, log errors."""
-    running = subprocess.run(["pgrep", "-f", "cmake --build build"],
-                             capture_output=True).returncode == 0
+    """Fill in what can be measured: step counter, binary freshness, log errors."""
+    running = subprocess.run(["pgrep", "-x", "ninja"], capture_output=True).returncode == 0
     state["running"] = running
     state["state"] = "building" if running else state.get("state_when_idle", "done")
+
+    # Step counter. Ninja prints "[done/total] Building ..." per edge; the last one is where
+    # we are. Without this the page says "building" for 20 minutes and tells you nothing.
+    state.pop("progress", None)
+    log = active_log()
+    if log:
+        txt = tail(log)
+        steps = re.findall(r"^\[(\d+)/(\d+)\] (.+)$", txt, re.M)
+        if steps:
+            done, total, what = steps[-1]
+            done, total = int(done), int(total)
+            pct = round(done * 100 / total) if total else 0
+            # Rate comes from a moving window of samples, not from the whole run. Two
+            # reasons: the page is usually opened mid-build (so elapsed/done is wrong), and
+            # step cost is wildly uneven - a Debug build opens with the precompiled header,
+            # which is minutes on its own and extrapolates to a four-hour estimate.
+            now = time.time()
+            if state.get("run_log") != str(log):
+                state["run_log"], state["samples"] = str(log), []
+            samples = [tuple(s) for s in state.get("samples", [])]
+            samples = [(t, n) for t, n in samples if now - t <= 600 and n <= done][-40:]
+            samples.append((now, done))
+            state["samples"] = [list(s) for s in samples]
+
+            eta = ""
+            if running:
+                t0, n0 = samples[0]
+                if now - t0 >= 15 and done > n0:
+                    left = int((now - t0) / (done - n0) * (total - done))
+                    if left > 0:
+                        eta = f"~{left // 60}m {left % 60}s left" if left >= 60 else f"~{left}s left"
+                else:
+                    eta = "measuring rate…"
+            state["progress"] = {"done": done, "total": total, "pct": pct, "eta": eta,
+                                 "what": os.path.basename(what.split(" object ")[-1]).replace(".o", ""),
+                                 "log": str(log)}
+    if not running:
+        for k in ("run_log", "samples"):
+            state.pop(k, None)
+
     binp = REPO / "build/src/Release/snapmaker-orca"
     if binp.exists():
-        state["binary"] = dt.datetime.fromtimestamp(binp.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+        mt = binp.stat().st_mtime
+        state["binary"] = dt.datetime.fromtimestamp(mt).strftime("%H:%M:%S")
+        state["binary_age"] = ago(mt)
+        # A binary older than the newest source is the trap: the app you just launched
+        # does not contain the change you are testing. Say so rather than showing a time.
+        # Staleness is "older than the newest source", NOT "a build is running": the running
+        # build may be another config (Debug shares this dir) and may not touch this binary
+        # at all. Conflating the two labels a freshly linked binary as the previous one.
+        ns = newest_source()
+        stale = bool(ns and ns[1] > mt)
+        state["binary_stale"] = stale
+        state["binary_note"] = (f"relinking now - still the previous build ({ns[0]} is newer)" if stale and running
+                                else f"STALE - older than {ns[0]} ({ago(ns[1])})" if stale
+                                else "newer than every source file" + (" (a build is running)" if running else ""))
+
+    dbg = REPO / "build/src/Debug/snapmaker-orca"
+    state["debug_binary"] = (dt.datetime.fromtimestamp(dbg.stat().st_mtime).strftime("%H:%M:%S")
+                             if dbg.exists() else "not built")
+
     for b in state.get("builds", []):
-        log = pathlib.Path(b.get("log", ""))
-        if log.exists():
-            txt = log.read_text(errors="replace")
+        lg = pathlib.Path(b.get("log", ""))
+        if lg.exists():
+            txt = tail(lg)
             b["errors"] = len(re.findall(r"\berror:", txt))
             b["lines"] = txt.count("\n")
-    state["generated"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    state["generated"] = dt.datetime.now().strftime("%H:%M:%S")
     STATE.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     return state
 
@@ -86,6 +188,18 @@ th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px;c
 td{padding:6px 0;border-top:1px solid var(--line);font-family:var(--mono);font-size:12.5px}
 td.t{font-family:inherit;font-size:13px}
 .foot{color:var(--faint);font-size:12px;text-align:center}
+.bar{height:8px;border-radius:999px;background:color-mix(in srgb,var(--dim) 18%,transparent);overflow:hidden}
+.bar span{display:block;height:100%;border-radius:999px;background:var(--busy);transition:width .4s ease}
+.bar.done span{background:var(--ok)}
+.steps{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 0 9px}
+.steps .n{font-family:var(--mono);font-size:22px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.steps .of{color:var(--faint);font-family:var(--mono);font-size:13px}
+.steps .eta{margin-left:auto;color:var(--dim);font-size:12.5px;font-family:var(--mono)}
+.now{margin-top:8px;font-size:12.5px;color:var(--dim);font-family:var(--mono);
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kv.warn{border-color:color-mix(in srgb,var(--busy) 50%,var(--line))}
+.kv .sub{font-size:11.5px;color:var(--dim);margin-top:2px}
+.kv.warn .sub{color:var(--busy)}
 """
 
 
@@ -97,16 +211,34 @@ def render(s: dict) -> str:
     if st != "building" and errs:
         st, label = "failed", "Failed"
 
-    kv = [("Binary", s.get("binary", "—")), ("Targets", str(len(builds))),
-          ("Errors", str(errs)), ("Branch", s.get("branch", "—"))]
+    # key, value, sub-line, warn
+    kv = [("Binary", f"{s.get('binary','—')}  ({s.get('binary_age','')})",
+           s.get("binary_note", ""), s.get("binary_stale", False)),
+          ("Debug binary", s.get("debug_binary", "—"), "start.sh run --debug", False),
+          ("Errors", str(errs), "across the chain", errs > 0),
+          ("Branch", s.get("branch", "—"), "", False)]
 
     parts = [f"""<div class="card"><div class="top"><h1>{E(s.get('title','Build'))}</h1>
       <span class="pill {st}"><span class="dot"></span>{E(label)}</span>
       <span class="meta">{E(s.get('generated',''))}</span></div>
       <p style="margin:10px 0 0;color:var(--dim)">{E(s.get('summary',''))}</p>
       <div class="grid" style="margin-top:12px">""" +
-      "".join(f'<div class="kv"><div class="k">{E(k)}</div><div class="v">{E(v)}</div></div>' for k, v in kv) +
+      "".join(f'<div class="kv{" warn" if w else ""}"><div class="k">{E(k)}</div>'
+              f'<div class="v">{E(v)}</div>'
+              + (f'<div class="sub">{E(sub)}</div>' if sub else "")
+              + "</div>" for k, v, sub, w in kv) +
       "</div></div>"]
+
+    p = s.get("progress")
+    if p:
+        parts.append(
+            f'<div class="card"><h2>Progress</h2><div class="steps">'
+            f'<span class="n">{p["done"]}</span><span class="of">/ {p["total"]} steps</span>'
+            f'<span class="of">&middot; {p["pct"]}%</span>'
+            f'<span class="eta">{E(p.get("eta") or ("finished" if not s.get("running") else ""))}</span></div>'
+            f'<div class="bar{"" if s.get("running") else " done"}"><span style="width:{p["pct"]}%"></span></div>'
+            f'<div class="now">{"compiling" if s.get("running") else "last step"}: {E(p["what"])}</div>'
+            f'<div class="now" style="color:var(--faint)">{E(p["log"])}</div></div>')
 
     if s.get("features"):
         parts.append('<div class="card"><h2>What is in this build</h2><ul>' + "".join(
@@ -129,10 +261,16 @@ def render(s: dict) -> str:
         parts.append('<div class="card"><h2>Not in this build</h2><ul>' + "".join(
             f"<li>{E(o)}</li>" for o in s["open"]) + "</ul></div>")
 
-    return ("<title>" + E(s.get("title", "Build")) + "</title>\n<style>" + CSS + "</style>\n"
+    # The page is a static file, so refreshing only helps if something regenerates it -
+    # that is what `start.sh watch` does. Refresh only while building; a done page that
+    # keeps reloading is just noise.
+    refresh = '<meta http-equiv="refresh" content="15">\n' if s.get("running") else ""
+    foot = ("auto-refreshing every 15s &mdash; keep <code>.claude/tools/start.sh watch</code> running"
+            if s.get("running") else
+            "Snapshot &mdash; regenerate with <code>.claude/tools/start.sh status</code>")
+    return (refresh + "<title>" + E(s.get("title", "Build")) + "</title>\n<style>" + CSS + "</style>\n"
             '<div class="wrap">' + "".join(parts) +
-            '<div class="foot">Snapshot — regenerate with '
-            "<code>.claude/tools/start.sh status</code></div></div>\n")
+            '<div class="foot">' + foot + "</div></div>\n")
 
 
 def main() -> int:
