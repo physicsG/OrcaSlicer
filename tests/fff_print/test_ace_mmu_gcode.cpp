@@ -79,6 +79,10 @@ SCENARIO("multiACE loading plan is planned during processing", "[ace_mmu][gcode]
                 REQUIRE(on_ace >= 2);    // so at least two colours share the ACE head
                 // Three colours alternating every layer on two heads must swap.
                 REQUIRE(plan.swaps > 0);
+                // The sequence the plan was optimised against must survive processing:
+                // the assignment dialog and the post-slice notification both gate on it,
+                // so an empty one silently disables the whole UI surface.
+                REQUIRE(print.ace_sequence().size() > 1);
             }
         }
     }
