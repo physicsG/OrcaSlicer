@@ -251,7 +251,10 @@ bool Field::is_matched(const std::string& string, const std::string& pattern)
 void Field::get_value_by_opt_type(wxString& str, const bool check_value/* = true*/)
 {
 	switch (m_opt.type) {
-    case coInt: {
+    // coInts parses exactly like coInt: the per-extruder index is applied by the
+    // options group, so by the time a value reaches a Field it is a plain int.
+    case coInt:
+    case coInts: {
         long val = 0;
         if (!str.ToLong(&val)) {
             if (!check_value) {
@@ -1400,6 +1403,7 @@ void Choice::propagate_value()
             break;
         }
         case coInt:
+        case coInts:
         {
             int old_val = !m_value.empty() ? boost::any_cast<int>(m_value) : 0;
             if (old_val == boost::any_cast<int>(get_value()))
@@ -1447,6 +1451,12 @@ void Choice::set_selection()
 	}
 	case coInt:{
 		text_value = wxString::Format(_T("%i"), int(m_opt.default_value->getInt()));
+		break;
+	}
+	case coInts:{
+		const ConfigOptionInts *vec = m_opt.get_default_value<ConfigOptionInts>();
+		if (vec == nullptr || vec->empty()) break;
+		text_value = wxString::Format(_T("%i"), vec->get_at(m_opt_idx));
 		break;
 	}
 	case coStrings:{
@@ -1509,13 +1519,14 @@ void Choice::set_value(const boost::any& value, bool change_event)
 
 	switch (m_opt.type) {
 	case coInt:
+	case coInts:
 	case coFloat:
 	case coPercent:
 	case coFloatOrPercent:
 	case coString:
 	case coStrings: {
 		wxString text_value;
-		if (m_opt.type == coInt)
+		if (m_opt.type == coInt || m_opt.type == coInts)
 			text_value = wxString::Format(_T("%i"), int(boost::any_cast<int>(value)));
 		else
 			text_value = boost::any_cast<wxString>(value);
@@ -1677,7 +1688,7 @@ boost::any& Choice::get_value()
             get_value_by_opt_type(ret_str);
         else if (m_opt.type == coFloatOrPercent)
             m_value = m_opt.enum_values[ret_enum];
-        else if (m_opt.type == coInt)
+        else if (m_opt.type == coInt || m_opt.type == coInts)
             m_value = atoi(m_opt.enum_values[ret_enum].c_str());
         else
             m_value = string_to_double_decimal_point(m_opt.enum_values[ret_enum]);
