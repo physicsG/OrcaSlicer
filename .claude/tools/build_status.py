@@ -6,8 +6,8 @@ and republish it when a build starts and when it finishes. The point is to answe
 glance, "what is compiling, what is in it, and what should I try when it lands" without
 asking.
 
-    python3 docs/ace-mmu/tools/build_status.py            # render
-    python3 docs/ace-mmu/tools/build_status.py --probe    # refresh live bits first
+    .claude/tools/start.sh status     # render + probe (what VS Code runs)
+    python3 .claude/tools/build_status.py --probe
 """
 import datetime as dt
 import json
@@ -16,11 +16,10 @@ import re
 import subprocess
 import sys
 
-HERE = pathlib.Path(__file__).resolve().parent
-DOCS = HERE.parent
-REPO = DOCS.parent.parent
-STATE = DOCS / "build-status.json"
-OUT = DOCS / "build-status.html"
+HERE = pathlib.Path(__file__).resolve().parent      # .claude/tools
+REPO = HERE.parent.parent
+STATE = HERE / "build-status.json"
+OUT = REPO / "docs/ace-mmu/build-status.html"
 
 E = lambda s: (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
@@ -133,7 +132,7 @@ def render(s: dict) -> str:
     return ("<title>" + E(s.get("title", "Build")) + "</title>\n<style>" + CSS + "</style>\n"
             '<div class="wrap">' + "".join(parts) +
             '<div class="foot">Snapshot — regenerate with '
-            "<code>python3 docs/ace-mmu/tools/build_status.py --probe</code></div></div>\n")
+            "<code>.claude/tools/start.sh status</code></div></div>\n")
 
 
 def main() -> int:

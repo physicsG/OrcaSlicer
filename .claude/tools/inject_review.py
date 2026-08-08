@@ -5,15 +5,15 @@ The mockups are published as standalone artifacts, so the overlay has to be inli
 rather than linked. Keeping one source (review-overlay.js) and injecting it means the
 mockups cannot drift apart.
 
-    python3 docs/ace-mmu/tools/inject_review.py [file.html ...]
+    .claude/tools/start.sh review [file.html ...]
 
 With no arguments it refreshes every mockup in docs/ace-mmu/.
 """
 import pathlib
 import sys
 
-HERE = pathlib.Path(__file__).resolve().parent
-DOCS = HERE.parent
+HERE = pathlib.Path(__file__).resolve().parent      # .claude/tools
+DOCS = HERE.parent.parent / "docs" / "ace-mmu"
 BEGIN = "<!-- review-overlay:begin -->"
 END = "<!-- review-overlay:end -->"
 

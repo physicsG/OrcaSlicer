@@ -45,6 +45,7 @@ resources/profiles/user/default
 /tools/perl/
 
 deps_src/build/
-.claude/
+.claude/*
+!.claude/tools/
 .hermes/
 CLAUDE.md
