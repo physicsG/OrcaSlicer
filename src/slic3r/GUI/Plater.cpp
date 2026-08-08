@@ -102,6 +102,7 @@
 
 #include "GUI.hpp"
 #include "GUI_App.hpp"
+#include "AcePlanDialog.hpp"
 #include "GUI_ObjectList.hpp"
 #include "GUI_Utils.hpp"
 #include "GUI_Factories.hpp"
@@ -19408,6 +19409,21 @@ void Plater::export_gcode(bool prefer_removable)
         if (state & priv::UPDATE_BACKGROUND_PROCESS_INVALID)
             return;
         default_output_file = this->p->background_process.output_filepath_for_project("");
+
+        // multiACE: let the user see and adjust which spool sits on which head before the
+        // gcode is written. Only when there is something to decide - an ACE-fed head and
+        // more than one filament in the sequence - and only once the plate is sliced, since
+        // the plan and its cost come from slicing. Applying overrides the computed plan and
+        // invalidates the gcode step alone, so nothing is re-sliced.
+        if (AcePlanDialog::worth_showing(fff_print())) {
+            AcePlanDialog dlg(this, fff_print());
+            if (dlg.ShowModal() == wxID_OK && dlg.result().applied) {
+                const size_t n = fff_print().config().filament_diameter.values.size();
+                const AceMmu::LoadingPlan chosen = dlg.as_plan(n);
+                if (chosen.feasible)
+                    fff_print().set_ace_plan_override(chosen);
+            }
+        }
     } catch (const Slic3r::PlaceholderParserError &ex) {
         // Show the error with monospaced font.
         show_error(this, ex.what(), true);

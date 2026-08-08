@@ -1048,6 +1048,14 @@ std::vector<size_t> Print::layers_sorted_for_object(float start, float end, std:
     return idx_of_object_sorted;
 };
 
+void Print::set_ace_plan_override(const AceMmu::LoadingPlan &plan)
+{
+    m_ace_plan = plan;
+    // The plan is consumed while writing gcode (tool remap, ACE_SWAP_HEAD arguments, the
+    // auto-load block), so only that step is stale.
+    this->invalidate_step(psGCodeExport);
+}
+
 StringObjectException Print::sequential_print_clearance_valid(const Print &print, Polygons *polygons, std::vector<std::pair<Polygon, float>>* height_polygons)
 {
     StringObjectException single_object_exception;
@@ -2566,6 +2574,7 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
         // (ace_head_capacity > 1 somewhere). An empty plan means a plain toolchanger
         // and everything downstream is a no-op.
         m_ace_plan = AceMmu::LoadingPlan{};
+        m_ace_sequence.clear();
         {
             const std::vector<int>& caps    = m_config.ace_head_capacity.values;
             const std::vector<int>& units   = m_config.ace_head_unit.values;
@@ -2587,6 +2596,9 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
                         seq.push_back(int(e));
                 const int n_filaments = int(m_config.filament_diameter.values.size());
                 m_ace_plan = AceMmu::plan_loading(heads, seq, n_filaments);
+                // Kept so the assignment dialog can price a user's own layout against the
+                // same sequence the planner optimised, rather than re-deriving it.
+                m_ace_sequence = std::move(seq);
             }
         }
         this->set_done(psWipeTower);

@@ -1005,6 +1005,12 @@ public:
     // multiACE filament -> (head, slot) plan; empty/infeasible when the printer has
     // no ACE-fed head (ace_head_capacity all 1) or the plate is single-filament.
     const AceMmu::LoadingPlan&  ace_plan() const { return m_ace_plan; }
+    // Replace the computed plan with one the user chose in the assignment dialog. Only the
+    // gcode step is invalidated: the layout decides which head each filament loads into, not
+    // any geometry, so re-slicing would be wasted work.
+    void                        set_ace_plan_override(const AceMmu::LoadingPlan &plan);
+    // Collapsed tool sequence the plan was optimised against; empty when there is no plan.
+    const std::vector<int>&     ace_sequence() const { return m_ace_sequence; }
 
     bool                        enable_timelapse_print() const;
 
@@ -1103,6 +1109,7 @@ private:
     PrintRegionConfig                       m_default_region_config;
     MixedFilamentManager                    m_mixed_filament_mgr;
     AceMmu::LoadingPlan                     m_ace_plan;
+    std::vector<int>                        m_ace_sequence;
     PrintObjectPtrs                         m_objects;
     PrintRegionPtrs                         m_print_regions;
     

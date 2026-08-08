@@ -96,6 +96,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/AceMmuDialog.cpp
     GUI/AceMmuDialog.hpp
     GUI/AceMmuPanel.cpp
+    GUI/AcePlanDialog.cpp
+    GUI/AcePlanDialog.hpp
     GUI/AceMmuPanel.hpp
     GUI/SMAccountPersist.cpp
     GUI/SMAccountPersist.hpp
