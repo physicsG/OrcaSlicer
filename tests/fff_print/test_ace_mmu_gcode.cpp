@@ -159,6 +159,10 @@ SCENARIO("multiACE plan reaches the exported gcode", "[.][ace_mmu_export]")
             THEN("the gcode carries the plan and per-change ace_* variables") {
                 // machine_start_gcode got the plan summary (one T<i>:H<h>S<s> per filament).
                 REQUIRE(gcode.find(";ACEPLAN T0:H") != std::string::npos);
+                // ...and the cost, so the gcode explains its own purge, plus whether the
+                // layout was the planner's or a hand-made one.
+                REQUIRE(gcode.find(" swaps:") != std::string::npos);
+                REQUIRE(gcode.find(" optimal:") != std::string::npos);
                 // change_filament_gcode got the variables on every change...
                 REQUIRE(gcode.find(";ACEVARS H") != std::string::npos);
                 // ...including at least one real ACE swap (two colours share the ACE

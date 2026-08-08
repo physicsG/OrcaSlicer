@@ -2748,6 +2748,12 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
                 plan_summary += "T" + std::to_string(i) + ":H" + std::to_string(m_ace_plan.head_of[i]) +
                                 "S" + std::to_string(m_ace_plan.slot_of[i]);
             }
+            // The cost, and whose choice it was. A print's swap count explains its purge
+            // long after the slicer session is gone, and "optimal:0" is the difference
+            // between the planner's answer and a layout the user picked by hand - worth
+            // knowing before blaming the optimiser for an expensive print.
+            plan_summary += " swaps:" + std::to_string(m_ace_plan.swaps) +
+                            " optimal:" + std::string(m_ace_plan.optimal ? "1" : "0");
         }
         this->placeholder_parser().set("ace_plan_head", plan_heads);
         this->placeholder_parser().set("ace_plan_slot", plan_slots);
