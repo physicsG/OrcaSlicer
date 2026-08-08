@@ -310,6 +310,11 @@ public:
     Model& model();
     const Print& fff_print() const;
     Print& fff_print();
+
+    // multiACE: show the filament assignment for the sliced plate and apply what the
+    // user picks. Returns true if a layout was applied. Safe to call when there is
+    // nothing to decide - it simply does nothing.
+    bool review_ace_assignment();
     const SLAPrint& sla_print() const;
     SLAPrint& sla_print();
 

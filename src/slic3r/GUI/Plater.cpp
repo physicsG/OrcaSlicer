@@ -14531,6 +14531,38 @@ void Plater::priv::on_process_completed(SlicingProcessCompletedEvent &evt)
     this->sidebar->show_sliced_info_sizer(evt.success());
 #endif
 
+    // multiACE: swap count is the cost the user cannot see anywhere else. The legend shows
+    // flushed volume per filament, but never says how many swaps produced it or that a
+    // different assignment would produce fewer - and by the time gcode exists it is too
+    // late to reconsider cheaply. Say it once, right after slicing, with a way to act on it.
+    if (evt.success()) {
+        const Print &print = q->fff_print();
+        const auto  &plan  = print.ace_plan();
+        if (plan.feasible && plan.swaps > 0 && AcePlanDialog::worth_showing(print)) {
+            // total_wipe_tower_filament is mm of filament and is 0 when purging happens
+            // inside the filament change rather than on a tower, so only mention it when
+            // slicing actually reported some.
+            const double purge_m = print.print_statistics().total_wipe_tower_filament / 1000.;
+            wxString text = format_wxstr(_L_PLURAL("multiACE: %1% filament swap on this plate.",
+                                                   "multiACE: %1% filament swaps on this plate.",
+                                                   plan.swaps),
+                                         plan.swaps);
+            if (purge_m > 0.05)
+                text += " " + format_wxstr(_L("Purging accounts for %1% m of filament."),
+                                           wxString::FromDouble(purge_m, 1));
+            notification_manager->push_notification(
+                NotificationType::CustomNotification,
+                NotificationManager::NotificationLevel::RegularNotificationLevel,
+                into_u8(text), _u8L("Review assignment"),
+                [](wxEvtHandler *) {
+                    // Deferred: the dialog is modal and this runs from the notification's
+                    // own render pass, where opening one would re-enter it.
+                    wxGetApp().CallAfter([]() { wxGetApp().plater()->review_ace_assignment(); });
+                    return true;
+                });
+        }
+    }
+
     // This updates the "Slice now", "Export G-code", "Arrange" buttons status.
     // Namely, it refreshes the "Out of print bed" property of all the ModelObjects, and it enables
     // the "Slice now" and "Export G-code" buttons based on their "out of bed" status.
@@ -19388,6 +19420,26 @@ void Plater::apply_cut_object_to_model(size_t obj_idx, const ModelObjectPtrs& ne
     // w.wait_for_idle();
 }
 
+bool Plater::review_ace_assignment()
+{
+    // Only when there is something to decide: an ACE-fed head, more than one filament in
+    // the sequence, and a sliced plate - the plan and its cost both come from slicing.
+    if (!AcePlanDialog::worth_showing(fff_print()))
+        return false;
+
+    AcePlanDialog dlg(this, fff_print());
+    if (dlg.ShowModal() != wxID_OK || !dlg.result().applied)
+        return false;
+
+    const size_t              n      = fff_print().config().filament_diameter.values.size();
+    const AceMmu::LoadingPlan chosen = dlg.as_plan(n);
+    if (!chosen.feasible)
+        return false;   // a layout that leaves a filament unplaced must never reach gcode
+
+    fff_print().set_ace_plan_override(chosen);
+    return true;
+}
+
 void Plater::export_gcode(bool prefer_removable)
 {
     if (p->model.objects.empty())
@@ -19411,19 +19463,9 @@ void Plater::export_gcode(bool prefer_removable)
         default_output_file = this->p->background_process.output_filepath_for_project("");
 
         // multiACE: let the user see and adjust which spool sits on which head before the
-        // gcode is written. Only when there is something to decide - an ACE-fed head and
-        // more than one filament in the sequence - and only once the plate is sliced, since
-        // the plan and its cost come from slicing. Applying overrides the computed plan and
-        // invalidates the gcode step alone, so nothing is re-sliced.
-        if (AcePlanDialog::worth_showing(fff_print())) {
-            AcePlanDialog dlg(this, fff_print());
-            if (dlg.ShowModal() == wxID_OK && dlg.result().applied) {
-                const size_t n = fff_print().config().filament_diameter.values.size();
-                const AceMmu::LoadingPlan chosen = dlg.as_plan(n);
-                if (chosen.feasible)
-                    fff_print().set_ace_plan_override(chosen);
-            }
-        }
+        // gcode is written. Same entry point as the post-slice notification, so both routes
+        // behave identically.
+        review_ace_assignment();
     } catch (const Slic3r::PlaceholderParserError &ex) {
         // Show the error with monospaced font.
         show_error(this, ex.what(), true);
