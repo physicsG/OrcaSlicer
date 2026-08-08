@@ -434,3 +434,30 @@ Newest first. One block per session: date, what changed (files), result, next.
   inherent to 7 colours all used every layer on 3 feeders + one 4-slot ACE head, not a
   planner failure — but it is exactly the number the assignment dialog must surface
   before the user commits.
+
+## Multimaterial tab crash — root cause
+
+Opening Printer settings › Multimaterial segfaulted as soon as the multiACE groups were
+added. Two rounds of reasoning blamed the wrong thing (`i_enum_open` on a vector option,
+then an option-less optgroup); both were reverted or disproved without fixing anything.
+A backtrace settled it — `.claude/tools/start.sh run`, then `trace`:
+
+    #3 Slic3r::GUI::OptionsGroup::activate_line(Line&)
+    #4 OptionsGroup::activate(...)  #5 Page::activate(...)  #7 TabPrinter::activate_selected_page
+
+`OptionsGroup.cpp:277` reads `line.get_options().front()` **unguarded**. The early return
+above it — the one path that tolerates a line with no options — is entered only when
+`line.full_width` is set:
+
+    if (line.full_width && (line.widget != nullptr || !line.get_extra_widgets().empty())) { ... return; }
+
+The Sync line carried a widget but no `full_width`, so it fell through to `.front()` on an
+empty vector: null deref at offset `0x30` (`ConfigOptionDef::gui_type`), matching `RAX=0x0`.
+
+**Rule: a line carrying only a widget must set `full_width = 1`.** It is not cosmetic;
+without it the page cannot be opened. The existing precedent (`build_preset_description_line`)
+sets it. `full_width` lines draw no label column, so a label must live inside the widget.
+
+Worth knowing: the same unguarded `.front()` is upstream OrcaSlicer/PrusaSlicer code, so any
+future widget-only line hits it. It is left as-is rather than patched — a guard there would
+silently skip lines instead of crashing, which trades a loud bug for a quiet one.

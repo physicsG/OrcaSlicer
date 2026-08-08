@@ -80,6 +80,9 @@
        font:inherit;font-size:13px;padding:0 34px 0 9px;}
   .ctl .unit{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:11.5px;color:var(--ink-faint);}
   .ctl.spin input{padding-left:24px;}
+  .ctl.sel input{padding-left:24px;}
+  .ctl .caret{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--ink-dim);font-size:11px;}
+  .ctl.dis .caret{opacity:.35;}
   .ctl .spinner{position:absolute;left:8px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:2px;color:var(--ink-dim);font-size:8px;line-height:6px;}
   .cb{width:15px;height:15px;border:1px solid var(--field-line);border-radius:3px;background:var(--field);display:grid;place-items:center;}
   .cb.on{background:var(--teal);border-color:var(--teal);}
@@ -98,6 +101,9 @@
       color:var(--ink);font:inherit;font-size:13px;padding:0 24px 0 9px;display:flex;align-items:center;position:relative;}
   .select::after{content:"\25BE";position:absolute;right:8px;color:var(--ink-dim);font-size:10px;}
   .ctl.wide{width:196px;} .ctl.wider{width:224px;}
+  .ctl.dis input{background:var(--field-disabled);color:var(--faint);}
+  .ctl.dis .spinner{opacity:.35;}
+  .row.dis .lbl{color:var(--faint);}
   .syncbar{display:flex;align-items:center;gap:10px;padding:8px 0 2px;flex-wrap:wrap;}
   .btn{height:26px;padding:0 12px;border:1px solid var(--field-line);border-radius:4px;background:var(--field);
       color:var(--ink);font-size:12.5px;display:inline-flex;align-items:center;gap:6px;}
@@ -137,29 +143,32 @@
   <div class="body" id="body"></div>
 </div>
 
-<p class="note"><b>Mockup &mdash; Printer settings &rsaquo; Multimaterial, proposed multiACE topology UX.</b>
-The <span class="swatch"></span> group is the addition; everything else is the page as it ships today.
-See <span class="k">docs/ace-mmu/12-topology-config-ux.md</span> for the full options and trade-offs.</p>
+<p class="note"><b>Mockup &mdash; Printer settings &rsaquo; Multimaterial, as actually implemented.</b>
+The <span class="swatch"></span> groups are the addition. This replaces an earlier, more ambitious version of this
+mockup; what changed and why is below, because the gap is worth knowing before anyone tries to close it.</p>
 
-<p class="note"><b>What changed and why.</b> The previous version asked for two raw numbers per toolhead, and all
-three of its problems bit us in practice. <b>(1)</b> <span class="k">slots = 1</span> was a magic value: it reads as
-a quantity but actually means <i>no ACE</i>. It is now spelled <b>&ldquo;Stock feeder&rdquo;</b>. <b>(2)</b> The unit
-was 0-based while every other surface calls the first unit <b>ACE&nbsp;1</b>. The UI that showed you the answer
-disagreed with the field that wanted it, which is exactly how a head wired to the first ACE got configured as
-<span class="k">1</span>. Labels are now 1-based everywhere, and they name the <b>ACE unit</b> &mdash; the hardware,
-which may be an ACE Pro, an ACE 2 Pro, and so on. <b>multiACE</b> is the layer that drives them, so it appears in
-the group header and nowhere else. <b>(3)</b> The unit field appeared on heads with no ACE, where it means nothing; the slot count
-now appears only when a head is actually ACE-fed.</p>
+<p class="note"><b>What ships.</b> A <b>Sync from printer</b> button reads the live topology
+(<span class="k">/multiace/api/state</span>) and reports any divergence, so the machine can be the source of truth
+without Orca depending on it &mdash; the values stay in the preset and slicing still works offline. Per toolhead,
+<b>Fed by</b> (stock feeder, or an ACE unit with its slot count) and the <b>ACE unit</b>, which is
+<b>greyed out on stock feeders</b> because it means nothing there. A live-but-meaningless field is exactly what
+invited setting the unit instead of the capacity.</p>
 
-<p class="note"><b>Consolidating the config.</b> The same topology currently lives in three places: multiACE&rsquo;s
-own page on the printer (authoritative &mdash; <span class="k">ACE_SET_HEAD_ACE</span> and friends persist it), the
-U1&nbsp;+&nbsp;multiACE device page (a live mirror), and here (hand-typed, and therefore able to disagree). The
-printer already reports all of it via <span class="k">/multiace/api/state</span>, so <b>Sync from printer</b> makes
-the machine the source of truth in one click, and Orca&rsquo;s copy becomes a cache that keeps offline slicing
-working. The second group shows the case that matters: when the preset and the machine disagree, it is stated
-plainly with a one-click fix &mdash; instead of silently emitting <span class="k">ACE=</span> pointing at the wrong
-unit. The end state (option&nbsp;D) moves authoring to the device page entirely, leaving this as a read-only
-summary.</p>
+<p class="note"><b>No magic numbers.</b> Both fields are labelled dropdowns, so the stored value is never shown raw:
+<span class="k">1</span> reads <b>Stock feeder</b>, <span class="k">4</span> reads <b>ACE &ndash; 4 slots</b>, and
+unit <span class="k">0</span> reads <b>ACE 1</b> &mdash; matching every other surface, which is what stops a head
+wired to the first ACE being configured as unit&nbsp;1. The lists stay open (<span class="k">i_enum_open</span>),
+so an unusual slot count can still be typed.</p>
+
+<p class="note"><b>This needed a fix to Orca itself, and it is worth knowing why.</b> An earlier version of this
+mockup said named choices were not renderable, because <span class="k">i_enum_open</span> was wired only for
+<i>scalar</i> options while these are <span class="k">coInts</span> (one value per toolhead). That was half right:
+the gui_type already builds a <span class="k">Choice</span> for any type, but five places in
+<span class="k">Field.cpp</span> special-cased <span class="k">coInt</span> without its vector twin. Four were
+cosmetic; the fifth, <span class="k">Choice::propagate_value</span>, let a <span class="k">coInts</span> value fall
+into the float branch, where <span class="k">boost::any_cast&lt;double&gt;</span> threw on focus change &mdash; the
+exception escaped the wx handler and killed the app. Adding the missing cases is what makes this page possible, and
+it makes labelled dropdowns available to every per-extruder integer setting, not just these two.</p>
 
 <script>
 "use strict";
@@ -170,18 +179,21 @@ var ICON = {
   param: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>',
   adv:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L4.8 8.3l5-.7z"/></svg>'
 };
-// value kinds: cb(on|off|dim) | txt | spin ; unit optional
+// value kinds: cb(on|off|dim) | txt | spin | sel ; unit optional
+// "sel" is a labelled i_enum_open dropdown. It renders raw numbers as names, which is what
+// the multiACE rows use - see the note below on what it took to make that work for vectors.
 function rows(list){
   return list.map(function(r){
     var ctl;
     if (r.k === "cb")
       ctl = '<span class="cb ' + (r.v === "on" ? "on" : (r.v === "dim" ? "off" : "")) + '"></span>';
     else
-      ctl = '<div class="ctl' + (r.k === "spin" ? " spin" : "") + '">' +
+      ctl = '<div class="ctl' + (r.k === "spin" ? " spin" : "") + (r.k === "sel" ? " sel" : "") + (r.dis ? " dis" : "") + '">' +
             (r.k === "spin" ? '<span class="spinner"><span>&#9650;</span><span>&#9660;</span></span>' : '') +
+            (r.k === "sel" ? '<span class="caret">&#8964;</span>' : '') +
             '<input type="text" value="' + r.v + '" readonly>' +
             (r.unit ? '<span class="unit">' + r.unit + '</span>' : '') + '</div>';
-    return '<div class="row' + (r.neu ? ' newrow' : '') + '">' +
+    return '<div class="row' + (r.neu ? ' newrow' : '') + (r.dis ? ' dis' : '') + '">' +
              '<div class="lbl' + (r.lbl.length > 34 ? ' multi' : '') + '">' + r.lbl + '</div>' + ctl +
              (r.revert ? '<span class="revert">&#8634;</span>' : '') +
            '</div>';
@@ -205,48 +217,37 @@ var html = section(ICON.semm, "Single extruder multi-material setup", [
   {lbl:"Manual Filament Change",         k:"cb", v:"dim"}
 ]);
 
-// Proposed (option C + A): say what it means, and let the machine fill it in.
-//  - "Fed by" replaces the magic 1 = no ACE
-//  - unit labels are 1-based (A1), matching the device page and multiACE's own UI
-//  - "Slots" only exists when the head is ACE-fed
-var fedRows = HEADS.map(function(h, i){
+// What Orca's settings framework can actually render today: one config field per
+// row, per toolhead, plus a widget line for the Sync button. Labelled dropdowns are
+// NOT available here - i_enum_open is only wired for scalar options (Choice::set_value
+// has no coInts case), and attaching it to these vector options segfaults the page.
+// The Sync row has no label gutter, and that is forced rather than chosen: a line
+// carrying only a widget must set Line::full_width, or OptionsGroup::activate_line
+// falls through to get_options().front() on an empty vector and segfaults as the page
+// activates. full_width lines draw no label column, so the explanation sits beside the
+// button. The sync result is reported in a dialog, not inline.
+var syncRow =
+  '<div class="syncbar">' +
+  '<span class="btn primary">Sync from printer</span>' +
+  '<span class="status" style="gap:0">Read which ACE unit feeds each toolhead from the printer.</span></div>';
+
+html += '<div class="sect"><div class="head newgrp"><span class="ico">' + ICON.ace + '</span>' +
+        '<span class="nm">multiACE</span></div><div class="rule"></div>' + syncRow +
+        '<div class="hint">Reads which ACE unit feeds each toolhead from the printer. ' +
+        'The values stay in the preset, so slicing still works with the printer switched off.</div></div>';
+
+HEADS.forEach(function(h, i){
   var ace = h.slots !== "1";
-  var r = '<div class="row newrow"><div class="lbl">Toolhead ' + (i + 1) + '</div>' +
-          '<div class="ctl wider"><div class="select">' +
-          (ace ? "ACE " + (parseInt(h.unit, 10) + 1) + (h.model ? " \u00b7 " + h.model : "")
-               : "Stock feeder") + '</div></div>';
-  if (ace)
-    r += '<div class="ctl" style="width:96px;margin-left:10px"><div class="select">' + h.slots + ' slots</div></div>';
-  r += '</div>';
-  return r;
-}).join("");
-
-html += '<div class="sect"><div class="head newgrp"><span class="ico">' + ICON.ace + '</span>' +
-        '<span class="nm">multiACE &mdash; how each toolhead is fed</span></div><div class="rule"></div>' +
-        '<div class="syncbar">' +
-          '<span class="btn primary">Sync from printer</span>' +
-          '<span class="status"><span class="dot"></span>Matches printer &middot; synced 2 min ago</span>' +
-        '</div>' +
-        fedRows +
-        '<div class="hint">&ldquo;Stock feeder&rdquo; means the head&rsquo;s own side feeder. ' +
-        'ACE units are numbered as they appear everywhere else &mdash; ACE&nbsp;1 is the first unit &mdash; ' +
-        'and each may be a different model.</div>' +
-        '</div>';
-
-// The same group when the preset and the machine disagree - the failure this design
-// is meant to make impossible to miss.
-html += '<div class="sect"><div class="head newgrp"><span class="ico">' + ICON.ace + '</span>' +
-        '<span class="nm">multiACE &mdash; how each toolhead is fed <span style="font-weight:400;color:var(--ink-faint)">(divergence example)</span></span>' +
-        '</div><div class="rule"></div>' +
-        '<div class="syncbar">' +
-          '<span class="btn">Sync from printer</span>' +
-          '<span class="status warn"><span class="dot"></span>Toolhead 4 is set to <b>ACE 2</b>, printer reports <b>ACE 1</b> &middot; ' +
-          '<span class="link">Use the printer&rsquo;s</span></span>' +
-        '</div>' +
-        '<div class="row newrow"><div class="lbl">Toolhead 4</div>' +
-        '<div class="ctl wider"><div class="select" style="border-color:var(--new)">ACE 2</div></div>' +
-        '<div class="ctl" style="width:96px;margin-left:10px"><div class="select">4 slots</div></div></div>' +
-        '</div>';
+  html += '<div class="sect"><div class="head newgrp"><span class="ico">' + ICON.ace + '</span>' +
+          '<span class="nm">Toolhead ' + (i + 1) + '</span></div><div class="rule"></div>' +
+          rows([
+            {lbl:"Fed by", k:"sel", v:(ace ? "ACE - " + h.slots + " slots" : "Stock feeder"), neu:true, revert:ace},
+            {lbl:"ACE unit", k:"sel", v:(ace ? "ACE " + (parseInt(h.unit, 10) + 1) : "None"), neu:true, dis:!ace}
+          ]) +
+          (ace ? '<div class="hint">4 slots on ACE 1 &mdash; an ACE 2 Pro, per the printer.</div>'
+               : '<div class="hint">Stock side feeder &mdash; the ACE unit reads <b>None</b> and is greyed out, because no ACE addresses this head.</div>') +
+          '</div>';
+});
 
 html += section(ICON.tower, "Wipe tower", [
   {lbl:"Purge in prime tower",                        k:"cb", v:"dim"},
@@ -352,7 +353,7 @@ document.getElementById("body").innerHTML = html;
       : "";
     var id = el.id ? "#" + el.id : "";
     var hint = tag + id + (id ? "" : cls);
-    // Walk up for a section title, so "4 slots" becomes "… in ‘multiACE — how each toolhead is fed’".
+    // Walk up for a section title, so "4 slots" becomes "… in ‘Toolhead 4’".
     var sec = el.closest(".sect, .acebox, .panel, .dialog, .win");
     var secName = "";
     if (sec) {
