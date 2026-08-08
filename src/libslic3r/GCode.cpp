@@ -2768,8 +2768,10 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
                                     ? print.config().ace_head_capacity.get_at(h) : 1;
                 if (cap <= 1)
                     continue;   // stock feeder: the ACE never touches it
+                // Clamp: "None" (-1) is a display value for stock feeders. This line is
+                // only reached for ACE-fed heads, but ACE=-1 would be silently wrong gcode.
                 const int unit = (h < int(print.config().ace_head_unit.values.size()))
-                                     ? print.config().ace_head_unit.get_at(h) : 0;
+                                     ? std::max(0, print.config().ace_head_unit.get_at(h)) : 0;
                 lines.push_back("ACE_SWAP_HEAD HEAD=" + std::to_string(h) + " ACE=" + std::to_string(unit) +
                                 " SLOT=0");
             }
@@ -8514,7 +8516,10 @@ void GCode::set_ace_toolchange_vars(DynamicConfig &config, unsigned int new_extr
     // Each ACE-fed head is wired to exactly one unit (ACE_SET_HEAD_ACE); ACE_SWAP_HEAD
     // requires it, so resolve it from the printer config rather than guessing.
     auto unit_of_head = [this](int h) {
-        return (h >= 0 && h < int(m_config.ace_head_unit.values.size())) ? m_config.ace_head_unit.get_at(h) : -1;
+        if (h < 0 || h >= int(m_config.ace_head_unit.values.size()))
+            return -1;
+        // "None" only means anything on a stock feeder, where this value is unused.
+        return std::max(0, m_config.ace_head_unit.get_at(h));
     };
     unit      = unit_of_head(head);
     prev_unit = unit_of_head(prev_head);

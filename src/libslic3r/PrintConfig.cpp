@@ -3979,22 +3979,54 @@ void PrintConfigDef::init_fff_params()
     def->set_default_value(new ConfigOptionFloats { 0.4 });
 
     def = this->add("ace_head_unit", coInts);
-    def->label = L("multiACE unit feeding this head (0-based)");
-    def->tooltip = L("Which multiACE unit feeds this toolhead (0-based). Each ACE-fed head is wired to "
-                     "exactly one unit and can only load or swap that unit's slots. Ignored when the head "
-                     "uses its stock feeder (capacity 1).");
+    // Stored 0-based because that is the ACE= argument the firmware takes, but never shown
+    // that way: every other surface calls the first unit "ACE 1". Closed list - a unit that
+    // does not exist is not a value worth being able to type.
+    def->gui_type = ConfigOptionDef::GUIType::i_enum_open;
+    def->enum_values.push_back("-1");
+    def->enum_values.push_back("0");
+    def->enum_values.push_back("1");
+    def->enum_values.push_back("2");
+    def->enum_values.push_back("3");
+    def->enum_labels.push_back(L("None"));
+    def->enum_labels.push_back(L("ACE 1"));
+    def->enum_labels.push_back(L("ACE 2"));
+    def->enum_labels.push_back(L("ACE 3"));
+    def->enum_labels.push_back(L("ACE 4"));
+    def->label = L("ACE unit");
+    def->tooltip = L("Which ACE unit feeds this toolhead. Each ACE-fed head is wired to exactly one unit "
+                     "(ACE_SET_HEAD_ACE on the printer), and this value becomes the ACE= argument of every "
+                     "filament swap, so a wrong choice addresses the wrong hardware. Units are numbered as "
+                     "they appear on the device page: ACE 1 is the first unit. \"None\" is what a stock "
+                     "feeder shows, since no ACE addresses it.");
     def->mode = comAdvanced;
-    def->min = 0;
-    def->set_default_value(new ConfigOptionInts { 0 });
+    def->min = -1;
+    // None by default: the matching default for ace_head_capacity is a stock feeder, and
+    // showing "ACE 1" there claims a unit that is not feeding anything.
+    def->set_default_value(new ConfigOptionInts { -1 });
 
     def = this->add("ace_head_capacity", coInts);
-    def->label = L("multiACE slots on this head (1 = stock feeder)");
-    def->tooltip = L("Spool positions available to each toolhead, and the switch that enables multiACE "
-                     "planning: leave it at 1 for a stock side feeder, or set it to the number of ACE "
-                     "slots feeding this head (e.g. 4). Planning stays off while every head is 1. "
-                     "value means the head is fed by a multiACE with that many slots (sum the slots when "
-                     "several ACE units are combined onto one head). Used to plan which filament is loaded "
-                     "where so mid-print spool swaps are minimized.");
+    // Labelled choices rather than a bare number: "1" meaning "no ACE at all" is exactly
+    // the kind of magic value that got a head wired to the first ACE configured as unit 1.
+    // i_enum_open keeps it open, so an unusual slot count can still be typed. Vector
+    // support for this gui_type was added in Field.cpp (Choice set/get + parsing).
+    def->gui_type = ConfigOptionDef::GUIType::i_enum_open;
+    def->enum_values.push_back("1");
+    def->enum_values.push_back("2");
+    def->enum_values.push_back("4");
+    def->enum_values.push_back("6");
+    def->enum_values.push_back("8");
+    def->enum_labels.push_back(L("Stock feeder"));
+    def->enum_labels.push_back(L("ACE - 2 slots"));
+    def->enum_labels.push_back(L("ACE - 4 slots"));
+    def->enum_labels.push_back(L("ACE - 6 slots"));
+    def->enum_labels.push_back(L("ACE - 8 slots"));
+    def->label = L("Fed by");
+    def->tooltip = L("How this toolhead gets filament, and the switch that enables multiACE planning. "
+                     "\"Stock feeder\" is the head's own side feeder - one spool, no ACE. Otherwise pick the "
+                     "number of slots the ACE unit presents to this head (sum them when several units are "
+                     "combined onto one head). While every head is a stock feeder, planning stays off and "
+                     "slicing is unchanged.");
     def->mode = comAdvanced;
     def->min = 1;
     def->set_default_value(new ConfigOptionInts { 1 });

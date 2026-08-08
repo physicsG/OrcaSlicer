@@ -36,6 +36,7 @@
 #include <wx/wupdlock.h>
 
 #include "GUI_App.hpp"
+#include "AceMmuProvider.hpp"
 #include "GUI_ObjectList.hpp"
 #include "Plater.hpp"
 #include "MainFrame.hpp"
@@ -4644,6 +4645,75 @@ PageShp TabPrinter::build_kinematics_page()
  * but "Motion ability" and "Single extruder MM setup" too
  * (These pages can changes according to the another values of a current preset)
  * */
+// Read the multiACE topology from the connected printer and write it into the preset.
+// The machine is authoritative (ACE_SET_HEAD_ACE and friends persist it there); the
+// preset is a cache so slicing still works offline. Divergence is reported rather than
+// silently corrected, because a wrong unit becomes a wrong ACE= argument in the gcode.
+void TabPrinter::sync_ace_topology()
+{
+    const std::string host = AceMmuProvider::resolve_connected_host();
+    if (host.empty()) {
+        MessageDialog(parent(), _L("No printer is connected, so its multiACE topology cannot be read.\n\n"
+                                   "Connect the printer, or set \"Fed by\" for each toolhead by hand."),
+                      _L("Sync from printer"), wxICON_INFORMATION | wxOK).ShowModal();
+        return;
+    }
+
+    AceMmuProvider prov(host);
+    if (!prov.fetch_once()) {
+        MessageDialog(parent(), wxString::Format(_L("Could not read the multiACE state from %s."), host),
+                      _L("Sync from printer"), wxICON_WARNING | wxOK).ShowModal();
+        return;
+    }
+    const AceMmu::AceSnapshot snap = prov.snapshot();
+
+    std::vector<int> caps, units;
+    const auto *cur_caps  = m_config->option<ConfigOptionInts>("ace_head_capacity");
+    const auto *cur_units = m_config->option<ConfigOptionInts>("ace_head_unit");
+    wxString changes;
+    for (size_t h = 0; h < m_extruders_count; ++h) {
+        int cap = 1, unit = -1;   // no ACE reported for this head means None
+        for (const AceMmu::AceToolhead &th : snap.toolheads) {
+            if (size_t(th.idx) != h)
+                continue;
+            if (!th.feeder && th.ace.has_value()) {
+                unit = *th.ace;
+                cap  = AceMmu::SLOT_COUNT;
+                for (const AceMmu::AceUnit &u : snap.units)
+                    if (u.idx == unit && !u.slots.empty())
+                        cap = int(u.slots.size());
+            }
+            break;
+        }
+        const int was_cap  = (cur_caps  && h < cur_caps->values.size())  ? cur_caps->values[h]  : 1;
+        const int was_unit = (cur_units && h < cur_units->values.size()) ? cur_units->values[h] : -1;
+        if (was_cap != cap || (cap > 1 && was_unit != unit))
+            changes += wxString::Format(_L("  Toolhead %d: %s -> %s\n"), int(h) + 1,
+                                        was_cap <= 1 ? _L("stock feeder")
+                                                     : wxString::Format(_L("ACE %d, %d slots"), was_unit + 1, was_cap),
+                                        cap <= 1 ? _L("stock feeder")
+                                                 : wxString::Format(_L("ACE %d, %d slots"), unit + 1, cap));
+        caps.push_back(cap);
+        units.push_back(unit);
+    }
+
+    if (changes.IsEmpty()) {
+        MessageDialog(parent(), _L("The preset already matches the printer."), _L("Sync from printer"),
+                      wxICON_INFORMATION | wxOK).ShowModal();
+        return;
+    }
+
+    DynamicPrintConfig new_conf = *m_config;
+    new_conf.set_key_value("ace_head_capacity", new ConfigOptionInts(caps));
+    new_conf.set_key_value("ace_head_unit", new ConfigOptionInts(units));
+    load_config(new_conf);
+    update_dirty();
+    toggle_options();
+
+    MessageDialog(parent(), _L("Read from the printer:\n\n") + changes, _L("Sync from printer"),
+                  wxICON_INFORMATION | wxOK).ShowModal();
+}
+
 void TabPrinter::build_unregular_pages(bool from_initial_build/* = false*/)
 {
     size_t		n_before_extruders = 2;			//	Count of pages before Extruder pages
@@ -4695,16 +4765,58 @@ if (is_marlin_flavor)
         Option option(def, "extruders_count");
         optgroup->append_single_option_line(option);
 
+        // multiACE: the printer already knows its own topology and reports it, so offer
+        // to read it rather than making the user retype it. Keeping the values in the
+        // preset is what lets slicing work with the printer switched off.
+        {
+            auto ace_head_og = page->new_optgroup(L("multiACE"), "param_multi_material");
+            // A line carrying only a widget MUST set full_width: OptionsGroup::activate_line
+            // takes an early return for those, and everything reaching the code below it is
+            // assumed to have options - it reads get_options().front() unguarded. Without
+            // this flag the line falls through and segfaults as the page activates. The
+            // label therefore lives in the widget itself, since full_width lines draw none.
+            Line ace_line = Line{ "", "" };
+            ace_line.full_width = 1;
+            ace_line.append_widget([this](wxWindow *parent) {
+                auto *btn = new Button(parent, _L("Sync from printer"));
+                btn->SetStyle(ButtonStyle::Regular, ButtonType::Parameter);
+                btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) { this->sync_ace_topology(); });
+
+                // Label takes the font in the constructor. A wxStaticText with SetFont()
+                // applied afterwards keeps the best size cached from the old font, and the
+                // sizer then allocates it too little width - the text renders clipped.
+                auto *text = new Label(parent, Label::Body_14,
+                                       _L("Read which ACE unit feeds each toolhead."));
+                wxGetApp().UpdateDarkUI(text);
+
+                auto *sizer = new wxBoxSizer(wxHORIZONTAL);
+                sizer->Add(btn, 0, wxALIGN_CENTER_VERTICAL);
+                sizer->Add(text, 1, wxALIGN_CENTER_VERTICAL | wxLEFT, 10);
+                return sizer;
+            });
+            ace_head_og->append_line(ace_line);
+        }
+
         // multiACE: per-toolhead spool topology. Grouped per head so it is obvious
         // which source feeds which toolhead - these two values used to sit in each
         // Extruder page's Size group, where a "unit feeding this head" field showed up
         // even for heads with no ACE at all. Rows are built for the extruder count
         // known at page creation; changing that count needs a restart to re-lay them.
         for (size_t head = 0; head < m_extruders_count; ++head) {
-            auto ace_og = page->new_optgroup(wxString::Format(_L("multiACE - Toolhead %d"), int(head) + 1),
+            // "multiACE" names the layer and belongs on the section header only - these
+            // are toolheads, each fed by a stock feeder or by an ACE unit.
+            auto ace_og = page->new_optgroup(wxString::Format(_L("Toolhead %d"), int(head) + 1),
                                              "param_multi_material");
             ace_og->append_single_option_line("ace_head_capacity", "", head);
             ace_og->append_single_option_line("ace_head_unit", "", head);
+            // Re-evaluate the greyed-out ACE unit field when "spool positions" changes.
+            // Deliberately no page rebuild here: rebuilding from inside a field's own
+            // change event destroys the field mid-event.
+            ace_og->m_on_change = [this](const t_config_option_key &opt_key, boost::any value) {
+                update_dirty();
+                on_value_change(opt_key, value);
+                toggle_options();
+            };
         }
 
         // Orca: rebuild missed extruder pages
@@ -5083,6 +5195,29 @@ void TabPrinter::toggle_options()
                  "high_current_on_filament_swap",
              })
             toggle_option(el, !is_BBL_printer);
+
+        // multiACE: "ACE unit" is meaningless on a stock feeder, so grey it out rather
+        // than leaving a field that invites being set (which is how a head wired to the
+        // first ACE ended up configured as unit 1).
+        const auto *caps  = m_config->option<ConfigOptionInts>("ace_head_capacity");
+        const auto *units = m_config->option<ConfigOptionInts>("ace_head_unit");
+        std::vector<int> want = units ? units->values : std::vector<int>{};
+        bool coerce = false;
+        for (size_t head = 0; head < m_extruders_count; ++head) {
+            const bool ace_fed = caps && head < caps->values.size() && caps->values[head] > 1;
+            toggle_option("ace_head_unit", ace_fed, int(head));
+            // A stock feeder is addressed by no ACE, so it reads "None"; a head that has
+            // just become ACE-fed needs a real unit rather than keeping None.
+            if (head < want.size()) {
+                const int v = ace_fed ? std::max(0, want[head]) : -1;
+                if (want[head] != v) { want[head] = v; coerce = true; }
+            }
+        }
+        if (coerce) {
+            DynamicPrintConfig new_conf = *m_config;
+            new_conf.set_key_value("ace_head_unit", new ConfigOptionInts(want));
+            load_config(new_conf);
+        }
 
         auto bSEMM = m_config->opt_bool("single_extruder_multi_material");
         if (!bSEMM && m_config->opt_bool("manual_filament_change")) {
