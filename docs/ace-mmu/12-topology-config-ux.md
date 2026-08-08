@@ -71,7 +71,7 @@ No editable fields. Orca fetches topology at connect/slice time and displays it.
 Replace the two numbers with, per toolhead, one **"Fed by"** control:
 
 ```
-Toolhead 4    Fed by  [ multiACE A1 ▾ ]   Slots [ 4 ▾ ]
+Toolhead 4    Fed by  [ ACE 1 · ACE Pro ▾ ]   Slots [ 4 ▾ ]
 Toolhead 1    Fed by  [ Stock feeder ▾ ]
 ```
 
@@ -101,7 +101,7 @@ read-only summary plus *"Configure on the U1 + multiACE page →"*.
 **C + A now, D next.**
 
 1. **C** fixes the vocabulary — the biggest win for the smallest change, and it makes
-   the numbering consistent with every other surface (A1, not 0).
+   the numbering consistent with every other surface (ACE 1, not 0).
 2. **A** makes the machine the source of truth in one click, and surfaces divergence
    instead of letting it become a bad `ACE=`.
 3. **D** later folds authoring into the device page, leaving Printer settings as a
