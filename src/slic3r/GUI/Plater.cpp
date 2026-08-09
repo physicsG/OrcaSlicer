@@ -9288,6 +9288,11 @@ struct Plater::priv
     bool m_slice_all{false};
     bool m_is_slicing {false};
     bool m_is_publishing {false};
+    // multiACE: an applied filament assignment only reaches the file through the gcode
+    // writer, so an export that changed the plan has to wait for the rewrite instead of
+    // packaging what the previous slice left on disk. Set before the restart, run once on
+    // completion, dropped on cancel or error.
+    std::function<void()> ace_after_reslice;
     int m_is_RightClickInLeftUI{-1};
     int m_cur_slice_plate;
     //BBS: m_slice_all in .gcode.3mf file case, set true when slice all
@@ -14551,9 +14556,12 @@ void Plater::priv::on_process_completed(SlicingProcessCompletedEvent &evt)
             if (purge_m > 0.05)
                 text += " " + format_wxstr(_L("Purging accounts for %1% m of filament."),
                                            wxString::FromDouble(purge_m, 1));
+            // Important, not Regular: the regular 10s fade proved far too quick to read a
+            // swap count and decide to act on it - a screenshot loop sampling every 2s caught
+            // it in a single frame. This level gives 20s, the longest fade-out on offer.
             notification_manager->push_notification(
                 NotificationType::CustomNotification,
-                NotificationManager::NotificationLevel::RegularNotificationLevel,
+                NotificationManager::NotificationLevel::ImportantNotificationLevel,
                 into_u8(text), _u8L("Review assignment"),
                 [](wxEvtHandler *) {
                     // Deferred: the dialog is modal and this runs from the notification's
@@ -14692,6 +14700,17 @@ void Plater::priv::on_process_completed(SlicingProcessCompletedEvent &evt)
             }
         }
     }
+
+    // multiACE: resume an export that was waiting for the gcode to be rewritten with the
+    // assignment the user applied. Taken unconditionally so a cancelled or failed rewrite
+    // cannot leave it armed for an unrelated slice; run only when the rewrite succeeded.
+    if (ace_after_reslice) {
+        std::function<void()> resume;
+        resume.swap(ace_after_reslice);
+        if (is_finished && !has_error && !evt.cancelled())
+            wxGetApp().CallAfter(resume);
+    }
+
     BOOST_LOG_TRIVIAL(debug) << __FUNCTION__ << boost::format(", exit.");
 }
 
@@ -19590,7 +19609,7 @@ void Plater::export_gcode_3mf(bool export_all)
     // multiACE: same review as the plain gcode export. This is the path the toolbar,
     // Ctrl+G and the menu all take, so the hook has to be here too - putting it only on
     // Plater::export_gcode meant the dialog never appeared in the actual UI.
-    review_ace_assignment();
+    const bool ace_plan_changed = review_ace_assignment();
 
     default_output_file.replace_extension(".gcode.3mf");
     default_output_file = fs::path(Slic3r::fold_utf8_to_ascii(default_output_file.string()));
@@ -19615,18 +19634,23 @@ void Plater::export_gcode_3mf(bool export_all)
         }
     }
 
-    if (!output_path.empty()) {
+    if (output_path.empty())
+        return;
+
+    // This export packages the gcode the last slice wrote; it does not produce one. Kept as
+    // a closure so it can run now, or after a rewrite when the plan changed under it.
+    auto package = [this, export_all](const fs::path &out_path) {
         //BBS do not set to removable media path
         bool path_on_removable_media = false;
         p->notification_manager->new_export_began(path_on_removable_media);
         p->exporting_status = path_on_removable_media ? ExportingStatus::EXPORTING_TO_REMOVABLE : ExportingStatus::EXPORTING_TO_LOCAL;
         //BBS do not save last output path
-        p->last_output_path = output_path.string();
-        p->last_output_dir_path = output_path.parent_path().string();
+        p->last_output_path = out_path.string();
+        p->last_output_dir_path = out_path.parent_path().string();
         int plate_idx = get_partplate_list().get_curr_plate_index();
         if (export_all)
             plate_idx = PLATE_ALL_IDX;
-        export_3mf(output_path, SaveStrategy::Silence | SaveStrategy::SplitModel | SaveStrategy::WithGcode | SaveStrategy::SkipModel, plate_idx); // BBS: silence
+        export_3mf(out_path, SaveStrategy::Silence | SaveStrategy::SplitModel | SaveStrategy::WithGcode | SaveStrategy::SkipModel, plate_idx); // BBS: silence
 
         RemovableDriveManager& removable_drive_manager = *wxGetApp().removable_drive_manager();
 
@@ -19635,9 +19659,23 @@ void Plater::export_gcode_3mf(bool export_all)
 
 
         // update last output dir
-        appconfig.update_last_output_dir(output_path.parent_path().string(), false);
-        p->notification_manager->push_exporting_finished_notification(output_path.string(), p->last_output_dir_path, on_removable);
+        wxGetApp().app_config->update_last_output_dir(out_path.parent_path().string(), false);
+        p->notification_manager->push_exporting_finished_notification(out_path.string(), p->last_output_dir_path, on_removable);
+    };
+
+    // multiACE: applying an assignment changes only the gcode, so the file on disk is now
+    // the layout the user rejected. Rewrite it first - packaging immediately is what made
+    // Apply to plate look like it did nothing.
+    if (ace_plan_changed) {
+        p->ace_after_reslice = [package, output_path]() { package(output_path); };
+        if (p->restart_background_process(priv::UPDATE_BACKGROUND_PROCESS_FORCE_RESTART))
+            return;   // packaging resumes from on_process_completed
+        // Nothing will complete, so nothing would resume: package what is there rather
+        // than dropping the export on the floor.
+        p->ace_after_reslice = nullptr;
+        BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": could not restart slicing for the applied multiACE plan";
     }
+    package(output_path);
 }
 
 void Plater::send_gcode_finish(wxString name)
@@ -20805,48 +20843,69 @@ void Plater::send_gcode_legacy(int plate_idx, Export3mfProgressFn proFn, bool us
             show_error(this, ex.what(), false);
             return;
         }
-        default_output_file = prepare_upload_filename_for_dialog(std::move(default_output_file));
+        // multiACE: the same review the export paths run. Sending straight to the machine is
+        // the most common route to a print, and it used to skip the decision entirely - the
+        // plan and its purge cost were settled without the user ever being shown them.
+        const bool ace_plan_changed = review_ace_assignment();
 
-        // get file path
-        auto file_path = get_partplate_list().get_curr_plate()->get_tmp_gcode_path();
-        upload_job.upload_data.source_path = file_path;
-        upload_job.upload_data.upload_path = default_output_file;
+        // What is uploaded is the gcode the last slice left in the plate's temp file, so an
+        // applied assignment only reaches the printer once that file has been rewritten.
+        auto send = [this, default_output_file, prepare_upload_filename_for_dialog]() mutable {
+            default_output_file = prepare_upload_filename_for_dialog(std::move(default_output_file));
 
-        // upload or print
-        // Repetier specific: Query the server for the list of file groups.
-        wxArrayString groups;
+            PrintHostJob upload_job;
+            // get file path
+            auto file_path = get_partplate_list().get_curr_plate()->get_tmp_gcode_path();
+            upload_job.upload_data.source_path = file_path;
+            upload_job.upload_data.upload_path = default_output_file;
 
-        // PrusaLink specific: Query the server for the list of file groups.
-        wxArrayString storage_paths;
-        wxArrayString storage_names;
+            // upload or print
+            // Repetier specific: Query the server for the list of file groups.
+            wxArrayString groups;
 
-        auto                config = get_app_config();
-        PrintHostSendDialog dlg(default_output_file, PrintHostPostUploadAction::StartPrint, groups, storage_paths, storage_names,
-                                config->get_bool("open_device_tab_post_upload"));
-        dlg.init();
-        if (dlg.ShowModal() == wxID_CANCEL) {
-            return;
+            // PrusaLink specific: Query the server for the list of file groups.
+            wxArrayString storage_paths;
+            wxArrayString storage_names;
+
+            auto                config = get_app_config();
+            PrintHostSendDialog dlg(default_output_file, PrintHostPostUploadAction::StartPrint, groups, storage_paths, storage_names,
+                                    config->get_bool("open_device_tab_post_upload"));
+            dlg.init();
+            if (dlg.ShowModal() == wxID_CANCEL) {
+                return;
+            }
+            config->set_bool("open_device_tab_post_upload", dlg.switch_to_device_tab());
+            upload_job.switch_to_device_tab    = dlg.switch_to_device_tab();
+            upload_job.upload_data.upload_path = dlg.filename();
+            upload_job.upload_data.post_action = dlg.post_action();
+            upload_job.upload_data.group       = dlg.group();
+            upload_job.upload_data.storage     = dlg.storage();
+
+
+            WebPreprintDialog* dialog = new WebPreprintDialog();
+            dialog->set_swtich_to_device(dlg.switch_to_device_tab());
+            dialog->set_send_page(dlg.post_action() == PrintHostPostUploadAction::None);
+            dialog->set_gcode_file_name(upload_job.upload_data.source_path.string());
+            dialog->set_display_file_name(upload_job.upload_data.upload_path.string());
+            dialog->run();
+
+            if (dialog->is_finish()) {
+                wxGetApp().mainframe->select_tab(MainFrame::TabPosition::tpMonitor);
+            }
+
+            delete dialog;
+        };
+
+        if (ace_plan_changed) {
+            p->ace_after_reslice = send;
+            if (p->restart_background_process(priv::UPDATE_BACKGROUND_PROCESS_FORCE_RESTART))
+                return;   // sending resumes from on_process_completed
+            // Nothing will complete, so nothing would resume. Send what is there rather than
+            // silently doing nothing, the same fallback the sliced-file export takes.
+            p->ace_after_reslice = nullptr;
+            BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": could not restart slicing for the applied multiACE plan";
         }
-        config->set_bool("open_device_tab_post_upload", dlg.switch_to_device_tab());
-        upload_job.switch_to_device_tab    = dlg.switch_to_device_tab();
-        upload_job.upload_data.upload_path = dlg.filename();
-        upload_job.upload_data.post_action = dlg.post_action();
-        upload_job.upload_data.group       = dlg.group();
-        upload_job.upload_data.storage     = dlg.storage();
-
-
-        WebPreprintDialog* dialog = new WebPreprintDialog();
-        dialog->set_swtich_to_device(dlg.switch_to_device_tab());
-        dialog->set_send_page(dlg.post_action() == PrintHostPostUploadAction::None);
-        dialog->set_gcode_file_name(upload_job.upload_data.source_path.string());
-        dialog->set_display_file_name(upload_job.upload_data.upload_path.string());
-        bool res = dialog->run();
-
-        if (dialog->is_finish()) {
-            wxGetApp().mainframe->select_tab(MainFrame::TabPosition::tpMonitor);
-        }
-
-        delete dialog;
+        send();
 
         return;
     }

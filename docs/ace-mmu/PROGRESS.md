@@ -6,22 +6,17 @@
 
 ## Snapshot
 
-- **Branch:** `feat/add-ace-mmu-support`
-- **Current phase:** Phase 0–2 ✅. **Phase 3 (native UI) in progress:** Prepare
-  "Sync from AMS" wired for the U1; a native ACE MMU page (dialog) added.
-- **Overall status:** 🟢 Native path working. The U1 Device tab is a Flutter webview
-  (`PrinterWebView`+SSWCP, no in-repo source) so ACE can't render there; we surface it
-  in the **native** Prepare tab instead. Done this session: (a) Prepare "Sync from AMS"
-  button shown for the U1 → `MachineObject::sync_ace_ams()` fetches multiACE → amsList
-  → filament list; (b) native `AceMmuDialog` (unit humidity/temp/protocol/mode, four
-  slot cards with RFID/override chips + hex, toolhead strip, live **Refresh**) opened
-  from an "ACE" button in Prepare; (c) parser extended with `toolheads[]`/`ace_head`;
-  (d) interactive HTML mockup at [device-page-mockup.html](device-page-mockup.html).
-- **Next action:** validate on the printer (open Prepare → **ACE** / **Sync from AMS**
-  for the connected U1). Then Phase 3b = **Option B**: promote the dialog into a proper
-  native Device *page/tab* styled after Bambu's AMS UI (see 05). Later: `setting_id`
-  preset auto-match; Preview per-slot labels; write actions (Dry/load) — deferred
-  (untested printer commands).
+- **Branch:** `feat/ace-mmu-slicing` (earlier UI work landed on `feat/add-ace-mmu-support`)
+- **Where we are:** read **[13-roadmap.md](13-roadmap.md)** first — it is the front-to-back
+  plan and the authority on what is done vs missing. Roadmap phases 1–5 are all **done and
+  observed**: topology config, planner, gcode emission, assignment dialog (on export *and*
+  print, with Apply reaching the file), and cost visibility.
+- **Overall status:** 🟢 End to end on the real 7-colour cube. The U1 Device tab is a Flutter
+  webview (`PrinterWebView`+SSWCP, no in-repo source) so ACE can't render there; the native
+  "U1 + multiACE" tab and the Prepare/Preview tabs carry the UI instead.
+- **Next action:** roadmap item 4 — **persistence** (an applied layout lives on one `Print`
+  and is lost on re-slice or reopen; it needs to ride in the 3MF alongside the plate). Then
+  reconciliation with what is actually loaded in the ACE, then infeasible plates.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
   - `libslic3r_tests "[ace_mmu]"` → 8 cases / 67 assertions pass (incl. live fixture).
     Rebuild: `cmake --build build --config Release --target libslic3r_tests -j 8`.
@@ -93,6 +88,34 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-09 — Apply to plate reaches the gcode, on export *and* print
+- **The previous diagnosis was wrong.** Building the committed `m_ace_plan_user` fix
+  and re-running the manual test still wrote `swaps:300 optimal:1`. The override was
+  never being discarded by recomputation: `Plater::export_gcode_3mf` **packages the
+  gcode the last slice left in the plate's temp file** (`store_to_3mf_structure` reads
+  `m_gcode_result->filename`) and never regenerates it. Proved by exercising the other
+  route — File › Export › Export G-code, which re-exports through the background
+  process, wrote `swaps:349 optimal:0` with 350 `ACE_SWAP_HEAD` from the very same
+  `Print`. The committed fix is still needed; it just was not sufficient.
+- Changed (`Plater.cpp`): new one-shot `priv::ace_after_reslice`, set before
+  `restart_background_process(FORCE_RESTART)` and run from `on_process_completed`
+  (taken unconditionally so a cancelled rewrite cannot leave it armed; run only on
+  success). `export_gcode_3mf`'s tail became a `package` closure that runs now, or
+  after the rewrite. `send_gcode_legacy`'s U1 branch got the same treatment plus the
+  review call it never had.
+- **Print path (roadmap gap A) closed:** the assignment dialog now opens on Print,
+  and the file staged for upload carried `swaps:349 optimal:0` / 350 `ACE_SWAP_HEAD`.
+- **Notification settled:** it *does* fire — a 2 s screenshot loop caught it in exactly
+  one frame, which is what "never observed" was. Raised to
+  `ImportantNotificationLevel` (20 s instead of 10 s); confirmed legible for ~14 s and
+  correctly reading 349 after an applied layout.
+- Result: build green, all three verified headlessly on `Test_Cube_U1_multiACE.3mf`.
+  Exports checked by unzipping the `.gcode.3mf` and counting macros, not by reading code.
+- Next: roadmap item 4, **persistence** (D) — an applied layout still lives on one
+  `Print` and is lost on re-slice or reopen.
+- New rule worth keeping: any route that uploads or packages `get_tmp_gcode_path()`
+  needs rewrite-then-resume. Multi-plate export (G) still lacks it.
 
 ### 2026-08-06 (cont.) — Sync notice fixed, page styled, FM-split PLAN
 - Fixed the "unknown filaments mapped to generic preset" notice
@@ -482,33 +505,4 @@ Slicing `Test_Cube_U1_multiACE.3mf` on `Snapmaker U1 (0.4 nozzle) - multiACE`
 - assignment dialog opens on export with live topology, and Manual mode re-prices
   (300 → 349 swaps, 40.4 → 47.0 g) against "Auto would need 300"
 
-### The one open defect
-
-**Apply to plate does not reach the gcode.** Applying a 349-swap manual layout and
-exporting wrote the 300-swap auto plan: exporting re-processes, which recomputed
-and discarded the override.
-
-A fix is **committed but never built or run** — the build was still going when the
-session ended, and the status page reports the binary as older than `Print.cpp`.
-`Print` now keeps the applied layout in `m_ace_plan_user`, separate from the
-computed `m_ace_plan`, and re-applies it after planning when the filament count
-still matches.
-
-**To continue, in order:**
-
-1. `cmake --build build --config Release --target snapmaker-orca -j "$(nproc)"`
-   then confirm `./.claude/tools/start.sh status` says the binary is newer than
-   every source file. It is stale right now.
-2. Re-run the manual test: `./.claude/tools/start.sh headless ~/proj/models/Test_Cube_U1_multiACE.3mf`,
-   slice (click 1394,99), Ctrl+G, click **Manual** (845,207), click a feeder spool
-   then an ACE slot to swap them, **Apply to plate** (1170,799), save, then unzip
-   the `.gcode.3mf` and check the header. Success is `optimal:0` and the swap count
-   the dialog showed — currently it writes `optimal:1` and 300.
-3. If it now holds, the next items are the roadmap's order: notification lifetime,
-   then the **print path** (the dialog is on export only), then persistence.
-
-### Never observed
-
-The post-slice notification. It is built and reads the same sliced `Print` as the
-dialog, but auto-dismisses faster than a screenshot loop, so it is unknown whether
-it fires at all. Do not assume either way.
+### The one open defect — **resolved 2026-08-09**, see the session log below.

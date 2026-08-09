@@ -54,36 +54,64 @@ collapsed sequence − 1), not by pairwise adjacency.
 - done — initial auto-load block before the prime line
 - done — `; multiACE plan: … swaps:300 optimal:1` header
 
-## Phase 4 — Assignment dialog (done, with one gap)
+## Phase 4 — Assignment dialog (done)
 
-Opens on export when the plate has an ACE-fed head and more than one filament.
+Opens on export **and on print** when the plate has an ACE-fed head and more than
+one filament.
 
 - done — live topology header, spools placed per the computed plan
 - done — Manual mode re-prices as you move spools (300 → 349 swaps, 40.4 → 47.0 g)
   with "Auto would need 300" alongside
 - done — waste derived from what slicing actually flushed
-- **gap** — **Apply to plate did not reach the gcode.** Exporting after applying a
-  349-swap manual layout wrote the 300-swap auto plan. Cause: export re-processes
-  and recomputes, discarding the override. A fix keeping the user layout in a
-  separate member is written but **not yet verified**.
+- done — **Apply to plate reaches the gcode.** The earlier diagnosis was wrong: the
+  override was never discarded by recomputation. `Plater::export_gcode_3mf` (Ctrl+G,
+  the toolbar, "Export plate sliced file") *packages the gcode the last slice wrote*
+  and never regenerates it, so the applied layout could not appear no matter what the
+  `Print` held. The plain "Export G-code" path always worked, because it re-runs the
+  export through the background process. Both export paths and the print path now
+  rewrite the gcode before using it — see "The rewrite-then-resume rule" below.
 
-## Phase 5 — Cost visibility (built)
+## Phase 5 — Cost visibility (done)
 
 - done — cost in the gcode header
 - done — cost in the dialog
-- **built** — post-slice notification naming the swap count with a *Review
-  assignment* link. Never observed firing; it auto-dismisses faster than a
-  screenshot loop. Unknown whether it renders and is simply missed, or does not fire.
+- done — post-slice notification naming the swap count with a *Review assignment*
+  link. It **does** fire; a 2 s screenshot loop caught it in a single frame, which is
+  what "never observed" had been. Raised from `RegularNotificationLevel` (10 s) to
+  `ImportantNotificationLevel` (20 s) and confirmed on screen for ~14 s.
+
+## The rewrite-then-resume rule
+
+An applied assignment changes **only the gcode** — no geometry, no tool ordering. Every
+route to a file or a printer therefore has to answer one question: does it *generate*
+gcode, or does it *reuse* what the last slice left in the plate's temp file?
+
+| Route | Reuses temp gcode? | How the override gets in |
+|-------|--------------------|--------------------------|
+| File › Export › Export G-code | no, re-exports | already worked |
+| Ctrl+G / Export plate sliced file | yes | rewrite, then resume |
+| Print (Snapmaker U1 upload) | yes | rewrite, then resume |
+
+"Rewrite, then resume" is `Plater::priv::ace_after_reslice`: a one-shot continuation set
+before `restart_background_process(FORCE_RESTART)` and run from `on_process_completed`.
+`set_ace_plan_override` invalidates `psGCodeExport` only, so the restart re-writes the
+gcode without re-slicing geometry, and `m_ace_plan_user` keeps the layout across it. The
+continuation is taken unconditionally on completion and run only on success, so a
+cancelled or failed rewrite cannot leave it armed for an unrelated slice.
+
+**Any future route that uploads or packages `get_tmp_gcode_path()` needs the same
+treatment.** Multi-plate export (G) is the one known to still be missing it.
 
 ---
 
 ## What is still missing
 
-### A. The print path (gap — highest value)
+### A. The print path (done)
 
-The dialog is hooked to **export only**. Printing straight to the machine never
-shows it, so the most common route to a print skips the decision entirely.
-*Mockup needed: where the assignment step sits in the send flow.*
+The dialog now runs in `Plater::send_gcode_legacy`'s Snapmaker U1 branch, before the
+upload dialog, and an applied layout rewrites the temp gcode before it is sent.
+Verified: the file staged for upload carried `swaps:349 optimal:0` and 350
+`ACE_SWAP_HEAD` after applying a manual layout.
 
 ### B. Reconciling with what is actually in the ACE (gap)
 
@@ -123,9 +151,10 @@ that only the current plate is reviewed.
 
 ## Order of work
 
-1. **Verify the override fix** (Phase 4 gap) — without it the dialog is decoration.
-2. **Notification**: settle whether it fires; give it a lifetime that survives a glance.
-3. **Print path** (A) — the dialog must be on the route people actually use.
+1. ~~**Verify the override fix**~~ — done 2026-08-09; the cause was the packaging
+   path, not recomputation. See Phase 4.
+2. ~~**Notification**~~ — done 2026-08-09; it fires, and now lasts 20 s.
+3. ~~**Print path** (A)~~ — done 2026-08-09.
 4. **Persistence** (D) — an applied layout that evaporates is worse than none.
 5. **Reconciliation** (B) — the highest-consequence correctness gap.
 6. **Infeasible plates** (C), then **pinning/drying** (E), **multi-ACE** (F),
@@ -135,7 +164,6 @@ that only the current plate is reviewed.
 
 | # | Mockup | For |
 |---|--------|-----|
-| 1 | Assignment step in the send/print flow | A |
 | 2 | Planned vs actual ACE contents, with reconcile actions | B |
 | 3 | Infeasible plate refusal | C |
 | 4 | Pinned / drying spool states | E |
