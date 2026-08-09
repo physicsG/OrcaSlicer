@@ -1109,6 +1109,9 @@ private:
     PrintRegionConfig                       m_default_region_config;
     MixedFilamentManager                    m_mixed_filament_mgr;
     AceMmu::LoadingPlan                     m_ace_plan;
+    // A layout the user chose, kept apart from the computed one so re-processing
+    // cannot quietly discard it. Empty head_of means "no override".
+    AceMmu::LoadingPlan                     m_ace_plan_user;
     std::vector<int>                        m_ace_sequence;
     PrintObjectPtrs                         m_objects;
     PrintRegionPtrs                         m_print_regions;

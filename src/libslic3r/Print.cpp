@@ -1050,7 +1050,10 @@ std::vector<size_t> Print::layers_sorted_for_object(float start, float end, std:
 
 void Print::set_ace_plan_override(const AceMmu::LoadingPlan &plan)
 {
-    m_ace_plan = plan;
+    // Remember it separately: exporting re-runs processing, which recomputes the plan and
+    // would otherwise throw the user's layout away between Apply and the written gcode.
+    m_ace_plan_user = plan;
+    m_ace_plan      = plan;
     // The plan is consumed while writing gcode (tool remap, ACE_SWAP_HEAD arguments, the
     // auto-load block), so only that step is stale.
     this->invalidate_step(psGCodeExport);
@@ -2599,6 +2602,13 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
                 // Kept so the assignment dialog can price a user's own layout against the
                 // same sequence the planner optimised, rather than re-deriving it.
                 m_ace_sequence = std::move(seq);
+                // A layout the user applied wins over the computed one, as long as it still
+                // describes this plate. Size is the check that matters: a changed filament
+                // count means the old layout no longer refers to the same spools.
+                if (m_ace_plan_user.feasible && m_ace_plan_user.head_of.size() == size_t(n_filaments))
+                    m_ace_plan = m_ace_plan_user;
+                else
+                    m_ace_plan_user = AceMmu::LoadingPlan{};
             }
         }
         this->set_done(psWipeTower);
