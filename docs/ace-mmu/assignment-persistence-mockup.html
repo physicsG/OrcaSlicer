@@ -1,0 +1,565 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remembering a filament layout</title>
+<style>
+  /* Tokens lifted verbatim from resources/web/aceplan/index.html so this reads as the
+     real dialog, not a lookalike. One addition below: --save/--save-soft. */
+  :root{
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --page:#e6e7e9; --panel:#ffffff; --hbar:#eef0f1; --hbar-line:#e2e4e6;
+    --line:#e4e6e8; --line-soft:#eef0f1; --inset:#f4f5f6;
+    --text:#2f3336; --dim:#7d868d; --faint:#a7aeb4;
+    --teal:#14b8a6; --teal-ink:#fff; --teal-soft:rgba(20,184,166,.12);
+    --blue:#4a90d9; --blue-soft:rgba(74,144,217,.12);
+    --warn:#e2953a; --warn-soft:rgba(226,149,58,.14);
+    --empty:#e7e9eb;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 26px -18px rgba(16,24,32,.4);
+    /* NEW: "remembered with this plate". Deliberately not teal (that is action) and not
+       orange (that is pinned / costs more) — this is a statement of memory. */
+    --save:#4a90d9; --save-soft:rgba(74,144,217,.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --page:#0f1215; --panel:#181c20; --hbar:#1f242a; --hbar-line:#262c32; --line:#272d33; --line-soft:#20262b; --inset:#1e242a;
+      --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d; --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+      --blue:#5aa0e6; --blue-soft:rgba(90,160,230,.16); --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+      --empty:#232a30; --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+      --save:#5aa0e6; --save-soft:rgba(90,160,230,.16);
+    }
+  }
+  :root[data-theme="dark"]{
+    --page:#0f1215; --panel:#181c20; --hbar:#1f242a; --hbar-line:#262c32; --line:#272d33; --line-soft:#20262b; --inset:#1e242a;
+    --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d; --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+    --blue:#5aa0e6; --blue-soft:rgba(90,160,230,.16); --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+    --empty:#232a30; --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+    --save:#5aa0e6; --save-soft:rgba(90,160,230,.16);
+  }
+  :root[data-theme="light"]{
+    --page:#e6e7e9; --panel:#ffffff; --hbar:#eef0f1; --hbar-line:#e2e4e6;
+    --line:#e4e6e8; --line-soft:#eef0f1; --inset:#f4f5f6;
+    --text:#2f3336; --dim:#7d868d; --faint:#a7aeb4;
+    --teal:#14b8a6; --teal-ink:#fff; --teal-soft:rgba(20,184,166,.12);
+    --blue:#4a90d9; --blue-soft:rgba(74,144,217,.12);
+    --warn:#e2953a; --warn-soft:rgba(226,149,58,.14);
+    --empty:#e7e9eb;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 26px -18px rgba(16,24,32,.4);
+    --save:#4a90d9; --save-soft:rgba(74,144,217,.12);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{font-family:var(--font-sans);color:var(--text);background:var(--page);font-size:14px;line-height:1.45;
+       -webkit-font-smoothing:antialiased;padding:30px 14px 60px;}
+  .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+
+  /* ---- review frame (quiet; the dialog is the loud part) ---- */
+  .col{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:34px;}
+  .lede h1{margin:0 0 6px;font-size:23px;font-weight:700;letter-spacing:-.015em;text-wrap:balance;}
+  .lede p{margin:0;color:var(--dim);font-size:13.5px;max-width:64ch;}
+  .lede p + p{margin-top:9px;}
+  .lede b{color:var(--text);font-weight:600;}
+
+  .case{display:flex;flex-direction:column;gap:12px;}
+  .eyebrow{display:flex;align-items:baseline;gap:10px;font-size:10.5px;font-weight:800;letter-spacing:.11em;
+           text-transform:uppercase;color:var(--dim);}
+  .eyebrow .k{color:var(--teal);}
+  .facts{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;font-size:12.5px;
+         background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--line);
+         border-radius:0 10px 10px 0;padding:12px 15px;}
+  .facts dt{color:var(--dim);font-weight:600;white-space:nowrap;}
+  .facts dd{margin:0;}
+  .facts dd b{font-weight:600;}
+  .facts.ask{border-left-color:var(--teal);}
+  .facts.bad{border-left-color:var(--warn);}
+
+  .qbox{background:var(--teal-soft);border:1px solid color-mix(in srgb,var(--teal) 32%,transparent);
+        border-radius:10px;padding:12px 15px;font-size:12.5px;}
+  .qbox h4{margin:0 0 6px;font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--teal);}
+  .qbox ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;}
+
+  .switch{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel);align-self:flex-start;}
+  .switch button{font:inherit;font-size:11.5px;font-weight:600;color:var(--dim);padding:6px 13px;cursor:pointer;
+                 border:0;background:transparent;border-right:1px solid var(--line);}
+  .switch button:last-child{border-right:0;}
+  .switch button[aria-pressed="true"]{color:var(--teal);background:var(--teal-soft);box-shadow:inset 0 0 0 1px var(--teal);}
+  .switch button:focus-visible{outline:2px solid var(--blue);outline-offset:-2px;}
+
+  /* ---- the dialog itself ---- */
+  .dialog{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;}
+  .dhead{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--hbar);border-bottom:1px solid var(--hbar-line);flex-wrap:wrap;}
+  .dhead .title{font-size:14.5px;font-weight:700;}
+  .dhead .sub{font-size:11.5px;color:var(--dim);}
+  .dhead .right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+
+  .pillset{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel);}
+  .pillset button{font:inherit;font-size:12px;font-weight:600;color:var(--dim);padding:6px 14px;cursor:pointer;border:0;background:transparent;border-right:1px solid var(--line);}
+  .pillset button:last-child{border-right:0;}
+  .pillset button[aria-pressed="true"]{color:var(--teal);background:var(--teal-soft);box-shadow:inset 0 0 0 1px var(--teal);}
+  .pillset button:focus-visible{outline:2px solid var(--blue);outline-offset:-2px;}
+
+  .stat{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dim);background:var(--inset);border:1px solid var(--line);border-radius:999px;padding:4px 10px;}
+  .stat b{color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+  .stat.good b{color:var(--teal);}
+  .stat.bad{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));background:var(--warn-soft);}
+  .stat.bad b{color:var(--warn);}
+  .stat.muted{opacity:.5;}
+
+  /* NEW: the remembered-layout banner, in place of the usual hint line */
+  .hint{padding:9px 16px;border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--dim);background:color-mix(in srgb,var(--blue) 4%,var(--panel));}
+  .hint b{color:var(--text);font-weight:600;}
+  .memo{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--line-soft);
+        font-size:12px;color:var(--dim);background:var(--save-soft);}
+  .memo .chip{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;letter-spacing:.04em;
+              text-transform:uppercase;color:var(--save);background:var(--panel);
+              border:1px solid color-mix(in srgb,var(--save) 40%,transparent);border-radius:999px;padding:3px 9px;white-space:nowrap;}
+  .memo .chip svg{display:block;}
+  .memo b{color:var(--text);font-weight:600;}
+  .memo .act{margin-left:auto;}
+  .memo.warnband{background:var(--warn-soft);}
+  .memo.warnband .chip{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);}
+  .linkbtn{font:inherit;font-size:12px;font-weight:600;color:var(--teal);background:transparent;border:0;padding:0;
+           cursor:pointer;text-decoration:underline;text-underline-offset:2px;white-space:nowrap;}
+  .linkbtn:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:3px;}
+
+  .map{position:relative;padding:18px 18px 8px;}
+  .srcrow{position:relative;z-index:1;display:flex;align-items:stretch;gap:14px;flex-wrap:wrap;}
+  .headrow{position:relative;z-index:1;display:flex;justify-content:space-around;gap:12px;margin-top:56px;padding-bottom:12px;}
+  .wires{position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:0;}
+  .wires path{fill:none;stroke:var(--line);stroke-width:2;}
+  .wires path.flow{stroke:color-mix(in srgb,var(--teal) 55%,var(--line));stroke-dasharray:2 9;stroke-linecap:round;animation:flow 1.1s linear infinite;}
+  @keyframes flow{to{stroke-dashoffset:-11;}}
+  @media (prefers-reduced-motion:reduce){.wires path.flow{animation:none;stroke-dasharray:none;}}
+
+  .acebox{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);box-shadow:inset 0 1px 0 rgba(255,255,255,.30), var(--shadow);}
+  .acebox.main{flex:1;min-width:430px;}
+  .acebox.single{flex:0 0 auto;}
+  .aceband{display:flex;align-items:center;gap:10px;padding:9px 13px;background:color-mix(in srgb,var(--teal) 7%,var(--inset));border-bottom:1px solid var(--line);}
+  .acebadge{width:24px;height:24px;border-radius:7px;background:var(--teal-soft);color:var(--teal);display:grid;place-items:center;font-weight:800;font-size:11px;border:1px solid color-mix(in srgb,var(--teal) 30%,transparent);}
+  .aceband .nm{font-size:13px;font-weight:600;}
+  .slots{display:flex;gap:10px;padding:12px;justify-content:space-around;}
+
+  .pos{position:relative;width:96px;border:1px dashed transparent;border-radius:11px;padding:8px 4px 7px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;background:transparent;}
+  .pos:hover{border-color:color-mix(in srgb,var(--teal) 45%,var(--line));}
+  .pos:focus-visible{outline:2px solid var(--blue);outline-offset:1px;}
+  .pos .spool{width:54px;height:54px;border-radius:50%;position:relative;display:grid;place-items:center;
+    background:radial-gradient(circle at 50% 50%, var(--panel) 0 30%, var(--c,#8fa7c8) 30.5%);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);}
+  .pos .spool::after{content:"";width:13px;height:13px;border-radius:50%;background:var(--inset);box-shadow:inset 0 0 0 2px var(--line);}
+  .pos.empty .spool{background:repeating-linear-gradient(135deg,var(--empty) 0 7px,transparent 7px 14px);box-shadow:inset 0 0 0 2px var(--line);}
+  .pos .nm{font-size:11.5px;font-weight:600;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pos.empty .nm{color:var(--faint);font-weight:500;}
+  .pos .tag{font-size:9.5px;color:var(--faint);font-family:var(--font-mono);}
+  .pin{position:absolute;top:2px;right:6px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;
+    background:var(--warn);color:#fff;font-size:11px;box-shadow:0 1px 3px rgba(0,0,0,.3);}
+  /* NEW: a spool the plate remembers, as distinct from one the optimiser pinned */
+  .pos.moved .spool{box-shadow:inset 0 0 0 1px rgba(0,0,0,.14), 0 0 0 2px var(--save);}
+
+  .tool{width:110px;background:var(--inset);border:1px solid var(--line);border-radius:11px;padding:9px 10px;display:flex;flex-direction:column;align-items:center;gap:5px;}
+  .tool .noz{width:26px;height:20px;border:2px solid var(--dim);border-bottom-width:0;border-radius:5px 5px 0 0;position:relative;}
+  .tool .noz::after{content:"";position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--dim);}
+  .tool .tn{font-size:11px;font-weight:700;}
+  .tool .cur{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--dim);}
+  .tool .cur .c{width:10px;height:10px;border-radius:3px;background:var(--c,transparent);box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);}
+
+  .planrow{display:flex;gap:14px;padding:12px 16px 14px;border-top:1px solid var(--line-soft);flex-wrap:wrap;}
+  .plan{flex:1;min-width:300px;}
+  .plan h3{margin:2px 0 7px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--dim);}
+  .loadlist{display:flex;flex-direction:column;gap:4px;font-size:12.5px;}
+  .loadlist .li{display:flex;align-items:center;gap:8px;}
+  .loadlist .c{width:12px;height:12px;border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);}
+  .loadlist .where{margin-left:auto;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--dim);}
+  .loadlist .where b{color:var(--text);font-weight:600;}
+  .loadlist .li.moved .where b{color:var(--save);}
+  .actions{display:flex;flex-direction:column;justify-content:flex-end;gap:8px;min-width:150px;}
+  .btn{font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border-radius:8px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);color:var(--text);}
+  .btn:hover{border-color:var(--teal);color:var(--teal);}
+  .btn:focus-visible{outline:2px solid var(--blue);outline-offset:1px;}
+  .btn.primary{background:var(--teal);color:var(--teal-ink);border-color:transparent;}
+  .btn.primary:hover{color:var(--teal-ink);filter:brightness(1.06);}
+
+  .after{font-size:12.5px;color:var(--dim);padding-left:15px;border-left:3px solid var(--line-soft);}
+  .after b{color:var(--text);font-weight:600;}
+  .after code{font-family:var(--font-mono);font-size:11.5px;background:var(--inset);border:1px solid var(--line);
+              border-radius:4px;padding:1px 5px;}
+
+  .foot{border-top:1px solid var(--line);padding-top:18px;font-size:12.5px;color:var(--dim);}
+  .foot h2{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--text);letter-spacing:-.01em;}
+  .foot table{border-collapse:collapse;width:100%;font-size:12px;}
+  .foot th,.foot td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line-soft);vertical-align:top;}
+  .foot th{font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);}
+  .foot td code{font-family:var(--font-mono);font-size:11px;}
+  .scroll{overflow-x:auto;}
+</style>
+
+<div class="col">
+
+  <header class="lede">
+    <h1>Remembering a filament layout</h1>
+    <p>An applied assignment currently lives on one <b>Print</b> object. Re-slice or reopen the
+      project and it is gone — the plate quietly goes back to whatever the optimiser prefers.
+      Persistence stores the layout with its plate, in the 3MF.</p>
+    <p>That is straightforward plumbing. What it changes on screen is not, and that is what these
+      three states are for. Numbers below are the real ones from the 7-colour cube on
+      <span class="mono">Snapmaker U1 (0.4 nozzle) - multiACE</span>: auto costs
+      <b>300 swaps / ~40.4 g</b>, the hand layout costs <b>349 / ~47.0 g</b>.</p>
+  </header>
+
+  <!-- ============================ A ============================ -->
+  <section class="case">
+    <div class="eyebrow"><span class="k">State A</span><span>Fresh plate — nothing remembered</span></div>
+    <dl class="facts">
+      <dt>Situation</dt><dd>The plate has never been assigned by hand.</dd>
+      <dt>Behaviour</dt><dd>Unchanged from today: opens in Auto on the computed plan.</dd>
+    </dl>
+    <div id="caseA"></div>
+    <p class="after">Nothing to decide here — included as the baseline the other two are read against.</p>
+  </section>
+
+  <!-- ============================ B ============================ -->
+  <section class="case">
+    <div class="eyebrow"><span class="k">State B</span><span>Reopened project — layout remembered</span></div>
+    <dl class="facts ask">
+      <dt>Situation</dt><dd>The project was saved after applying a hand layout, then reopened and re-sliced.</dd>
+      <dt>Must claim</dt><dd>The layout in force is the user's <b>349</b>, and a free optimum would still be <b>300</b>.</dd>
+      <dt>At stake</dt><dd>Whether the plate says it is carrying a saved layout, and what it cost.</dd>
+    </dl>
+    <div class="switch" role="group" aria-label="Variant">
+      <button id="bProposed" aria-pressed="true">Proposed</button>
+      <button id="bToday" aria-pressed="false">If the page contract stays as-is</button>
+    </div>
+    <div id="caseB"></div>
+    <p class="after" id="afterB"></p>
+  </section>
+
+  <!-- ============================ C ============================ -->
+  <section class="case">
+    <div class="eyebrow"><span class="k">State C</span><span>Remembered layout no longer fits</span></div>
+    <dl class="facts bad">
+      <dt>Situation</dt><dd>The layout was saved for 7 filaments; the project now has 5.</dd>
+      <dt>Behaviour</dt><dd>The layout is dropped — it no longer refers to the same spools — and the plate is planned fresh.</dd>
+      <dt>At stake</dt><dd>Whether dropping it is said out loud or done silently.</dd>
+    </dl>
+    <div id="caseC"></div>
+    <p class="after">The slicer already drops it on a size mismatch; that part is written. The only
+      question is the banner: <b>say it, or stay quiet?</b> Saying it costs a line of chrome on a
+      plate the user may have stopped caring about. Staying quiet means a layout they deliberately
+      saved disappears with no trace.</p>
+  </section>
+
+  <!-- ============================ questions ============================ -->
+  <div class="qbox">
+    <h4>Settled — this is what was built</h4>
+    <ol>
+      <li><b>State B: proposed.</b> C++ sends a remembered layout as <code class="mono">manual</code>
+        rather than as pins, so the page's optimiser runs unconstrained and
+        <b>Auto would need 300</b> is a real comparison.</li>
+      <li><b>Handing the plate back</b> is <b>Use auto instead</b> in the banner. It switches to Auto;
+        applying in Auto then clears the stored layout.</li>
+      <li><b>State C says it</b>, with Dismiss for this opening only — dismissing hides the banner,
+        it does not delete the layout, so the plate keeps it in case the filament count comes back.</li>
+      <li><b>Hand layouts only.</b> Applying in Auto clears any stored layout rather than freezing
+        today's answer onto a plate whose colours may change.</li>
+    </ol>
+    <p style="margin:9px 0 0">One deviation from the drawings above, since corrected here: the
+      instruction hint stays <em>below</em> the banner instead of being replaced by it. Someone
+      reopening a project to adjust a layout needs "drag spools between positions" more than they
+      need the extra whitespace.</p>
+  </div>
+
+  <div class="foot">
+    <h2>What is already written underneath</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Piece</th><th>Where</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>ace_plan_layout</code></td><td>PrintConfig</td>
+              <td>One toolhead index per filament. Per-plate, in no preset — a hand layout is project data, not a setting.</td></tr>
+          <tr><td>Plate accessors</td><td>PartPlate</td>
+              <td><code>get/set_ace_plan_layout</code>, following the <code>first_layer_print_sequence</code> pattern.</td></tr>
+          <tr><td>3MF round trip</td><td>bbs_3mf</td>
+              <td>Stored and read as plate metadata, so it travels with the project.</td></tr>
+          <tr><td>Re-pricing</td><td>Print::process</td>
+              <td>The stored layout is re-priced against the plate's current sequence rather than trusting a saved number, and marked
+                  <code>optimal</code> only if it agrees with what the planner chose.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* The cube's seven filaments, in project order. Colours stand in for the 3MF's. */
+var FIL = [
+  {n:"Generic PLA", c:"#d64541"},
+  {n:"Generic PLA", c:"#e5308c"},
+  {n:"Generic PLA", c:"#f2c218"},
+  {n:"Generic PLA", c:"#1faa4b"},
+  {n:"Generic PLA", c:"#1f6fd0"},
+  {n:"Generic PLA", c:"#17b8c4"},
+  {n:"Generic PLA", c:"#7a4fb3"}
+];
+/* head_of, as the gcode header writes it. Auto: T2 (yellow) on feeder T1, magenta in ACE S1. */
+var AUTO   = [3,3,0,1,2,3,3];
+var MANUAL = [3,0,3,1,2,3,3];   /* the swap the user made: yellow <-> magenta */
+
+function el(tag, cls, txt){ var e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; }
+
+/* Slots follow the planner's rule: first use on that head takes the first free slot. */
+function slotsFor(headOf){
+  var next=[0,0,0,0], slot=new Array(headOf.length).fill(-1);
+  var order=[2,3,4,1,5,6,0];                    /* first-use order on this plate */
+  order.forEach(function(c){ var h=headOf[c]; if(h>=0 && slot[c]<0) slot[c]=next[h]++; });
+  return slot;
+}
+
+function spool(c, headOf, slot, moved, pinned){
+  var p = el("div","pos"+(moved?" moved":""));
+  p.tabIndex = 0;
+  var s = el("div","spool"); s.style.setProperty("--c", FIL[c].c); p.appendChild(s);
+  if (pinned){ var pn = el("div","pin"); pn.textContent = "◉"; p.appendChild(pn); }
+  p.appendChild(el("div","nm", FIL[c].n));
+  p.appendChild(el("div","tag", headOf[c]===3 ? "ACE 1 · S"+(slot[c]+1)+" · PLA" : "T"+(headOf[c]+1)+" · PLA"));
+  return p;
+}
+function emptySlot(label){
+  var p = el("div","pos empty"); p.tabIndex = 0;
+  p.appendChild(el("div","spool"));
+  p.appendChild(el("div","nm","Empty"));
+  p.appendChild(el("div","tag",label));
+  return p;
+}
+
+function buildDialog(o){
+  var d = el("div","dialog");
+
+  /* header */
+  var h = el("div","dhead");
+  var t = el("div");
+  t.appendChild(el("div","title","Filament assignment"));
+  t.appendChild(el("div","sub", o.sub));
+  h.appendChild(t);
+  var r = el("div","right");
+  var ps = el("div","pillset"); ps.setAttribute("role","group"); ps.setAttribute("aria-label","Assignment mode");
+  ["Auto","Manual"].forEach(function(m){
+    var b = el("button",null,m);
+    b.setAttribute("aria-pressed", String(o.mode===m.toLowerCase()));
+    ps.appendChild(b);
+  });
+  r.appendChild(ps);
+  var sw = el("div","stat "+(o.swapsTone||"")); sw.innerHTML = "Swaps <b>"+o.swaps+"</b>"; r.appendChild(sw);
+  var wa = el("div","stat"); wa.innerHTML = "Waste <b>~"+o.waste+" g</b>"; r.appendChild(wa);
+  var au = el("div","stat "+(o.autoTone||"")); au.innerHTML = "Auto would need <b>"+o.auto+"</b>"; r.appendChild(au);
+  h.appendChild(r);
+  d.appendChild(h);
+
+  /* banner */
+  if (o.memo){
+    var m = el("div","memo"+(o.memo.warn?" warnband":""));
+    var chip = el("span","chip");
+    chip.innerHTML = '<svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">'+
+      '<rect x="1" y="1.5" width="10" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>'+
+      '<path d="M3.6 1.5v3.2h4.8V1.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>'+
+      '<span>'+o.memo.chip+'</span>';
+    m.appendChild(chip);
+    var txt = el("span"); txt.innerHTML = o.memo.text; m.appendChild(txt);
+    if (o.memo.action){
+      var a = el("div","act");
+      var b = el("button","linkbtn", o.memo.action); a.appendChild(b);
+      m.appendChild(a);
+    }
+    d.appendChild(m);
+  }
+  if (o.hint){
+    var hint = el("div","hint");
+    hint.innerHTML = o.hint;
+    d.appendChild(hint);
+  }
+
+  /* machine map */
+  var map = el("div","map");
+  var svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.setAttribute("class","wires"); svg.setAttribute("aria-hidden","true");
+  map.appendChild(svg);
+
+  var slot = slotsFor(o.layout);
+  var src  = el("div","srcrow");
+  [0,1,2].forEach(function(hd){
+    var box = el("div","acebox single");
+    var band = el("div","aceband");
+    var badge = el("div","acebadge","T"+(hd+1)); band.appendChild(badge);
+    band.appendChild(el("div","nm","Feeder"));
+    box.appendChild(band);
+    var sl = el("div","slots");
+    var who = -1;
+    for (var c=0;c<o.layout.length;c++) if (o.layout[c]===hd) who=c;
+    sl.appendChild(who<0 ? emptySlot("T"+(hd+1))
+                         : spool(who,o.layout,slot,o.moved&&o.moved.indexOf(who)>=0,o.pinned));
+    box.appendChild(sl);
+    src.appendChild(box);
+  });
+  var ace = el("div","acebox main");
+  var aband = el("div","aceband");
+  aband.appendChild(el("div","acebadge","1"));
+  aband.appendChild(el("div","nm","ACE 1 → T4"));
+  ace.appendChild(aband);
+  var aslots = el("div","slots");
+  for (var s0=0;s0<4;s0++){
+    var occ=-1;
+    for (var c2=0;c2<o.layout.length;c2++) if (o.layout[c2]===3 && slot[c2]===s0) occ=c2;
+    aslots.appendChild(occ<0 ? emptySlot("ACE 1 · S"+(s0+1))
+                             : spool(occ,o.layout,slot,o.moved&&o.moved.indexOf(occ)>=0,o.pinned));
+  }
+  ace.appendChild(aslots);
+  src.appendChild(ace);
+  map.appendChild(src);
+
+  var heads = el("div","headrow");
+  for (var hd2=0; hd2<4; hd2++){
+    var tool = el("div","tool");
+    tool.appendChild(el("div","noz"));
+    tool.appendChild(el("div","tn","T"+(hd2+1)));
+    var cur = el("div","cur");
+    var first=-1;
+    for (var c3=0;c3<o.layout.length;c3++) if (o.layout[c3]===hd2 && (first<0 || slot[c3]<slot[first])) first=c3;
+    var sq = el("span","c"); if (first>=0) sq.style.setProperty("--c", FIL[first].c);
+    cur.appendChild(sq); cur.appendChild(el("span",null,first>=0?FIL[first].n:"—"));
+    tool.appendChild(cur);
+    heads.appendChild(tool);
+  }
+  map.appendChild(heads);
+  d.appendChild(map);
+
+  /* load plan + actions */
+  var pr = el("div","planrow");
+  var plan = el("div","plan");
+  plan.appendChild(el("h3",null,"Load plan"));
+  var list = el("div","loadlist");
+  for (var c4=0;c4<o.layout.length;c4++){
+    var moved = o.moved && o.moved.indexOf(c4)>=0;
+    var li = el("div","li"+(moved?" moved":""));
+    var sq2 = el("span","c"); sq2.style.background = FIL[c4].c; li.appendChild(sq2);
+    li.appendChild(el("span",null,FIL[c4].n));
+    var w = el("span","where");
+    w.innerHTML = o.layout[c4]===3
+      ? "ACE 1 &middot; <b>S"+(slot[c4]+1)+"</b>"
+      : "<b>T"+(o.layout[c4]+1)+"</b> feeder";
+    li.appendChild(w);
+    list.appendChild(li);
+  }
+  plan.appendChild(list);
+  pr.appendChild(plan);
+  var acts = el("div","actions");
+  (o.buttons||[]).forEach(function(b){ acts.appendChild(el("button","btn"+(b.primary?" primary":""), b.label)); });
+  pr.appendChild(acts);
+  d.appendChild(pr);
+
+  return d;
+}
+
+/* wires: measured, so they land on the real boxes in either theme */
+function drawWires(root){
+  root.querySelectorAll(".map").forEach(function(map){
+    var svg = map.querySelector(".wires");
+    var mr = map.getBoundingClientRect();
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var boxes = map.querySelectorAll(".srcrow > .acebox");
+    var tools = map.querySelectorAll(".headrow > .tool");
+    boxes.forEach(function(b, i){
+      var t = tools[i]; if (!t) return;
+      var br = b.getBoundingClientRect(), tr = t.getBoundingClientRect();
+      var x1 = br.left - mr.left + br.width/2,  y1 = br.bottom - mr.top;
+      var x2 = tr.left - mr.left + tr.width/2,  y2 = tr.top - mr.top;
+      var p = document.createElementNS("http://www.w3.org/2000/svg","path");
+      p.setAttribute("class","flow");
+      p.setAttribute("d","M"+x1+" "+y1+" C "+x1+" "+(y1+26)+", "+x2+" "+(y2-26)+", "+x2+" "+y2);
+      svg.appendChild(p);
+    });
+  });
+}
+
+/* ---- the three states ---- */
+var SUB = "Snapmaker U1 · 3 stock feeders + ACE 1 → T4";
+
+function stateA(){
+  return buildDialog({
+    sub:SUB, mode:"auto", swaps:"300", waste:"40.4", auto:"–", swapsTone:"good",
+    hint:'Auto plan honours <b>7 pin(s)</b>. Drag a spool to pin it to a position, or click it to pin/unpin in place — pinned spools never move.',
+    layout:AUTO,
+    buttons:[{label:"Clear pins"},{label:"Apply to plate",primary:true}]
+  });
+}
+
+function stateBProposed(){
+  return buildDialog({
+    sub:SUB, mode:"manual", swaps:"349", waste:"47.0", auto:"300", swapsTone:"bad",
+    memo:{
+      chip:"Saved with this plate",
+      text:"Your layout was restored with the project. It costs <b>49 more swaps</b> than the optimiser would choose.",
+      action:"Use auto instead"
+    },
+    hint:'Manual layout: drag spools between positions (occupants swap places). Clicking a spool, then a destination, works too.',
+    layout:MANUAL, moved:[1,2],
+    buttons:[{label:"Copy auto layout"},{label:"Apply to plate",primary:true}]
+  });
+}
+
+function stateBToday(){
+  return buildDialog({
+    sub:SUB, mode:"auto", swaps:"349", waste:"47.0", auto:"–", autoTone:"muted",
+    hint:'Auto plan honours <b>7 pin(s)</b>. Drag a spool to pin it to a position, or click it to pin/unpin in place — pinned spools never move.',
+    layout:MANUAL, pinned:true,
+    buttons:[{label:"Clear pins"},{label:"Apply to plate",primary:true}]
+  });
+}
+
+function stateC(){
+  var five = [3,0,1,2,3];
+  var saved = FIL.slice(0,5);
+  var keep = FIL; FIL = saved;
+  var d = buildDialog({
+    sub:SUB, mode:"auto", swaps:"98", waste:"13.2", auto:"–", swapsTone:"good",
+    memo:{
+      warn:true,
+      chip:"Layout dropped",
+      text:"The layout saved with this plate was for <b>7 filaments</b>; the project now has <b>5</b>, so it no longer says where these spools go. Planned fresh.",
+      action:"Dismiss"
+    },
+    hint:'Auto plan honours <b>0 pin(s)</b>. Drag a spool to pin it to a position, or click it to pin/unpin in place — pinned spools never move.',
+    layout:five,
+    buttons:[{label:"Clear pins"},{label:"Apply to plate",primary:true}]
+  });
+  FIL = keep;
+  return d;
+}
+
+var A = document.getElementById("caseA");
+var B = document.getElementById("caseB");
+var C = document.getElementById("caseC");
+A.appendChild(stateA());
+C.appendChild(stateC());
+
+var AFTER = {
+  proposed:'The remembered layout arrives as the <b>manual</b> layout, not as pins, so the page’s own optimiser '+
+           'runs unconstrained and <b>Auto would need 300</b> is a real comparison. The two moved spools carry a blue ring, '+
+           'and the banner states the cost of keeping them there.',
+  today:'Sending the remembered layout as pins — what the code does now — opens the plate in <b>Auto</b>, so it reads as '+
+        '“the optimiser chose 349”. The <b>Auto would need</b> chip is computed from a free optimum and would say 300, but it '+
+        'is hidden in Auto mode, so the 300 is never shown. Every spool wears the orange pin, which says <em>you pinned this</em> '+
+        'rather than <em>the plate remembers this</em>, and nothing states the layout came from the project.'
+};
+function showB(which){
+  B.innerHTML = "";
+  B.appendChild(which==="proposed" ? stateBProposed() : stateBToday());
+  document.getElementById("afterB").innerHTML = AFTER[which];
+  document.getElementById("bProposed").setAttribute("aria-pressed", String(which==="proposed"));
+  document.getElementById("bToday").setAttribute("aria-pressed", String(which==="today"));
+  drawWires(document);
+}
+document.getElementById("bProposed").addEventListener("click", function(){ showB("proposed"); });
+document.getElementById("bToday").addEventListener("click", function(){ showB("today"); });
+showB("proposed");
+
+window.addEventListener("resize", function(){ drawWires(document); });
+window.addEventListener("load", function(){ drawWires(document); });
+</script>

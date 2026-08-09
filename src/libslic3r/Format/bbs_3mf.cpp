@@ -52,7 +52,7 @@ namespace pt = boost::property_tree;
 
 #include "TextConfiguration.hpp"
 #include "EmbossShape.hpp"
-#include "ExPolygonSerialize.hpp" 
+#include "ExPolygonSerialize.hpp"
 
 #include "NSVGUtils.hpp"
 
@@ -293,6 +293,7 @@ static constexpr const char* PRINT_SEQUENCE_ATTR = "print_sequence";
 static constexpr const char* FIRST_LAYER_PRINT_SEQUENCE_ATTR = "first_layer_print_sequence";
 static constexpr const char* OTHER_LAYERS_PRINT_SEQUENCE_ATTR = "other_layers_print_sequence";
 static constexpr const char* OTHER_LAYERS_PRINT_SEQUENCE_NUMS_ATTR = "other_layers_print_sequence_nums";
+static constexpr const char* ACE_PLAN_LAYOUT_ATTR = "ace_plan_layout";
 static constexpr const char* SPIRAL_VASE_MODE = "spiral_mode";
 static constexpr const char* FILAMENT_MAP_MODE_ATTR = "filament_map_mode";
 static constexpr const char* FILAMENT_MAP_ATTR = "filament_maps";
@@ -2102,7 +2103,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                         add_error("Invalid connector is found");
                         continue;
                     }
-                    model_object->volumes[connector.volume_id]->cut_info = 
+                    model_object->volumes[connector.volume_id]->cut_info =
                         ModelVolume::CutInfo(CutConnectorType(connector.type), connector.r_tolerance, connector.h_tolerance, true);
                 }
             }
@@ -2291,7 +2292,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
-    bool _BBS_3MF_Importer::_is_svg_shape_file(const std::string &name) const { 
+    bool _BBS_3MF_Importer::_is_svg_shape_file(const std::string &name) const {
         return boost::starts_with(name, MODEL_FOLDER) && boost::ends_with(name, ".svg");
     }
 
@@ -2783,7 +2784,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             }
         }
     }
-    
+
     void _BBS_3MF_Importer::_extract_layer_config_ranges_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, ConfigSubstitutionContext& config_substitutions)
     {
         if (stat.m_uncomp_size > 0) {
@@ -3088,10 +3089,10 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             add_error("Error while reading svg shape for emboss");
             return;
         }
-        
+
         // store for case svg is loaded before volume
         m_path_to_emboss_shape_files[filename] = std::move(file);
-        
+
         // find embossed volume, for case svg is loaded after volume
         for (const ModelObject* object : m_model->objects)
         for (ModelVolume *volume : object->volumes) {
@@ -3877,7 +3878,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
     {
     public:
         TextConfigurationSerialization() = delete;
-                
+
         using TypeToName = boost::bimap<EmbossStyle::Type, std::string_view>;
         static const TypeToName type_to_name;
 
@@ -3886,13 +3887,13 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
         using VerticalAlignToName = boost::bimap<FontProp::VerticalAlign, std::string_view>;
         static const VerticalAlignToName vertical_align_to_name;
-        
+
         static EmbossStyle::Type get_type(std::string_view type) {
             const auto& to_type = TextConfigurationSerialization::type_to_name.right;
             auto type_item = to_type.find(type);
             assert(type_item != to_type.end());
             if (type_item == to_type.end()) return EmbossStyle::Type::undefined;
-            return type_item->second;        
+            return type_item->second;
         }
 
         static std::string_view get_name(EmbossStyle::Type type) {
@@ -3960,7 +3961,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             return true; // do not contain svg file
 
         const std::string &path = svg->path_in_3mf;
-        if (path.empty()) 
+        if (path.empty())
             return true; // do not contain svg file
 
         auto it = m_path_to_emboss_shape_files.find(path);
@@ -4241,6 +4242,18 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                     return results;
                 };
                 m_curr_plater->config.set_key_value("first_layer_print_sequence", new ConfigOptionInts(get_vector_from_string(value)));
+            }
+            else if (key == ACE_PLAN_LAYOUT_ATTR) {
+                // multiACE: one toolhead index per filament, as applied in the assignment
+                // dialog. Print re-prices it against the plate's own sequence, so only the
+                // placement needs to survive the round trip.
+                std::stringstream stream(value);
+                std::vector<int>  head_of;
+                int               head;
+                while (stream >> head)
+                    head_of.push_back(head);
+                if (!head_of.empty())
+                    m_curr_plater->config.set_key_value("ace_plan_layout", new ConfigOptionInts(head_of));
             }
             else if (key == OTHER_LAYERS_PRINT_SEQUENCE_ATTR) {
                 auto get_vector_from_string = [](const std::string &str) -> std::vector<int> {
@@ -4853,9 +4866,9 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             }
 
             volume->set_type(volume_data->part_type);
-            
+
             if (auto &es = volume_data->shape_configuration; es.has_value())
-                volume->emboss_shape = std::move(es);            
+                volume->emboss_shape = std::move(es);
             if (auto &tc = volume_data->text_configuration; tc.has_value())
                 volume->text_configuration = std::move(tc);
 
@@ -6598,7 +6611,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 // Orca: PRIVACY: do not store creation & modification date in 3mf
                 metadata_item_map[BBL_CREATION_DATE_TAG] = "";
                 metadata_item_map[BBL_MODIFICATION_TAG]  = "";
-                //SoftFever: write BambuStudio tag to keep it compatible 
+                //SoftFever: write BambuStudio tag to keep it compatible
                 metadata_item_map[BBL_APPLICATION_TAG] = (boost::format("%1%-%2%") % "BambuStudio" % Snapmaker_VERSION).str();
             }
             metadata_item_map[BBS_3MF_VERSION] = std::to_string(VERSION_BBS_3MF);
@@ -7223,7 +7236,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             boost::replace_all(out, "><connector", ">\n   <connector");
             boost::replace_all(out, "></connector>", ">\n   </connector>");
             boost::replace_all(out, "></object>", ">\n </object>");
-            // OR just 
+            // OR just
             boost::replace_all(out, "><", ">\n<");
         }
 
@@ -7627,7 +7640,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                             if (const std::optional<EmbossShape> &es = volume->emboss_shape;
                                 es.has_value())
                                 to_xml(stream, *es, *volume, archive);
-                    
+
                             if (const std::optional<TextConfiguration> &tc = volume->text_configuration;
                                 tc.has_value())
                                 TextConfigurationSerialization::to_xml(stream, *tc);
@@ -7685,6 +7698,18 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                     stream << "\"/>\n";
                 }
 
+
+                ConfigOptionInts *ace_plan_layout_opt = plate_data->config.option<ConfigOptionInts>("ace_plan_layout");
+                if (ace_plan_layout_opt != nullptr && !ace_plan_layout_opt->values.empty()) {
+                    stream << "    <" << METADATA_TAG << " " << KEY_ATTR << "=\"" << ACE_PLAN_LAYOUT_ATTR << "\" " << VALUE_ATTR << "=\"";
+                    const std::vector<int>& values = ace_plan_layout_opt->values;
+                    for (size_t i = 0; i < values.size(); ++i) {
+                        stream << values[i];
+                        if (i != (values.size() - 1))
+                            stream << " ";
+                    }
+                    stream << "\"/>\n";
+                }
 
                 ConfigOptionInts *other_layers_print_sequence_opt = plate_data->config.option<ConfigOptionInts>("other_layers_print_sequence");
                 if (other_layers_print_sequence_opt != nullptr) {
@@ -8683,14 +8708,14 @@ F bimap_cvt(const boost::bimap<F, S> &bmap, S s, const F & def_value) {
     auto found_item = map.find(s);
 
     // only for back and forward compatibility
-    assert(found_item != map.end()); 
+    assert(found_item != map.end());
     if (found_item == map.end())
         return def_value;
 
     return found_item->second;
 }
 
-template<typename F, typename S> 
+template<typename F, typename S>
 S bimap_cvt(const boost::bimap<F, S> &bmap, F f, const S &def_value)
 {
     const auto &map = bmap.left;
@@ -8790,7 +8815,7 @@ FontProp::HorizontalAlign read_horizontal_align(const char **attributes, unsigne
             return static_cast<FontProp::HorizontalAlign>(horizontal_align_int);
     }
 
-    return bimap_cvt(horizontal_align_to_name, std::string_view(horizontal_align_str), FontProp::HorizontalAlign::center);    
+    return bimap_cvt(horizontal_align_to_name, std::string_view(horizontal_align_str), FontProp::HorizontalAlign::center);
 }
 
 
@@ -8820,7 +8845,7 @@ std::optional<TextConfiguration> TextConfigurationSerialization::read(const char
     FontProp fp;
     int char_gap = bbs_get_attribute_value_int(attributes, num_attributes, CHAR_GAP_ATTR);
     if (char_gap != 0) fp.char_gap = char_gap;
-    int line_gap = bbs_get_attribute_value_int(attributes, num_attributes, LINE_GAP_ATTR); 
+    int line_gap = bbs_get_attribute_value_int(attributes, num_attributes, LINE_GAP_ATTR);
     if (line_gap != 0) fp.line_gap = line_gap;
     float boldness = bbs_get_attribute_value_float(attributes, num_attributes, BOLDNESS_ATTR);
     if (std::fabs(boldness) > std::numeric_limits<float>::epsilon())
@@ -8926,16 +8951,16 @@ bool to_xml(std::stringstream &stream, const EmbossShape::SvgFile &svg, const Mo
     stream << SVG_FILE_PATH_IN_3MF_ATTR << "=\"" << xml_escape_double_quotes_attribute_value(svg.path_in_3mf) << "\" ";
 
     std::shared_ptr<std::string> file_data = svg.file_data;
-    assert(file_data != nullptr); 
+    assert(file_data != nullptr);
     if (file_data == nullptr && !svg.path.empty())
         file_data = read_from_disk(svg.path);
     if (file_data == nullptr) {
         BOOST_LOG_TRIVIAL(warning) << "Can't write svg file no filedata";
         return false;
     }
-    const std::string &file_data_str = *file_data; 
+    const std::string &file_data_str = *file_data;
 
-    return mz_zip_writer_add_mem(&archive, svg.path_in_3mf.c_str(), 
+    return mz_zip_writer_add_mem(&archive, svg.path_in_3mf.c_str(),
         (const void *) file_data_str.c_str(), file_data_str.size(), MZ_DEFAULT_COMPRESSION);
 }
 
@@ -8947,7 +8972,7 @@ void to_xml(std::stringstream &stream, const EmbossShape &es, const ModelVolume 
     if (es.svg_file.has_value())
         if(!to_xml(stream, *es.svg_file, volume, archive))
             BOOST_LOG_TRIVIAL(warning) << "Can't write svg file defiden embossed shape into 3mf";
-    
+
     stream << SHAPE_SCALE_ATTR << "=\"" << es.scale << "\" ";
 
     if (!es.final_shape.is_healed)
@@ -8958,17 +8983,17 @@ void to_xml(std::stringstream &stream, const EmbossShape &es, const ModelVolume 
     stream << DEPTH_ATTR << "=\"" << p.depth << "\" ";
     if (p.use_surface)
         stream << USE_SURFACE_ATTR << "=\"" << 1 << "\" ";
-    
+
     // FIX of baked transformation
     Transform3d fix = create_fix(es.fix_3mf_tr, volume);
     stream << TRANSFORM_ATTR << "=\"";
     _BBS_3MF_Exporter::add_transformation(stream, fix);
     stream << "\" ";
 
-    stream << "/>\n"; // end SHAPE_TAG    
+    stream << "/>\n"; // end SHAPE_TAG
 }
 
-std::optional<EmbossShape> read_emboss_shape(const char **attributes, unsigned int num_attributes) {    
+std::optional<EmbossShape> read_emboss_shape(const char **attributes, unsigned int num_attributes) {
     double scale = bbs_get_attribute_value_float(attributes, num_attributes, SHAPE_SCALE_ATTR);
     int unhealed = bbs_get_attribute_value_int(attributes, num_attributes, UNHEALED_ATTR);
     bool is_healed = unhealed != 1;
@@ -8980,11 +9005,11 @@ std::optional<EmbossShape> read_emboss_shape(const char **attributes, unsigned i
 
     int use_surface  = bbs_get_attribute_value_int(attributes, num_attributes, USE_SURFACE_ATTR);
     if (use_surface == 1)
-        projection.use_surface = true;     
+        projection.use_surface = true;
 
     std::optional<Transform3d> fix_tr_mat;
     std::string fix_tr_mat_str = bbs_get_attribute_value_string(attributes, num_attributes, TRANSFORM_ATTR);
-    if (!fix_tr_mat_str.empty()) { 
+    if (!fix_tr_mat_str.empty()) {
         fix_tr_mat = bbs_get_transform_from_3mf_specs_string(fix_tr_mat_str);
     }
 
@@ -8994,7 +9019,7 @@ std::optional<EmbossShape> read_emboss_shape(const char **attributes, unsigned i
     // MayBe: store also shapes to not store svg
     // But be carefull curve will be lost -> scale will not change sampling
     // shapes could be loaded from SVG
-    ExPolygonsWithIds shapes; 
+    ExPolygonsWithIds shapes;
     // final shape could be calculated from shapes
     HealedExPolygons final_shape;
     final_shape.is_healed = is_healed;

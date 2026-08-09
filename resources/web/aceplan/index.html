@@ -63,6 +63,25 @@
   .hint{padding:9px 16px;border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--dim);background:color-mix(in srgb,var(--blue) 4%,var(--panel));}
   .hint b{color:var(--text);font-weight:600;}
 
+  /* the plate is carrying a layout: a statement of memory, so neither teal (action) nor
+     the orange of a pin (a constraint the user placed by hand) */
+  .memo{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--line-soft);
+        font-size:12px;color:var(--dim);background:var(--blue-soft);}
+  .memo[hidden]{display:none;}
+  .memo b{color:var(--text);font-weight:600;}
+  .memo .chip{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;letter-spacing:.04em;
+              text-transform:uppercase;color:var(--blue);background:var(--panel);
+              border:1px solid color-mix(in srgb,var(--blue) 40%,transparent);border-radius:999px;
+              padding:3px 9px;white-space:nowrap;}
+  .memo.dropped{background:var(--warn-soft);}
+  .memo.dropped .chip{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);}
+  .memo .act{margin-left:auto;}
+  .linkbtn{font:inherit;font-size:12px;font-weight:600;color:var(--teal);background:transparent;border:0;padding:0;
+           cursor:pointer;text-decoration:underline;text-underline-offset:2px;white-space:nowrap;}
+  .linkbtn:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:3px;}
+  /* a spool the plate remembers, as distinct from one the user pinned */
+  .pos.remembered .spool{box-shadow:inset 0 0 0 1px rgba(0,0,0,.14), 0 0 0 2px var(--blue);}
+
   /* machine map */
   .map{position:relative;padding:18px 18px 8px;}
   .srcrow{position:relative;z-index:1;display:flex;align-items:stretch;gap:14px;flex-wrap:wrap;}
@@ -151,6 +170,7 @@
     </div>
   </div>
 
+  <div class="memo" id="memo" hidden></div>
   <div class="hint" id="hint"></div>
 
   <div class="map" id="map">
@@ -192,7 +212,18 @@ function applyState(st){
   (st.pins || []).forEach(function(p){
     if (p && p.filament >= 0) { state.pins[p.filament] = p.head; state.slotPins[p.filament] = (p.slot === undefined ? -1 : p.slot); }
   });
-  state.manual = null; state.sel = -1; state.drag = -1;
+  // A layout the user chose arrives as `manual`, never as pins: the optimiser must stay
+  // free so "Auto would need N" compares against a real optimum. `saved` says the plate is
+  // carrying it across sessions; `dropped_for` says one was remembered for a different
+  // filament count and ignored this slice.
+  state.manual = (Array.isArray(st.manual) && st.manual.length === FIL.length) ? st.manual.slice() : null;
+  state.saved  = !!st.saved && !!state.manual;
+  // Kept apart from state.manual so the banner can tell "still the saved layout" from
+  // "the saved layout, since edited".
+  state.savedLayout = state.saved ? state.manual.slice() : null;
+  state.droppedFor = typeof st.dropped_for === "number" ? st.dropped_for : 0;
+  state.memoOff = false;
+  state.sel = -1; state.drag = -1;
   state.mode = st.mode === "manual" ? "manual" : "auto";
   sync();
 }
@@ -262,13 +293,21 @@ const state = {
   sel:-1,                          // colour selected for click-to-move (manual)
   drag:-1,                         // colour currently being dragged
   plan:null, slots:null, autoSwaps:0,
+  saved:false,                     // this layout is remembered with the plate
+  savedLayout:null,                // that layout, to tell "unchanged" from "since edited"
+  droppedFor:0,                    // a layout for N filaments was ignored (N != this plate's)
+  memoOff:false,                   // the banner was dismissed for this opening
 };
 
 /* ---- rendering ---- */
 const $=id=>document.getElementById(id);
 function posCard(colour, whereTag, roleTxt){
   const d=document.createElement("div");
-  d.className="pos"+(colour<0?" empty":""); d.tabIndex=0;
+  // "remembered" is not "pinned": the ring marks a spool the plate carries a saved position
+  // for, and only the ones the saved layout actually moved off the optimiser's choice.
+  const remembered = colour>=0 && state.saved && state.mode==="manual" && state.savedLayout &&
+                     state.plan && state.savedLayout[colour] !== state.plan[colour];
+  d.className="pos"+(colour<0?" empty":"")+(remembered?" remembered":""); d.tabIndex=0;
   const pinShown = colour>=0 && state.mode==="auto" && state.pins[colour]>=0;
   d.innerHTML =
     '<span class="roleband"'+(roleTxt?'':' hidden')+'>'+(roleTxt||"")+'</span>' +
@@ -302,6 +341,36 @@ function render(){
   if(showAuto) stA.innerHTML="Auto would need <b>"+state.autoSwaps+"</b>";
   $("useAuto").hidden = state.mode!=="manual";
   $("clearPins").hidden = state.mode!=="auto"; // pins only constrain the Auto plan
+
+  // banner: what the plate remembers. Dismissable, and gone once the layout stops being
+  // the saved one (switching to Auto, or moving a spool, makes the statement untrue).
+  const memo = $("memo");
+  const stillSaved = state.saved && state.mode==="manual" && state.savedLayout &&
+                     layout.join() === state.savedLayout.join();
+  if (state.memoOff || (!stillSaved && !state.droppedFor)) {
+    memo.hidden = true;
+  } else {
+    memo.hidden = false;
+    memo.className = "memo" + (stillSaved ? "" : " dropped");
+    if (stillSaved) {
+      const extra = swaps - state.autoSwaps;
+      memo.innerHTML = '<span class="chip">Saved with this plate</span>' +
+        "<span>Your layout was restored with the project." +
+        (extra > 0 ? " It costs <b>" + extra + " more swaps</b> than the optimiser would choose." : "") +
+        '</span><span class="act"><button class="linkbtn" id="memoAct">Use auto instead</button></span>';
+      $("memoAct").addEventListener("click", function(){
+        // Hand the plate back: Auto from here, and applying in Auto clears the stored layout.
+        state.mode = "auto"; state.saved = false; state.sel = -1; sync();
+      });
+    } else {
+      memo.innerHTML = '<span class="chip">Layout dropped</span>' +
+        "<span>The layout saved with this plate was for <b>" + state.droppedFor +
+        " filaments</b>; the project now has <b>" + N() + "</b>, so it no longer says where these " +
+        "spools go. Planned fresh.</span>" +
+        '<span class="act"><button class="linkbtn" id="memoAct">Dismiss</button></span>';
+      $("memoAct").addEventListener("click", function(){ state.memoOff = true; render(); });
+    }
+  }
 
   // hint line
   $("hint").innerHTML = state.mode==="auto"

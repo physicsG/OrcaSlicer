@@ -57,7 +57,7 @@ enum class NoiseType {
 };
 
 enum PrintHostType {
-    htPrusaLink, htPrusaConnect, htOctoPrint, htDuet, htFlashAir, htAstroBox, htRepetier, htMKS, htESP3D, htCrealityPrint, htObico, htFlashforge, htSimplyPrint, htElegooLink, htMoonRaker_mqtt, htMoonRaker, 
+    htPrusaLink, htPrusaConnect, htOctoPrint, htDuet, htFlashAir, htAstroBox, htRepetier, htMKS, htESP3D, htCrealityPrint, htObico, htFlashforge, htSimplyPrint, htElegooLink, htMoonRaker_mqtt, htMoonRaker,
 };
 
 enum AuthorizationType {
@@ -293,7 +293,7 @@ enum BedType {
 
 // BBS
 enum LayerSeq {
-    flsAuto, 
+    flsAuto,
     flsCustomize
 };
 
@@ -953,7 +953,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloat,              travel_jerk))
     ((ConfigOptionBool,               precise_z_height))
     ((ConfigOptionFloat,              default_junction_deviation))
-        
+
     ((ConfigOptionBool, interlocking_beam))
     ((ConfigOptionFloat,interlocking_beam_width))
     ((ConfigOptionFloat,interlocking_orientation))
@@ -1153,8 +1153,8 @@ PRINT_CONFIG_CLASS_DEFINE(
 PRINT_CONFIG_CLASS_DEFINE(
     GCodeConfig,
 
-    ((ConfigOptionString,              before_layer_change_gcode)) 
-    ((ConfigOptionString,              printing_by_object_gcode)) 
+    ((ConfigOptionString,              before_layer_change_gcode))
+    ((ConfigOptionString,              printing_by_object_gcode))
     ((ConfigOptionFloats,              deretraction_speed))
     //BBS
     ((ConfigOptionBool,                enable_arc_fitting))
@@ -1191,7 +1191,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionBool,                bbl_bed_temperature_gcode))
     ((ConfigOptionEnum<GCodeFlavor>,   gcode_flavor))
 
-    ((ConfigOptionFloat,               time_cost)) 
+    ((ConfigOptionFloat,               time_cost))
     ((ConfigOptionString,              layer_change_gcode))
     ((ConfigOptionString,              time_lapse_gcode))
 
@@ -1199,7 +1199,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloat,               max_volumetric_extrusion_rate_slope_segment_length))
     ((ConfigOptionBool,               extrusion_rate_smoothing_external_perimeter_only))
 
-    
+
     ((ConfigOptionPercents,            retract_before_wipe))
     ((ConfigOptionFloats,              retraction_length))
     ((ConfigOptionFloats,              retract_length_toolchange))
@@ -1361,6 +1361,7 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionFloats,             nozzle_diameter))
     ((ConfigOptionInts,               ace_head_capacity))
     ((ConfigOptionInts,               ace_head_unit))
+    ((ConfigOptionInts,               ace_plan_layout))
     ((ConfigOptionBool,               reduce_infill_retraction))
     ((ConfigOptionBool,               ooze_prevention))
     ((ConfigOptionString,             filename_format))
@@ -1470,7 +1471,7 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
 
     ((ConfigOptionBools,               activate_chamber_temp_control))
     ((ConfigOptionInts ,               chamber_temperature))
-    
+
     // Orca: support adaptive bed mesh
     ((ConfigOptionFloat,               preferred_orientation))
     ((ConfigOptionPoint,               bed_mesh_min))

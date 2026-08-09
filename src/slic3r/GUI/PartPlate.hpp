@@ -277,7 +277,7 @@ public:
 
     void set_timelapse_warning_code(int code) { m_timelapse_warning_code = code; }
     int  timelapse_warning_code() { return m_timelapse_warning_code; }
-    
+
     //get the print's object, result and index
     void get_print(PrintBase **print, GCodeResult **result, int *index);
 
@@ -480,6 +480,12 @@ public:
     void set_other_layers_print_sequence(const std::vector<LayerPrintSequence>& layer_seq_list);
     void update_first_layer_print_sequence(size_t filament_nums);
     void update_first_layer_print_sequence_when_delete_filament(size_t filamen_id);
+
+    // multiACE: the filament -> toolhead layout the user applied on this plate, one head
+    // index per filament. Empty means the optimiser decides. Stored on the plate rather
+    // than the Print so it survives a re-slice and rides in the 3MF with its plate.
+    std::vector<int> get_ace_plan_layout() const;
+    void             set_ace_plan_layout(const std::vector<int> &head_of);
 
 
     void print() const;

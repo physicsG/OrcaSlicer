@@ -19463,6 +19463,13 @@ bool Plater::review_ace_assignment()
     if (!chosen.feasible)
         return false;   // a layout that leaves a filament unplaced must never reach gcode
 
+    // Persist a hand-made layout with its plate, so re-slicing or reopening the project does
+    // not quietly hand the plate back to the optimiser. Only a manual one: applying in Auto
+    // means "yes, use the computed plan", and pinning that would freeze today's answer onto
+    // a plate whose colours may change tomorrow - so it clears any layout instead.
+    if (PartPlate *plate = p->partplate_list.get_curr_plate())
+        plate->set_ace_plan_layout(dlg.result().manual ? chosen.head_of : std::vector<int>());
+
     print->set_ace_plan_override(chosen);
     return true;
 }

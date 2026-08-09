@@ -10,13 +10,14 @@
 - **Where we are:** read **[13-roadmap.md](13-roadmap.md)** first — it is the front-to-back
   plan and the authority on what is done vs missing. Roadmap phases 1–5 are all **done and
   observed**: topology config, planner, gcode emission, assignment dialog (on export *and*
-  print, with Apply reaching the file), and cost visibility.
+  print, with Apply reaching the file), and cost visibility. Persistence is done too: a
+  hand layout rides in the 3MF with its plate.
 - **Overall status:** 🟢 End to end on the real 7-colour cube. The U1 Device tab is a Flutter
   webview (`PrinterWebView`+SSWCP, no in-repo source) so ACE can't render there; the native
   "U1 + multiACE" tab and the Prepare/Preview tabs carry the UI instead.
-- **Next action:** roadmap item 4 — **persistence** (an applied layout lives on one `Print`
-  and is lost on re-slice or reopen; it needs to ride in the 3MF alongside the plate). Then
-  reconciliation with what is actually loaded in the ACE, then infeasible plates.
+- **Next action:** roadmap item 5 — **reconciliation**. Orca decides "slot 2 holds the red";
+  nothing checks the machine agrees, so a plan that contradicts the loaded spools prints the
+  wrong colours with no warning. Then infeasible plates, pinning/drying, multi-ACE, multi-plate.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
   - `libslic3r_tests "[ace_mmu]"` → 8 cases / 67 assertions pass (incl. live fixture).
     Rebuild: `cmake --build build --config Release --target libslic3r_tests -j 8`.
@@ -88,6 +89,41 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-09 (cont.) — An applied layout is remembered with its plate
+- Roadmap item 4 / gap D. A **hand** layout is stored on the plate as `ace_plan_layout`
+  (one toolhead index per filament, no slots — `evaluate_assignment` derives those) and
+  rides in the 3MF as plate metadata. `Print::process` prefers this session's Apply, else
+  the stored one, and **re-prices** either against the plate's current sequence rather
+  than trusting a saved swap count; `optimal` is set only when the layout agrees with
+  what the planner chose.
+- Applying in **Auto** clears the stored layout — "yes, use the computed plan" must not
+  freeze today's answer onto a plate whose colours may change.
+- **Dialog contract changed** (mockup first, agreed with the user:
+  [assignment-persistence-mockup.html](assignment-persistence-mockup.html)): a remembered
+  layout is sent as `manual`, **never as pins**, so the page's own optimiser stays free
+  and "Auto would need N" is a real comparison. Banners: *Saved with this plate* (with
+  the extra cost and *Use auto instead*) and *Layout dropped* when it was saved for a
+  different filament count. Remembered spools get a blue ring, distinct from the orange
+  pin — remembered is not pinned.
+- **Trap avoided:** clearing writes an *empty* option instead of erasing the key.
+  `Print::apply` diffs the config it is handed against the one it holds, and a key that
+  is simply absent is never diffed — erasing would have left the Print holding the layout
+  the user just told it to forget.
+- Verified end to end, in a **new process**: apply by hand → save project → reopen →
+  slices straight to `swaps:349 optimal:0`; the 3MF carries
+  `ace_plan_layout value="3 0 3 1 2 3 3"`; *Use auto instead* → 300 swaps, banner gone;
+  applying in Auto → key absent from the re-saved 3MF; a 7-filament layout on a
+  6-filament plate → *Layout dropped* banner and `swaps:200 optimal:1`.
+- Corrected in the mockup rather than shipped: I had claimed the old contract reported
+  "Auto would need 349". It does not — that chip is computed from a free optimum. The
+  real fault is narrower: in Auto mode the chip is *hidden*, so the 300 is never shown,
+  and every spool wears a pin it did not earn.
+- **Known wart, pre-existing:** waste = swaps × (this slice's flush ÷ this slice's
+  swaps), so the same layout is quoted ~47.0 g from an auto slice and ~40.4 g from its
+  own. Swap counts are exact; the gram estimate drifts.
+- Next: roadmap item 5, **reconciliation** (B) — nothing checks that the ACE actually
+  holds what the plan assumes.
 
 ### 2026-08-09 — Apply to plate reaches the gcode, on export *and* print
 - **The previous diagnosis was wrong.** Building the committed `m_ace_plan_user` fix

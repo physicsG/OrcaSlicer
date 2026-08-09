@@ -607,7 +607,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
         "z_hop",
         "travel_slope",
         "retract_lift_above",
-        "retract_lift_below", 
+        "retract_lift_below",
         "retract_lift_enforce",
         "retract_restart_extra",
         "retract_restart_extra_toolchange",
@@ -642,7 +642,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
         "accel_to_decel_factor",
         "wipe_on_loops",
         "gcode_comments",
-        "gcode_label_objects", 
+        "gcode_label_objects",
         "exclude_object",
         "support_material_interface_fan_speed",
         "internal_bridge_fan_speed", // ORCA: Add support for separate internal bridge fan speed control
@@ -746,14 +746,17 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
             || opt_key == "textured_cool_plate_temp"
             || opt_key == "eng_plate_temp"
             || opt_key == "hot_plate_temp"
-            || opt_key == "textured_plate_temp" 
+            || opt_key == "textured_plate_temp"
             || opt_key == "graphic_effect_plate_temp"
             || opt_key == "enable_prime_tower"
             || opt_key == "prime_tower_width"
             || opt_key == "prime_tower_brim_width"
             || opt_key == "first_layer_print_sequence"
+            // The multiACE plan is decided at the end of psWipeTower, so a layout the user
+            // applied has to re-enter there rather than only at gcode-writing time.
+            || opt_key == "ace_plan_layout"
             || opt_key == "other_layers_print_sequence"
-            || opt_key == "other_layers_print_sequence_nums" 
+            || opt_key == "other_layers_print_sequence_nums"
             || opt_key == "wipe_tower_bridging"
             || opt_key == "wipe_tower_extra_flow"
             || opt_key == "wipe_tower_no_sparse_layers"
@@ -769,7 +772,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
             || opt_key == "initial_layer_speed"
             || opt_key == "initial_layer_travel_speed"
             || opt_key == "slow_down_layers"
-            || opt_key == "idle_temperature" 
+            || opt_key == "idle_temperature"
             || opt_key == "filament_tower_ironing_area"
             || opt_key == "wipe_tower_cone_angle"
             || opt_key == "wipe_tower_extra_spacing"
@@ -1052,8 +1055,9 @@ void Print::set_ace_plan_override(const AceMmu::LoadingPlan &plan)
 {
     // Remember it separately: exporting re-runs processing, which recomputes the plan and
     // would otherwise throw the user's layout away between Apply and the written gcode.
-    m_ace_plan_user = plan;
-    m_ace_plan      = plan;
+    m_ace_plan_user    = plan;
+    m_ace_plan         = plan;
+    m_ace_plan_is_user = true;
     // The plan is consumed while writing gcode (tool remap, ACE_SWAP_HEAD arguments, the
     // auto-load block), so only that step is stale.
     this->invalidate_step(psGCodeExport);
@@ -1634,7 +1638,7 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
 
             Vec3d test =this->shrinkage_compensation();
             const double shrinkage_compensation_z = this->shrinkage_compensation().z();
-            
+
             if (shrinkage_compensation_z != 1. && layers.back() > (this->config().printable_height / shrinkage_compensation_z + EPSILON)) {
                 // The object exceeds the maximum build volume height because of shrinkage compensation.
                 return StringObjectException{
@@ -1657,14 +1661,14 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
     }
 
     // Some of the objects has variable layer height applied by painting or by a table.
-    bool has_custom_layering = std::find_if(m_objects.begin(), m_objects.end(), 
-        [](const PrintObject *object) { return object->model_object()->has_custom_layering(); }) 
+    bool has_custom_layering = std::find_if(m_objects.begin(), m_objects.end(),
+        [](const PrintObject *object) { return object->model_object()->has_custom_layering(); })
         != m_objects.end();
 
     // Custom layering is not allowed for tree supports as of now.
     for (size_t print_object_idx = 0; print_object_idx < m_objects.size(); ++ print_object_idx)
         if (const PrintObject &print_object = *m_objects[print_object_idx];
-            print_object.has_support_material() && is_tree(print_object.config().support_type.value) && (print_object.config().support_style.value == smsTreeOrganic || 
+            print_object.has_support_material() && is_tree(print_object.config().support_type.value) && (print_object.config().support_style.value == smsTreeOrganic ||
                 // Orca: use organic as default
                 print_object.config().support_style.value == smsDefault) &&
             print_object.model_object()->has_custom_layering()) {
@@ -1695,7 +1699,7 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
 
         if (m_config.ooze_prevention && m_config.single_extruder_multi_material)
             return {L("Ooze prevention is only supported with the wipe tower when 'single_extruder_multi_material' is off.")};
-            
+
 #if 0
         if (m_config.gcode_flavor != gcfRepRapSprinter && m_config.gcode_flavor != gcfRepRapFirmware &&
             m_config.gcode_flavor != gcfRepetier && m_config.gcode_flavor != gcfMarlinLegacy && m_config.gcode_flavor != gcfMarlinFirmware)
@@ -1753,7 +1757,7 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
             if (has_custom_layering) {
                 std::vector<std::vector<coordf_t>> layer_z_series;
                 layer_z_series.assign(m_objects.size(), std::vector<coordf_t>());
-               
+
                 for (size_t idx_object = 0; idx_object < m_objects.size(); ++idx_object) {
                     layer_z_series[idx_object] = generate_object_layers(m_objects[idx_object]->slicing_parameters(), layer_height_profiles[idx_object], m_objects[idx_object]->config().precise_z_height.value);
                 }
@@ -2022,7 +2026,7 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
                                       "machine_max_junction_deviation value in your printer's configuration to get higher limits.");
                 warning->opt_key = warning_key;
             }
-            
+
             // check acceleration
             const auto max_accel = m_config.machine_max_acceleration_extruding.values[0];
             if (warning_key.empty() && m_default_object_config.default_acceleration > 0 && max_accel > 0) {
@@ -2578,6 +2582,8 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
         // and everything downstream is a no-op.
         m_ace_plan = AceMmu::LoadingPlan{};
         m_ace_sequence.clear();
+        m_ace_plan_is_user     = false;
+        m_ace_plan_dropped_for = 0;
         {
             const std::vector<int>& caps    = m_config.ace_head_capacity.values;
             const std::vector<int>& units   = m_config.ace_head_unit.values;
@@ -2599,16 +2605,43 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
                         seq.push_back(int(e));
                 const int n_filaments = int(m_config.filament_diameter.values.size());
                 m_ace_plan = AceMmu::plan_loading(heads, seq, n_filaments);
+
+                // A layout the user applied wins over the computed one. Two sources, same
+                // meaning: m_ace_plan_user is this session's Apply, ace_plan_layout is one
+                // restored from the project. The in-session one wins because it is the more
+                // recent statement of intent; the stored one is what survives a reopen.
+                std::vector<int> user_heads;
+                if (m_ace_plan_user.feasible && m_ace_plan_user.head_of.size() == size_t(n_filaments))
+                    user_heads = m_ace_plan_user.head_of;
+                else {
+                    m_ace_plan_user = AceMmu::LoadingPlan{};
+                    const std::vector<int>& stored = m_config.ace_plan_layout.values;
+                    // Size is the check that matters: a different filament count means the
+                    // layout no longer refers to the same spools.
+                    if (stored.size() == size_t(n_filaments))
+                        user_heads = stored;
+                    else if (!stored.empty())
+                        // Remembered, but for a different set of spools. Ignored here, and
+                        // reported so the dialog can say so rather than silently replanning.
+                        m_ace_plan_dropped_for = stored.size();
+                }
+                if (!user_heads.empty()) {
+                    // Re-priced against this sequence rather than trusting a stored number:
+                    // the plate may have changed since the layout was applied, and a swap
+                    // count that no longer matches the gcode is worse than none. Slots come
+                    // out of the same first-use rule the planner uses.
+                    AceMmu::LoadingPlan priced = AceMmu::evaluate_assignment(heads, seq, n_filaments, user_heads);
+                    if (priced.feasible) {
+                        // Optimal iff it happens to agree with what the planner chose - the
+                        // honest answer, and it keeps "optimal:0" in the gcode meaningful.
+                        priced.optimal      = m_ace_plan.feasible && priced.head_of == m_ace_plan.head_of;
+                        m_ace_plan          = priced;
+                        m_ace_plan_is_user  = true;
+                    }
+                }
                 // Kept so the assignment dialog can price a user's own layout against the
                 // same sequence the planner optimised, rather than re-deriving it.
                 m_ace_sequence = std::move(seq);
-                // A layout the user applied wins over the computed one, as long as it still
-                // describes this plate. Size is the check that matters: a changed filament
-                // count means the old layout no longer refers to the same spools.
-                if (m_ace_plan_user.feasible && m_ace_plan_user.head_of.size() == size_t(n_filaments))
-                    m_ace_plan = m_ace_plan_user;
-                else
-                    m_ace_plan_user = AceMmu::LoadingPlan{};
             }
         }
         this->set_done(psWipeTower);
@@ -3014,7 +3047,7 @@ Points Print::first_layer_wipe_tower_corners(bool check_wipe_tower_existance) co
         double width = m_config.prime_tower_width + 2*m_wipe_tower_data.brim_width;
         double depth = m_wipe_tower_data.depth + 2*m_wipe_tower_data.brim_width;
         Vec2d pt0(-m_wipe_tower_data.brim_width, -m_wipe_tower_data.brim_width);
-        
+
         // First the corners.
         std::vector<Vec2d> pts = { pt0,
                                    Vec2d(pt0.x()+width, pt0.y()),
@@ -3160,9 +3193,9 @@ const WipeTowerData &Print::wipe_tower_data(size_t filaments_cnt) const
                 max_wipe_volumes.emplace_back(*std::max_element(v.begin(), v.end()));
             float maximum = std::accumulate(max_wipe_volumes.begin(), max_wipe_volumes.end(), 0.f);
             maximum       = maximum * filaments_cnt / max_wipe_volumes.size();
-            
+
             // Orca: it's overshooting a bit, so let's reduce it a bit
-            maximum *= 0.6; 
+            maximum *= 0.6;
             const_cast<Print *>(this)->m_wipe_tower_data.depth = maximum / (layer_height * width);
         } else {
             double wipe_volume = m_config.prime_volume;
@@ -3567,7 +3600,7 @@ std::tuple<float, float> Print::object_skirt_offset(double margin_height) const
 {
     if (config().skirt_loops == 0 || config().skirt_type != stPerObject)
         return std::make_tuple(0, 0);
-    
+
     float max_nozzle_diameter = *std::max_element(m_config.nozzle_diameter.values.begin(), m_config.nozzle_diameter.values.end());
     float max_layer_height    = *std::max_element(config().max_layer_height.values.begin(), config().max_layer_height.values.end());
     float line_width = m_config.initial_layer_line_width.get_abs_value(max_nozzle_diameter);
@@ -4956,8 +4989,8 @@ int PrintObjectRegions::FuzzySkinPaintedRegion::parent_print_object_region_id(co
     return this->parent_print_object_region(layer_range)->print_object_region_id();
 }
 
-ExtrusionLayers FakeWipeTower::getTrueExtrusionLayersFromWipeTower() const 
-{ 
+ExtrusionLayers FakeWipeTower::getTrueExtrusionLayersFromWipeTower() const
+{
     ExtrusionLayers wtels;
     wtels.type = ExtrusionLayersType::WIPE_TOWER;
     std::vector<float> layer_heights;

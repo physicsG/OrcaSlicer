@@ -126,10 +126,36 @@ More colours than total capacity has no layout. The planner returns infeasible
 and slicing proceeds as a plain toolchanger — silently wrong for the user's
 intent. *Mockup needed: the refusal, saying how many slots short and what to drop.*
 
-### D. Persistence (gap)
+### D. Persistence (done)
 
-An applied layout lives on one `Print`. Re-slice or reopen the project and it is
-gone. Needs storing in the 3MF alongside the plate.
+A hand layout is stored on its plate as `ace_plan_layout` (one toolhead index per
+filament) and rides in the 3MF as plate metadata. `Print::process` re-prices it
+against the plate's *current* sequence rather than trusting a saved swap count, and
+marks it `optimal` only when it agrees with what the planner chose.
+
+Only a **hand** layout is remembered. Applying in Auto means "yes, use the computed
+plan", so it clears any stored layout rather than freezing today's answer onto a
+plate whose colours may change.
+
+The dialog states what the plate is carrying — see
+[assignment-persistence-mockup.html](assignment-persistence-mockup.html) for the
+three states and why each is shaped the way it is:
+
+- restored → opens in **Manual**, banner *Saved with this plate* naming the extra
+  cost, and *Use auto instead* to hand the plate back
+- a remembered layout arrives as `manual`, **never as pins**, so the page's own
+  optimiser stays free and "Auto would need N" is a real comparison
+- saved for a different filament count → dropped, and the banner says so
+
+Verified end to end: apply by hand → save → reopen in a **new process** → slices
+straight to `swaps:349 optimal:0`; *Use auto instead* → 300; applying in Auto clears
+the key from the saved 3MF; 7-filament layout on a 6-filament plate → dropped, and
+the plate plans fresh at `swaps:200 optimal:1`.
+
+**Known wart (pre-existing, not introduced here):** the waste figure is
+swaps × (what this slice actually flushed ÷ this slice's swaps), so the same layout
+is quoted ~47.0 g when priced from an auto slice and ~40.4 g when priced from its
+own. The swap counts are exact; only the gram estimate drifts.
 
 ### E. Pinning and drying (partial)
 
@@ -155,19 +181,20 @@ that only the current plate is reviewed.
    path, not recomputation. See Phase 4.
 2. ~~**Notification**~~ — done 2026-08-09; it fires, and now lasts 20 s.
 3. ~~**Print path** (A)~~ — done 2026-08-09.
-4. **Persistence** (D) — an applied layout that evaporates is worse than none.
-5. **Reconciliation** (B) — the highest-consequence correctness gap.
+4. ~~**Persistence** (D)~~ — done 2026-08-09.
+5. **Reconciliation** (B) — the highest-consequence correctness gap, and next.
 6. **Infeasible plates** (C), then **pinning/drying** (E), **multi-ACE** (F),
    **multi-plate** (G).
 
 ## Mockups to produce
 
-| # | Mockup | For |
-|---|--------|-----|
-| 2 | Planned vs actual ACE contents, with reconcile actions | B |
-| 3 | Infeasible plate refusal | C |
-| 4 | Pinned / drying spool states | E |
-| 5 | Two-ACE assignment board | F |
+| # | Mockup | For | Status |
+|---|--------|-----|--------|
+| — | [Remembering a filament layout](assignment-persistence-mockup.html) | D | built to it |
+| 2 | Planned vs actual ACE contents, with reconcile actions | B | to produce |
+| 3 | Infeasible plate refusal | C | to produce |
+| 4 | Pinned / drying spool states | E | to produce |
+| 5 | Two-ACE assignment board | F | to produce |
 
 ## Standing risks
 

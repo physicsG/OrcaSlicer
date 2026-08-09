@@ -232,11 +232,11 @@ struct PrintInstance
 	const ModelInstance *model_instance;
 	// Shift of this instance's center into the world coordinates.
 	Point 				 shift;
-    
+
     BoundingBoxf3   get_bounding_box();
     Polygon get_convex_hull_2d();
     // SoftFever
-    // 
+    //
     // instance id
     size_t               id;
     // Orca: unique id used by marlin/rrf cancel object feature
@@ -614,9 +614,9 @@ private:
 
     PrintObject*                            m_shared_object{ nullptr };
 
-    
+
     // SoftFever
-    // 
+    //
     // object id
     size_t               m_id;
     void apply_conical_overhang();
@@ -709,7 +709,7 @@ struct FakeWipeTower
 
         std::vector<ExtrusionPaths> paths;
         for (float hh = 0.f; hh < h; hh += lh) {
-            
+
             if (hh != 0.f) {
                 // The wipe tower may be getting smaller. Find the depth for this layer.
                 size_t i = 0;
@@ -808,7 +808,7 @@ struct WipeTowerData
     }
 
 private:
-	// Only allow the WipeTowerData to be instantiated internally by Print, 
+	// Only allow the WipeTowerData to be instantiated internally by Print,
 	// as this WipeTowerData shares reference to Print::m_tool_ordering.
 	friend class Print;
 	WipeTowerData(ToolOrdering &tool_ordering) : tool_ordering(tool_ordering) { clear(); }
@@ -865,7 +865,7 @@ struct PrintStatistics
     static const std::string TotalFilamentCostValueMask;
     static const std::string TotalFilamentUsedWipeTower;
     static const std::string TotalFilamentUsedWipeTowerValueMask;
-    
+
 };
 
 typedef std::vector<PrintObject*>       PrintObjectPtrs;
@@ -954,7 +954,7 @@ public:
                                                      bool& out_pei_not_pla,
                                                      bool& out_pei_tpu,
                                                      const PresetBundle* preset_bundle = nullptr) const;
-    
+
     double              max_allowed_layer_height() const;
     bool                has_support_material() const;
     // Make sure the background processing has no access to this model_object during this call!
@@ -1011,6 +1011,13 @@ public:
     void                        set_ace_plan_override(const AceMmu::LoadingPlan &plan);
     // Collapsed tool sequence the plan was optimised against; empty when there is no plan.
     const std::vector<int>&     ace_sequence() const { return m_ace_sequence; }
+    // True when ace_plan() is a layout the user chose rather than one the optimiser found -
+    // either applied this session or restored from the project. The dialog opens in Manual
+    // on these, so a saved layout is never presented as the optimiser's recommendation.
+    bool                        ace_plan_is_user() const { return m_ace_plan_is_user; }
+    // Filament count a stored layout was saved for, when it no longer matches this plate and
+    // was therefore ignored; 0 when nothing was dropped. Lets the dialog say so.
+    size_t                      ace_plan_dropped_for() const { return m_ace_plan_dropped_for; }
 
     bool                        enable_timelapse_print() const;
 
@@ -1078,7 +1085,7 @@ public:
     bool is_all_objects_are_short() const {
         return std::all_of(this->objects().begin(), this->objects().end(), [&](PrintObject* obj) { return obj->height() < scale_(this->config().nozzle_height.value); });
     }
-    
+
     // Orca: Implement prusa's filament shrink compensation approach
     // Returns if all used filaments have same shrinkage compensations.
      bool has_same_shrinkage_compensations() const;
@@ -1113,9 +1120,11 @@ private:
     // cannot quietly discard it. Empty head_of means "no override".
     AceMmu::LoadingPlan                     m_ace_plan_user;
     std::vector<int>                        m_ace_sequence;
+    bool                                    m_ace_plan_is_user{false};
+    size_t                                  m_ace_plan_dropped_for{0};
     PrintObjectPtrs                         m_objects;
     PrintRegionPtrs                         m_print_regions;
-    
+
     //SoftFever
     bool m_isBBLPrinter;
 
@@ -1147,7 +1156,7 @@ private:
     //BBS
     ConflictResultOpt m_conflict_result;
     FakeWipeTower     m_fake_wipe_tower;
-    
+
     //SoftFever: calibration
     Calib_Params m_calib_params;
 

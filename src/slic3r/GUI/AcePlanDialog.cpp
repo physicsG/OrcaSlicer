@@ -99,7 +99,20 @@ std::string AcePlanDialog::build_state_json() const
     }
     st["units"]    = units;
     st["sequence"] = m_print.ace_sequence();
-    st["mode"]     = "auto";
+
+    // A layout the user chose opens in Manual, as itself. Sending it as pins instead would
+    // constrain the page's own optimiser to it, so the plate would read as "the optimiser
+    // chose this" - and the free-optimum comparison the page shows in Manual would never
+    // appear. See docs/ace-mmu/assignment-persistence-mockup.html.
+    const bool user_layout = m_print.ace_plan_is_user() && plan.feasible;
+    st["mode"]   = user_layout ? "manual" : "auto";
+    st["saved"]  = user_layout;
+    if (user_layout)
+        st["manual"] = plan.head_of;
+    // A layout remembered for a different filament count was ignored this slice; say which,
+    // so its disappearance is explained rather than merely noticed.
+    if (const size_t dropped = m_print.ace_plan_dropped_for(); dropped > 0)
+        st["dropped_for"] = dropped;
 
     // The page prices a layout as swaps x grams-per-swap, and falls back to a demo constant
     // of 7 g if we say nothing - which read "~2100 g" on a plate that actually flushes about
@@ -131,9 +144,11 @@ std::string AcePlanDialog::build_state_json() const
         st["grams_per_swap"] = (sum_mm3 / double(pairs)) / 1000. * density;
 
     // Seed the page with the computed layout as pins so it opens on the plan that the
-    // gcode would otherwise use, rather than on an empty board.
+    // gcode would otherwise use, rather than on an empty board. Not for a user's own
+    // layout: that arrives as `manual` above, leaving the page's optimiser unconstrained
+    // so "Auto would need N" is a real comparison rather than a restatement.
     st["pins"] = nlohmann::json::array();
-    for (size_t f = 0; f < plan.head_of.size(); ++f) {
+    for (size_t f = 0; !user_layout && f < plan.head_of.size(); ++f) {
         if (plan.head_of[f] < 0)
             continue;
         nlohmann::json p;

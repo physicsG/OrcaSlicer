@@ -595,7 +595,7 @@ void PartPlate::calc_vertex_for_plate_name_edit_icon(GLTexture *texture, int ind
     float name_width = 0.0;
     if (texture && texture->get_width() > 0 && texture->get_height())
         // original width give correct ratio in here since rendering width can be much higher because of next_highest_power_of_2 for rendering
-        name_width = icon_sz * texture->m_original_width / texture->get_height(); 
+        name_width = icon_sz * texture->m_original_width / texture->get_height();
 
     //if (m_plater && m_plater->get_build_volume_type() == BuildVolume_Type::Circle)
     //    px = scale_(bed_ext.center()(0)) + m_name_texture_width * 0.50 - height * 0.50;
@@ -1955,8 +1955,8 @@ void PartPlate::generate_plate_name_texture()
     calc_vertex_for_plate_name_edit_icon(&m_name_texture, 0, m_plate_name_edit_icon);
     register_model_for_picking(*canvas, m_plate_name_edit_icon, picking_id_component(6));
 }
-void PartPlate::set_plate_name(const std::string& name) 
-{ 
+void PartPlate::set_plate_name(const std::string& name)
+{
 	// compare if name equal to m_name, case sensitive
     if (boost::equals(m_name, name))
         return;
@@ -3070,6 +3070,25 @@ void PartPlate::set_first_layer_print_sequence(const std::vector<int>& sorted_fi
 	}
 }
 
+std::vector<int> PartPlate::get_ace_plan_layout() const
+{
+    const ConfigOptionInts *op_layout = m_config.option<ConfigOptionInts>("ace_plan_layout");
+    return op_layout ? op_layout->values : std::vector<int>();
+}
+
+void PartPlate::set_ace_plan_layout(const std::vector<int> &head_of)
+{
+    // Clearing writes an empty option rather than erasing the key. Erasing looks tidier but
+    // does not clear: Print::apply diffs the config it is handed against the one it holds,
+    // and a key that is simply absent is never diffed - so the Print would keep the layout
+    // the user just told it to forget. An empty vector is a value, so it propagates.
+    // (The 3MF writer skips empties, so nothing is stored for a plate with no layout.)
+    if (ConfigOptionInts *op_layout = m_config.option<ConfigOptionInts>("ace_plan_layout"))
+        op_layout->values = head_of;
+    else
+        m_config.set_key_value("ace_plan_layout", new ConfigOptionInts(head_of));
+}
+
 void PartPlate::set_other_layers_print_sequence(const std::vector<LayerPrintSequence>& layer_seq_list)
 {
 	if (layer_seq_list.empty()) {
@@ -3374,7 +3393,7 @@ void PartPlateList::generate_icon_textures()
 		}
 	}
 
-	
+
 	// if (m_move_front_texture.get_id() == 0)
     {
         file_name = path + (m_is_dark ? "plate_move_front_dark.svg" : "plate_move_front.svg");
