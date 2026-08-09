@@ -53,21 +53,13 @@
   ],
   "running": false,
   "state": "done",
-  "binary": "13:56:26",
-  "generated": "13:57:45",
+  "binary": "12:34:43",
+  "generated": "15:30:16",
   "tests": "207 unit assertions \u00b7 2 e2e scenarios \u00b7 all passing",
-  "binary_age": "1m ago",
-  "binary_stale": false,
-  "binary_note": "newer than every source file",
+  "binary_age": "2h 55m ago",
+  "binary_stale": true,
+  "binary_note": "STALE - older than Print.cpp (1h 58m ago)",
   "debug_binary": "not built",
   "run_started": 1786187721.0533872,
-  "run_started_done": 3,
-  "progress": {
-    "done": 5,
-    "total": 5,
-    "pct": 100,
-    "eta": "",
-    "what": "snapmaker-orca",
-    "log": "/tmp/orca_build_rel.log"
-  }
+  "run_started_done": 3
 }

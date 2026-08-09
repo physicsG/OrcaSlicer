@@ -461,3 +461,54 @@ sets it. `full_width` lines draw no label column, so a label must live inside th
 Worth knowing: the same unguarded `.front()` is upstream OrcaSlicer/PrusaSlicer code, so any
 future widget-only line hits it. It is left as-is rather than patched — a guard there would
 silently skip lines instead of crashing, which trades a loud bug for a quiet one.
+
+## State at handover (2026-08-09)
+
+Branch `feat/ace-mmu-slicing`, tree clean at `156f571f4`. The plan for what remains
+is **[13-roadmap.md](13-roadmap.md)** — read that first; this section is only
+"where the last session stopped".
+
+### Verified working, end to end, on the real 7-colour cube
+
+Slicing `Test_Cube_U1_multiACE.3mf` on `Snapmaker U1 (0.4 nozzle) - multiACE`
+(capacity `[1,1,1,4]`, unit `[-1,-1,-1,0]`) produces:
+
+- `; multiACE plan: … swaps:300 optimal:1` in the gcode header
+- `T0–T3` only — no virtual tool reaches the file
+- 301 `ACE_SWAP_HEAD` (300 swaps + auto-load), all `ACE=0`
+- 300 `ACE_SET_PURGE`, every one adjacent to its swap
+- pre-extrude on heads 0/1/2 only, never on the ACE head
+- settings page shows named values with `None` on stock feeders
+- assignment dialog opens on export with live topology, and Manual mode re-prices
+  (300 → 349 swaps, 40.4 → 47.0 g) against "Auto would need 300"
+
+### The one open defect
+
+**Apply to plate does not reach the gcode.** Applying a 349-swap manual layout and
+exporting wrote the 300-swap auto plan: exporting re-processes, which recomputed
+and discarded the override.
+
+A fix is **committed but never built or run** — the build was still going when the
+session ended, and the status page reports the binary as older than `Print.cpp`.
+`Print` now keeps the applied layout in `m_ace_plan_user`, separate from the
+computed `m_ace_plan`, and re-applies it after planning when the filament count
+still matches.
+
+**To continue, in order:**
+
+1. `cmake --build build --config Release --target snapmaker-orca -j "$(nproc)"`
+   then confirm `./.claude/tools/start.sh status` says the binary is newer than
+   every source file. It is stale right now.
+2. Re-run the manual test: `./.claude/tools/start.sh headless ~/proj/models/Test_Cube_U1_multiACE.3mf`,
+   slice (click 1394,99), Ctrl+G, click **Manual** (845,207), click a feeder spool
+   then an ACE slot to swap them, **Apply to plate** (1170,799), save, then unzip
+   the `.gcode.3mf` and check the header. Success is `optimal:0` and the swap count
+   the dialog showed — currently it writes `optimal:1` and 300.
+3. If it now holds, the next items are the roadmap's order: notification lifetime,
+   then the **print path** (the dialog is on export only), then persistence.
+
+### Never observed
+
+The post-slice notification. It is built and reads the same sliced `Print` as the
+dialog, but auto-dismisses faster than a screenshot loop, so it is unknown whether
+it fires at all. Do not assume either way.
