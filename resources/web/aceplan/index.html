@@ -296,7 +296,7 @@ function render(){
   const stS=$("stSwaps"), stW=$("stWaste"), stA=$("stAuto");
   stS.innerHTML="Swaps <b>"+(swaps==null?"—":swaps)+"</b>";
   stS.className="stat "+(swaps!=null && swaps<=state.autoSwaps?"good":"bad");
-  stW.innerHTML="Waste <b>~"+(swaps==null?"—":swaps*GRAMS_PER_SWAP)+" g</b>";
+  stW.innerHTML="Waste <b>~"+(swaps==null?"—":(swaps*GRAMS_PER_SWAP).toFixed(1))+" g</b>";
   const showAuto = state.mode==="manual";
   stA.hidden=!showAuto;
   if(showAuto) stA.innerHTML="Auto would need <b>"+state.autoSwaps+"</b>";

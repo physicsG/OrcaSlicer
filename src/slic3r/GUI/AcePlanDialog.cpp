@@ -1,6 +1,7 @@
 #include "AcePlanDialog.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/filesystem/path.hpp>
@@ -99,6 +100,35 @@ std::string AcePlanDialog::build_state_json() const
     st["units"]    = units;
     st["sequence"] = m_print.ace_sequence();
     st["mode"]     = "auto";
+
+    // The page prices a layout as swaps x grams-per-swap, and falls back to a demo constant
+    // of 7 g if we say nothing - which read "~2100 g" on a plate that actually flushes about
+    // 40 g. A cost figure that wrong is worse than none, since making the cost honest is the
+    // whole point of this dialog. Derive it from this printer's flush matrix instead.
+    const std::vector<double> &flush = cfg.flush_volumes_matrix.values;
+    const size_t               side  = size_t(std::sqrt(double(flush.size())) + 0.5);
+    double                     sum_mm3 = 0.;
+    size_t                     pairs   = 0;
+    for (size_t i = 0; i < side; ++i)
+        for (size_t j = 0; j < side; ++j)
+            if (i != j && i * side + j < flush.size()) {
+                sum_mm3 += flush[i * side + j];
+                ++pairs;
+            }
+    // mm^3 -> cm^3 -> grams. Density varies little between the filaments on one plate, so
+    // the first one is a fair stand-in.
+    const double density = cfg.filament_density.values.empty() ? 1.24 : cfg.filament_density.get_at(0);
+    const double diam    = cfg.filament_diameter.values.empty() ? 1.75 : cfg.filament_diameter.get_at(0);
+    const double area    = M_PI / 4. * diam * diam;   // mm^2
+
+    // What slicing actually flushed beats what the matrix predicts: the matrix is a
+    // worst-case per pair, and on this printer the emitted purge came out around four
+    // times smaller. Fall back to the matrix only when there is no measurement yet.
+    const double flushed_mm = m_print.print_statistics().total_wipe_tower_filament;
+    if (flushed_mm > 0. && plan.swaps > 0)
+        st["grams_per_swap"] = (flushed_mm * area / 1000. * density) / double(plan.swaps);
+    else if (pairs > 0)
+        st["grams_per_swap"] = (sum_mm3 / double(pairs)) / 1000. * density;
 
     // Seed the page with the computed layout as pins so it opens on the plan that the
     // gcode would otherwise use, rather than on an empty board.
