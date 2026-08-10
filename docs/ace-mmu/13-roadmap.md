@@ -212,11 +212,30 @@ swaps × (what this slice actually flushed ÷ this slice's swaps), so the same l
 is quoted ~47.0 g when priced from an auto slice and ~40.4 g when priced from its
 own. The swap counts are exact; only the gram estimate drifts.
 
-### E. Pinning and drying (partial)
+### E. Pinning (partial — mockup ready, decisions open)
 
-The page supports pinning a spool to a position and the planner honours pins, but
-nothing persists them and drying is not modelled at all.
-*Mockup needed: a pinned/drying spool and what the planner does around it.*
+Drying is **out of scope for this page** (user's call): the assignment dialog is
+about where spools go, not about conditioning them.
+
+The planner already honours pins as hard constraints (`PlanPin` takes a head, a unit
+or an exact slot) and the board already sets them by click and drag. Two things are
+wrong:
+
+- **Everything arrives pinned.** C++ seeds the page with the computed plan expressed
+  as one pin per filament, so the board opens on *"Auto plan honours 7 pin(s)"* with
+  an orange badge on every spool. A badge everything carries distinguishes nothing,
+  and a deliberate pin is indistinguishable from the optimiser's own choice. The
+  seeding exists for a real reason — it guarantees the board shows the layout the
+  gcode will use rather than an equal-cost rearrangement from the page's own
+  optimiser — so the fix is to send the layout *as a layout* and keep `pins` for pins.
+- **Pins do not survive** the dialog closing, unlike an applied layout.
+
+Plus a bug found while reading: `pinTo()` records the slot only when the head index
+is literally `3` (`state.slotPins[c] = head===3 ? slot : -1`). With two ACE-fed heads
+— now a tested configuration — pinning into the other ACE head keeps the head and
+silently loses the slot.
+
+Mockup: [pinning-mockup.html](pinning-mockup.html). Four decisions open.
 
 ### F. More than one ACE (tested, short of second hardware)
 
@@ -252,8 +271,9 @@ that only the current plate is reviewed.
 3. ~~**Print path** (A)~~ — done 2026-08-09.
 4. ~~**Persistence** (D)~~ — done 2026-08-09.
 5. ~~**Reconciliation** (B)~~ — done 2026-08-10.
-6. **Infeasible plates** (C) — next, and the last one that can print silently wrong.
-   Then **pinning/drying** (E), **multi-ACE** (F), **multi-plate** (G).
+6. ~~**Infeasible plates** (C)~~ — refusal done 2026-08-10; tray dialog deferred.
+7. ~~**Multi-ACE** (F)~~ — tested 2026-08-10, short of second hardware.
+8. **Pinning** (E) — mockup ready, decisions open. Then **multi-plate** (G).
 
 ## Mockups to produce
 
@@ -262,7 +282,7 @@ that only the current plate is reviewed.
 | — | [Remembering a filament layout](assignment-persistence-mockup.html) | D | built to it |
 | — | [What the ACE actually holds](reconciliation-mockup.html) | B | built to it |
 | — | [More colours than places](infeasible-plate-mockup.html) | C | awaiting decisions |
-| 4 | Pinned / drying spool states | E | to produce |
+| — | [Pinning a spool in place](pinning-mockup.html) | E | awaiting decisions |
 | 5 | Two-ACE assignment board | F | to produce |
 
 ## Standing risks

@@ -1,0 +1,367 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pinning a spool in place</title>
+<style>
+  /* Tokens lifted from resources/web/aceplan/index.html so this reads as the real dialog. */
+  :root{
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --page:#e6e7e9; --panel:#ffffff; --hbar:#eef0f1; --hbar-line:#e2e4e6;
+    --line:#e4e6e8; --line-soft:#eef0f1; --inset:#f4f5f6;
+    --text:#2f3336; --dim:#7d868d; --faint:#a7aeb4;
+    --teal:#14b8a6; --teal-ink:#fff; --teal-soft:rgba(20,184,166,.12);
+    --blue:#4a90d9; --blue-soft:rgba(74,144,217,.12);
+    --warn:#e2953a; --warn-soft:rgba(226,149,58,.14);
+    --empty:#e7e9eb;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 26px -18px rgba(16,24,32,.4);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --page:#0f1215; --panel:#181c20; --hbar:#1f242a; --hbar-line:#262c32; --line:#272d33; --line-soft:#20262b; --inset:#1e242a;
+      --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d; --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+      --blue:#5aa0e6; --blue-soft:rgba(90,160,230,.16); --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+      --empty:#232a30; --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"]{
+    --page:#0f1215; --panel:#181c20; --hbar:#1f242a; --hbar-line:#262c32; --line:#272d33; --line-soft:#20262b; --inset:#1e242a;
+    --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d; --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+    --blue:#5aa0e6; --blue-soft:rgba(90,160,230,.16); --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+    --empty:#232a30; --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+  }
+  :root[data-theme="light"]{
+    --page:#e6e7e9; --panel:#ffffff; --hbar:#eef0f1; --hbar-line:#e2e4e6;
+    --line:#e4e6e8; --line-soft:#eef0f1; --inset:#f4f5f6;
+    --text:#2f3336; --dim:#7d868d; --faint:#a7aeb4;
+    --teal:#14b8a6; --teal-ink:#fff; --teal-soft:rgba(20,184,166,.12);
+    --blue:#4a90d9; --blue-soft:rgba(74,144,217,.12);
+    --warn:#e2953a; --warn-soft:rgba(226,149,58,.14);
+    --empty:#e7e9eb;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 26px -18px rgba(16,24,32,.4);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{font-family:var(--font-sans);color:var(--text);background:var(--page);font-size:14px;line-height:1.45;
+       -webkit-font-smoothing:antialiased;padding:30px 14px 60px;}
+  .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+
+  .col{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:34px;}
+  .lede h1{margin:0 0 6px;font-size:23px;font-weight:700;letter-spacing:-.015em;text-wrap:balance;}
+  .lede p{margin:0;color:var(--dim);font-size:13.5px;max-width:64ch;}
+  .lede p + p{margin-top:9px;}
+  .lede b{color:var(--text);font-weight:600;}
+  .lede code{font-family:var(--font-mono);font-size:12px;background:var(--panel);border:1px solid var(--line);
+             border-radius:4px;padding:1px 5px;}
+
+  .case{display:flex;flex-direction:column;gap:12px;}
+  .eyebrow{display:flex;align-items:baseline;gap:10px;font-size:10.5px;font-weight:800;letter-spacing:.11em;
+           text-transform:uppercase;color:var(--dim);}
+  .eyebrow .k{color:var(--teal);}
+  .eyebrow .k.now{color:var(--warn);}
+  .after{font-size:12.5px;color:var(--dim);padding-left:15px;border-left:3px solid var(--line-soft);}
+  .after b{color:var(--text);font-weight:600;}
+  .after code{font-family:var(--font-mono);font-size:11.5px;background:var(--inset);border:1px solid var(--line);
+              border-radius:4px;padding:1px 5px;}
+
+  .qbox{background:var(--teal-soft);border:1px solid color-mix(in srgb,var(--teal) 32%,transparent);
+        border-radius:10px;padding:12px 15px;font-size:12.5px;}
+  .qbox h4{margin:0 0 6px;font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--teal);}
+  .qbox ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:7px;}
+  .qbox .opt{color:var(--dim);}
+  .qbox .rec{color:var(--teal);font-weight:700;}
+  .qbox code{font-family:var(--font-mono);font-size:11.5px;}
+
+  /* ---- the dialog ---- */
+  .dialog{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;}
+  .dhead{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--hbar);border-bottom:1px solid var(--hbar-line);flex-wrap:wrap;}
+  .dhead .title{font-size:14.5px;font-weight:700;}
+  .dhead .sub{font-size:11.5px;color:var(--dim);}
+  .dhead .right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .pillset{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel);}
+  .pillset button{font:inherit;font-size:12px;font-weight:600;color:var(--dim);padding:6px 14px;border:0;
+                  background:transparent;border-right:1px solid var(--line);cursor:pointer;}
+  .pillset button:last-child{border-right:0;}
+  .pillset button[aria-pressed="true"]{color:var(--teal);background:var(--teal-soft);box-shadow:inset 0 0 0 1px var(--teal);}
+  .stat{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dim);background:var(--inset);
+        border:1px solid var(--line);border-radius:999px;padding:4px 10px;}
+  .stat b{color:var(--text);font-family:var(--font-mono);}
+  .stat.good b{color:var(--teal);}
+
+  .hint{padding:9px 16px;border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--dim);
+        background:color-mix(in srgb,var(--blue) 4%,var(--panel));}
+  .hint b{color:var(--text);font-weight:600;}
+  .memo{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--line-soft);
+        font-size:12px;color:var(--dim);background:var(--warn-soft);}
+  .memo b{color:var(--text);font-weight:600;}
+  .memo .chip{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;letter-spacing:.04em;
+              text-transform:uppercase;color:var(--warn);background:var(--panel);
+              border:1px solid color-mix(in srgb,var(--warn) 40%,transparent);border-radius:999px;
+              padding:3px 9px;white-space:nowrap;}
+  .memo .act{margin-left:auto;}
+  .linkbtn{font:inherit;font-size:12px;font-weight:600;color:var(--teal);background:transparent;border:0;padding:0;
+           cursor:pointer;text-decoration:underline;text-underline-offset:2px;white-space:nowrap;}
+
+  .map{padding:16px 18px 10px;}
+  .srcrow{display:flex;align-items:stretch;gap:14px;flex-wrap:wrap;}
+  .acebox{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);}
+  .acebox.main{flex:1;min-width:420px;}
+  .acebox.single{flex:0 0 auto;}
+  .aceband{display:flex;align-items:center;gap:10px;padding:9px 13px;
+           background:color-mix(in srgb,var(--teal) 7%,var(--inset));border-bottom:1px solid var(--line);}
+  .acebadge{width:24px;height:24px;border-radius:7px;background:var(--teal-soft);color:var(--teal);display:grid;
+            place-items:center;font-weight:800;font-size:11px;border:1px solid color-mix(in srgb,var(--teal) 30%,transparent);}
+  .aceband .nm{font-size:13px;font-weight:600;}
+  .slots{display:flex;gap:10px;padding:12px;justify-content:space-around;}
+  .pos{position:relative;width:96px;border:1px dashed transparent;border-radius:11px;padding:8px 4px 7px;
+       display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .pos .spool{width:52px;height:52px;border-radius:50%;position:relative;display:grid;place-items:center;
+    background:radial-gradient(circle at 50% 50%, var(--panel) 0 30%, var(--c,#8fa7c8) 30.5%);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);}
+  .pos .spool::after{content:"";width:12px;height:12px;border-radius:50%;background:var(--inset);box-shadow:inset 0 0 0 2px var(--line);}
+  .pos .nm{font-size:11.5px;font-weight:600;}
+  .pos .tag{font-size:9.5px;color:var(--faint);font-family:var(--font-mono);}
+  .pin{position:absolute;top:2px;right:6px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;
+       background:var(--warn);color:#fff;font-size:11px;box-shadow:0 1px 3px rgba(0,0,0,.3);}
+  /* a pin the user actually placed reads as deliberate: the spool is ringed, not just badged */
+  .pos.pinned .spool{box-shadow:inset 0 0 0 1px rgba(0,0,0,.14), 0 0 0 2px var(--warn);}
+
+  .planrow{display:flex;gap:14px;padding:12px 16px 14px;border-top:1px solid var(--line-soft);align-items:center;flex-wrap:wrap;}
+  .planrow .note{flex:1;min-width:240px;font-size:12px;color:var(--dim);}
+  .planrow .note b{color:var(--text);font-weight:600;}
+  .btn{font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border-radius:8px;padding:8px 14px;
+       background:var(--panel);border:1px solid var(--line);color:var(--text);}
+  .btn.primary{background:var(--teal);color:var(--teal-ink);border-color:transparent;}
+
+  .foot{border-top:1px solid var(--line);padding-top:18px;font-size:12.5px;color:var(--dim);}
+  .foot h2{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--text);}
+  .foot b{color:var(--text);}
+  .foot code{font-family:var(--font-mono);font-size:11.5px;}
+  .bug{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--warn);
+       border-radius:0 10px 10px 0;padding:12px 15px;font-size:12.5px;}
+  .bug h4{margin:0 0 6px;font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--warn);}
+  .bug code{font-family:var(--font-mono);font-size:11.5px;background:var(--inset);border:1px solid var(--line);
+            border-radius:4px;padding:1px 5px;}
+</style>
+
+<div class="col">
+
+  <header class="lede">
+    <h1>Pinning a spool in place</h1>
+    <p>A pin says <b>this colour stays here</b> — the optimiser plans around it instead of moving
+      it. The planner already honours pins as hard constraints and the board already lets you set
+      them. Two things are wrong with that today, and one of them makes the feature invisible.</p>
+    <p><b>Everything arrives pinned.</b> C++ seeds the page with the computed plan expressed as
+      pins — one per filament — so the board opens saying <code>Auto plan honours 7 pin(s)</code>
+      with an orange pin on every spool. A badge that every spool carries distinguishes nothing,
+      and a deliberate pin is indistinguishable from the optimiser's own choice.</p>
+    <p><b>And pins do not survive.</b> Unlike an applied layout, which now rides in the 3MF with
+      its plate, a pin is gone the moment the dialog closes.</p>
+  </header>
+
+  <!-- ============================ A ============================ -->
+  <section class="case">
+    <div class="eyebrow"><span class="k now">Today</span><span>Every spool wears a pin</span></div>
+    <div id="caseA"></div>
+    <p class="after">The seeding exists for a good reason: it guarantees the board shows exactly
+      the layout the gcode will use, rather than the page's own optimiser re-deriving an
+      equal-cost but differently-arranged one. Removing it naively would let the board lie about
+      where spools go — so the fix is to send the layout <em>as a layout</em>, and keep
+      <code>pins</code> for pins.</p>
+  </section>
+
+  <!-- ============================ B ============================ -->
+  <section class="case">
+    <div class="eyebrow"><span class="k">Proposed</span><span>Only what you pin is pinned</span></div>
+    <div id="caseB"></div>
+    <p class="after">Two spools pinned, five free. The header counts the real pins, the pinned
+      spools are ringed as well as badged, and <b>Clear pins</b> now has something to clear. Auto
+      re-optimises around the two, which is what a pin is <em>for</em> — here it costs 12 swaps
+      over the free optimum, and the header says so.</p>
+  </section>
+
+  <!-- ============================ C ============================ -->
+  <section class="case">
+    <div class="eyebrow"><span class="k">Proposed</span><span>Pins come back with the plate</span></div>
+    <div id="caseC"></div>
+    <p class="after">Reopened project: the two pins are restored, and one that no longer fits —
+      its slot is gone because the ACE was reconfigured from four slots to two — is dropped and
+      said out loud, exactly as a remembered layout is when the filament count changes.</p>
+  </section>
+
+  <!-- ============================ the bug ============================ -->
+  <div class="bug">
+    <h4>A bug to fix alongside</h4>
+    <p style="margin:0"><code>pinTo()</code> records the slot only when the head index is literally
+      <code>3</code>: <code>state.slotPins[colour] = head===3 ? slot : -1</code>. On a machine with
+      two ACE-fed heads — which the two-unit work just made real — pinning into the <em>other</em>
+      ACE head keeps the head but silently loses the slot. It should test whether the head is
+      ACE-fed, not whether it happens to be the fourth one.</p>
+  </div>
+
+  <!-- ============================ questions ============================ -->
+  <div class="qbox">
+    <h4>What I need from you</h4>
+    <ol>
+      <li><b>Seeded ≠ pinned.</b> <span class="rec">Recommended:</span> C++ sends its plan as the
+        layout and sends only real pins as <code>pins</code>. The board still matches the gcode
+        exactly; the pin badge starts meaning something.</li>
+      <li><b>Do pins persist with the plate?</b> <span class="rec">Recommended: yes</span>, by the
+        same mechanism as the applied layout — a per-plate option in the 3MF.
+        <span class="opt">The alternative is that pins last only as long as the dialog, which is
+        what happens now and is why nobody would use them.</span></li>
+      <li><b>Pin to a head, or to an exact slot?</b> The board supports both. Pinning to a
+        <em>head</em> says "keep this colour on T4"; to a <em>slot</em>, "keep it in T4 · S2".
+        <span class="opt">Slot-exact is stricter and is what a physical spool actually occupies;
+        head-only leaves the optimiser room to reshuffle within the ACE.</span></li>
+      <li><b>A pin that no longer fits</b> — drop it silently, or say so as drawn in the third
+        panel?</li>
+    </ol>
+  </div>
+
+  <div class="foot">
+    <h2>What already exists</h2>
+    <p><b>Planner:</b> <code>PlanPin</code> in <code>AceMmuPlan.hpp</code> already takes a head, an
+      ACE unit or an exact slot, and treats it as a hard constraint — the search optimises the free
+      colours around it. No solver work is needed. <b>Page:</b> pin/unpin by click and by drag
+      already work, and <code>optimise(state.pins)</code> already respects them. <b>Persistence:</b>
+      the pattern is in place from the applied layout — a per-plate <code>coInts</code> option,
+      written to plate metadata in the 3MF, re-priced on load. <b>What is missing</b> is the
+      distinction between a seeded position and a pin, the persistence itself, and the
+      <code>head===3</code> fix.</p>
+  </div>
+
+</div>
+
+<script>
+var FIL = [
+  {n:"Generic PLA", c:"#d64541"},
+  {n:"Generic PLA", c:"#e5308c"},
+  {n:"Generic PLA", c:"#f2c218"},
+  {n:"Generic PLA", c:"#1faa4b"},
+  {n:"Generic PLA", c:"#1f6fd0"},
+  {n:"Generic PLA", c:"#17b8c4"},
+  {n:"Generic PLA", c:"#7a4fb3"}
+];
+function el(t,c,x){var e=document.createElement(t); if(c) e.className=c; if(x!=null) e.textContent=x; return e;}
+
+function spool(c, tag, pinned){
+  var p = el("div","pos"+(pinned?" pinned":""));
+  var s = el("div","spool"); s.style.setProperty("--c", FIL[c].c); p.appendChild(s);
+  if (pinned){ var pn = el("div","pin"); pn.textContent="◉"; p.appendChild(pn); }
+  p.appendChild(el("div","nm", FIL[c].n));
+  p.appendChild(el("div","tag", tag));
+  return p;
+}
+function emptySlot(tag){
+  var p = el("div","pos");
+  var s = el("div","spool");
+  s.style.background = "repeating-linear-gradient(135deg,var(--empty) 0 7px,transparent 7px 14px)";
+  s.style.boxShadow = "inset 0 0 0 2px var(--line)";
+  p.appendChild(s);
+  p.appendChild(el("div","nm","Empty"));
+  p.appendChild(el("div","tag", tag));
+  return p;
+}
+
+function build(o){
+  var d = el("div","dialog");
+
+  var h = el("div","dhead");
+  var t = el("div");
+  t.appendChild(el("div","title","Filament assignment"));
+  t.appendChild(el("div","sub", o.sub || "Snapmaker U1 · 3 stock feeders + ACE 1 → T4"));
+  h.appendChild(t);
+  var r = el("div","right");
+  var ps = el("div","pillset");
+  ["Auto","Manual"].forEach(function(m,i){
+    var b = el("button",null,m); b.setAttribute("aria-pressed", String(i===0)); ps.appendChild(b);
+  });
+  r.appendChild(ps);
+  (o.stats||[]).forEach(function(s){
+    var e = el("div","stat "+(s.tone||"")); e.innerHTML = s.label+" <b>"+s.value+"</b>"; r.appendChild(e);
+  });
+  h.appendChild(r);
+  d.appendChild(h);
+
+  if (o.memo){
+    var m = el("div","memo");
+    m.appendChild(el("span","chip", o.memo.chip));
+    var tx = el("span"); tx.innerHTML = o.memo.text; m.appendChild(tx);
+    if (o.memo.action){ var a = el("div","act"); a.appendChild(el("button","linkbtn", o.memo.action)); m.appendChild(a); }
+    d.appendChild(m);
+  }
+  var hint = el("div","hint"); hint.innerHTML = o.hint; d.appendChild(hint);
+
+  var map = el("div","map");
+  var src = el("div","srcrow");
+  o.feeders.forEach(function(f, i){
+    var box = el("div","acebox single");
+    var band = el("div","aceband");
+    band.appendChild(el("div","acebadge","T"+(i+1)));
+    band.appendChild(el("div","nm","Feeder"));
+    box.appendChild(band);
+    var sl = el("div","slots");
+    sl.appendChild(spool(f.c, "T"+(i+1)+" · PLA", f.pin));
+    box.appendChild(sl);
+    src.appendChild(box);
+  });
+  var ace = el("div","acebox main");
+  var ab = el("div","aceband");
+  ab.appendChild(el("div","acebadge","1"));
+  ab.appendChild(el("div","nm", o.aceLabel || "ACE 1 → T4"));
+  ace.appendChild(ab);
+  var as = el("div","slots");
+  o.ace.forEach(function(s, i){
+    if (s === null) as.appendChild(emptySlot("ACE 1 · S"+(i+1)));
+    else as.appendChild(spool(s.c, "ACE 1 · S"+(i+1)+" · PLA", s.pin));
+  });
+  ace.appendChild(as);
+  src.appendChild(ace);
+  map.appendChild(src);
+  d.appendChild(map);
+
+  var pr = el("div","planrow");
+  var note = el("div","note"); note.innerHTML = o.note;
+  pr.appendChild(note);
+  (o.buttons||[]).forEach(function(b){
+    pr.appendChild(el("button","btn"+(b.primary?" primary":""), b.label));
+  });
+  d.appendChild(pr);
+  return d;
+}
+
+/* A — today: the plan arrives as seven pins */
+document.getElementById("caseA").appendChild(build({
+  stats:[{label:"Swaps",value:"300",tone:"good"},{label:"Waste",value:"~40.4 g"}],
+  hint:'Auto plan honours <b>7 pin(s)</b>. Drag a spool to pin it to a position, or click it to pin/unpin in place — pinned spools never move.',
+  feeders:[{c:2,pin:true},{c:3,pin:true},{c:4,pin:true}],
+  ace:[{c:1,pin:true},{c:5,pin:true},{c:6,pin:true},{c:0,pin:true}],
+  note:"Every spool is pinned, so <b>Clear pins</b> is the only control that does anything — and using it lets the board rearrange away from the plan the gcode holds.",
+  buttons:[{label:"Clear pins"},{label:"Apply to plate",primary:true}]
+}));
+
+/* B — proposed: two real pins */
+document.getElementById("caseB").appendChild(build({
+  stats:[{label:"Swaps",value:"312"},{label:"Waste",value:"~42.0 g"},{label:"Auto would need",value:"300"}],
+  hint:'Auto plan honours <b>2 pin(s)</b>. Drag a spool to pin it to a position, or click it to pin/unpin in place — pinned spools never move.',
+  feeders:[{c:2,pin:false},{c:3,pin:true},{c:4,pin:false}],
+  ace:[{c:1,pin:false},{c:5,pin:true},{c:6,pin:false},{c:0,pin:false}],
+  note:"Two spools held in place; the optimiser arranged the other five around them. Pinning cost <b>12 swaps</b>.",
+  buttons:[{label:"Clear pins"},{label:"Apply to plate",primary:true}]
+}));
+
+/* C — proposed: pins restored, one dropped */
+document.getElementById("caseC").appendChild(build({
+  sub:"Snapmaker U1 · 3 stock feeders + ACE 1 → T4 (2 slots)",
+  aceLabel:"ACE 1 → T4",
+  stats:[{label:"Swaps",value:"318"},{label:"Waste",value:"~42.8 g"},{label:"Auto would need",value:"306"}],
+  memo:{chip:"1 pin dropped",
+        text:"A pin held <b>Generic PLA</b> in <b>ACE 1 &middot; S3</b>, which this printer no longer has — the ACE is set to 2 slots. The other pin was restored.",
+        action:"Dismiss"},
+  hint:'Auto plan honours <b>1 pin(s)</b>. Drag a spool to pin it to a position, or click it to pin/unpin in place — pinned spools never move.',
+  feeders:[{c:2,pin:false},{c:3,pin:true},{c:4,pin:false}],
+  ace:[{c:1,pin:false},{c:5,pin:false}],
+  note:"Pins ride in the 3MF with their plate, like an applied layout.",
+  buttons:[{label:"Clear pins"},{label:"Apply to plate",primary:true}]
+}));
+</script>

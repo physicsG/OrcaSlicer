@@ -15,9 +15,9 @@
 - **Overall status:** 🟢 End to end on the real 7-colour cube. The U1 Device tab is a Flutter
   webview (`PrinterWebView`+SSWCP, no in-repo source) so ACE can't render there; the native
   "U1 + multiACE" tab and the Prepare/Preview tabs carry the UI instead.
-- **Next action:** roadmap item **E, pinning and drying** — the last unstarted gap besides
-  multi-plate export (G) and the deferred tray dialog for C. Pins are honoured by the planner
-  but never persisted, and drying is not modelled at all even though the ACE reports it.
+- **Next action:** answer the four questions on [pinning-mockup.html](pinning-mockup.html),
+  then implement E. Remaining after that: multi-plate export (G) and the deferred tray dialog
+  for C.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
   - `libslic3r_tests "[ace_mmu]"` → 22 cases / 162 assertions pass (parser, planner,
     reconciliation incl. two ACE units; plus a live-captured fixture).
@@ -90,6 +90,23 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-10 (cont.) — Pinning: the feature is invisible, and a mockup
+- Roadmap item E, scoped down: **drying is out of scope for this page** (user's call).
+- Two findings, both from reading the shipped behaviour rather than guessing:
+  - **Every spool arrives pinned.** C++ seeds the page with the computed plan expressed as
+    one pin per filament, so the board opens on *"Auto plan honours 7 pin(s)"* with an
+    orange badge on all seven. A badge everything carries distinguishes nothing, and a
+    deliberate pin cannot be told from the optimiser's own choice. The seeding is not
+    gratuitous — it guarantees the board shows the layout the gcode holds rather than an
+    equal-cost rearrangement from the page's own optimiser — so the fix is to send the
+    layout *as a layout* and keep `pins` for pins.
+  - **Pins do not persist**, unlike an applied layout.
+- **Bug found alongside:** `pinTo()` records the slot only when the head index is literally
+  `3` (`state.slotPins[c] = head===3 ? slot : -1`). With two ACE-fed heads - now a tested
+  configuration - pinning into the other ACE head keeps the head and loses the slot.
+- Mockup: [pinning-mockup.html](pinning-mockup.html), three states (today, only-what-you-pin,
+  pins restored with one dropped). Four questions open; no code written yet.
 
 ### 2026-08-10 (cont.) — Two ACE units: tested, and a hole found by testing
 - Roadmap item F was "built, untested". The reconciliation I had just shipped keys each
