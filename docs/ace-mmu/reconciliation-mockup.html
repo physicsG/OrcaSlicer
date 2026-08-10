@@ -138,6 +138,8 @@
   .btn:focus-visible{outline:2px solid var(--blue);outline-offset:1px;}
   .btn.primary{background:var(--teal);color:var(--teal-ink);border-color:transparent;}
   .btn.primary:hover{filter:brightness(1.06);}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn[disabled]:hover{filter:none;}
 
   .foot{border-top:1px solid var(--line);padding-top:18px;font-size:12.5px;color:var(--dim);}
   .foot h2{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--text);letter-spacing:-.01em;}
@@ -159,9 +161,10 @@
       distinguishes a spool the ACE read from <b>RFID</b> or that you set by hand from one it merely
       <b>inferred</b>. A design that shouts “wrong filament” when the machine simply does not know
       would train people to ignore it. So: <b>agrees</b>, <b>disagrees</b>, <b>cannot tell</b>.</p>
-    <p>State B below uses the real contents this printer last reported —
-      <span class="mono">PETG Kingroon Silver #83afff</span> in S1, two empty slots, and a spool in
-      S4 the ACE is only guessing at.</p>
+    <p>State B is drawn from what this printer actually reported while the feature was being
+      built — <span class="mono">PETG Kingroon #83AFFF</span> named by hand in S1, the rest empty.
+      S4 is shown holding an unidentified spool so the third verdict is visible; the machine's real
+      S4 was empty.</p>
   </header>
 
   <!-- ============================ A ============================ -->
@@ -202,7 +205,8 @@
     <dl class="facts">
       <dt>Situation</dt><dd>The ACE endpoint is LAN-only. Over a cloud connection, or with the
         printer off, there is nothing to compare against.</dd>
-      <dt>Behaviour</dt><dd>Say the check did not run. Do not imply agreement, and do not block.</dd>
+      <dt>Behaviour</dt><dd>Say the check did not run. Do not imply agreement — and do not block,
+        since there is nothing the user could do about it.</dd>
     </dl>
     <div id="caseC"></div>
     <p class="after">The failure mode to avoid is a green tick that means “could not check”.
@@ -211,25 +215,25 @@
 
   <!-- ============================ questions ============================ -->
   <div class="qbox">
-    <h4>What I need from you</h4>
+    <h4>Settled — this is what was built</h4>
     <ol>
-      <li><b>Where does it live?</b> Drawn here as a strip inside the assignment dialog, under the
-        machine map — the plan and its reality in one place.
-        <span class="opt">Alternative: its own step between Apply and the print, which is harder to
-        skip but adds a click to every print.</span></li>
-      <li><b>Blocking or advisory?</b> Drawn as advisory: the primary button still prints, the
-        warning is loud but not a wall.
-        <span class="opt">Alternative: a confirmed mismatch disables printing until resolved or
-        explicitly overridden.</span></li>
-      <li><b>What counts as a match?</b> Drawn as <b>colour + material</b>, brand ignored.
-        <span class="opt">Colour alone would pass PLA where PETG is loaded — a temperature problem.
-        Adding brand would flag a Kingroon-vs-Generic difference nobody cares about.</span></li>
-      <li><b>Unverified slots</b> — drawn as a grey “cannot tell”, counted separately from
-        mismatches and not blocking.
-        <span class="opt">Alternative: treat unverified as a mismatch, which is safer and noisier.</span></li>
-      <li><b>Should “Use what is loaded” exist at all?</b> It is the one action that changes the
-        plan rather than the printer, and it re-prices the plate as a side effect.</li>
+      <li><b>Inside the assignment dialog</b>, as a strip under the machine map: the plan and its
+        reality in one place. The panels above are drawn standalone for legibility; in the app they
+        are that strip.</li>
+      <li><b>Blocking, with an explicit override.</b> While any slot is unresolved, <i>Apply to
+        plate</i> is disabled and a <b>Print anyway — I have checked the spools</b> tick appears.
+        Closing the dialog instead abandons the export or print rather than quietly proceeding.</li>
+      <li><b>Colour + material</b>, brand ignored.</li>
+      <li><b>Unverified counts as unresolved.</b> The label still says “cannot tell” rather than
+        “wrong”, because the remedy differs — name the spool on the printer, or swap it — but it
+        holds the gate shut either way. Not knowing is not evidence the plate is safe.</li>
+      <li><b>“Use what is loaded” was dropped.</b> It rewrote the user's own assignment on their
+        behalf, which is exactly what Manual mode already does deliberately: drag the spools to
+        where the machine has them and the verdicts clear as you go. One tool, not two.</li>
     </ol>
+    <p style="margin:9px 0 0">The gate is re-checked in C++ against the layout actually committed,
+      not the one the dialog opened on — so resolving a mismatch by moving spools genuinely
+      resolves it, and closing the dialog cannot skip the check.</p>
   </div>
 
   <div class="foot">
@@ -327,7 +331,11 @@ function panel(o){
 
   var f = el("div","foot2");
   var n = el("div","note"); n.innerHTML = o.note; f.appendChild(n);
-  (o.buttons||[]).forEach(function(x){ f.appendChild(el("button","btn"+(x.primary?" primary":""), x.label)); });
+  (o.buttons||[]).forEach(function(x){
+    var b = el("button","btn"+(x.primary?" primary":""), x.label);
+    if (x.disabled) b.disabled = true;
+    f.appendChild(b);
+  });
   d.appendChild(f);
   return d;
 }
@@ -357,9 +365,10 @@ document.getElementById("caseB").appendChild(panel({
   when:"just now",
   stats:[{label:"Slots",value:"4"},{label:"Differ",value:"3",tone:"bad"},{label:"Can't tell",value:"1"}],
   band:{tone:"warnband", chip:"Does not match",
-        text:"<b>Three slots</b> do not hold what the plan expects. Printing now would put the wrong " +
-             "colour — and the wrong material — on the ACE head.",
-        actions:["Use what is loaded","Load these spools"]},
+        text:"<b>Three slots</b> do not hold what the plan expects, and a fourth cannot be checked. " +
+             "<i>Apply to plate</i> stays disabled until the spools agree — or until you tick " +
+             "<b>Print anyway</b>.",
+        actions:["☐ Print anyway — I have checked the spools"]},
   slots:[
     {slot:"ACE 1 · S1", verdict:"bad", planHex:"#e5308c", planName:"Generic PLA", planSub:"#e5308c · PLA",
      actHex:"#83afff", actName:"Kingroon Silver", actSub:"RFID · PETG"},
@@ -371,8 +380,9 @@ document.getElementById("caseB").appendChild(panel({
      actHex:"#8fa7c8", actName:"Unidentified spool", actSub:"inferred · PETG?"}
   ],
   note:"<b>S4</b> holds something, but the ACE has no tag for it and you have not named it, so it " +
-       "cannot be checked. Counted apart from the three that are definitely wrong.",
-  buttons:[{label:"Back to assignment"},{label:"Print anyway",primary:true}]
+       "cannot be checked. Named apart from the three that are definitely wrong — the remedy is " +
+       "different — but it holds the gate shut the same way.",
+  buttons:[{label:"Apply to plate",primary:true,disabled:true}]
 }));
 
 /* ---- C: unreachable ---- */

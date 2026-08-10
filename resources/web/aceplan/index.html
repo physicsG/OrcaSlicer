@@ -82,6 +82,41 @@
   /* a spool the plate remembers, as distinct from one the user pinned */
   .pos.remembered .spool{box-shadow:inset 0 0 0 1px rgba(0,0,0,.14), 0 0 0 2px var(--blue);}
 
+  /* what the machine says it is holding */
+  .acecheck{border-top:1px solid var(--line-soft);padding:10px 16px 12px;}
+  .acecheck[hidden]{display:none;}
+  .acecheck .ahead{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:9px;}
+  .acecheck h3{margin:0;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--dim);}
+  .acecheck .verdict{font-size:11px;font-weight:700;border-radius:999px;padding:3px 9px;}
+  .acecheck.ok    .verdict{color:var(--teal);background:var(--teal-soft);}
+  .acecheck.bad   .verdict{color:var(--warn);background:var(--warn-soft);}
+  .acecheck.unread .verdict{color:var(--dim);background:var(--inset);border:1px solid var(--line);}
+  .acecheck .ovr{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dim);cursor:pointer;}
+  .acecheck .ovr input{accent-color:var(--warn);cursor:pointer;}
+  .acecheck .ovr[hidden]{display:none;}
+  .aslots{display:flex;gap:8px;flex-wrap:wrap;}
+  .aslot{flex:1 1 150px;min-width:150px;border:1px solid var(--line);border-radius:10px;padding:7px 9px;background:var(--inset);}
+  .aslot.bad{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));background:var(--warn-soft);}
+  .aslot.unknown{border-style:dashed;}
+  .aslot .top{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:800;letter-spacing:.05em;
+              text-transform:uppercase;color:var(--dim);margin-bottom:5px;}
+  .aslot .top .tick{margin-left:auto;font-size:10px;font-weight:700;}
+  .aslot.ok      .top .tick{color:var(--teal);}
+  .aslot.bad     .top .tick{color:var(--warn);}
+  .aslot.unknown .top .tick{color:var(--dim);}
+  .aslot .pair{display:flex;align-items:center;gap:6px;}
+  .cdot{width:16px;height:16px;border-radius:50%;flex:0 0 auto;
+        background:radial-gradient(circle at 50% 50%, var(--panel) 0 28%, var(--c,#8fa7c8) 28.5%);
+        box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);}
+  .cdot.none{background:repeating-linear-gradient(135deg,var(--empty) 0 4px,transparent 4px 8px);
+             box-shadow:inset 0 0 0 1px var(--line);}
+  .cdot.hazy{opacity:.45;}
+  .aslot .arrow{color:var(--faint);font-size:11px;}
+  .aslot .what{font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+  .aslot.unknown .what{color:var(--dim);font-style:italic;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn[disabled]:hover{border-color:transparent;color:var(--teal-ink);}
+
   /* machine map */
   .map{position:relative;padding:18px 18px 8px;}
   .srcrow{position:relative;z-index:1;display:flex;align-items:stretch;gap:14px;flex-wrap:wrap;}
@@ -179,6 +214,17 @@
     <div class="headrow" id="headrow"></div>
   </div>
 
+  <div class="acecheck" id="acecheck" hidden>
+    <div class="ahead">
+      <h3>ACE contents</h3>
+      <span class="verdict" id="aceVerdict"></span>
+      <label class="ovr" id="aceOvrWrap" hidden>
+        <input type="checkbox" id="aceOvr"> Print anyway — I have checked the spools
+      </label>
+    </div>
+    <div class="aslots" id="aslots"></div>
+  </div>
+
   <div class="planrow">
     <div class="plan">
       <h3>Load plan</h3>
@@ -218,6 +264,11 @@ function applyState(st){
   // filament count and ignored this slice.
   state.manual = (Array.isArray(st.manual) && st.manual.length === FIL.length) ? st.manual.slice() : null;
   state.saved  = !!st.saved && !!state.manual;
+  // What the printer says is in its ACE slots. Empty/absent means the check did not run -
+  // the endpoint is LAN-only - and that must never be shown as agreement.
+  state.ace      = (st.ace && Array.isArray(st.ace.slots)) ? st.ace.slots : [];
+  state.aceRead  = !!(st.ace && st.ace.checked);
+  state.aceForce = false;
   // Kept apart from state.manual so the banner can tell "still the saved layout" from
   // "the saved layout, since edited".
   state.savedLayout = state.saved ? state.manual.slice() : null;
@@ -295,6 +346,8 @@ const state = {
   plan:null, slots:null, autoSwaps:0,
   saved:false,                     // this layout is remembered with the plate
   savedLayout:null,                // that layout, to tell "unchanged" from "since edited"
+  ace:[], aceRead:false,           // what the machine reports in its ACE slots
+  aceForce:false,                  // the user accepted responsibility for a mismatch
   droppedFor:0,                    // a layout for N filaments was ignored (N != this plate's)
   memoOff:false,                   // the banner was dismissed for this opening
 };
@@ -318,6 +371,91 @@ function posCard(colour, whereTag, roleTxt){
   return d;
 }
 function currentLayout(){ return state.mode==="auto" ? state.plan : state.manual; }
+
+/* ---- what the machine is holding, judged against the board ---- */
+// Mirrors spool_matches() in libslic3r/AceMmuReconcile.hpp: colour and material, brand
+// ignored. Keep the two in step - C++ has the final say at Apply, this only keeps the
+// verdicts live while spools are being moved.
+function hex6(s){ s = (s||"").replace(/^#/,""); return s.slice(0,6).toLowerCase(); }
+function mat(s){ return (s||"").replace(/\s+/g,"").toUpperCase(); }
+function spoolMatches(wc, wm, hc, hm){
+  wc = hex6(wc); hc = hex6(hc);
+  if (!wc || !hc || wc !== hc) return false;
+  wm = mat(wm); hm = mat(hm);
+  if (!wm || !hm) return true;   // a blank on either side cannot contradict the other
+  return wm === hm;
+}
+// Per ACE slot: which filament the layout puts there, and whether the machine agrees.
+// "unknown" is a spool the ACE only inferred - not an accusation, but not a confirmation
+// either, so it counts as unresolved.
+function aceChecks(layout){
+  const out = [];
+  if (!state.aceRead) return out;
+  state.ace.forEach(function(s){
+    let colour = -1;
+    for (let c = 0; c < N(); c++){
+      const h = layout[c];
+      if (h < 0 || state.slots[c] !== s.slot) continue;
+      const u = (UNITS[h] === undefined || UNITS[h] < 0) ? -1 : UNITS[h];
+      if (u !== s.unit) continue;             // feeders never appear in the ACE's report
+      colour = c; break;
+    }
+    let verdict;
+    if (colour < 0)          verdict = "unused";
+    else if (!s.occupied)    verdict = "bad";      // empty is not a guess
+    else if (!s.trusted)     verdict = "unknown";
+    else verdict = spoolMatches(FIL[colour].hex, FIL[colour].mat, s.colour, s.material) ? "ok" : "bad";
+    out.push({ s:s, colour:colour, verdict:verdict });
+  });
+  return out;
+}
+function renderAce(layout){
+  const box = $("acecheck");
+  const checks = aceChecks(layout);
+  if (!state.aceRead){
+    // Say the check did not run. A quiet green tick here would be a lie.
+    box.hidden = false;
+    box.className = "acecheck unread";
+    $("aceVerdict").textContent = "not checked — the ACE only answers over LAN";
+    $("aslots").innerHTML = "";
+    $("aceOvrWrap").hidden = true;
+    return 0;
+  }
+  const bad = checks.filter(c=>c.verdict==="bad").length;
+  const unk = checks.filter(c=>c.verdict==="unknown").length;
+  const unresolved = bad + unk;
+
+  box.hidden = false;
+  box.className = "acecheck " + (unresolved ? "bad" : "ok");
+  $("aceVerdict").textContent = unresolved
+    ? [bad ? bad+" wrong" : null, unk ? unk+" unidentified" : null].filter(Boolean).join(" · ")
+    : "matches the plate";
+  $("aceOvrWrap").hidden = !unresolved;
+
+  const host = $("aslots"); host.innerHTML = "";
+  checks.forEach(function(c){
+    if (c.verdict === "unused") return;          // a spare spool is not a problem
+    const d = document.createElement("div");
+    d.className = "aslot " + c.verdict;
+    const want = FIL[c.colour];
+    const tick = c.verdict==="ok" ? "OK" : c.verdict==="bad" ? "WRONG" : "?";
+    const loadedTxt = !c.s.occupied ? "empty"
+      : (c.verdict==="unknown" ? "not identified"
+        : ((c.s.name ? c.s.name+" " : "") + (c.s.material || "?")));
+    d.innerHTML =
+      '<div class="top"><span>ACE '+(c.s.unit+1)+' &middot; S'+(c.s.slot+1)+'</span>' +
+      '<span class="tick">'+tick+'</span></div>' +
+      '<div class="pair">' +
+        '<span class="cdot" style="--c:'+want.hex+'"></span>' +
+        '<span class="arrow">&rarr;</span>' +
+        '<span class="cdot'+(c.s.occupied?"":" none")+(c.verdict==="unknown"?" hazy":"")+'"' +
+          (c.s.occupied&&c.s.colour?' style="--c:'+c.s.colour+'"':'')+'></span>' +
+        '<span class="what">'+loadedTxt+'</span>' +
+      '</div>';
+    host.appendChild(d);
+  });
+  return unresolved;
+}
 function render(){
   const COLL = collapse(SEQ);
   // plan
@@ -341,6 +479,17 @@ function render(){
   if(showAuto) stA.innerHTML="Auto would need <b>"+state.autoSwaps+"</b>";
   $("useAuto").hidden = state.mode!=="manual";
   $("clearPins").hidden = state.mode!=="auto"; // pins only constrain the Auto plan
+
+  // What the machine actually holds, judged against this layout. Moving a spool can resolve
+  // a mismatch, so this re-runs on every render rather than once when the dialog opened.
+  const unresolved = renderAce(layout);
+  const blocked = unresolved > 0 && !state.aceForce;
+  const apply = $("applyBtn");
+  apply.disabled = blocked;
+  apply.title = blocked
+    ? "The ACE does not hold what this plate needs. Move the spools, load them, or tick "
+      + "“Print anyway”."
+    : "";
 
   // banner: what the plate remembers. Dismissable, and gone once the layout stops being
   // the saved one (switching to Auto, or moving a spool, makes the statement untrue).
@@ -536,9 +685,12 @@ function sync(){ $("mAuto").setAttribute("aria-pressed", state.mode==="auto");
   $("mManual").setAttribute("aria-pressed", state.mode==="manual"); render(); }
 $("clearPins").addEventListener("click", ()=>{ state.pins.fill(-1); state.slotPins.fill(-1); render(); });
 $("useAuto").addEventListener("click", ()=>{ if(state.plan) state.manual=state.plan.slice(); render(); });
+$("aceOvr").addEventListener("change", function(e){ state.aceForce = e.target.checked; render(); });
 $("applyBtn").addEventListener("click", function(){
   const layout = currentLayout() || [];
-  const out = { mode: state.mode, swaps: simulate(layout), assign: [] };
+  // `override` travels with the layout: C++ re-checks the committed one and needs to know
+  // the user took responsibility for whatever it finds.
+  const out = { mode: state.mode, swaps: simulate(layout), override: !!state.aceForce, assign: [] };
   for (let c = 0; c < N(); c++)
     out.assign.push({ filament:c, head:layout[c], slot:state.slots[c],
                       unit:(layout[c]>=0 ? (UNITS[layout[c]] === undefined ? -1 : UNITS[layout[c]]) : -1),

@@ -10,6 +10,7 @@
 
 #include "nlohmann/json.hpp"
 
+#include "AceMmuProvider.hpp"
 #include "GUI_App.hpp"
 #include "I18N.hpp"
 #include "Widgets/WebView.hpp"
@@ -29,11 +30,60 @@ bool AcePlanDialog::worth_showing(const Print &print)
     return print.ace_sequence().size() > 1;
 }
 
+std::vector<int> AcePlanDialog::head_units() const
+{
+    const PrintConfig &cfg = m_print.config();
+    std::vector<int>   units;
+    units.reserve(cfg.ace_head_unit.values.size());
+    for (size_t h = 0; h < cfg.ace_head_unit.values.size(); ++h) {
+        // "None" is -1 here as well: a stock feeder is addressed by no ACE, and the ACE
+        // never reports it, so it stays outside the comparison.
+        const int cap = h < cfg.ace_head_capacity.values.size() ? cfg.ace_head_capacity.values[h] : 1;
+        units.push_back(cap > 1 ? std::max(0, cfg.ace_head_unit.values[h]) : -1);
+    }
+    return units;
+}
+
+size_t AcePlanDialog::unresolved_for(const AceMmu::LoadingPlan &plan) const
+{
+    if (m_ace.units.empty())
+        return 0;   // nothing was read; the caller decides what to do about that
+
+    const PrintConfig  *cfg    = &m_print.config();
+    const PresetBundle *bundle = wxGetApp().preset_bundle;
+    const auto *colours = bundle ? bundle->project_config.option<ConfigOptionStrings>("filament_colour") : nullptr;
+
+    std::vector<std::string> cols, mats;
+    const size_t             n = cfg->filament_diameter.values.size();
+    cols.reserve(n);
+    mats.reserve(n);
+    for (size_t f = 0; f < n; ++f) {
+        cols.push_back((colours && f < colours->values.size()) ? colours->values[f] : std::string());
+        mats.push_back(f < cfg->filament_type.values.size() ? cfg->filament_type.values[f] : std::string());
+    }
+    return AceMmu::reconcile(m_ace, plan, head_units(), cols, mats).unresolved();
+}
+
 AcePlanDialog::AcePlanDialog(wxWindow *parent, const Print &print)
     : DPIDialog(parent, wxID_ANY, _L("Filament assignment"), wxDefaultPosition, wxDefaultSize,
                 wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
     , m_print(print)
 {
+    // Read what the machine is holding, once, before the page loads. Synchronous and
+    // best-effort: the endpoint is LAN-only and the printer may be off, in which case
+    // m_ace stays empty and the page is told the check did not run.
+    if (const std::string host = AceMmuProvider::resolve_connected_host(); !host.empty()) {
+        // Short timeouts: this blocks the dialog opening, and a printer that is configured
+        // but switched off must cost a moment, not the poller's eight seconds.
+        AceMmuProvider probe(host);
+        if (probe.fetch_once(/*connect*/ 2, /*total*/ 4))
+            m_ace = probe.snapshot();
+        BOOST_LOG_TRIVIAL(info) << "AcePlanDialog: ACE state from " << host << ": "
+                                << m_ace.units.size() << " unit(s)";
+    } else {
+        BOOST_LOG_TRIVIAL(info) << "AcePlanDialog: no connected host; skipping the ACE check";
+    }
+
     // WebKit needs a scheme: a bare filesystem path renders as "The URL can't be shown".
     // Same pattern as AceMmuPanel and WebGuideDialog.
     const wxString url = wxString("file://") +
@@ -50,7 +100,12 @@ AcePlanDialog::AcePlanDialog(wxWindow *parent, const Print &print)
     auto *sizer = new wxBoxSizer(wxVERTICAL);
     sizer->Add(m_browser, 1, wxEXPAND);
     SetSizer(sizer);
-    SetSize(wxSize(FromDIP(1040), FromDIP(760)));
+    // Tall enough for the machine map, the ACE contents strip and the load plan together -
+    // the primary action must not sit below the fold - but never taller than the screen it
+    // has to live on.
+    const int want_h = FromDIP(880);
+    const int max_h  = int(wxGetDisplaySize().GetHeight() * 0.92);
+    SetSize(wxSize(FromDIP(1040), std::min(want_h, max_h)));
     CenterOnParent();
 
     Bind(wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED, &AcePlanDialog::on_script_message, this, m_browser->GetId());
@@ -90,14 +145,31 @@ std::string AcePlanDialog::build_state_json() const
     }
 
     st["capacities"] = cfg.ace_head_capacity.values;
-    // "None" is -1 here as well: a stock feeder is addressed by no ACE.
-    std::vector<int> units;
-    units.reserve(cfg.ace_head_unit.values.size());
-    for (size_t h = 0; h < cfg.ace_head_unit.values.size(); ++h) {
-        const int cap = h < cfg.ace_head_capacity.values.size() ? cfg.ace_head_capacity.values[h] : 1;
-        units.push_back(cap > 1 ? std::max(0, cfg.ace_head_unit.values[h]) : -1);
+    st["units"]      = head_units();
+
+    // What the machine says it is holding. The page judges it against whatever layout is on
+    // the board, so moving a spool updates the verdicts live - the C++ side re-checks the
+    // committed layout at Apply and has the final say.
+    nlohmann::json ace;
+    ace["checked"] = !m_ace.units.empty();
+    ace["slots"]   = nlohmann::json::array();
+    for (const AceMmu::AceUnit &unit : m_ace.units) {
+        for (const AceMmu::AceSlot &slot : unit.slots) {
+            nlohmann::json s;
+            s["unit"]     = unit.idx;
+            s["slot"]     = slot.idx;
+            s["occupied"] = slot.occupied;
+            s["colour"]   = slot.color_rrggbb;
+            s["material"] = slot.material;
+            s["name"]     = slot.brand.empty() ? slot.sku : slot.brand;
+            // Whether the machine actually knows, as opposed to having guessed. The page
+            // must not accuse a spool the ACE only inferred of being the wrong one.
+            s["trusted"] = slot.identity_trusted();
+            ace["slots"].push_back(s);
+        }
     }
-    st["units"]    = units;
+    st["ace"] = ace;
+
     st["sequence"] = m_print.ace_sequence();
 
     // A layout the user chose opens in Manual, as itself. Sending it as pins instead would
@@ -195,6 +267,7 @@ void AcePlanDialog::on_script_message(wxWebViewEvent &evt)
         const nlohmann::json j = nlohmann::json::parse(msg.substr(6));
         m_result.applied = true;
         m_result.manual  = j.value("mode", std::string("auto")) == "manual";
+        m_result.forced  = j.value("override", false);
         m_result.swaps   = j.value("swaps", -1);
         for (const auto &a : j.value("assign", nlohmann::json::array())) {
             Assignment as;

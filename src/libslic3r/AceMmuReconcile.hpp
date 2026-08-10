@@ -6,14 +6,17 @@
 // agrees, and a plan that contradicts the loaded spools prints the wrong colours at full
 // speed without a word.
 //
-// The verdict is deliberately THREE-valued, not two. AceSlot::identity_trusted() already
-// distinguishes a spool the ACE read from RFID (or that the user named by hand) from one it
-// merely inferred. Reporting "wrong filament" when the machine simply does not know what it
-// is holding would be a false accusation, and a check that cries wolf gets ignored - which
-// costs more than having no check at all.
+// The verdict is THREE-valued, not two. AceSlot::identity_trusted() distinguishes a spool the
+// ACE read from RFID (or that the user named by hand) from one it merely inferred, and the two
+// call for different remedies: swap the spool, or tell the machine what is already in there.
+// So the label stays honest - "differs" is not "cannot tell".
 //
-// Facts only: this says what agrees and what does not. Whether a mismatch warns, blocks, or
-// re-plans is a policy decision that lives in the GUI.
+// Both nevertheless count as UNRESOLVED, and printing is gated on them (user's call): a spool
+// nobody can identify is not evidence that the plate is safe to print. See unresolved() vs
+// any_mismatch() below.
+//
+// Facts only: this says what agrees and what does not. Whether being unresolved warns or
+// blocks is policy, and lives in the GUI.
 // See docs/ace-mmu/reconciliation-mockup.html.
 //
 // Pure/header-only (no GUI, no printer, no wx) so it unit-tests under tests/libslic3r.
@@ -61,9 +64,14 @@ struct Reconciliation
     {
         return size_t(std::count_if(slots.begin(), slots.end(), [v](const SlotCheck& s) { return s.verdict == v; }));
     }
-    // Only a verdict the machine is sure of. Unverified slots are not "wrong", and lumping
-    // them in would make the common case (a spool with no tag) look like an error.
+    // Only what the machine is sure is wrong. Use this to word the message - "two slots hold
+    // the wrong filament" must not be said about a slot nobody could identify.
     bool any_mismatch() const { return count(SlotVerdict::Differs) > 0; }
+
+    // What the print is gated on: anything not positively confirmed. An unidentified spool is
+    // not evidence that the plate is safe, so it holds the gate shut the same as a wrong one -
+    // the user can clear it by naming the spool on the printer, or by overriding deliberately.
+    size_t unresolved() const { return count(SlotVerdict::Differs) + count(SlotVerdict::Unverified); }
 };
 
 namespace detail {

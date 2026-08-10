@@ -311,10 +311,14 @@ public:
     const Print& fff_print() const;
     Print& fff_print();
 
-    // multiACE: show the filament assignment for the sliced plate and apply what the
-    // user picks. Returns true if a layout was applied. Safe to call when there is
-    // nothing to decide - it simply does nothing.
-    bool review_ace_assignment();
+    // multiACE: show the filament assignment for the sliced plate and apply what the user
+    // picks. Safe to call when there is nothing to decide - it simply reports Proceed.
+    enum class AceReview {
+        Proceed,   // carry on: nothing to decide, or decided without changing the plan
+        Replanned, // a new layout was applied, so the gcode on disk is now stale
+        Abort,     // ACE slots do not hold what the plate needs and the user did not override
+    };
+    AceReview review_ace_assignment();
     const SLAPrint& sla_print() const;
     SLAPrint& sla_print();
 

@@ -99,17 +99,19 @@ TEST_CASE("every slot agreeing reports no mismatch", "[ace_mmu]")
     CHECK(r.slots.size() == 4);
     CHECK(r.count(SlotVerdict::Agrees) == 4);
     CHECK_FALSE(r.any_mismatch());
+    CHECK(r.unresolved() == 0);   // the only state that lets a print through unattended
 }
 
 TEST_CASE("the printer's real contents against a four-PLA plan", "[ace_mmu]")
 {
-    // What this printer last reported: PETG in S1, two empty slots, and a spool in S4 the
-    // ACE only inferred. Three definite problems and one it cannot speak to.
+    // Read from the machine at 192.168.2.242 while writing this: one PETG spool the user
+    // named by hand in S1, and three empty slots. Every slot the plan wants is wrong, and
+    // none of it is guesswork - the ACE is certain about all four.
     const AceSnapshot snap = one_unit({
         make_slot(0, true,  "#83afff", "PETG", "override"),
         make_slot(1, false, "",        "",     "empty"),
         make_slot(2, false, "",        "",     "empty"),
-        make_slot(3, true,  "#8fa7c8", "PETG", "derived"),
+        make_slot(3, false, "",        "",     "empty"),
     });
     const Reconciliation r = reconcile(snap, ace_plan_4(), HEAD_UNIT,
                                        {"#e5308c", "#17b8c4", "#7a4fb3", "#d64541"},
@@ -117,14 +119,14 @@ TEST_CASE("the printer's real contents against a four-PLA plan", "[ace_mmu]")
     REQUIRE(r.checked);
     REQUIRE(r.slots.size() == 4);
 
-    CHECK(r.slots[0].verdict == SlotVerdict::Differs);      // PETG where PLA was planned
-    CHECK(r.slots[1].verdict == SlotVerdict::Differs);      // empty
-    CHECK(r.slots[2].verdict == SlotVerdict::Differs);      // empty
-    CHECK(r.slots[3].verdict == SlotVerdict::Unverified);   // occupied, but only inferred
+    CHECK(r.slots[0].verdict == SlotVerdict::Differs);   // PETG where PLA was planned
+    CHECK(r.slots[1].verdict == SlotVerdict::Differs);   // empty
+    CHECK(r.slots[2].verdict == SlotVerdict::Differs);   // empty
+    CHECK(r.slots[3].verdict == SlotVerdict::Differs);   // empty
 
-    CHECK(r.count(SlotVerdict::Differs) == 3);
-    CHECK(r.count(SlotVerdict::Unverified) == 1);
+    CHECK(r.count(SlotVerdict::Differs) == 4);
     CHECK(r.any_mismatch());
+    CHECK(r.unresolved() == 4);
 
     // The UI shows both sides, so both have to survive the comparison.
     CHECK(r.slots[0].expect_colour == "#e5308c");
@@ -133,10 +135,11 @@ TEST_CASE("the printer's real contents against a four-PLA plan", "[ace_mmu]")
     CHECK(r.slots[1].actual_occupied == false);
 }
 
-TEST_CASE("an untrusted spool is never called wrong", "[ace_mmu]")
+TEST_CASE("an untrusted spool is unresolved, not called wrong", "[ace_mmu]")
 {
-    // Even when the inferred identity happens to contradict the plan outright, the machine
-    // is guessing. Calling that a mismatch is how a check earns its way into being ignored.
+    // Even when the inferred identity contradicts the plan outright, the machine is guessing,
+    // so the label stays "cannot tell" - the remedy is to name the spool, not to swap it.
+    // It still holds the gate shut: not knowing is not evidence that the plate is safe.
     const AceSnapshot snap = one_unit({make_slot(0, true, "#000000", "ABS", "derived")});
     LoadingPlan       p;
     p.feasible = true;
@@ -145,7 +148,8 @@ TEST_CASE("an untrusted spool is never called wrong", "[ace_mmu]")
     const Reconciliation r = reconcile(snap, p, HEAD_UNIT, {"#e5308c"}, {"PLA"});
     REQUIRE(r.slots.size() == 1);
     CHECK(r.slots[0].verdict == SlotVerdict::Unverified);
-    CHECK_FALSE(r.any_mismatch());
+    CHECK_FALSE(r.any_mismatch());   // wording: nothing is provably wrong
+    CHECK(r.unresolved() == 1);      // gate: nothing is provably right either
 }
 
 TEST_CASE("slots the plan does not use are reported, not judged", "[ace_mmu]")
@@ -164,6 +168,7 @@ TEST_CASE("slots the plan does not use are reported, not judged", "[ace_mmu]")
     CHECK(r.slots[1].verdict == SlotVerdict::Unused);
     CHECK(r.slots[1].filament == -1);
     CHECK_FALSE(r.any_mismatch());   // a spare spool is not a problem
+    CHECK(r.unresolved() == 0);      // and does not hold the gate shut
 }
 
 TEST_CASE("a filament on a stock feeder is outside the check", "[ace_mmu]")

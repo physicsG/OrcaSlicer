@@ -123,7 +123,7 @@ AceMmu::AceSnapshot AceMmuProvider::snapshot() const
     return m_snapshot;
 }
 
-bool AceMmuProvider::fetch_once()
+bool AceMmuProvider::fetch_once(int timeout_connect_s, int timeout_max_s)
 {
     const std::string url = m_base_url + "/api/state";
 
@@ -131,8 +131,8 @@ bool AceMmuProvider::fetch_once()
     AceMmu::AceSnapshot parsed;
 
     Http::get(url)
-        .timeout_connect(4)
-        .timeout_max(8)
+        .timeout_connect(timeout_connect_s)
+        .timeout_max(timeout_max_s)
         .on_error([&](std::string /*body*/, std::string error, unsigned status) {
             BOOST_LOG_TRIVIAL(warning) << "AceMmuProvider: GET " << url << " failed: " << error << " (status " << status << ")";
         })

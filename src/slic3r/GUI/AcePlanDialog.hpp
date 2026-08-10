@@ -8,6 +8,8 @@
 
 #include "GUI_Utils.hpp"
 #include "libslic3r/AceMmuPlan.hpp"
+#include "libslic3r/AceMmuReconcile.hpp"
+#include "libslic3r/AceMmuState.hpp"
 
 namespace Slic3r {
 
@@ -37,6 +39,7 @@ public:
     {
         bool                    applied = false;
         bool                    manual  = false;   // user overrode the computed layout
+        bool                    forced  = false;   // printed despite unresolved ACE slots
         int                     swaps   = -1;      // as priced by the page
         std::vector<Assignment> assign;
     };
@@ -54,6 +57,17 @@ public:
     // place on it. Callers use this to decide, so the dialog never opens with nothing to say.
     static bool worth_showing(const Print &print);
 
+    // True when the printer answered and its slots could be compared at all. The ACE is
+    // LAN-only, so a cloud-connected machine simply cannot be read - and "could not check"
+    // must never be allowed to look like "checked and fine".
+    bool ace_checked() const { return !m_ace.units.empty(); }
+
+    // ACE slots that a given layout leaves unconfirmed - wrong spool, empty, or a spool the
+    // machine cannot identify. Judged against the snapshot read when the dialog opened, and
+    // against the layout the user is actually committing, since moving a spool in the board
+    // can resolve a mismatch. 0 when nothing was read.
+    size_t unresolved_for(const AceMmu::LoadingPlan &plan) const;
+
 protected:
     void on_dpi_changed(const wxRect &suggested_rect) override {}
 
@@ -61,10 +75,16 @@ private:
     void        on_script_message(wxWebViewEvent &evt);
     void        push_state();
     std::string build_state_json() const;
+    // Per head, the ACE unit feeding it (-1 = stock feeder). Shared by the page payload and
+    // the reconciliation, so the two can never disagree about the machine's wiring.
+    std::vector<int> head_units() const;
 
     wxWebView   *m_browser = nullptr;
     const Print &m_print;
     Result       m_result;
+    // Read once, when the dialog opens. A live poll would let the board's verdicts change
+    // under the user mid-decision.
+    AceMmu::AceSnapshot m_ace;
 };
 
 }} // namespace Slic3r::GUI

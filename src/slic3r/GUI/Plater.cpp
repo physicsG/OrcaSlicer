@@ -19440,28 +19440,41 @@ void Plater::apply_cut_object_to_model(size_t obj_idx, const ModelObjectPtrs& ne
     // w.wait_for_idle();
 }
 
-bool Plater::review_ace_assignment()
+Plater::AceReview Plater::review_ace_assignment()
 {
     // The plate that was sliced belongs to the background process. Plater::fff_print() is a
     // different Print object that never runs process(), so it carries no plan - reading it
     // here silently disabled this dialog and the post-slice notification alike.
     Print *print = p->background_process.fff_print();
     if (print == nullptr)
-        return false;
+        return AceReview::Proceed;
 
     // Only when there is something to decide: an ACE-fed head, more than one filament in
     // the sequence, and a sliced plate - the plan and its cost both come from slicing.
     if (!AcePlanDialog::worth_showing(*print))
-        return false;
+        return AceReview::Proceed;
 
     AcePlanDialog dlg(this, *print);
-    if (dlg.ShowModal() != wxID_OK || !dlg.result().applied)
-        return false;
+    const bool    applied = dlg.ShowModal() == wxID_OK && dlg.result().applied;
 
     const size_t              n      = print->config().filament_diameter.values.size();
-    const AceMmu::LoadingPlan chosen = dlg.as_plan(n);
-    if (!chosen.feasible)
-        return false;   // a layout that leaves a filament unplaced must never reach gcode
+    const AceMmu::LoadingPlan chosen = applied ? dlg.as_plan(n) : AceMmu::LoadingPlan{};
+    // A layout that leaves a filament unplaced must never reach gcode; fall back to the plan
+    // already on the Print rather than treating it as an applied choice.
+    const bool                 take_it   = chosen.feasible;
+    const AceMmu::LoadingPlan &effective = take_it ? chosen : print->ace_plan();
+
+    // The gate, judged against the layout that would actually print rather than the one the
+    // dialog opened on - moving a spool on the board can resolve a mismatch. The page already
+    // refuses to apply while slots are unresolved; this is the check that cannot be skipped
+    // by closing the dialog instead.
+    if (dlg.ace_checked() && dlg.unresolved_for(effective) > 0 && !dlg.result().forced) {
+        BOOST_LOG_TRIVIAL(info) << "Plater: multiACE contents do not match the plate; not proceeding";
+        return AceReview::Abort;
+    }
+
+    if (!take_it)
+        return AceReview::Proceed;
 
     // Persist a hand-made layout with its plate, so re-slicing or reopening the project does
     // not quietly hand the plate back to the optimiser. Only a manual one: applying in Auto
@@ -19471,7 +19484,7 @@ bool Plater::review_ace_assignment()
         plate->set_ace_plan_layout(dlg.result().manual ? chosen.head_of : std::vector<int>());
 
     print->set_ace_plan_override(chosen);
-    return true;
+    return AceReview::Replanned;
 }
 
 void Plater::export_gcode(bool prefer_removable)
@@ -19498,8 +19511,9 @@ void Plater::export_gcode(bool prefer_removable)
 
         // multiACE: let the user see and adjust which spool sits on which head before the
         // gcode is written. Same entry point as the post-slice notification, so both routes
-        // behave identically.
-        review_ace_assignment();
+        // behave identically. Abort means the ACE does not hold what this plate needs.
+        if (review_ace_assignment() == AceReview::Abort)
+            return;
     } catch (const Slic3r::PlaceholderParserError &ex) {
         // Show the error with monospaced font.
         show_error(this, ex.what(), true);
@@ -19616,7 +19630,10 @@ void Plater::export_gcode_3mf(bool export_all)
     // multiACE: same review as the plain gcode export. This is the path the toolbar,
     // Ctrl+G and the menu all take, so the hook has to be here too - putting it only on
     // Plater::export_gcode meant the dialog never appeared in the actual UI.
-    const bool ace_plan_changed = review_ace_assignment();
+    const AceReview ace_review = review_ace_assignment();
+    if (ace_review == AceReview::Abort)
+        return;
+    const bool ace_plan_changed = ace_review == AceReview::Replanned;
 
     default_output_file.replace_extension(".gcode.3mf");
     default_output_file = fs::path(Slic3r::fold_utf8_to_ascii(default_output_file.string()));
@@ -20853,7 +20870,10 @@ void Plater::send_gcode_legacy(int plate_idx, Export3mfProgressFn proFn, bool us
         // multiACE: the same review the export paths run. Sending straight to the machine is
         // the most common route to a print, and it used to skip the decision entirely - the
         // plan and its purge cost were settled without the user ever being shown them.
-        const bool ace_plan_changed = review_ace_assignment();
+        const AceReview ace_review = review_ace_assignment();
+        if (ace_review == AceReview::Abort)
+            return;
+        const bool ace_plan_changed = ace_review == AceReview::Replanned;
 
         // What is uploaded is the gcode the last slice left in the plate's temp file, so an
         // applied assignment only reaches the printer once that file has been rewritten.

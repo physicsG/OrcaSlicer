@@ -15,9 +15,9 @@
 - **Overall status:** 🟢 End to end on the real 7-colour cube. The U1 Device tab is a Flutter
   webview (`PrinterWebView`+SSWCP, no in-repo source) so ACE can't render there; the native
   "U1 + multiACE" tab and the Prepare/Preview tabs carry the UI instead.
-- **Next action:** roadmap item 5 — **reconciliation**. Orca decides "slot 2 holds the red";
-  nothing checks the machine agrees, so a plan that contradicts the loaded spools prints the
-  wrong colours with no warning. Then infeasible plates, pinning/drying, multi-ACE, multi-plate.
+- **Next action:** roadmap item 6 — **infeasible plates** (C). More colours than total
+  capacity has no layout; the planner returns infeasible and slicing proceeds as a plain
+  toolchanger, silently wrong. Then pinning/drying, multi-ACE, multi-plate.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
   - `libslic3r_tests "[ace_mmu]"` → 8 cases / 67 assertions pass (incl. live fixture).
     Rebuild: `cmake --build build --config Release --target libslic3r_tests -j 8`.
@@ -89,6 +89,30 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-10 — Reconciliation lands: the plate is checked against the machine
+- Roadmap item 5 / gap B, finished to the decisions taken on the mockup: the check lives
+  **inside the assignment dialog** as an *ACE contents* strip; it **blocks** with an explicit
+  *Print anyway* tick; matching is colour + material; **unverified counts as unresolved**;
+  and *Use what is loaded* was **dropped** — it rewrote the user's own assignment, which is
+  what Manual mode already does deliberately.
+- `AcePlanDialog` reads `/multiace/api/state` as it opens (2 s connect / 4 s total, so a
+  printer that is configured but off costs a moment rather than the poller's eight seconds)
+  and hands the slot contents to the page, which judges them against whatever layout is on
+  the board — move a spool and the verdicts update. `Plater::review_ace_assignment` now
+  returns `AceReview::{Proceed,Replanned,Abort}` and re-checks the **committed** layout in
+  C++, so the gate cannot be skipped by closing the dialog.
+- **Verified against the live printer**, not a fixture. The ACE really held one PETG spool
+  named by hand in S1 and three empty slots; against the 7-colour PLA plate the strip read
+  **4 wrong**, *Apply to plate* was disabled, ticking the override enabled it, and pressing
+  Escape cancelled the export — where the same key previously led straight to the save
+  dialog. The "not checked" state was confirmed first, before a host was configured.
+- Fixed while verifying: the strip pushed the load plan and the primary button past the
+  bottom of the dialog. Height is now `min(880 DIP, 92% of the screen)`.
+- **Testing tip for future sessions:** the headless datadir has no connected device, so the
+  check reports "not checked". Setting `print_host` on the printer preset in
+  `/tmp/orca-headless-datadir` makes `resolve_connected_host()` fall through to it (path 4)
+  and the real ACE is read.
 
 ### 2026-08-09 (cont.) — Reconciliation: the comparison, and a mockup for the UI
 - Roadmap item 5 / gap B, started. Added `src/libslic3r/AceMmuReconcile.hpp` (header-only,

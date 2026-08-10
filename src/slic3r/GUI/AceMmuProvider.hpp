@@ -48,7 +48,10 @@ public:
     // calls each tick). Returns true and replaces the cached snapshot only on a
     // well-formed response; a transient/failed/garbage read keeps the last good
     // snapshot (docs 04 §4.7).
-    bool fetch_once();
+    // The timeouts are the background poller's. Callers blocking the GUI on this -
+    // AcePlanDialog reads the ACE as it opens - should pass shorter ones: a printer
+    // that is configured but switched off would otherwise freeze the dialog.
+    bool fetch_once(int timeout_connect_s = 4, int timeout_max_s = 8);
 
     const std::string& base_url() const { return m_base_url; }
 

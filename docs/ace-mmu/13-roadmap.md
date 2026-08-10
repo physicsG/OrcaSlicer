@@ -113,7 +113,7 @@ upload dialog, and an applied layout rewrites the temp gcode before it is sent.
 Verified: the file staged for upload carried `swaps:349 optimal:0` and 350
 `ACE_SWAP_HEAD` after applying a manual layout.
 
-### B. Reconciling with what is actually in the ACE (comparison done, UI pending)
+### B. Reconciling with what is actually in the ACE (done)
 
 Orca decides "slot 2 holds the red". Nothing checks the machine agrees. A plan
 that contradicts the loaded spools prints the wrong colours with no warning.
@@ -131,12 +131,26 @@ that contradicts the loaded spools prints the wrong colours with no warning.
 - `checked = false` when there is no snapshot. The ACE is LAN-only, so this is the
   ordinary case over a cloud connection, and a green tick meaning "could not check"
   would be worse than nothing.
-- **gap** — the UI. Mockup at
-  [reconciliation-mockup.html](reconciliation-mockup.html); five decisions open:
-  where it lives, blocking vs advisory, what counts as a match, how unverified slots
-  are treated, and whether "Use what is loaded" should re-plan around reality.
-- Scope limit worth stating on screen: the ACE reports its own slots and nothing
-  else, so a wrong colour on a stock feeder stays undetected.
+- done — the UI, as an **ACE contents** strip inside the assignment dialog. The
+  dialog reads `/multiace/api/state` as it opens (short timeouts, so a printer that
+  is configured but off costs a moment, not the poller's eight seconds) and the page
+  judges each slot against whatever layout is on the board — so moving a spool
+  updates the verdicts live.
+- done — **blocking, with an explicit override**. While anything is unresolved,
+  *Apply to plate* is disabled and a *Print anyway — I have checked the spools* tick
+  appears. Closing the dialog instead returns `AceReview::Abort` and the export or
+  print is abandoned; C++ re-checks the committed layout, so the gate cannot be
+  skipped by closing the dialog, and resolving a mismatch by moving spools genuinely
+  resolves it.
+- **"Use what is loaded" was dropped** (user's call). It rewrote the user's own
+  assignment on their behalf, which is what Manual mode already does deliberately:
+  drag spools to where the machine has them and the verdicts clear as you go.
+- Scope limit stated on screen: the ACE reports its own slots and nothing else, so a
+  wrong colour on a stock feeder stays undetected.
+- Verified against the live printer, not a fixture: with one PETG spool named by hand
+  in S1 and three empty slots, a 7-colour PLA plate reported **4 wrong**, Apply was
+  disabled, ticking the override enabled it, and closing the dialog cancelled the
+  export where it previously proceeded.
 
 ### C. Infeasible plates (gap)
 
@@ -200,16 +214,16 @@ that only the current plate is reviewed.
 2. ~~**Notification**~~ — done 2026-08-09; it fires, and now lasts 20 s.
 3. ~~**Print path** (A)~~ — done 2026-08-09.
 4. ~~**Persistence** (D)~~ — done 2026-08-09.
-5. **Reconciliation** (B) — the highest-consequence correctness gap, and next.
-6. **Infeasible plates** (C), then **pinning/drying** (E), **multi-ACE** (F),
-   **multi-plate** (G).
+5. ~~**Reconciliation** (B)~~ — done 2026-08-10.
+6. **Infeasible plates** (C) — next, and the last one that can print silently wrong.
+   Then **pinning/drying** (E), **multi-ACE** (F), **multi-plate** (G).
 
 ## Mockups to produce
 
 | # | Mockup | For | Status |
 |---|--------|-----|--------|
 | — | [Remembering a filament layout](assignment-persistence-mockup.html) | D | built to it |
-| 2 | [What the ACE actually holds](reconciliation-mockup.html) | B | awaiting decisions |
+| — | [What the ACE actually holds](reconciliation-mockup.html) | B | built to it |
 | 3 | Infeasible plate refusal | C | to produce |
 | 4 | Pinned / drying spool states | E | to produce |
 | 5 | Two-ACE assignment board | F | to produce |
