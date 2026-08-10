@@ -113,12 +113,30 @@ upload dialog, and an applied layout rewrites the temp gcode before it is sent.
 Verified: the file staged for upload carried `swaps:349 optimal:0` and 350
 `ACE_SWAP_HEAD` after applying a manual layout.
 
-### B. Reconciling with what is actually in the ACE (gap)
+### B. Reconciling with what is actually in the ACE (comparison done, UI pending)
 
 Orca decides "slot 2 holds the red". Nothing checks the machine agrees. A plan
 that contradicts the loaded spools prints the wrong colours with no warning.
-*Mockup needed: mismatch state — planned vs actual, per slot, with a way to
-accept the machine's truth or reload the spools.*
+
+- done — `AceMmuReconcile.hpp`: `reconcile()` judges every ACE slot against the
+  plan, and `spool_matches()` on **colour + material** (brand ignored: colour alone
+  passes PLA where PETG is loaded, brand flags Kingroon-vs-Generic differences
+  nobody cares about). 8 cases in `tests/libslic3r/test_ace_mmu_reconcile.cpp`.
+- The verdict is **three-valued**, not two. `AceSlot::identity_trusted()` already
+  separates a spool read from RFID (or named by hand) from one merely inferred, so
+  the answers are *agrees* / *differs* / *cannot tell*. Calling an inferred spool
+  "wrong" is a false accusation, and a check that cries wolf gets ignored — which
+  costs more than no check. An empty slot is always a mismatch: the machine is not
+  guessing about emptiness.
+- `checked = false` when there is no snapshot. The ACE is LAN-only, so this is the
+  ordinary case over a cloud connection, and a green tick meaning "could not check"
+  would be worse than nothing.
+- **gap** — the UI. Mockup at
+  [reconciliation-mockup.html](reconciliation-mockup.html); five decisions open:
+  where it lives, blocking vs advisory, what counts as a match, how unverified slots
+  are treated, and whether "Use what is loaded" should re-plan around reality.
+- Scope limit worth stating on screen: the ACE reports its own slots and nothing
+  else, so a wrong colour on a stock feeder stays undetected.
 
 ### C. Infeasible plates (gap)
 
@@ -191,7 +209,7 @@ that only the current plate is reviewed.
 | # | Mockup | For | Status |
 |---|--------|-----|--------|
 | — | [Remembering a filament layout](assignment-persistence-mockup.html) | D | built to it |
-| 2 | Planned vs actual ACE contents, with reconcile actions | B | to produce |
+| 2 | [What the ACE actually holds](reconciliation-mockup.html) | B | awaiting decisions |
 | 3 | Infeasible plate refusal | C | to produce |
 | 4 | Pinned / drying spool states | E | to produce |
 | 5 | Two-ACE assignment board | F | to produce |

@@ -90,6 +90,25 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 
 Newest first. One block per session: date, what changed (files), result, next.
 
+### 2026-08-09 (cont.) — Reconciliation: the comparison, and a mockup for the UI
+- Roadmap item 5 / gap B, started. Added `src/libslic3r/AceMmuReconcile.hpp` (header-only,
+  no GUI): `reconcile()` judges each ACE slot against the plan, `spool_matches()` compares
+  **colour + material** with brand ignored. 8 cases in
+  `tests/libslic3r/test_ace_mmu_reconcile.cpp`; `[ace_mmu]` now 16 cases / 107 assertions,
+  all green.
+- **The verdict is three-valued.** `AceSlot::identity_trusted()` already distinguishes an
+  RFID/override spool from an inferred one, so a slot can *agree*, *differ*, or be
+  *unverifiable*. Calling an inferred spool wrong is a false accusation, and a check that
+  cries wolf gets ignored — worse than no check. An empty slot is always a mismatch (the
+  machine is not guessing about emptiness), and `checked=false` when there is no snapshot,
+  because the endpoint is LAN-only and a tick meaning "could not check" is a lie.
+- Mockup [reconciliation-mockup.html](reconciliation-mockup.html) drawn against the real
+  contents this printer last reported (PETG in S1, two empty, one inferred). **Five
+  decisions are open** and the UI is deliberately not built yet: where it lives, blocking
+  vs advisory, the match predicate, how unverified slots count, and whether "Use what is
+  loaded" should re-plan around reality.
+- Next: those five answers, then the strip in the assignment dialog.
+
 ### 2026-08-09 (cont.) — An applied layout is remembered with its plate
 - Roadmap item 4 / gap D. A **hand** layout is stored on the plate as `ace_plan_layout`
   (one toolhead index per filament, no slots — `evaluate_assignment` derives those) and
