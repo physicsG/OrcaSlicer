@@ -1362,6 +1362,7 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionInts,               ace_head_capacity))
     ((ConfigOptionInts,               ace_head_unit))
     ((ConfigOptionInts,               ace_plan_layout))
+    ((ConfigOptionInts,               ace_plan_pins))
     ((ConfigOptionBool,               reduce_infill_retraction))
     ((ConfigOptionBool,               ooze_prevention))
     ((ConfigOptionString,             filename_format))

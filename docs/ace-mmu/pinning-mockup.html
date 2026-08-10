@@ -200,22 +200,24 @@
 
   <!-- ============================ questions ============================ -->
   <div class="qbox">
-    <h4>What I need from you</h4>
+    <h4>Settled — this is what was built</h4>
     <ol>
-      <li><b>Seeded ≠ pinned.</b> <span class="rec">Recommended:</span> C++ sends its plan as the
-        layout and sends only real pins as <code>pins</code>. The board still matches the gcode
-        exactly; the pin badge starts meaning something.</li>
-      <li><b>Do pins persist with the plate?</b> <span class="rec">Recommended: yes</span>, by the
-        same mechanism as the applied layout — a per-plate option in the 3MF.
-        <span class="opt">The alternative is that pins last only as long as the dialog, which is
-        what happens now and is why nobody would use them.</span></li>
-      <li><b>Pin to a head, or to an exact slot?</b> The board supports both. Pinning to a
-        <em>head</em> says "keep this colour on T4"; to a <em>slot</em>, "keep it in T4 · S2".
-        <span class="opt">Slot-exact is stricter and is what a physical spool actually occupies;
-        head-only leaves the optimiser room to reshuffle within the ACE.</span></li>
-      <li><b>A pin that no longer fits</b> — drop it silently, or say so as drawn in the third
-        panel?</li>
+      <li><b>Seeded ≠ pinned.</b> C++ sends its plan as <code>layout</code> and only real pins as
+        <code>pins</code>. The board still opens on exactly the arrangement the gcode holds — it
+        is simply no longer expressed as a constraint — and the page falls back to its own
+        optimiser only once the user actually touches a pin.</li>
+      <li><b>Pins persist with the plate</b>, by the same mechanism as the applied layout: a
+        per-plate <code>ace_plan_pins</code> option written to the 3MF, two values per filament.</li>
+      <li><b>Slot-exact.</b> Head-only pinning would leave the optimiser free to reshuffle within
+        the ACE, which is not what anyone wants from a pin. <code>PlanPin</code> gets both head
+        and slot.</li>
+      <li><b>A pin that no longer fits says so</b>, as drawn in the third panel.</li>
     </ol>
+    <p style="margin:9px 0 0">One consequence worth naming: a stale pin can make an otherwise
+      printable plate unplannable. Since the infeasible-plate work now <em>refuses to slice</em>,
+      a pin must never be able to trigger that refusal — so an infeasible pinned plan retries
+      unpinned, and if that succeeds the pins are dropped and reported rather than the plate
+      being rejected.</p>
   </div>
 
   <div class="foot">

@@ -294,6 +294,7 @@ static constexpr const char* FIRST_LAYER_PRINT_SEQUENCE_ATTR = "first_layer_prin
 static constexpr const char* OTHER_LAYERS_PRINT_SEQUENCE_ATTR = "other_layers_print_sequence";
 static constexpr const char* OTHER_LAYERS_PRINT_SEQUENCE_NUMS_ATTR = "other_layers_print_sequence_nums";
 static constexpr const char* ACE_PLAN_LAYOUT_ATTR = "ace_plan_layout";
+static constexpr const char* ACE_PLAN_PINS_ATTR = "ace_plan_pins";
 static constexpr const char* SPIRAL_VASE_MODE = "spiral_mode";
 static constexpr const char* FILAMENT_MAP_MODE_ATTR = "filament_map_mode";
 static constexpr const char* FILAMENT_MAP_ATTR = "filament_maps";
@@ -4255,6 +4256,16 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 if (!head_of.empty())
                     m_curr_plater->config.set_key_value("ace_plan_layout", new ConfigOptionInts(head_of));
             }
+            else if (key == ACE_PLAN_PINS_ATTR) {
+                // multiACE: two values per filament, toolhead then slot, -1 for unpinned.
+                std::stringstream stream(value);
+                std::vector<int>  pins;
+                int               v;
+                while (stream >> v)
+                    pins.push_back(v);
+                if (!pins.empty())
+                    m_curr_plater->config.set_key_value("ace_plan_pins", new ConfigOptionInts(pins));
+            }
             else if (key == OTHER_LAYERS_PRINT_SEQUENCE_ATTR) {
                 auto get_vector_from_string = [](const std::string &str) -> std::vector<int> {
                     std::stringstream stream(str);
@@ -7703,6 +7714,18 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 if (ace_plan_layout_opt != nullptr && !ace_plan_layout_opt->values.empty()) {
                     stream << "    <" << METADATA_TAG << " " << KEY_ATTR << "=\"" << ACE_PLAN_LAYOUT_ATTR << "\" " << VALUE_ATTR << "=\"";
                     const std::vector<int>& values = ace_plan_layout_opt->values;
+                    for (size_t i = 0; i < values.size(); ++i) {
+                        stream << values[i];
+                        if (i != (values.size() - 1))
+                            stream << " ";
+                    }
+                    stream << "\"/>\n";
+                }
+
+                ConfigOptionInts *ace_plan_pins_opt = plate_data->config.option<ConfigOptionInts>("ace_plan_pins");
+                if (ace_plan_pins_opt != nullptr && !ace_plan_pins_opt->values.empty()) {
+                    stream << "    <" << METADATA_TAG << " " << KEY_ATTR << "=\"" << ACE_PLAN_PINS_ATTR << "\" " << VALUE_ATTR << "=\"";
+                    const std::vector<int>& values = ace_plan_pins_opt->values;
                     for (size_t i = 0; i < values.size(); ++i) {
                         stream << values[i];
                         if (i != (values.size() - 1))

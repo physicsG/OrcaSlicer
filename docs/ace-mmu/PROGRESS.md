@@ -15,9 +15,9 @@
 - **Overall status:** 🟢 End to end on the real 7-colour cube. The U1 Device tab is a Flutter
   webview (`PrinterWebView`+SSWCP, no in-repo source) so ACE can't render there; the native
   "U1 + multiACE" tab and the Prepare/Preview tabs carry the UI instead.
-- **Next action:** answer the four questions on [pinning-mockup.html](pinning-mockup.html),
-  then implement E. Remaining after that: multi-plate export (G) and the deferred tray dialog
-  for C.
+- **Next action:** roadmap item **G, multi-plate export** — the last gap, plus the deferred
+  tray dialog for C. "Export all plate sliced file" reviews only the current plate, so the ACE
+  gate can be walked around by exporting all.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
   - `libslic3r_tests "[ace_mmu]"` → 22 cases / 162 assertions pass (parser, planner,
     reconciliation incl. two ACE units; plus a live-captured fixture).
@@ -90,6 +90,25 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-10 (cont.) — Pinning: built, and it means something now
+- All four decisions implemented and verified live.
+- **Seeded is no longer pinned.** C++ sends the computed plan as `layout`/`slots`, and only
+  real pins as `pins`. The board opens on *"Auto plan honours 0 pin(s)"* with no badges and
+  the same arrangement and cost as before, so it still matches the gcode; the page uses its
+  own optimiser only once a pin is touched (`state.pinsDirty`).
+- **Pins persist** as a per-plate `ace_plan_pins` (two values per filament, head then slot)
+  in the 3MF. Verified across a process restart: `1 0` and `3 2` came back, the dialog showed
+  *2 pin(s)* with the right two spools ringed, and the **slicer honoured them** -
+  `T3:H1S0`, `T5:H3S2`, where the unpinned plan had T5/T6 in the opposite slots.
+- **Slot-exact**, per the user: head-only would let the optimiser reshuffle inside the ACE.
+- Applying in **Auto** stores pins and clears the layout; the two are independent, which is
+  right - a pin constrains the optimiser, a layout replaces it.
+- Fixed `pinTo()`: it recorded the slot only when the head index was literally `3`, so on a
+  machine with two ACE-fed heads pinning into the other one lost the slot.
+- **Guard worth knowing:** a stale pin could otherwise make a printable plate infeasible and
+  trip the new hard refusal. An infeasible pinned plan now retries unpinned; if that succeeds
+  the pins are dropped and reported. The plate is the job; a pin is a preference.
 
 ### 2026-08-10 (cont.) — Pinning: the feature is invisible, and a mockup
 - Roadmap item E, scoped down: **drying is out of scope for this page** (user's call).

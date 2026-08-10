@@ -4044,6 +4044,18 @@ void PrintConfigDef::init_fff_params()
     def->min = -1;
     def->set_default_value(new ConfigOptionInts {});
 
+    // Per plate, like ace_plan_layout. Two ints per filament - toolhead then slot, -1 for
+    // unpinned - because a pin is slot-exact: "keep this colour in T4 S2". Pinning only to a
+    // head would leave the optimiser free to reshuffle within the ACE, which is not something
+    // anyone wants from a pin.
+    def = this->add("ace_plan_pins", coInts);
+    def->label = L("multiACE pinned spools");
+    def->tooltip = L("Positions the filament assignment must not move, as pinned in the "
+                     "assignment dialog. Two values per filament: toolhead and slot.");
+    def->mode = comDevelop;
+    def->min = -1;
+    def->set_default_value(new ConfigOptionInts {});
+
     def = this->add("notes", coString);
     def->label = L("Configuration notes");
     def->tooltip = L("You can put here your personal notes. This text will be added to the G-code "

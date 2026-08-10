@@ -1018,6 +1018,10 @@ public:
     // Filament count a stored layout was saved for, when it no longer matches this plate and
     // was therefore ignored; 0 when nothing was dropped. Lets the dialog say so.
     size_t                      ace_plan_dropped_for() const { return m_ace_plan_dropped_for; }
+    // Pins that could not be honoured this slice - the head stopped being ACE-fed, the slot
+    // no longer exists, or they were saved for a different filament count. Reported rather
+    // than dropped in silence, since the user placed them deliberately.
+    int                         ace_pins_dropped() const { return m_ace_pins_dropped; }
     // Why a plate has no multiACE layout, phrased for the user. Public so the message can be
     // unit-tested without running a slice.
     std::string                 ace_capacity_error(const std::vector<AceMmu::PlanHead> &heads,
@@ -1127,6 +1131,7 @@ private:
     std::vector<int>                        m_ace_sequence;
     bool                                    m_ace_plan_is_user{false};
     size_t                                  m_ace_plan_dropped_for{0};
+    int                                     m_ace_pins_dropped{0};
     PrintObjectPtrs                         m_objects;
     PrintRegionPtrs                         m_print_regions;
 

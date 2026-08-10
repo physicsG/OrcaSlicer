@@ -42,6 +42,9 @@ public:
         bool                    forced  = false;   // printed despite unresolved ACE slots
         int                     swaps   = -1;      // as priced by the page
         std::vector<Assignment> assign;
+        // Two values per filament, head then slot, -1 for unpinned - the shape the plate
+        // stores. Empty when the page sent none.
+        std::vector<int> pins;
     };
 
     AcePlanDialog(wxWindow *parent, const Print &print);

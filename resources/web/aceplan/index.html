@@ -253,6 +253,12 @@ function applyState(st){
   UNITS = st.units     || [];
   HEADS = CAPS.map(function(_, i){ return "T" + (i + 1); });
   if (typeof st.grams_per_swap === "number") GRAMS_PER_SWAP = st.grams_per_swap;
+  // The computed layout, sent as a layout rather than as pins so the board opens on the
+  // arrangement the gcode holds without every spool looking pinned.
+  state.seed      = (Array.isArray(st.layout) && st.layout.length === FIL.length) ? st.layout.slice() : null;
+  state.seedSlots = (Array.isArray(st.slots)  && st.slots.length  === FIL.length) ? st.slots.slice()  : null;
+  state.pinsDirty = false;
+  state.pinsDropped = typeof st.pins_dropped === "number" ? st.pins_dropped : 0;
   state.pins     = new Array(FIL.length).fill(-1);
   state.slotPins = new Array(FIL.length).fill(-1);
   (st.pins || []).forEach(function(p){
@@ -347,6 +353,9 @@ const state = {
   plan:null, slots:null, autoSwaps:0,
   saved:false,                     // this layout is remembered with the plate
   savedLayout:null,                // that layout, to tell "unchanged" from "since edited"
+  seed:null, seedSlots:null,       // the computed layout, verbatim from C++
+  pinsDirty:false,                 // the user has touched the pins since it was sent
+  pinsDropped:0,                   // pins this slice could not honour
   ace:[], aceUnits:[], aceRead:false,  // what the machine reports, and which units answered
   aceForce:false,                  // the user accepted responsibility for a mismatch
   droppedFor:0,                    // a layout for N filaments was ignored (N != this plate's)
@@ -473,15 +482,21 @@ function renderAce(layout){
 function render(){
   const COLL = collapse(SEQ);
   // plan
+  // Until the user touches a pin, the Auto layout is exactly what C++ planned - not the
+  // page's own re-derivation, which could pick an equal-cost but different arrangement and
+  // make the board disagree with the gcode.
   const auto = optimise(state.pins);
   const autoFree = optimise(new Array(N()).fill(-1));
   state.autoSwaps = autoFree ? autoFree.swaps : 0;
-  const feasible = !!auto;
-  if(feasible) state.plan = auto.headOf;
+  const feasible = !!auto || (!state.pinsDirty && !!state.seed);
+  if(!state.pinsDirty && state.seed) state.plan = state.seed.slice();
+  else if(auto) state.plan = auto.headOf;
   if(!state.manual && state.plan) state.manual = state.plan.slice();
   const layout = currentLayout() || new Array(N()).fill(-1);
   const swaps = feasible||state.mode==="manual" ? simulate(layout) : null;
-  state.slots = slotsFor(layout, state.slotPins);
+  state.slots = (!state.pinsDirty && state.seedSlots && state.mode === "auto")
+    ? state.seedSlots.slice()
+    : slotsFor(layout, state.slotPins);
 
   // stats
   const stS=$("stSwaps"), stW=$("stWaste"), stA=$("stAuto");
@@ -510,7 +525,7 @@ function render(){
   const memo = $("memo");
   const stillSaved = state.saved && state.mode==="manual" && state.savedLayout &&
                      layout.join() === state.savedLayout.join();
-  if (state.memoOff || (!stillSaved && !state.droppedFor)) {
+  if (state.memoOff || (!stillSaved && !state.droppedFor && !state.pinsDropped)) {
     memo.hidden = true;
   } else {
     memo.hidden = false;
@@ -525,6 +540,15 @@ function render(){
         // Hand the plate back: Auto from here, and applying in Auto clears the stored layout.
         state.mode = "auto"; state.saved = false; state.sel = -1; sync();
       });
+    } else if (!state.droppedFor && state.pinsDropped) {
+      // A pin outlives the topology that made sense of it - a head stops being ACE-fed, or an
+      // ACE is reconfigured with fewer slots. Say so; the user placed it deliberately.
+      memo.innerHTML = '<span class="chip">' + state.pinsDropped + ' pin' +
+        (state.pinsDropped === 1 ? '' : 's') + ' dropped</span>' +
+        "<span>Held a spool in a position this printer no longer has — check <b>Printer " +
+        "settings &rsaquo; Multimaterial</b> if that is unexpected.</span>" +
+        '<span class="act"><button class="linkbtn" id="memoAct">Dismiss</button></span>';
+      $("memoAct").addEventListener("click", function(){ state.memoOff = true; render(); });
     } else {
       memo.innerHTML = '<span class="chip">Layout dropped</span>' +
         "<span>The layout saved with this plate was for <b>" + state.droppedFor +
@@ -632,13 +656,16 @@ function manualMove(moving, occupant, head, slot){
 }
 function pinTo(colour, head, slot){
   state.pins[colour]=head;
-  state.slotPins[colour]=head===3?slot:-1;
+  // Slot-exact on any ACE-fed head. This used to test `head===3`, which quietly dropped the
+  // slot on a machine whose other head is also ACE-fed.
+  state.slotPins[colour]=(CAPS[head]>1)?slot:-1;
+  state.pinsDirty=true;
 }
 function hookPos(el, colour, head, slot){
   el.addEventListener("click", ()=>{
     if(state.mode==="auto"){
       if(colour<0) return;
-      if(state.pins[colour]>=0){ state.pins[colour]=-1; state.slotPins[colour]=-1; }
+      if(state.pins[colour]>=0){ state.pins[colour]=-1; state.slotPins[colour]=-1; state.pinsDirty=true; }
       else pinTo(colour, head, slot);
     } else {
       if(state.sel<0){ if(colour>=0) state.sel=colour; }
@@ -704,7 +731,14 @@ $("applyBtn").addEventListener("click", function(){
   const layout = currentLayout() || [];
   // `override` travels with the layout: C++ re-checks the committed one and needs to know
   // the user took responsibility for whatever it finds.
-  const out = { mode: state.mode, swaps: simulate(layout), override: !!state.aceForce, assign: [] };
+  const out = { mode: state.mode, swaps: simulate(layout), override: !!state.aceForce,
+                assign: [], pins: [] };
+  // Two values per filament, head then slot, -1 for unpinned - the shape the plate stores.
+  for (let c = 0; c < N(); c++){
+    const pinned = state.mode === "auto" && state.pins[c] >= 0;
+    out.pins.push(pinned ? state.pins[c] : -1);
+    out.pins.push(pinned ? (state.slotPins[c] >= 0 ? state.slotPins[c] : state.slots[c]) : -1);
+  }
   for (let c = 0; c < N(); c++)
     out.assign.push({ filament:c, head:layout[c], slot:state.slots[c],
                       unit:(layout[c]>=0 ? (UNITS[layout[c]] === undefined ? -1 : UNITS[layout[c]]) : -1),

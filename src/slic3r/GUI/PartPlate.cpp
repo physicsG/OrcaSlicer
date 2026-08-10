@@ -3089,6 +3089,22 @@ void PartPlate::set_ace_plan_layout(const std::vector<int> &head_of)
         m_config.set_key_value("ace_plan_layout", new ConfigOptionInts(head_of));
 }
 
+std::vector<int> PartPlate::get_ace_plan_pins() const
+{
+    const ConfigOptionInts *op = m_config.option<ConfigOptionInts>("ace_plan_pins");
+    return op ? op->values : std::vector<int>();
+}
+
+void PartPlate::set_ace_plan_pins(const std::vector<int> &head_slot_pairs)
+{
+    // Same reasoning as set_ace_plan_layout: write an empty option rather than erasing the
+    // key, so Print::apply diffs it and the pins the user just cleared actually clear.
+    if (ConfigOptionInts *op = m_config.option<ConfigOptionInts>("ace_plan_pins"))
+        op->values = head_slot_pairs;
+    else
+        m_config.set_key_value("ace_plan_pins", new ConfigOptionInts(head_slot_pairs));
+}
+
 void PartPlate::set_other_layers_print_sequence(const std::vector<LayerPrintSequence>& layer_seq_list)
 {
 	if (layer_seq_list.empty()) {

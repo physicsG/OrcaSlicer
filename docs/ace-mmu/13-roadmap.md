@@ -212,7 +212,7 @@ swaps × (what this slice actually flushed ÷ this slice's swaps), so the same l
 is quoted ~47.0 g when priced from an auto slice and ~40.4 g when priced from its
 own. The swap counts are exact; only the gram estimate drifts.
 
-### E. Pinning (partial — mockup ready, decisions open)
+### E. Pinning (done)
 
 Drying is **out of scope for this page** (user's call): the assignment dialog is
 about where spools go, not about conditioning them.
@@ -235,7 +235,24 @@ is literally `3` (`state.slotPins[c] = head===3 ? slot : -1`). With two ACE-fed 
 — now a tested configuration — pinning into the other ACE head keeps the head and
 silently loses the slot.
 
-Mockup: [pinning-mockup.html](pinning-mockup.html). Four decisions open.
+All four fixed, to the decisions taken on
+[pinning-mockup.html](pinning-mockup.html):
+
+- done — **seeded is no longer pinned.** C++ sends its plan as `layout`/`slots` and only
+  real pins as `pins`. The board still opens on exactly the arrangement the gcode holds
+  — verified: *"Auto plan honours 0 pin(s)"* with no badges, same layout, same 300 swaps
+  — and the page falls back to its own optimiser only once a pin is actually touched.
+- done — **pins persist**, as a per-plate `ace_plan_pins` in the 3MF: two values per
+  filament, head then slot. Verified across a process restart: pins `1 0` and `3 2`
+  came back and the slicer honoured them (`T3:H1S0`, `T5:H3S2`, where the unpinned plan
+  had T5/T6 in the opposite slots).
+- done — **slot-exact.** Head-only would let the optimiser reshuffle within the ACE,
+  which is not what a pin is for.
+- done — **a pin that no longer fits says so**, and `pinTo()` now tests whether the head
+  is ACE-fed rather than whether it is literally head 3.
+- **A stale pin can never trigger the infeasible-plate refusal.** An infeasible pinned
+  plan retries unpinned; if that succeeds the pins are dropped and reported, because the
+  plate is the job and a pin is only a preference.
 
 ### F. More than one ACE (tested, short of second hardware)
 
@@ -273,7 +290,8 @@ that only the current plate is reviewed.
 5. ~~**Reconciliation** (B)~~ — done 2026-08-10.
 6. ~~**Infeasible plates** (C)~~ — refusal done 2026-08-10; tray dialog deferred.
 7. ~~**Multi-ACE** (F)~~ — tested 2026-08-10, short of second hardware.
-8. **Pinning** (E) — mockup ready, decisions open. Then **multi-plate** (G).
+8. ~~**Pinning** (E)~~ — done 2026-08-10.
+9. **Multi-plate export** (G) — the last gap, plus the deferred tray dialog for C.
 
 ## Mockups to produce
 
@@ -282,7 +300,7 @@ that only the current plate is reviewed.
 | — | [Remembering a filament layout](assignment-persistence-mockup.html) | D | built to it |
 | — | [What the ACE actually holds](reconciliation-mockup.html) | B | built to it |
 | — | [More colours than places](infeasible-plate-mockup.html) | C | awaiting decisions |
-| — | [Pinning a spool in place](pinning-mockup.html) | E | awaiting decisions |
+| — | [Pinning a spool in place](pinning-mockup.html) | E | built to it |
 | 5 | Two-ACE assignment board | F | to produce |
 
 ## Standing risks

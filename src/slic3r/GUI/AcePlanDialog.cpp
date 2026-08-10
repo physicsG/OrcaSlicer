@@ -221,20 +221,36 @@ std::string AcePlanDialog::build_state_json() const
     else if (pairs > 0)
         st["grams_per_swap"] = (sum_mm3 / double(pairs)) / 1000. * density;
 
-    // Seed the page with the computed layout as pins so it opens on the plan that the
-    // gcode would otherwise use, rather than on an empty board. Not for a user's own
-    // layout: that arrives as `manual` above, leaving the page's optimiser unconstrained
-    // so "Auto would need N" is a real comparison rather than a restatement.
-    st["pins"] = nlohmann::json::array();
-    for (size_t f = 0; !user_layout && f < plan.head_of.size(); ++f) {
-        if (plan.head_of[f] < 0)
-            continue;
-        nlohmann::json p;
-        p["filament"] = int(f);
-        p["head"]     = plan.head_of[f];
-        p["slot"]     = f < plan.slot_of.size() ? plan.slot_of[f] : -1;
-        st["pins"].push_back(p);
+    // The computed layout, sent AS A LAYOUT. It used to go as one pin per filament so the
+    // board would match the gcode exactly - which it did, at the cost of making every spool
+    // look pinned and a deliberate pin indistinguishable from the optimiser's own choice.
+    // The board still opens on exactly this arrangement; it is just no longer a constraint.
+    if (!user_layout) {
+        st["layout"] = plan.head_of;
+        st["slots"]  = plan.slot_of;
     }
+
+    // Pins are now only what the user pinned, restored from the plate. Two values per
+    // filament in the config - head then slot - flattened here into the page's shape.
+    st["pins"] = nlohmann::json::array();
+    {
+        const std::vector<int> &stored = cfg.ace_plan_pins.values;
+        if (stored.size() == 2 * n_filaments) {
+            for (size_t f = 0; f < n_filaments; ++f) {
+                if (stored[2 * f] < 0)
+                    continue;
+                nlohmann::json p;
+                p["filament"] = int(f);
+                p["head"]     = stored[2 * f];
+                p["slot"]     = stored[2 * f + 1];
+                st["pins"].push_back(p);
+            }
+        }
+    }
+    // Pins the slice could not honour - the head stopped being ACE-fed, the slot is gone, or
+    // they were saved for a different filament count. Said out loud, not dropped in silence.
+    if (const int dropped = m_print.ace_pins_dropped(); dropped > 0)
+        st["pins_dropped"] = dropped;
 
     return st.dump();
 }
@@ -275,6 +291,8 @@ void AcePlanDialog::on_script_message(wxWebViewEvent &evt)
         m_result.manual  = j.value("mode", std::string("auto")) == "manual";
         m_result.forced  = j.value("override", false);
         m_result.swaps   = j.value("swaps", -1);
+        for (const auto &v : j.value("pins", nlohmann::json::array()))
+            m_result.pins.push_back(v.is_number_integer() ? v.get<int>() : -1);
         for (const auto &a : j.value("assign", nlohmann::json::array())) {
             Assignment as;
             as.filament = a.value("filament", -1);

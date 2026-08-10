@@ -19480,8 +19480,18 @@ Plater::AceReview Plater::review_ace_assignment()
     // not quietly hand the plate back to the optimiser. Only a manual one: applying in Auto
     // means "yes, use the computed plan", and pinning that would freeze today's answer onto
     // a plate whose colours may change tomorrow - so it clears any layout instead.
-    if (PartPlate *plate = p->partplate_list.get_curr_plate())
+    if (PartPlate *plate = p->partplate_list.get_curr_plate()) {
         plate->set_ace_plan_layout(dlg.result().manual ? chosen.head_of : std::vector<int>());
+        // Pins ride with the plate too, and independently of the layout: they constrain the
+        // optimiser rather than replacing it, so they matter precisely in Auto mode. An empty
+        // vector clears them, which is what applying with nothing pinned means.
+        std::vector<int> pins = dlg.result().pins;
+        if (pins.size() != 2 * n)
+            pins.clear();
+        if (std::all_of(pins.begin(), pins.end(), [](int v) { return v < 0; }))
+            pins.clear();
+        plate->set_ace_plan_pins(pins);
+    }
 
     print->set_ace_plan_override(chosen);
     return AceReview::Replanned;

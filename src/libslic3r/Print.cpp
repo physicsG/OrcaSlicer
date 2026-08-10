@@ -755,6 +755,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
             // The multiACE plan is decided at the end of psWipeTower, so a layout the user
             // applied has to re-enter there rather than only at gcode-writing time.
             || opt_key == "ace_plan_layout"
+            || opt_key == "ace_plan_pins"
             || opt_key == "other_layers_print_sequence"
             || opt_key == "other_layers_print_sequence_nums"
             || opt_key == "wipe_tower_bridging"
@@ -2644,6 +2645,7 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
         m_ace_sequence.clear();
         m_ace_plan_is_user     = false;
         m_ace_plan_dropped_for = 0;
+        m_ace_pins_dropped     = 0;
         {
             const std::vector<int>& caps    = m_config.ace_head_capacity.values;
             const std::vector<int>& units   = m_config.ace_head_unit.values;
@@ -2664,7 +2666,50 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
                     for (unsigned int e : lt.extruders)
                         seq.push_back(int(e));
                 const int n_filaments = int(m_config.filament_diameter.values.size());
-                m_ace_plan = AceMmu::plan_loading(heads, seq, n_filaments);
+
+                // Pins the user set on this plate: two values per filament, head then slot,
+                // -1 for unpinned. Slot-exact, because pinning only to a head would leave the
+                // optimiser free to reshuffle within the ACE - not what a pin is for.
+                std::vector<AceMmu::PlanPin> pins;
+                {
+                    const std::vector<int> &stored = m_config.ace_plan_pins.values;
+                    if (stored.size() == size_t(2 * n_filaments) && n_filaments > 0) {
+                        pins.assign(n_filaments, AceMmu::PlanPin{});
+                        for (int c = 0; c < n_filaments; ++c) {
+                            const int ph = stored[2 * c], ps = stored[2 * c + 1];
+                            if (ph < 0)
+                                continue;
+                            // A pin outlives the topology that made sense of it: a head can
+                            // stop being ACE-fed, or an ACE can be reconfigured with fewer
+                            // slots. Such a pin is dropped, and counted so the dialog can say
+                            // so rather than let it vanish.
+                            const int cap = (size_t(ph) < caps.size()) ? std::max(1, caps[ph]) : 0;
+                            if (ph >= int(n_heads) || cap == 0 || ps >= cap) {
+                                ++m_ace_pins_dropped;
+                                continue;
+                            }
+                            pins[c].head = ph;
+                            pins[c].slot = ps;
+                        }
+                    } else if (!stored.empty()) {
+                        // Saved for a different filament count; it no longer refers to these
+                        // spools at all.
+                        m_ace_pins_dropped = int(stored.size() / 2);
+                    }
+                }
+
+                m_ace_plan = AceMmu::plan_loading(heads, seq, n_filaments, pins);
+                if (!m_ace_plan.feasible && !pins.empty()) {
+                    // Pins can make an otherwise-printable plate unplannable. The plate is the
+                    // job and the pin is a preference, so drop the pins rather than refuse to
+                    // slice - and never let a stale pin masquerade as a capacity shortfall.
+                    AceMmu::LoadingPlan unpinned = AceMmu::plan_loading(heads, seq, n_filaments);
+                    if (unpinned.feasible) {
+                        m_ace_plan = unpinned;
+                        m_ace_pins_dropped += int(std::count_if(pins.begin(), pins.end(),
+                                                                [](const AceMmu::PlanPin &p) { return p.head >= 0; }));
+                    }
+                }
 
                 // No layout exists for this plate. Refuse rather than write a file: an
                 // infeasible plan leaves the tool remap empty, so the gcode would address

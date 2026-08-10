@@ -487,6 +487,11 @@ public:
     std::vector<int> get_ace_plan_layout() const;
     void             set_ace_plan_layout(const std::vector<int> &head_of);
 
+    // multiACE: positions the user pinned on this plate. Two values per filament, toolhead
+    // then slot, -1 for unpinned. Slot-exact, so a pin means "this colour stays in T4 S2".
+    std::vector<int> get_ace_plan_pins() const;
+    void             set_ace_plan_pins(const std::vector<int> &head_slot_pairs);
+
 
     void print() const;
 
