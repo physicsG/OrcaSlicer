@@ -15,9 +15,9 @@
 - **Overall status:** 🟢 End to end on the real 7-colour cube. The U1 Device tab is a Flutter
   webview (`PrinterWebView`+SSWCP, no in-repo source) so ACE can't render there; the native
   "U1 + multiACE" tab and the Prepare/Preview tabs carry the UI instead.
-- **Next action:** roadmap item **G, multi-plate export** — the last gap, plus the deferred
-  tray dialog for C. "Export all plate sliced file" reviews only the current plate, so the ACE
-  gate can be walked around by exporting all.
+- **Next action:** nothing is unstarted. Left over: the **tray dialog** for C (deferred by the
+  user - the text refusal stands), **real two-ACE hardware** for F, and seeing G's refusal fire
+  on a genuine two-plate project.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
   - `libslic3r_tests "[ace_mmu]"` → 22 cases / 162 assertions pass (parser, planner,
     reconciliation incl. two ACE units; plus a live-captured fixture).
@@ -90,6 +90,24 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-10 (cont.) — Multi-plate export no longer skips the ACE check
+- Roadmap item G, the last gap. The assignment dialog reviews the plate you are looking at;
+  *Export all plate sliced file* packaged the others unexamined, which side-steps a gate the
+  user asked to be hard. `Plater::ace_other_plates_supplied()` now reconciles **every other
+  sliced plate** against one ACE snapshot and refuses, naming the plate. Opening the dialog
+  once per plate would be worse than the problem; naming the plate to go and look at is
+  enough. Each plate owns its own `Print` (`PartPlateList::m_print_list`), so nothing has to
+  switch plates.
+- No snapshot means no claim; unsliced plates are skipped; the current plate is skipped
+  because the dialog already covered it with its own override.
+- **Verified:** single-plate export-all is unaffected - still opens the dialog for the
+  current plate and reaches the save dialog, no spurious refusal.
+- **Unverified, and worth a human minute:** the positive case. Building a second validly
+  sliced plate defeated three attempts here - copy/paste lands the object at the plate edge,
+  arrange-all merges the plates back into one, and a dragged copy slices with the wipe tower
+  off the bed ("A G-code path goes beyond the plate boundaries"). That is project setup, not
+  this code, but it means the refusal itself has never been seen firing.
 
 ### 2026-08-10 (cont.) — Pinning: built, and it means something now
 - All four decisions implemented and verified live.

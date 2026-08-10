@@ -19440,6 +19440,73 @@ void Plater::apply_cut_object_to_model(size_t obj_idx, const ModelObjectPtrs& ne
     // w.wait_for_idle();
 }
 
+// ACE slots a given plate leaves unconfirmed, judged against one snapshot. Each plate owns
+// its own Print, so every plate can be checked without switching to it.
+static size_t ace_unresolved_for_plate(const Print &print, const AceMmu::AceSnapshot &snap)
+{
+    if (snap.units.empty() || !print.ace_plan().feasible)
+        return 0;
+    const PrintConfig &cfg = print.config();
+    std::vector<int>   units;
+    units.reserve(cfg.ace_head_unit.values.size());
+    for (size_t h = 0; h < cfg.ace_head_unit.values.size(); ++h) {
+        const int cap = h < cfg.ace_head_capacity.values.size() ? cfg.ace_head_capacity.values[h] : 1;
+        units.push_back(cap > 1 ? std::max(0, cfg.ace_head_unit.values[h]) : -1);
+    }
+    std::vector<std::string> cols, mats;
+    const size_t             n = cfg.filament_diameter.values.size();
+    for (size_t f = 0; f < n; ++f) {
+        cols.push_back(f < cfg.filament_colour.values.size() ? cfg.filament_colour.values[f] : std::string());
+        mats.push_back(f < cfg.filament_type.values.size() ? cfg.filament_type.values[f] : std::string());
+    }
+    return AceMmu::reconcile(snap, print.ace_plan(), units, cols, mats).unresolved();
+}
+
+bool Plater::ace_other_plates_supplied()
+{
+    // The assignment dialog reviews the plate you are looking at. Exporting every plate at
+    // once used to review that one and package the rest unexamined, which is a way round a
+    // gate that is otherwise hard - so check them all. Opening the dialog once per plate
+    // would be worse than the problem; naming the plate to go and look at is enough.
+    const std::string host = AceMmuProvider::resolve_connected_host();
+    if (host.empty())
+        return true;   // LAN-only endpoint, nothing to compare against; the single-plate path says so too
+    AceMmu::AceSnapshot snap;
+    {
+        AceMmuProvider probe(host);
+        if (!probe.fetch_once(/*connect*/ 2, /*total*/ 4))
+            return true;
+        snap = probe.snapshot();
+    }
+    if (snap.units.empty())
+        return true;
+
+    const int current = p->partplate_list.get_curr_plate_index();
+    for (int i = 0; i < p->partplate_list.get_plate_count(); ++i) {
+        if (i == current)
+            continue;   // reviewed in the dialog, with its own override
+        PartPlate *plate = p->partplate_list.get_plate(i);
+        if (plate == nullptr || !plate->is_slice_result_valid())
+            continue;
+        const Print *print = plate->fff_print();
+        if (print == nullptr)
+            continue;
+        const size_t unresolved = ace_unresolved_for_plate(*print, snap);
+        if (unresolved == 0)
+            continue;
+        show_error(this, format_wxstr(_L_PLURAL("multiACE: plate %1% needs %2% spool the ACE does not have.",
+                                                "multiACE: plate %1% needs %2% spools the ACE does not have.",
+                                                int(unresolved)),
+                                      i + 1, int(unresolved)) +
+                             "\n\n" +
+                             _L("Only the plate you are viewing is reviewed in the assignment dialog. Switch to "
+                                "that plate to check it, or export the plates one at a time."),
+                   false);
+        return false;
+    }
+    return true;
+}
+
 Plater::AceReview Plater::review_ace_assignment()
 {
     // The plate that was sliced belongs to the background process. Plater::fff_print() is a
@@ -19644,6 +19711,9 @@ void Plater::export_gcode_3mf(bool export_all)
     if (ace_review == AceReview::Abort)
         return;
     const bool ace_plan_changed = ace_review == AceReview::Replanned;
+    // Every other plate goes out in this file too, unreviewed, so check them here.
+    if (export_all && !ace_other_plates_supplied())
+        return;
 
     default_output_file.replace_extension(".gcode.3mf");
     default_output_file = fs::path(Slic3r::fold_utf8_to_ascii(default_output_file.string()));

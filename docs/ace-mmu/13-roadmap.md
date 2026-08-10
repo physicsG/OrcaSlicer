@@ -100,7 +100,9 @@ continuation is taken unconditionally on completion and run only on success, so 
 cancelled or failed rewrite cannot leave it armed for an unrelated slice.
 
 **Any future route that uploads or packages `get_tmp_gcode_path()` needs the same
-treatment.** Multi-plate export (G) is the one known to still be missing it.
+treatment.** Multi-plate export was the last one missing it; it now checks the other
+plates rather than rewriting them, since only the current plate has a dialog to
+rewrite from (G).
 
 ---
 
@@ -273,10 +275,26 @@ All four fixed, to the decisions taken on
   plus a fabricated topology, so wiring, unit indices and swap behaviour on a second
   physical ACE remain untested.
 
-### G. Multi-plate export (gap)
+### G. Multi-plate export (done, one path unverified)
 
-"Export all sliced files" never calls the review. Either run it per plate or state
-that only the current plate is reviewed.
+The assignment dialog reviews the plate you are viewing. *Export all plate sliced
+file* packaged the rest unexamined, which is a way round a gate that is otherwise
+hard — so `Plater::ace_other_plates_supplied()` now reconciles **every other sliced
+plate** against one ACE snapshot and refuses the export naming the plate, rather
+than opening the dialog once per plate. Each plate owns its own `Print`, so no plate
+switching is needed.
+
+- No snapshot (LAN-only endpoint unreachable) means no claim, exactly as the
+  single-plate path behaves.
+- Unsliced plates are skipped; the current plate is skipped because the dialog
+  already reviewed it, with its own override.
+- **Verified:** the single-plate case is unaffected — export-all still opens the
+  dialog for the current plate and reaches the save dialog with no spurious refusal.
+- **Unverified:** the positive case, an *other* plate that is short of spools.
+  Building a second validly-sliced plate defeated three attempts here — pasted and
+  dragged copies slice with the wipe tower off the bed ("A G-code path goes beyond
+  the plate boundaries"), which is a project-setup problem unrelated to this code.
+  Worth exercising by hand on a real two-plate project.
 
 ---
 
@@ -291,7 +309,8 @@ that only the current plate is reviewed.
 6. ~~**Infeasible plates** (C)~~ — refusal done 2026-08-10; tray dialog deferred.
 7. ~~**Multi-ACE** (F)~~ — tested 2026-08-10, short of second hardware.
 8. ~~**Pinning** (E)~~ — done 2026-08-10.
-9. **Multi-plate export** (G) — the last gap, plus the deferred tray dialog for C.
+9. ~~**Multi-plate export** (G)~~ — done 2026-08-10; positive case unverified.
+10. Remaining: the deferred **tray dialog** for C, and real two-ACE hardware for F.
 
 ## Mockups to produce
 

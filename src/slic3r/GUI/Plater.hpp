@@ -319,6 +319,10 @@ public:
         Abort,     // ACE slots do not hold what the plate needs and the user did not override
     };
     AceReview review_ace_assignment();
+    // multiACE: true when every *other* sliced plate's ACE slots hold what its plan needs.
+    // The dialog only ever reviews the plate you are viewing, so exporting all plates has to
+    // check the rest itself or the gate is trivially side-stepped. Shows the error itself.
+    bool      ace_other_plates_supplied();
     const SLAPrint& sla_print() const;
     SLAPrint& sla_print();
 
