@@ -19,7 +19,8 @@
   capacity has no layout; the planner returns infeasible and slicing proceeds as a plain
   toolchanger, silently wrong. Then pinning/drying, multi-ACE, multi-plate.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
-  - `libslic3r_tests "[ace_mmu]"` → 8 cases / 67 assertions pass (incl. live fixture).
+  - `libslic3r_tests "[ace_mmu]"` → 16 cases / 110 assertions pass (parser, planner,
+    reconciliation; incl. a live-captured fixture).
     Rebuild: `cmake --build build --config Release --target libslic3r_tests -j 8`.
   - Full app: `cmake --build build --config Release --target Snapmaker_Orca -j 8`.
   - **Fast iteration (mold + ccache; ~15 s incremental):** full setup + commands in
@@ -89,6 +90,27 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-10 (cont.) — Infeasible plates: measured, and a mockup
+- Roadmap item 6 / gap C. Before designing anything I **sliced an over-capacity plate** (the
+  7-colour cube with the ACE set to 2 slots = 5 places) and read the file. It is worse than
+  the roadmap assumed:
+  - slicing **succeeded** with no error, warning or notification;
+  - the plan header came out **empty**, not "infeasible";
+  - the file contains **300 tool changes to `T4`/`T5`/`T6`** on a four-head machine, plus
+    `M109 S220 T5` and `SM_PRINT_PREEXTRUDE_FILAMENT INDEX=5`. When the plan is infeasible
+    `set_tool_remap` gets an empty map, so the "physical heads only" contract breaks silently;
+  - **zero** `ACE_SWAP_HEAD`.
+- The dialog also **misdiagnoses** it: "These pins cannot all be satisfied. Unpin something to
+  get a plan." There are no pins — C++ sends none when the plan is infeasible. The board
+  silently omits the filaments that did not fit and the load plan lists `ACE 1 · S0` twice.
+- Mockup: [infeasible-plate-mockup.html](infeasible-plate-mockup.html). Proposal is refuse at
+  **slicing** (so no file exists to send), a dialog that names the shortfall and shows the
+  unplaced filaments, and a **hard** block with no override — a wrong spool is a judgement
+  call, a missing toolhead is not. Four questions open; no code written yet.
+- **Testing gotcha, cost a cycle:** a project 3MF embeds its own printer config, which
+  overrides the user preset. To test a different `ace_head_capacity`, edit
+  `Metadata/project_settings.config` inside the 3MF, not the preset in the datadir.
 
 ### 2026-08-10 — Reconciliation lands: the plate is checked against the machine
 - Roadmap item 5 / gap B, finished to the decisions taken on the mockup: the check lives

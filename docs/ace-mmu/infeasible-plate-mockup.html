@@ -1,0 +1,347 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>More colours than places</title>
+<style>
+  /* Tokens lifted from resources/web/aceplan/index.html so this reads as the real dialog. */
+  :root{
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --page:#e6e7e9; --panel:#ffffff; --hbar:#eef0f1; --hbar-line:#e2e4e6;
+    --line:#e4e6e8; --line-soft:#eef0f1; --inset:#f4f5f6;
+    --text:#2f3336; --dim:#7d868d; --faint:#a7aeb4;
+    --teal:#14b8a6; --teal-ink:#fff; --teal-soft:rgba(20,184,166,.12);
+    --blue:#4a90d9; --blue-soft:rgba(74,144,217,.12);
+    --warn:#e2953a; --warn-soft:rgba(226,149,58,.14);
+    --stop:#d0453c; --stop-soft:rgba(208,69,60,.13);
+    --empty:#e7e9eb;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 26px -18px rgba(16,24,32,.4);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --page:#0f1215; --panel:#181c20; --hbar:#1f242a; --hbar-line:#262c32; --line:#272d33; --line-soft:#20262b; --inset:#1e242a;
+      --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d; --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+      --blue:#5aa0e6; --blue-soft:rgba(90,160,230,.16); --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+      --stop:#e2635a; --stop-soft:rgba(226,99,90,.16);
+      --empty:#232a30; --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"]{
+    --page:#0f1215; --panel:#181c20; --hbar:#1f242a; --hbar-line:#262c32; --line:#272d33; --line-soft:#20262b; --inset:#1e242a;
+    --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d; --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+    --blue:#5aa0e6; --blue-soft:rgba(90,160,230,.16); --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+    --stop:#e2635a; --stop-soft:rgba(226,99,90,.16);
+    --empty:#232a30; --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+  }
+  :root[data-theme="light"]{
+    --page:#e6e7e9; --panel:#ffffff; --hbar:#eef0f1; --hbar-line:#e2e4e6;
+    --line:#e4e6e8; --line-soft:#eef0f1; --inset:#f4f5f6;
+    --text:#2f3336; --dim:#7d868d; --faint:#a7aeb4;
+    --teal:#14b8a6; --teal-ink:#fff; --teal-soft:rgba(20,184,166,.12);
+    --blue:#4a90d9; --blue-soft:rgba(74,144,217,.12);
+    --warn:#e2953a; --warn-soft:rgba(226,149,58,.14);
+    --stop:#d0453c; --stop-soft:rgba(208,69,60,.13);
+    --empty:#e7e9eb;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 26px -18px rgba(16,24,32,.4);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{font-family:var(--font-sans);color:var(--text);background:var(--page);font-size:14px;line-height:1.45;
+       -webkit-font-smoothing:antialiased;padding:30px 14px 60px;}
+  .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+
+  .col{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:34px;}
+  .lede h1{margin:0 0 6px;font-size:23px;font-weight:700;letter-spacing:-.015em;text-wrap:balance;}
+  .lede p{margin:0;color:var(--dim);font-size:13.5px;max-width:64ch;}
+  .lede p + p{margin-top:9px;}
+  .lede b{color:var(--text);font-weight:600;}
+
+  .case{display:flex;flex-direction:column;gap:12px;}
+  .eyebrow{display:flex;align-items:baseline;gap:10px;font-size:10.5px;font-weight:800;letter-spacing:.11em;
+           text-transform:uppercase;color:var(--dim);}
+  .eyebrow .k{color:var(--teal);}
+  .eyebrow .k.now{color:var(--stop);}
+  .after{font-size:12.5px;color:var(--dim);padding-left:15px;border-left:3px solid var(--line-soft);}
+  .after b{color:var(--text);font-weight:600;}
+  .after code,.evid code{font-family:var(--font-mono);font-size:11.5px;background:var(--inset);
+        border:1px solid var(--line);border-radius:4px;padding:1px 5px;}
+
+  /* the evidence block: what the slicer actually wrote */
+  .evid{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--stop);
+        border-radius:0 10px 10px 0;padding:13px 15px;font-size:12.5px;}
+  .evid h4{margin:0 0 8px;font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--stop);}
+  .evid ul{margin:0;padding-left:17px;display:flex;flex-direction:column;gap:5px;}
+  .evid pre{margin:9px 0 0;padding:9px 11px;background:var(--inset);border:1px solid var(--line);border-radius:8px;
+            font-family:var(--font-mono);font-size:11.5px;overflow-x:auto;color:var(--text);}
+  .evid .cmt{color:var(--dim);}
+
+  .qbox{background:var(--teal-soft);border:1px solid color-mix(in srgb,var(--teal) 32%,transparent);
+        border-radius:10px;padding:12px 15px;font-size:12.5px;}
+  .qbox h4{margin:0 0 6px;font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--teal);}
+  .qbox ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:7px;}
+  .qbox .opt{color:var(--dim);}
+  .qbox .rec{color:var(--teal);font-weight:700;}
+
+  /* ---- the dialog ---- */
+  .dialog{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;}
+  .dhead{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--hbar);border-bottom:1px solid var(--hbar-line);flex-wrap:wrap;}
+  .dhead .title{font-size:14.5px;font-weight:700;}
+  .dhead .sub{font-size:11.5px;color:var(--dim);}
+  .dhead .right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .pillset{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel);}
+  .pillset button{font:inherit;font-size:12px;font-weight:600;color:var(--dim);padding:6px 14px;border:0;
+                  background:transparent;border-right:1px solid var(--line);cursor:pointer;}
+  .pillset button:last-child{border-right:0;}
+  .pillset button[aria-pressed="true"]{color:var(--teal);background:var(--teal-soft);box-shadow:inset 0 0 0 1px var(--teal);}
+  .stat{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dim);background:var(--inset);
+        border:1px solid var(--line);border-radius:999px;padding:4px 10px;}
+  .stat b{color:var(--text);font-family:var(--font-mono);}
+  .stat.stop{border-color:color-mix(in srgb,var(--stop) 45%,var(--line));background:var(--stop-soft);}
+  .stat.stop b{color:var(--stop);}
+
+  .hint{padding:9px 16px;border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--dim);
+        background:color-mix(in srgb,var(--blue) 4%,var(--panel));}
+  .hint b{color:var(--text);font-weight:600;}
+  .refuse{display:flex;align-items:flex-start;gap:11px;padding:11px 16px;border-bottom:1px solid var(--line-soft);
+          font-size:12.5px;color:var(--text);background:var(--stop-soft);}
+  .refuse .chip{flex:0 0 auto;font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+                color:var(--stop);background:var(--panel);border:1px solid color-mix(in srgb,var(--stop) 40%,transparent);
+                border-radius:999px;padding:3px 9px;margin-top:1px;}
+  .refuse .body{min-width:0;}
+  .refuse b{font-weight:700;}
+  .refuse .ways{margin:6px 0 0;padding-left:16px;color:var(--dim);display:flex;flex-direction:column;gap:3px;}
+  .refuse .ways b{color:var(--text);}
+
+  .map{padding:16px 18px 8px;}
+  .srcrow{display:flex;align-items:stretch;gap:14px;flex-wrap:wrap;}
+  .acebox{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);}
+  .acebox.main{flex:1;min-width:300px;}
+  .acebox.single{flex:0 0 auto;}
+  .aceband{display:flex;align-items:center;gap:10px;padding:9px 13px;
+           background:color-mix(in srgb,var(--teal) 7%,var(--inset));border-bottom:1px solid var(--line);}
+  .acebadge{width:24px;height:24px;border-radius:7px;background:var(--teal-soft);color:var(--teal);display:grid;
+            place-items:center;font-weight:800;font-size:11px;border:1px solid color-mix(in srgb,var(--teal) 30%,transparent);}
+  .aceband .nm{font-size:13px;font-weight:600;}
+  .aceband .cap{margin-left:auto;font-size:10.5px;color:var(--dim);font-family:var(--font-mono);}
+  .slots{display:flex;gap:10px;padding:12px;justify-content:space-around;}
+  .pos{width:96px;border:1px dashed transparent;border-radius:11px;padding:8px 4px 7px;display:flex;
+       flex-direction:column;align-items:center;gap:4px;}
+  .pos .spool{width:50px;height:50px;border-radius:50%;position:relative;display:grid;place-items:center;
+    background:radial-gradient(circle at 50% 50%, var(--panel) 0 30%, var(--c,#8fa7c8) 30.5%);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);}
+  .pos .spool::after{content:"";width:12px;height:12px;border-radius:50%;background:var(--inset);box-shadow:inset 0 0 0 2px var(--line);}
+  .pos .nm{font-size:11.5px;font-weight:600;}
+  .pos .tag{font-size:9.5px;color:var(--faint);font-family:var(--font-mono);}
+
+  /* the filaments with nowhere to go — the whole point of the refusal */
+  .homeless{margin:14px 18px 0;border:1px dashed color-mix(in srgb,var(--stop) 50%,var(--line));
+            border-radius:12px;background:var(--stop-soft);padding:11px 13px;}
+  .homeless h4{margin:0 0 8px;font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--stop);}
+  .homeless .row{display:flex;gap:10px;flex-wrap:wrap;}
+  .hom{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);
+       border-radius:999px;padding:4px 11px 4px 5px;font-size:12px;}
+  .hom .sp{width:20px;height:20px;border-radius:50%;
+    background:radial-gradient(circle at 50% 50%, var(--panel) 0 30%, var(--c,#888) 30.5%);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);}
+  .hom .use{color:var(--dim);font-family:var(--font-mono);font-size:10.5px;}
+
+  .planrow{display:flex;gap:14px;padding:12px 16px 14px;border-top:1px solid var(--line-soft);align-items:center;flex-wrap:wrap;}
+  .planrow .note{flex:1;min-width:240px;font-size:12px;color:var(--dim);}
+  .planrow .note b{color:var(--text);font-weight:600;}
+  .btn{font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border-radius:8px;padding:8px 14px;
+       background:var(--panel);border:1px solid var(--line);color:var(--text);}
+  .btn:hover{border-color:var(--teal);color:var(--teal);}
+  .btn.primary{background:var(--teal);color:var(--teal-ink);border-color:transparent;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn[disabled]:hover{border-color:transparent;color:var(--teal-ink);}
+
+  .foot{border-top:1px solid var(--line);padding-top:18px;font-size:12.5px;color:var(--dim);}
+  .foot h2{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--text);}
+  .foot b{color:var(--text);}
+</style>
+
+<div class="col">
+
+  <header class="lede">
+    <h1>More colours than places</h1>
+    <p>A plate can ask for more filaments than the machine has room for: three stock feeders plus
+      a four-slot ACE hold seven, and an eight-colour plate has nowhere to put the eighth. The
+      planner correctly returns <span class="mono">infeasible</span>. What happens next is the
+      problem.</p>
+    <p>This is not a hypothetical. I sliced the seven-colour cube with the ACE set to two slots —
+      <b>five places, seven colours</b> — and read the file it produced.</p>
+  </header>
+
+  <!-- ============================ evidence ============================ -->
+  <section class="case">
+    <div class="eyebrow"><span class="k now">Today</span><span>What the slicer actually wrote</span></div>
+    <div class="evid">
+      <h4>Observed, not inferred</h4>
+      <ul>
+        <li>Slicing <b>succeeded</b>. No error, no warning, no notification.</li>
+        <li>The plan header came out <b>empty</b> — not "infeasible", just blank.</li>
+        <li>The file addresses <b>heads that do not exist</b>: 300 tool changes to
+          <code>T4</code>, <code>T5</code>, <code>T6</code> on a four-head machine, with
+          matching <code>M109 … T5</code> and <code>SM_PRINT_PREEXTRUDE_FILAMENT INDEX=5</code>.</li>
+        <li>Not one <code>ACE_SWAP_HEAD</code>. The ACE is never told to do anything.</li>
+      </ul>
+      <pre>; multiACE plan: <span class="cmt">← empty</span>
+M109 S220 T5
+T5
+SM_PRINT_PREEXTRUDE_FILAMENT INDEX=5</pre>
+    </div>
+    <p class="after">Orca's own contract for this feature is “tool numbers are physical heads only;
+      no T4–T6 leaking through”. When the plan is infeasible the remap is empty and that contract
+      breaks silently. Whether the firmware ignores <code>T5</code>, faults, or does something
+      worse is <b>unverified</b> — and not something to find out by sending it.</p>
+    <p class="after">The dialog does open, but it misdiagnoses: it says
+      <b>“These pins cannot all be satisfied. Unpin something to get a plan.”</b> There are no pins
+      — C++ sends none when the plan is infeasible. It blames a constraint the user never set for a
+      capacity problem they did. The board also just <b>omits</b> the two filaments that did not
+      fit, and the load plan lists <span class="mono">ACE 1 · S0</span> twice.</p>
+  </section>
+
+  <!-- ============================ proposed ============================ -->
+  <section class="case">
+    <div class="eyebrow"><span class="k">Proposed</span><span>Refuse, and say how short</span></div>
+    <div id="proposed"></div>
+    <p class="after">Three changes. The dialog <b>names the shortfall</b> and lists the filaments
+      with nowhere to go, rather than dropping them off the board. <b>Apply is disabled with no
+      override</b> — unlike a spool mismatch, no amount of user confidence makes a fifth place
+      exist. And because the gcode is written before this dialog is ever opened, <b>slicing itself
+      refuses</b>: the plate does not get a file at all.</p>
+  </section>
+
+  <!-- ============================ questions ============================ -->
+  <div class="qbox">
+    <h4>What I need from you</h4>
+    <ol>
+      <li><b>Should slicing refuse, or just warn?</b> <span class="rec">I recommend refuse</span> —
+        raise it as a slicing error the way an unprintable model does, so no file exists to send.
+        <span class="opt">Warning-only leaves a T4–T6 file on disk that looks finished.</span></li>
+      <li><b>Hard block, or an override like the ACE check has?</b> <span class="rec">I recommend
+        hard</span>: a wrong spool is a judgement call, a missing toolhead is not.</li>
+      <li><b>What should it suggest?</b> Drawn with all three routes — remove filaments, give a head
+        more slots, or merge two colours.
+        <span class="opt">Naming the least-used colours as removal candidates is possible: slicing
+        knows how much each one is used.</span></li>
+      <li><b>Show the unplaced filaments</b> in a tray as drawn, or leave the board to the ones that
+        fit and name them only in the message?</li>
+    </ol>
+  </div>
+
+  <div class="foot">
+    <h2>Where it goes</h2>
+    <p><b>Slicing:</b> <span class="mono">Print::process</span> already knows — it holds the
+      infeasible <span class="mono">LoadingPlan</span> at the end of <span class="mono">psWipeTower</span>,
+      which is the moment to throw a <span class="mono">SlicingError</span> naming the shortfall.
+      <b>Dialog:</b> the page's infeasible branch needs to stop blaming pins, and C++ needs to send
+      the capacity and the used-filament count so the message can be specific. <b>Gate:</b> the same
+      <span class="mono">AceReview::Abort</span> path the ACE check already uses.</p>
+  </div>
+
+</div>
+
+<script>
+var FIL = [
+  {n:"Generic PLA", c:"#d64541", use:"18%"},
+  {n:"Generic PLA", c:"#e5308c", use:"16%"},
+  {n:"Generic PLA", c:"#f2c218", use:"15%"},
+  {n:"Generic PLA", c:"#1faa4b", use:"15%"},
+  {n:"Generic PLA", c:"#1f6fd0", use:"14%"},
+  {n:"Generic PLA", c:"#17b8c4", use:"11%"},
+  {n:"Generic PLA", c:"#7a4fb3", use:"11%"}
+];
+function el(t,c,x){var e=document.createElement(t); if(c) e.className=c; if(x!=null) e.textContent=x; return e;}
+
+function spool(c, tag){
+  var p = el("div","pos");
+  var s = el("div","spool"); s.style.setProperty("--c", FIL[c].c); p.appendChild(s);
+  p.appendChild(el("div","nm", FIL[c].n));
+  p.appendChild(el("div","tag", tag));
+  return p;
+}
+
+function build(){
+  var d = el("div","dialog");
+
+  var h = el("div","dhead");
+  var t = el("div");
+  t.appendChild(el("div","title","Filament assignment"));
+  t.appendChild(el("div","sub","Snapmaker U1 · 3 stock feeders + ACE 1 → T4 (2 slots)"));
+  h.appendChild(t);
+  var r = el("div","right");
+  var ps = el("div","pillset");
+  ["Auto","Manual"].forEach(function(m,i){
+    var b = el("button",null,m); b.setAttribute("aria-pressed", String(i===0)); ps.appendChild(b);
+  });
+  r.appendChild(ps);
+  var s1 = el("div","stat stop"); s1.innerHTML = "Places <b>5</b>"; r.appendChild(s1);
+  var s2 = el("div","stat stop"); s2.innerHTML = "Needed <b>7</b>"; r.appendChild(s2);
+  h.appendChild(r);
+  d.appendChild(h);
+
+  var rf = el("div","refuse");
+  rf.appendChild(el("span","chip","Will not fit"));
+  var body = el("div","body");
+  body.innerHTML =
+    "This plate uses <b>7 filaments</b>, and this printer has <b>5 places</b> for them — " +
+    "three stock feeders and a 2-slot ACE. <b>Two have nowhere to go</b>, so there is no layout " +
+    "to print and no gcode was written." +
+    '<ul class="ways">' +
+      "<li>Remove <b>2 filaments</b> from the plate, or merge two colours into one</li>" +
+      "<li>Give the ACE head more slots in <b>Printer settings › Multimaterial</b>, if the unit has them</li>" +
+      "<li>Fit a second ACE and set which head it feeds</li>" +
+    "</ul>";
+  rf.appendChild(body);
+  d.appendChild(rf);
+
+  var map = el("div","map");
+  var src = el("div","srcrow");
+  [[0,"T1"],[1,"T2"],[2,"T3"]].forEach(function(pair){
+    var box = el("div","acebox single");
+    var band = el("div","aceband");
+    band.appendChild(el("div","acebadge",pair[1]));
+    band.appendChild(el("div","nm","Feeder"));
+    box.appendChild(band);
+    var sl = el("div","slots"); sl.appendChild(spool(pair[0], pair[1]+" · PLA")); box.appendChild(sl);
+    src.appendChild(box);
+  });
+  var ace = el("div","acebox main");
+  var ab = el("div","aceband");
+  ab.appendChild(el("div","acebadge","1"));
+  ab.appendChild(el("div","nm","ACE 1 → T4"));
+  var cap = el("div","cap","2 slots"); ab.appendChild(cap);
+  ace.appendChild(ab);
+  var as = el("div","slots");
+  as.appendChild(spool(3,"ACE 1 · S1 · PLA"));
+  as.appendChild(spool(4,"ACE 1 · S2 · PLA"));
+  ace.appendChild(as);
+  src.appendChild(ace);
+  map.appendChild(src);
+  d.appendChild(map);
+
+  var hl = el("div","homeless");
+  hl.appendChild(el("h4","","Nowhere to go — 2 filaments"));
+  var row = el("div","row");
+  [5,6].forEach(function(c){
+    var e = el("div","hom");
+    var sp = el("span","sp"); sp.style.setProperty("--c", FIL[c].c); e.appendChild(sp);
+    e.appendChild(el("span",null,FIL[c].n));
+    e.appendChild(el("span","use", FIL[c].use + " of the print"));
+    row.appendChild(e);
+  });
+  hl.appendChild(row);
+  d.appendChild(hl);
+
+  var pr = el("div","planrow");
+  var note = el("div","note");
+  note.innerHTML = "Least-used first — these two are the cheapest to drop, but the choice is yours.";
+  pr.appendChild(note);
+  var b1 = el("button","btn","Close");
+  var b2 = el("button","btn primary","Apply to plate"); b2.disabled = true;
+  pr.appendChild(b1); pr.appendChild(b2);
+  d.appendChild(pr);
+  return d;
+}
+document.getElementById("proposed").appendChild(build());
+</script>

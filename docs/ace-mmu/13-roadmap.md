@@ -152,11 +152,23 @@ that contradicts the loaded spools prints the wrong colours with no warning.
   disabled, ticking the override enabled it, and closing the dialog cancelled the
   export where it previously proceeded.
 
-### C. Infeasible plates (gap)
+### C. Infeasible plates (gap — measured, mockup ready)
 
-More colours than total capacity has no layout. The planner returns infeasible
-and slicing proceeds as a plain toolchanger — silently wrong for the user's
-intent. *Mockup needed: the refusal, saying how many slots short and what to drop.*
+More colours than total capacity has no layout. **Measured, not assumed:** slicing
+the 7-colour cube with a 2-slot ACE (5 places, 7 colours) succeeds with no error,
+writes an **empty** plan header, emits **300 tool changes to `T4`/`T5`/`T6`** on a
+four-head machine (plus `M109 … T5`, `SM_PRINT_PREEXTRUDE_FILAMENT INDEX=5`) and
+**zero** `ACE_SWAP_HEAD`. The "physical heads only" contract breaks silently because
+an infeasible plan hands `set_tool_remap` an empty map.
+
+The dialog misdiagnoses it too — *"These pins cannot all be satisfied. Unpin
+something"* when C++ sent no pins at all — omits the filaments that did not fit, and
+lists `ACE 1 · S0` twice.
+
+Mockup: [infeasible-plate-mockup.html](infeasible-plate-mockup.html). Proposed:
+refuse at **slicing** so no file exists to send, a dialog naming the shortfall and
+showing the unplaced filaments, and a **hard** block with no override — a wrong spool
+is a judgement call, a missing toolhead is not. Four decisions open.
 
 ### D. Persistence (done)
 
@@ -224,7 +236,7 @@ that only the current plate is reviewed.
 |---|--------|-----|--------|
 | — | [Remembering a filament layout](assignment-persistence-mockup.html) | D | built to it |
 | — | [What the ACE actually holds](reconciliation-mockup.html) | B | built to it |
-| 3 | Infeasible plate refusal | C | to produce |
+| — | [More colours than places](infeasible-plate-mockup.html) | C | awaiting decisions |
 | 4 | Pinned / drying spool states | E | to produce |
 | 5 | Two-ACE assignment board | F | to produce |
 
