@@ -15,11 +15,12 @@
 - **Overall status:** 🟢 End to end on the real 7-colour cube. The U1 Device tab is a Flutter
   webview (`PrinterWebView`+SSWCP, no in-repo source) so ACE can't render there; the native
   "U1 + multiACE" tab and the Prepare/Preview tabs carry the UI instead.
-- **Next action:** finish item 6 (C) — the **tray dialog** for the unplaced spools; the
-  slicing refusal itself is done and verified. Then pinning/drying, multi-ACE, multi-plate.
+- **Next action:** roadmap item **E, pinning and drying** — the last unstarted gap besides
+  multi-plate export (G) and the deferred tray dialog for C. Pins are honoured by the planner
+  but never persisted, and drying is not modelled at all even though the ACE reports it.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
-  - `libslic3r_tests "[ace_mmu]"` → 16 cases / 110 assertions pass (parser, planner,
-    reconciliation; incl. a live-captured fixture).
+  - `libslic3r_tests "[ace_mmu]"` → 22 cases / 162 assertions pass (parser, planner,
+    reconciliation incl. two ACE units; plus a live-captured fixture).
     Rebuild: `cmake --build build --config Release --target libslic3r_tests -j 8`.
   - Full app: `cmake --build build --config Release --target Snapmaker_Orca -j 8`.
   - **Fast iteration (mold + ccache; ~15 s incremental):** full setup + commands in
@@ -89,6 +90,26 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-10 (cont.) — Two ACE units: tested, and a hole found by testing
+- Roadmap item F was "built, untested". The reconciliation I had just shipped keys each
+  slot to the head's ACE **unit**, and that code had only ever run against a single unit -
+  exactly where a bug would hide. Added six cases: two-unit planning (10 places take ten
+  colours, refuse eleven, four on each ACE), per-unit slot attribution, mismatch
+  attribution, and a spare spool in the other unit. The logic was correct, but it is now
+  proven rather than assumed. `[ace_mmu]` is 22 cases / 162 assertions.
+- Drove a fabricated two-unit topology through the GUI (`ace_head_capacity 1,1,4,4`,
+  `ace_head_unit -1,-1,0,1`): the board renders `ACE 1 → T3` and `ACE 2 → T4` as separate
+  boxes with wires to the right heads, and the gcode carries both `ACE=0` and `ACE=1`.
+- **Hole found by measuring:** with two units configured and only one connected, the
+  contents strip judged the unit that answered and said *nothing* about the spool bound
+  for the missing one - it was not even listed. Had the connected unit matched, the plate
+  would have passed the gate with a filament assigned to an ACE that is not there.
+  `reconcile()` now sweeps the plan for placements whose unit the snapshot never reported
+  and marks them `Differs` with `unit_missing`; the strip shows *ACE 2 · S1 — not
+  connected* and the count went 4 → 5. Verified live.
+- Still unverified: **real two-ACE hardware**. One physical unit plus a fabricated
+  topology cannot test wiring or swap behaviour on a second physical ACE.
 
 ### 2026-08-10 (cont.) — Infeasible plates: measured, and a mockup
 - Roadmap item 6 / gap C. Before designing anything I **sliced an over-capacity plate** (the

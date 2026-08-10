@@ -267,6 +267,7 @@ function applyState(st){
   // What the printer says is in its ACE slots. Empty/absent means the check did not run -
   // the endpoint is LAN-only - and that must never be shown as agreement.
   state.ace      = (st.ace && Array.isArray(st.ace.slots)) ? st.ace.slots : [];
+  state.aceUnits = (st.ace && Array.isArray(st.ace.units)) ? st.ace.units : [];
   state.aceRead  = !!(st.ace && st.ace.checked);
   state.aceForce = false;
   // Kept apart from state.manual so the banner can tell "still the saved layout" from
@@ -346,7 +347,7 @@ const state = {
   plan:null, slots:null, autoSwaps:0,
   saved:false,                     // this layout is remembered with the plate
   savedLayout:null,                // that layout, to tell "unchanged" from "since edited"
-  ace:[], aceRead:false,           // what the machine reports in its ACE slots
+  ace:[], aceUnits:[], aceRead:false,  // what the machine reports, and which units answered
   aceForce:false,                  // the user accepted responsibility for a mismatch
   droppedFor:0,                    // a layout for N filaments was ignored (N != this plate's)
   memoOff:false,                   // the banner was dismissed for this opening
@@ -407,6 +408,18 @@ function aceChecks(layout){
     else verdict = spoolMatches(FIL[colour].hex, FIL[colour].mat, s.colour, s.material) ? "ok" : "bad";
     out.push({ s:s, colour:colour, verdict:verdict });
   });
+  // Spools bound for an ACE the machine never reported. Leaving them off the strip would
+  // read as "checked and fine"; there is nowhere to load them from.
+  for (let c = 0; c < N(); c++){
+    const h = layout[c];
+    if (h < 0) continue;
+    const u = (UNITS[h] === undefined || UNITS[h] < 0) ? -1 : UNITS[h];
+    if (u < 0) continue;                               // a stock feeder is not an ACE
+    if (state.aceUnits.indexOf(u) >= 0) continue;      // that unit answered
+    out.push({ s:{unit:u, slot:state.slots[c], occupied:false, colour:"", material:"",
+                  name:"", trusted:true, missing:true},
+               colour:c, verdict:"bad" });
+  }
   return out;
 }
 function renderAce(layout){
@@ -439,7 +452,8 @@ function renderAce(layout){
     d.className = "aslot " + c.verdict;
     const want = FIL[c.colour];
     const tick = c.verdict==="ok" ? "OK" : c.verdict==="bad" ? "WRONG" : "?";
-    const loadedTxt = !c.s.occupied ? "empty"
+    const loadedTxt = c.s.missing ? "not connected"
+      : !c.s.occupied ? "empty"
       : (c.verdict==="unknown" ? "not identified"
         : ((c.s.name ? c.s.name+" " : "") + (c.s.material || "?")));
     d.innerHTML =

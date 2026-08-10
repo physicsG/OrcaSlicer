@@ -188,3 +188,186 @@ TEST_CASE("a filament on a stock feeder is outside the check", "[ace_mmu]")
     CHECK(r.slots[0].filament == 1);
     CHECK(r.slots[0].verdict == SlotVerdict::Agrees);
 }
+
+// ---------------------------------------------------------------------------------------
+// Two ACE units. The planner and the config have always allowed up to four, but every
+// test and every real slice so far has run against a single unit - so the code that maps
+// a slot back to the head feeding it has never actually had to discriminate. Slot numbers
+// are per head, so unit 0 slot 0 and unit 1 slot 0 are different physical places that
+// would look identical to anything matching on the slot number alone.
+// ---------------------------------------------------------------------------------------
+
+// Two stock feeders, then two 4-slot ACEs: head 2 fed by unit 0, head 3 by unit 1.
+static const std::vector<int> HEAD_UNIT_2 = {-1, -1, 0, 1};
+
+static AceSnapshot two_units(std::vector<AceSlot> unit0, std::vector<AceSlot> unit1)
+{
+    AceUnit a;
+    a.idx = 0; a.connected = true; a.slots = std::move(unit0);
+    AceUnit b;
+    b.idx = 1; b.connected = true; b.slots = std::move(unit1);
+    AceSnapshot snap;
+    snap.units.push_back(std::move(a));
+    snap.units.push_back(std::move(b));
+    return snap;
+}
+
+TEST_CASE("two ACE units: each slot is judged against its own unit", "[ace_mmu]")
+{
+    // Both units hold a spool in slot 0, and they are different colours. The plan puts
+    // filament 0 in unit 0 slot 0 and filament 1 in unit 1 slot 0 - each correct for its
+    // own unit. Matching on the slot number alone would cross them over and call both wrong.
+    const AceSnapshot snap = two_units(
+        {make_slot(0, true, "#e5308c", "PLA", "rfid")},
+        {make_slot(0, true, "#17b8c4", "PLA", "rfid")});
+
+    LoadingPlan p;
+    p.feasible = true;
+    p.head_of  = {2, 3};   // filament 0 -> head 2 (unit 0), filament 1 -> head 3 (unit 1)
+    p.slot_of  = {0, 0};   // both in slot 0 of their own unit
+
+    const Reconciliation r = reconcile(snap, p, HEAD_UNIT_2,
+                                       {"#e5308c", "#17b8c4"}, {"PLA", "PLA"});
+    REQUIRE(r.checked);
+    REQUIRE(r.slots.size() == 2);
+
+    CHECK(r.slots[0].unit == 0);
+    CHECK(r.slots[0].filament == 0);
+    CHECK(r.slots[0].verdict == SlotVerdict::Agrees);
+
+    CHECK(r.slots[1].unit == 1);
+    CHECK(r.slots[1].filament == 1);
+    CHECK(r.slots[1].verdict == SlotVerdict::Agrees);
+
+    CHECK(r.unresolved() == 0);
+}
+
+TEST_CASE("two ACE units: a mismatch is attributed to the right unit", "[ace_mmu]")
+{
+    // Swap what the two units are holding. Every slot is now wrong, and the report has to
+    // say so per unit rather than blaming one twice or cancelling out.
+    const AceSnapshot snap = two_units(
+        {make_slot(0, true, "#17b8c4", "PLA", "rfid")},   // unit 0 holds unit 1's spool
+        {make_slot(0, true, "#e5308c", "PLA", "rfid")});  // and vice versa
+
+    LoadingPlan p;
+    p.feasible = true;
+    p.head_of  = {2, 3};
+    p.slot_of  = {0, 0};
+
+    const Reconciliation r = reconcile(snap, p, HEAD_UNIT_2,
+                                       {"#e5308c", "#17b8c4"}, {"PLA", "PLA"});
+    REQUIRE(r.slots.size() == 2);
+    CHECK(r.slots[0].verdict == SlotVerdict::Differs);
+    CHECK(r.slots[1].verdict == SlotVerdict::Differs);
+    CHECK(r.count(SlotVerdict::Differs) == 2);
+
+    // Both sides are reported per slot, so the message can name what to move where.
+    CHECK(r.slots[0].expect_colour == "#e5308c");
+    CHECK(r.slots[0].actual_colour == "#17b8c4");
+    CHECK(r.slots[1].expect_colour == "#17b8c4");
+    CHECK(r.slots[1].actual_colour == "#e5308c");
+}
+
+TEST_CASE("two ACE units: a head's slot is not confused with the other unit's", "[ace_mmu]")
+{
+    // Only unit 1 is used by the plate. Unit 0's slot 0 holds something unrelated, and must
+    // come back Unused - not judged against the filament that lives in unit 1's slot 0.
+    const AceSnapshot snap = two_units(
+        {make_slot(0, true, "#83afff", "PETG", "rfid")},  // a spare, nothing plans for it
+        {make_slot(0, true, "#e5308c", "PLA",  "rfid")});
+
+    LoadingPlan p;
+    p.feasible = true;
+    p.head_of  = {3};
+    p.slot_of  = {0};
+
+    const Reconciliation r = reconcile(snap, p, HEAD_UNIT_2, {"#e5308c"}, {"PLA"});
+    REQUIRE(r.slots.size() == 2);
+    CHECK(r.slots[0].unit == 0);
+    CHECK(r.slots[0].verdict == SlotVerdict::Unused);
+    CHECK(r.slots[0].filament == -1);
+    CHECK(r.slots[1].unit == 1);
+    CHECK(r.slots[1].verdict == SlotVerdict::Agrees);
+    CHECK(r.unresolved() == 0);   // a spare spool in the other unit is not a problem
+}
+
+TEST_CASE("two ACE units: capacity is the sum, and the planner uses both", "[ace_mmu]")
+{
+    // 1 + 1 + 4 + 4 = 10 places. Ten colours fit; eleven do not.
+    std::vector<PlanHead> heads = {
+        PlanHead{0, 1, false, -1},
+        PlanHead{1, 1, false, -1},
+        PlanHead{2, 4, true, 0},
+        PlanHead{3, 4, true, 1},
+    };
+    std::vector<int> seq;
+    for (int round = 0; round < 3; ++round)
+        for (int c = 0; c < 10; ++c)
+            seq.push_back(c);
+
+    const LoadingPlan ten = plan_loading(heads, seq, 10);
+    REQUIRE(ten.feasible);
+    // Every colour placed, and both ACE units carrying their share - four each, since the
+    // two feeders take one apiece.
+    int on_unit0 = 0, on_unit1 = 0;
+    for (int c = 0; c < 10; ++c) {
+        REQUIRE(ten.head_of[c] >= 0);
+        if (ten.head_of[c] == 2) ++on_unit0;
+        if (ten.head_of[c] == 3) ++on_unit1;
+    }
+    CHECK(on_unit0 == 4);
+    CHECK(on_unit1 == 4);
+
+    seq.push_back(10);
+    CHECK_FALSE(plan_loading(heads, seq, 11).feasible);
+}
+
+TEST_CASE("a plan addressing an ACE the machine does not report", "[ace_mmu]")
+{
+    // Printer settings say head 3 is fed by ACE 2, but only one unit answered. Iterating
+    // the snapshot alone would skip that spool entirely and pass the plate on the strength
+    // of the unit that did answer. There is nowhere to load it from, so it is a mismatch.
+    const AceSnapshot snap = one_unit({make_slot(0, true, "#e5308c", "PLA", "rfid")});
+
+    LoadingPlan p;
+    p.feasible = true;
+    p.head_of  = {2, 3};   // head 2 -> unit 0 (present), head 3 -> unit 1 (absent)
+    p.slot_of  = {0, 0};
+
+    const Reconciliation r = reconcile(snap, p, HEAD_UNIT_2,
+                                       {"#e5308c", "#17b8c4"}, {"PLA", "PLA"});
+    REQUIRE(r.checked);
+    REQUIRE(r.slots.size() == 2);
+
+    // Unit 0's slot agrees...
+    CHECK(r.slots[0].unit == 0);
+    CHECK(r.slots[0].verdict == SlotVerdict::Agrees);
+    CHECK_FALSE(r.slots[0].unit_missing);
+
+    // ...and the spool bound for the absent unit is reported, not silently dropped.
+    CHECK(r.slots[1].unit == 1);
+    CHECK(r.slots[1].filament == 1);
+    CHECK(r.slots[1].verdict == SlotVerdict::Differs);
+    CHECK(r.slots[1].unit_missing);
+    CHECK(r.slots[1].expect_colour == "#17b8c4");
+
+    CHECK(r.unresolved() == 1);   // and it holds the gate shut
+}
+
+TEST_CASE("a stock feeder is not mistaken for a missing ACE", "[ace_mmu]")
+{
+    // head_unit is -1 for feeders. The missing-unit sweep must skip them, or every
+    // feeder-borne filament would be reported as bound for an absent ACE.
+    const AceSnapshot snap = one_unit({make_slot(0, true, "#e5308c", "PLA", "rfid")});
+    LoadingPlan       p;
+    p.feasible = true;
+    p.head_of  = {0, 1, 2};   // two feeders and one real ACE head
+    p.slot_of  = {0, 0, 0};
+    const Reconciliation r = reconcile(snap, p, HEAD_UNIT_2,
+                                       {"#111111", "#222222", "#e5308c"},
+                                       {"PLA", "PLA", "PLA"});
+    REQUIRE(r.slots.size() == 1);        // only the ACE slot is judged
+    CHECK(r.slots[0].verdict == SlotVerdict::Agrees);
+    CHECK(r.unresolved() == 0);
+}

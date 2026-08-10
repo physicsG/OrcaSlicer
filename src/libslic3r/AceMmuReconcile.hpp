@@ -53,6 +53,9 @@ struct SlotCheck
     std::string actual_material;
     std::string actual_name; // brand/sku if the machine offered one
     bool        actual_occupied = false;
+    // The plan addresses an ACE unit the machine never reported. Not a spool problem - the
+    // unit itself is absent - so the UI has to say something different about it.
+    bool unit_missing = false;
 };
 
 struct Reconciliation
@@ -181,6 +184,30 @@ inline Reconciliation reconcile(const AceSnapshot&              snapshot,
                                                                                                                     SlotVerdict::Differs;
             out.slots.push_back(c);
         }
+    }
+
+    // Spools the plan sends to an ACE the machine never reported. Iterating the snapshot
+    // alone would skip them entirely - the plate would be judged only on the units that
+    // answered, and a filament assigned to a unit that is not there would pass unmentioned.
+    // That is a mismatch of the most concrete kind: there is nowhere to load it from.
+    for (size_t f = 0; f < plan.head_of.size(); ++f) {
+        const int h = plan.head_of[f];
+        if (h < 0 || size_t(h) >= head_unit.size())
+            continue;
+        const int u = head_unit[h];
+        if (u < 0)
+            continue; // a stock feeder is not an ACE and is outside this check
+        if (std::any_of(snapshot.units.begin(), snapshot.units.end(), [u](const AceUnit& unit) { return unit.idx == u; }))
+            continue; // the unit answered; its slots were judged above
+        SlotCheck c;
+        c.unit            = u;
+        c.slot            = f < plan.slot_of.size() ? plan.slot_of[f] : -1;
+        c.filament        = int(f);
+        c.verdict         = SlotVerdict::Differs;
+        c.unit_missing    = true;
+        c.expect_colour   = f < colours.size() ? colours[f] : std::string();
+        c.expect_material = f < materials.size() ? materials[f] : std::string();
+        out.slots.push_back(c);
     }
     return out;
 }

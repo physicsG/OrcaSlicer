@@ -218,10 +218,24 @@ The page supports pinning a spool to a position and the planner honours pins, bu
 nothing persists them and drying is not modelled at all.
 *Mockup needed: a pinned/drying spool and what the planner does around it.*
 
-### F. More than one ACE (built, untested)
+### F. More than one ACE (tested, short of second hardware)
 
-Planner and config handle up to 4 units; only a single-unit machine has been
-tested. *Mockup needed: the assignment board with two units.*
+- done — planner and reconciliation now have two-unit coverage:
+  `1 + 1 + 4 + 4 = 10` places accept ten colours and refuse eleven, with four on
+  each ACE; and each slot is judged against **its own unit**. That last one mattered:
+  slot numbers are per head, so unit 0 slot 0 and unit 1 slot 0 are different physical
+  places that anything matching on slot number alone would cross over.
+- done — the board renders two units: `ACE 1 → T3` and `ACE 2 → T4` as separate
+  boxes, wires to the right heads, and the gcode carries both `ACE=0` and `ACE=1`.
+- done — **a plan addressing an ACE the machine does not report is now a mismatch.**
+  Found by measuring, not reading: with two units configured and one connected, the
+  strip judged only the unit that answered and said nothing about the spool bound for
+  the other. If the connected unit happened to match, the plate would have passed the
+  gate with a filament assigned to a unit that is not there. It now reports
+  *ACE 2 · S1 — not connected* and holds the gate shut.
+- Still unverified: **real two-ACE hardware**. Everything above is one physical unit
+  plus a fabricated topology, so wiring, unit indices and swap behaviour on a second
+  physical ACE remain untested.
 
 ### G. Multi-plate export (gap)
 

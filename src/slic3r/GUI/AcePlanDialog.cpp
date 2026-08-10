@@ -152,6 +152,12 @@ std::string AcePlanDialog::build_state_json() const
     // committed layout at Apply and has the final say.
     nlohmann::json ace;
     ace["checked"] = !m_ace.units.empty();
+    // Which ACE units actually answered. A plan can address a unit the printer settings
+    // declare but the machine does not have; the page says so rather than leaving those
+    // spools off the strip, which would read as "checked and fine".
+    ace["units"] = nlohmann::json::array();
+    for (const AceMmu::AceUnit &unit : m_ace.units)
+        ace["units"].push_back(unit.idx);
     ace["slots"]   = nlohmann::json::array();
     for (const AceMmu::AceUnit &unit : m_ace.units) {
         for (const AceMmu::AceSlot &slot : unit.slots) {
