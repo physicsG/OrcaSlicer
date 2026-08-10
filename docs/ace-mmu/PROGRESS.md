@@ -15,9 +15,8 @@
 - **Overall status:** 🟢 End to end on the real 7-colour cube. The U1 Device tab is a Flutter
   webview (`PrinterWebView`+SSWCP, no in-repo source) so ACE can't render there; the native
   "U1 + multiACE" tab and the Prepare/Preview tabs carry the UI instead.
-- **Next action:** roadmap item 6 — **infeasible plates** (C). More colours than total
-  capacity has no layout; the planner returns infeasible and slicing proceeds as a plain
-  toolchanger, silently wrong. Then pinning/drying, multi-ACE, multi-plate.
+- **Next action:** finish item 6 (C) — the **tray dialog** for the unplaced spools; the
+  slicing refusal itself is done and verified. Then pinning/drying, multi-ACE, multi-plate.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
   - `libslic3r_tests "[ace_mmu]"` → 16 cases / 110 assertions pass (parser, planner,
     reconciliation; incl. a live-captured fixture).
@@ -104,10 +103,20 @@ Newest first. One block per session: date, what changed (files), result, next.
 - The dialog also **misdiagnoses** it: "These pins cannot all be satisfied. Unpin something to
   get a plan." There are no pins — C++ sends none when the plan is infeasible. The board
   silently omits the filaments that did not fit and the load plan lists `ACE 1 · S0` twice.
-- Mockup: [infeasible-plate-mockup.html](infeasible-plate-mockup.html). Proposal is refuse at
-  **slicing** (so no file exists to send), a dialog that names the shortfall and shows the
-  unplaced filaments, and a **hard** block with no override — a wrong spool is a judgement
-  call, a missing toolhead is not. Four questions open; no code written yet.
+- Mockup: [infeasible-plate-mockup.html](infeasible-plate-mockup.html). Decisions taken:
+  refuse at **slicing**, **hard** with no override, **two** ways out (drop/merge filaments or
+  give the ACE head more slots — "fit a second ACE" was cut as not an action anyone takes at
+  the point of refusal), and a **tray** for the unplaced spools.
+- **Refusal built and verified.** `Print::process` throws a `SlicingError` at the end of
+  `psWipeTower`; the plate does not slice and **no gcode is written**. The message names the
+  shortfall and the least-used filaments with their colours. Checked the planner's rule first:
+  only filaments the plate actually prints need a place (`occ[c] > 0`), so a project with
+  spare filaments is never falsely refused — and a feasible plate still slices to
+  `swaps:300 optimal:1`, T0–T3 only.
+- **Still open:** the tray. Refusing at slicing means the assignment dialog never opens for an
+  over-capacity plate, so the tray has no home there. It needs its own small refusal dialog,
+  raised by throwing a type derived from `SlicingError` and catching it in
+  `on_process_completed` — clean, no string matching.
 - **Testing gotcha, cost a cycle:** a project 3MF embeds its own printer config, which
   overrides the user preset. To test a different `ace_head_capacity`, edit
   `Metadata/project_settings.config` inside the 3MF, not the preset in the datadir.

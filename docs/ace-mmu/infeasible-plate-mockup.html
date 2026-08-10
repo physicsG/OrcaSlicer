@@ -213,20 +213,22 @@ SM_PRINT_PREEXTRUDE_FILAMENT INDEX=5</pre>
 
   <!-- ============================ questions ============================ -->
   <div class="qbox">
-    <h4>What I need from you</h4>
+    <h4>Settled — this is what is being built</h4>
     <ol>
-      <li><b>Should slicing refuse, or just warn?</b> <span class="rec">I recommend refuse</span> —
-        raise it as a slicing error the way an unprintable model does, so no file exists to send.
-        <span class="opt">Warning-only leaves a T4–T6 file on disk that looks finished.</span></li>
-      <li><b>Hard block, or an override like the ACE check has?</b> <span class="rec">I recommend
-        hard</span>: a wrong spool is a judgement call, a missing toolhead is not.</li>
-      <li><b>What should it suggest?</b> Drawn with all three routes — remove filaments, give a head
-        more slots, or merge two colours.
-        <span class="opt">Naming the least-used colours as removal candidates is possible: slicing
-        knows how much each one is used.</span></li>
-      <li><b>Show the unplaced filaments</b> in a tray as drawn, or leave the board to the ones that
-        fit and name them only in the message?</li>
+      <li><b>Slicing refuses.</b> `Print::process` throws at the end of `psWipeTower`, so the plate
+        never produces a file. Nothing to send, nothing to mistake for finished.</li>
+      <li><b>Hard block, no override.</b> A wrong spool is a judgement call; a missing toolhead is
+        not.</li>
+      <li><b>Two ways out, not three:</b> drop or merge filaments, or give the ACE head more slots.
+        Fitting a second ACE was cut — it is not an action anyone takes at the point of being
+        refused. The message names the <b>least-used</b> filaments as the cheapest to drop, which
+        slicing can work out from how often each one prints.</li>
+      <li><b>The unplaced filaments get a tray</b>, as drawn.</li>
     </ol>
+    <p style="margin:9px 0 0"><b>Consequence of (1) worth naming:</b> refusing at slicing means this
+      dialog never opens for an over-capacity plate — it needs a sliced plate to exist. So the tray
+      cannot live here. It lands in a small refusal dialog of its own, raised from the slicing
+      error; the panel above is that dialog's content, minus the assignment board behind it.</p>
   </div>
 
   <div class="foot">
@@ -290,7 +292,6 @@ function build(){
     '<ul class="ways">' +
       "<li>Remove <b>2 filaments</b> from the plate, or merge two colours into one</li>" +
       "<li>Give the ACE head more slots in <b>Printer settings › Multimaterial</b>, if the unit has them</li>" +
-      "<li>Fit a second ACE and set which head it feeds</li>" +
     "</ul>";
   rf.appendChild(body);
   d.appendChild(rf);

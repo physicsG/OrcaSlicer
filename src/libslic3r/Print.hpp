@@ -1018,6 +1018,11 @@ public:
     // Filament count a stored layout was saved for, when it no longer matches this plate and
     // was therefore ignored; 0 when nothing was dropped. Lets the dialog say so.
     size_t                      ace_plan_dropped_for() const { return m_ace_plan_dropped_for; }
+    // Why a plate has no multiACE layout, phrased for the user. Public so the message can be
+    // unit-tested without running a slice.
+    std::string                 ace_capacity_error(const std::vector<AceMmu::PlanHead> &heads,
+                                                   const std::vector<int>              &seq,
+                                                   int                                  n_filaments) const;
 
     bool                        enable_timelapse_print() const;
 

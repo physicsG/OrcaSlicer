@@ -1051,6 +1051,66 @@ std::vector<size_t> Print::layers_sorted_for_object(float start, float end, std:
     return idx_of_object_sorted;
 };
 
+// Why this plate has no multiACE layout, in the user's terms: how many filaments it needs,
+// how many places the machine has, which spools are left over, and the two ways out. Named
+// rather than numbered wherever possible - "Filament 6" means nothing next to a colour.
+std::string Print::ace_capacity_error(const std::vector<AceMmu::PlanHead> &heads,
+                                      const std::vector<int>              &seq,
+                                      int                                  n_filaments) const
+{
+    // Only filaments the plate actually prints need a place; a project can define spares.
+    std::vector<char> used(std::max(0, n_filaments), 0);
+    for (int c : seq)
+        if (c >= 0 && c < n_filaments)
+            used[c] = 1;
+    const int n_used = int(std::count(used.begin(), used.end(), char(1)));
+
+    int feeders = 0, ace_slots = 0, ace_units = 0;
+    for (const AceMmu::PlanHead &h : heads) {
+        if (h.ace) {
+            ace_slots += std::max(1, h.capacity);
+            ++ace_units;
+        } else
+            ++feeders;
+    }
+    const int places = feeders + ace_slots;
+    if (n_used <= places)
+        // Infeasible for some reason other than capacity. Say so plainly rather than
+        // quoting numbers that look fine and leave the user hunting for a shortfall.
+        return _u8L("multiACE: this plate's filaments cannot be arranged on this printer's "
+                    "toolheads. Check Printer settings > Multimaterial.");
+
+    const auto &colours = m_config.filament_colour.values;
+    std::string leftovers;
+    // The planner places the busiest colours first, so the least-used are the ones with
+    // nowhere to go - and the cheapest to drop. Name that many, least-used last.
+    std::vector<std::pair<int, int>> by_use;   // (times printed, filament)
+    for (int c = 0; c < n_filaments; ++c)
+        if (used[c])
+            by_use.emplace_back(int(std::count(seq.begin(), seq.end(), c)), c);
+    std::sort(by_use.begin(), by_use.end());
+    for (int i = 0; i < n_used - places && i < int(by_use.size()); ++i) {
+        const int c = by_use[i].second;
+        if (!leftovers.empty())
+            leftovers += ", ";
+        leftovers += (boost::format(_u8L("Filament %1%")) % (c + 1)).str();
+        if (size_t(c) < colours.size() && !colours[c].empty())
+            leftovers += " (" + colours[c] + ")";
+    }
+
+    std::string msg = (boost::format(_u8L("multiACE: this plate uses %1% filaments, but this "
+                                          "printer has %2% places for them - %3% stock feeder(s) "
+                                          "and %4% ACE slot(s). %5% cannot be loaded, so there is "
+                                          "no way to print it."))
+                       % n_used % places % feeders % ace_slots % (n_used - places))
+                          .str();
+    if (!leftovers.empty())
+        msg += "\n\n" + (boost::format(_u8L("Least used, so cheapest to drop: %1%")) % leftovers).str();
+    msg += "\n\n" + _u8L("Remove the extra filaments from the plate or merge two colours, or give "
+                         "the ACE toolhead more slots in Printer settings > Multimaterial.");
+    return msg;
+}
+
 void Print::set_ace_plan_override(const AceMmu::LoadingPlan &plan)
 {
     // Remember it separately: exporting re-runs processing, which recomputes the plan and
@@ -2605,6 +2665,15 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
                         seq.push_back(int(e));
                 const int n_filaments = int(m_config.filament_diameter.values.size());
                 m_ace_plan = AceMmu::plan_loading(heads, seq, n_filaments);
+
+                // No layout exists for this plate. Refuse rather than write a file: an
+                // infeasible plan leaves the tool remap empty, so the gcode would address
+                // T4, T5, T6 on a four-head machine - 300 tool changes to heads that are not
+                // there, with no ACE_SWAP_HEAD anywhere. That used to slice without a word.
+                // There is no override for this the way there is for a spool mismatch: no
+                // amount of user confidence makes a fifth toolhead exist.
+                if (!m_ace_plan.feasible)
+                    throw Slic3r::SlicingError(ace_capacity_error(heads, seq, n_filaments));
 
                 // A layout the user applied wins over the computed one. Two sources, same
                 // meaning: m_ace_plan_user is this session's Apply, ace_plan_layout is one

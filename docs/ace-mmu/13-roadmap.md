@@ -152,7 +152,7 @@ that contradicts the loaded spools prints the wrong colours with no warning.
   disabled, ticking the override enabled it, and closing the dialog cancelled the
   export where it previously proceeded.
 
-### C. Infeasible plates (gap — measured, mockup ready)
+### C. Infeasible plates (refusal done; tray dialog outstanding)
 
 More colours than total capacity has no layout. **Measured, not assumed:** slicing
 the 7-colour cube with a 2-slot ACE (5 places, 7 colours) succeeds with no error,
@@ -165,10 +165,21 @@ The dialog misdiagnoses it too — *"These pins cannot all be satisfied. Unpin
 something"* when C++ sent no pins at all — omits the filaments that did not fit, and
 lists `ACE 1 · S0` twice.
 
-Mockup: [infeasible-plate-mockup.html](infeasible-plate-mockup.html). Proposed:
-refuse at **slicing** so no file exists to send, a dialog naming the shortfall and
-showing the unplaced filaments, and a **hard** block with no override — a wrong spool
-is a judgement call, a missing toolhead is not. Four decisions open.
+- done — **slicing refuses.** `Print::process` throws a `SlicingError` at the end of
+  `psWipeTower` when the plan is infeasible, so no file is written at all. Verified:
+  the plate does not slice, no gcode appears, and the error reads *"this plate uses 7
+  filaments, but this printer has 5 places for them — 3 stock feeder(s) and 2 ACE
+  slot(s)…"* with the **least-used** filaments named as cheapest to drop and their
+  colours. A feasible plate is unaffected — still `swaps:300 optimal:1`, T0–T3 only.
+- **Hard, no override.** A wrong spool is a judgement call; a missing toolhead is not.
+- Only filaments the plate actually **prints** need a place, so a project carrying
+  spare filaments is never falsely refused. The trigger is exactly
+  `used colours > total places`.
+- **gap** — the tray. Refusing at slicing means the assignment dialog never opens for
+  an over-capacity plate, so the drawn tray of unplaced spools has no home there. It
+  needs a small refusal dialog of its own, raised by throwing a type derived from
+  `SlicingError` and catching it in `on_process_completed` (clean, no string matching).
+  Mockup: [infeasible-plate-mockup.html](infeasible-plate-mockup.html).
 
 ### D. Persistence (done)
 
