@@ -322,6 +322,19 @@ switching is needed.
 | — | [Pinning a spool in place](pinning-mockup.html) | E | built to it |
 | 5 | Two-ACE assignment board | F | to produce |
 
+### H. The Snapmaker preprint page rejects a multiACE plate (blocking, analysed)
+
+Pressing **Print** reaches Snapmaker's compiled-Flutter *Print Preprocessing* page,
+which shows four spools with the **wrong colours**, says *"Please select filament
+type"* and leaves Send disabled — so a multiACE plate cannot be printed from Orca.
+
+Root cause is a genuine defect in `sw_GetFileFilamentMapping`: colour and type are
+reported per **project filament** while weight and length are reported per **emitted
+extruder**, and the page pairs them by index. Those two spaces coincide on an ordinary
+printer and diverge as soon as tool remapping puts several filaments on one head.
+
+Full analysis, options and recommendation: [14-preprint-page.md](14-preprint-page.md).
+
 ## Standing risks
 
 - **Cost is inherent, not a bug.** 7 colours all used every layer on 3 feeders and

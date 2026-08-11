@@ -15,9 +15,10 @@
 - **Overall status:** 🟢 End to end on the real 7-colour cube. The U1 Device tab is a Flutter
   webview (`PrinterWebView`+SSWCP, no in-repo source) so ACE can't render there; the native
   "U1 + multiACE" tab and the Prepare/Preview tabs carry the UI instead.
-- **Next action:** nothing is unstarted. Left over: the **tray dialog** for C (deferred by the
-  user - the text refusal stands), **real two-ACE hardware** for F, and seeing G's refusal fire
-  on a genuine two-plate project.
+- **Next action:** **the preprint page blocks multiACE prints** (new, blocking) — see
+  [14-preprint-page.md](14-preprint-page.md) for the analysis and the decision to take.
+  Also left over: the **tray dialog** for C (deferred - the text refusal stands), **real
+  two-ACE hardware** for F, and seeing G's refusal fire on a genuine two-plate project.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
   - `libslic3r_tests "[ace_mmu]"` → 22 cases / 162 assertions pass (parser, planner,
     reconciliation incl. two ACE units; plus a live-captured fixture).
@@ -90,6 +91,32 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-11 — The Snapmaker preprint page rejects multiACE plates (analysis)
+- Reported by the user: **Print** reaches Snapmaker's *Print Preprocessing* page, which shows
+  four spools with red marks, says "Please select filament type" and keeps Send disabled.
+- The page is `flutter_web/index.html?path=4` - the **compiled Flutter bundle**, no Dart
+  source in-repo, so it cannot be taught about the ACE. Reached by two independent routes:
+  `Plater::send_gcode_legacy`'s U1 branch (the Print button) and `Moonraker::upload` whenever
+  `post_action == StartPrint` (`MoonRaker.cpp:519`, commented "依赖flutter，先放开").
+- **Root cause found by reading `sw_GetFileFilamentMapping` (SSWCP.cpp:3223):** it mixes two
+  index spaces. `filament_color`/`filament_type` are per **project filament** (7 here);
+  `filament_weight`/`filament_used_mm` come from `total_volumes_per_extruder`, i.e. per
+  **emitted extruder** (4, after our tool remap). The page pairs them by position. That is
+  exactly the screenshot: four entries, colours of filaments 0-3, weights of heads 0-3, the
+  ACE head's 29.38 g shown as one green spool and its other three colours nowhere. On an
+  ordinary printer the two spaces coincide, which is why nobody has hit this before.
+- The gcode is uploaded **unmodified**; the page's mapping is data sent to the printer, not a
+  rewrite. So our ACE macros are unaffected whatever we decide.
+- **Measured on the live U1:** the Moonraker HTTP API is fully open and unauthenticated
+  (`/printer/info`, `/server/info`, `/machine/system_info`, `/server/files/roots` all 200) and
+  the `gcodes` root `/userdata/gcodes` is **rw**. Orca's own `Moonraker::upload` already POSTs
+  to `server/files/upload` with `form_add("print","true")` - the Flutter dialog is a gate in
+  front of that machinery, not the machinery itself.
+- Recommendation in the doc: try the zero-code workaround first (choose **Upload** rather than
+  **Upload and Print**, which routes to `path=5` instead of `path=4`), then fix the indexing,
+  keeping a bypass as fallback. Three cheap experiments would decide it; none were run because
+  they write to the printer.
 
 ### 2026-08-10 (cont.) — Multi-plate export no longer skips the ACE check
 - Roadmap item G, the last gap. The assignment dialog reviews the plate you are looking at;
