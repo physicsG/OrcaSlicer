@@ -982,9 +982,9 @@ void SSWCP_Instance::set_web_view(wxWebView* view) {
 // Send response to JavaScript
 void SSWCP_Instance::send_to_js()
 {
-    if (is_Instance_illegal()) 
+    if (is_Instance_illegal())
         return;
-        
+
 
     json response, payload;
     response["header"] = m_header;
@@ -1016,7 +1016,7 @@ void SSWCP_Instance::send_to_js()
             // Flutter debug: copy message to Flutter debug interface via WebSocket
             // This is independent of the original communication path above
             SSWCP::send_message_to_flutter(json_str);
-        } 
+        }
     });
 
 }
@@ -1611,6 +1611,17 @@ void SSWCP_Instance::update_filament_info(const json& objects, bool send_message
                 }
                 return;
             }
+
+            // The other half of the preprint page's matching problem: it pairs these machine
+            // spools against the file's filaments by type and nozzle, and says nothing when
+            // no pair is found. Logged beside the file-side payload so the two can be read
+            // together (see docs/ace-mmu/14-preprint-page.md).
+            BOOST_LOG_TRIVIAL(info) << "[WCP] machine filament info: type="
+                                    << j_value["filament_type"].dump() << " colour="
+                                    << (j_value.count("filament_color_rgba") ? j_value["filament_color_rgba"].dump()
+                                                                             : j_value["filament_color"].dump())
+                                    << " extruder_map_table=" << j_value["extruder_map_table"].dump()
+                                    << " nozzle=" << j_value["nozzle_diameters"].dump();
 
             // 存储耗材，并触发更新
             auto& filaments = wxGetApp().preset_bundle->machine_filaments;
@@ -3280,6 +3291,46 @@ void SSWCP_MachineOption_Instance::sw_GetFileFilamentMapping()
             return res;
         };
 
+        // multiACE: what this file calls a filament is a HEAD, not a project spool.
+        //
+        // GCodeWriter's tool remap folds several project filaments onto one ACE-fed head, so
+        // the emitted gcode only ever names T0..T3 and print_statistics is keyed by head -
+        // while colour and type below were read straight out of the project config, which
+        // still has one entry per spool. The page pairs those arrays by index, so it was
+        // handed head weights beside project-filament colours, could not reconcile them, and
+        // refused with "Please select filament type". See docs/ace-mmu/14-preprint-page.md.
+        //
+        // Describe the file the way the file is written: one entry per emitted extruder,
+        // carrying the filament that extruder loads first. With no plan the projection is the
+        // identity, so every other printer and plate keeps byte-for-byte the payload it had.
+        const AceMmu::LoadingPlan &ace_plan = print->ace_plan();
+        std::vector<int>           extruder_filament; // emitted extruder -> project filament
+        if (ace_plan.feasible && !ace_plan.head_of.empty()) {
+            int n_heads = 0;
+            for (int h : ace_plan.head_of)
+                n_heads = std::max(n_heads, h + 1);
+            extruder_filament.assign(n_heads, -1);
+            // A head loads the colour it presents first, and that is the spool the machine
+            // will report sitting in it - the one the page has to match against.
+            for (int f : print->ace_sequence()) {
+                if (f < 0 || f >= int(ace_plan.head_of.size()))
+                    continue;
+                const int h = ace_plan.head_of[f];
+                if (h >= 0 && extruder_filament[h] < 0)
+                    extruder_filament[h] = f;
+            }
+            // A head the plate never prints on still holds whatever is parked there.
+            for (int f = 0; f < int(ace_plan.head_of.size()); ++f) {
+                const int h = ace_plan.head_of[f];
+                if (h >= 0 && extruder_filament[h] < 0)
+                    extruder_filament[h] = f;
+            }
+        }
+        const bool remapped = !extruder_filament.empty();
+        // Project filament behind entry i; -1 for an extruder with nothing on it.
+        auto src_of = [&](size_t i) -> int { return remapped ? extruder_filament[i] : int(i); };
+        auto entry_count = [&](size_t plain) -> size_t { return remapped ? extruder_filament.size() : plain; };
+
         // filament colour
         if (config.has("filament_colour")) {
             std::vector<std::string> filament_color = config.option<ConfigOptionStrings>("filament_colour")->values;
@@ -3291,21 +3342,28 @@ void SSWCP_MachineOption_Instance::sw_GetFileFilamentMapping()
             if (config.has("filament_colour_mode"))
                 filament_colour_modes = config.option<ConfigOptionInts>("filament_colour_mode");
 
-            std::vector<long long> number_res(filament_color.size(), 0);
-            std::vector<std::string> str_res(filament_color.size());
+            const size_t count = entry_count(filament_color.size());
+            std::vector<long long> number_res(count, 0);
+            std::vector<std::string> str_res(count);
             json multi_color_res = json::array();
-            for (size_t i = 0; i < filament_color.size(); ++i) {
-                number_res[i] = color_to_int(filament_color[i]);
-                str_res[i] = filament_color[i];
+            for (size_t i = 0; i < count; ++i) {
+                const int f = src_of(i);
+                if (f < 0 || f >= int(filament_color.size())) {
+                    multi_color_res.push_back(nullptr); // empty extruder: no colour to report
+                    continue;
+                }
+                number_res[i] = color_to_int(filament_color[f]);
+                str_res[i] = filament_color[f];
 
-                const bool has_multi_colors = filament_multi_colors != nullptr && filament_multi_colors->values.size() > i;
-                const bool has_mode = filament_colour_modes != nullptr && filament_colour_modes->values.size() > i;
-                const std::string multi_colors = has_multi_colors ? filament_multi_colors->values[i] : std::string();
+                const size_t fi = size_t(f);
+                const bool has_multi_colors = filament_multi_colors != nullptr && filament_multi_colors->values.size() > fi;
+                const bool has_mode = filament_colour_modes != nullptr && filament_colour_modes->values.size() > fi;
+                const std::string multi_colors = has_multi_colors ? filament_multi_colors->values[fi] : std::string();
                 FilamentColorMode colorMode = FilamentColorMode::Segment;
                 if (has_mode)
-                    colorMode = FilamentColorModeFromConfig(filament_colour_modes->values[i]);
+                    colorMode = FilamentColorModeFromConfig(filament_colour_modes->values[fi]);
                 multi_color_res.push_back(
-                    FilamentColorUtils::BuildPreprintColorMultiItem(multi_colors, colorMode, filament_color[i]));
+                    FilamentColorUtils::BuildPreprintColorMultiItem(multi_colors, colorMode, filament_color[fi]));
             }
 
             response["filament_color"] = number_res;
@@ -3322,9 +3380,17 @@ void SSWCP_MachineOption_Instance::sw_GetFileFilamentMapping()
                 filament_count = std::max(filament_count, filament_colour_opt->values.size());
             }
 
+            // The page sizes the whole payload off this array - it is the file's filament
+            // count - so it is what has to move into extruder space first.
+            filament_count = entry_count(filament_count);
             filament_types.reserve(filament_count);
             for (size_t i = 0; i < filament_count; ++i) {
-                std::string filament_type = filament_type_opt->get_at(int(i));
+                const int f = src_of(i);
+                if (f < 0) {
+                    filament_types.emplace_back();
+                    continue;
+                }
+                std::string filament_type = filament_type_opt->get_at(f);
                 boost::trim(filament_type);
                 filament_types.emplace_back(std::move(filament_type));
             }
@@ -3351,13 +3417,18 @@ void SSWCP_MachineOption_Instance::sw_GetFileFilamentMapping()
         if (config.has("filament_density")) {
             auto filament_density = config.option<ConfigOptionFloats>("filament_density")->values;
 
-            std::vector<double> filament_used_g(filament_density.size(), 0);
+            // total_volumes_per_extruder is already keyed by emitted extruder; only the
+            // density it is multiplied by has to follow the projection - an ACE head's
+            // volume was being weighed with the density of whatever spool shares its index.
+            std::vector<double> filament_used_g(entry_count(filament_density.size()), 0);
             double              total_weight = 0;
             for (const auto& pr : result.print_statistics.total_volumes_per_extruder) {
-                if (pr.first >= filament_density.size()) {
+                if (pr.first >= filament_used_g.size())
                     continue;
-                }
-                filament_used_g[pr.first] = filament_density[pr.first] * pr.second * 0.001;
+                const int f = src_of(pr.first);
+                if (f < 0 || f >= int(filament_density.size()))
+                    continue;
+                filament_used_g[pr.first] = filament_density[f] * pr.second * 0.001;
                 total_weight += filament_used_g[pr.first];
             }
 
@@ -3374,12 +3445,14 @@ void SSWCP_MachineOption_Instance::sw_GetFileFilamentMapping()
             }
             auto filament_diameter = filament_diameter_opt->values;
 
-            std::vector<double> filament_used_mm(filament_diameter.size(), 0);
+            std::vector<double> filament_used_mm(entry_count(filament_diameter.size()), 0);
             for (const auto& pr : result.print_statistics.total_volumes_per_extruder) {
-                if (pr.first >= filament_diameter.size()) {
+                if (pr.first >= filament_used_mm.size())
                     continue;
-                }
-                auto diameter = static_cast<double>(filament_diameter[pr.first]);
+                const int f = src_of(pr.first);
+                if (f < 0 || f >= int(filament_diameter.size()))
+                    continue;
+                auto diameter = static_cast<double>(filament_diameter[f]);
                 if (diameter > 0) {
                     filament_used_mm[pr.first] = pr.second / (M_PI * (diameter * 0.5) * (diameter * 0.5));
                 }
@@ -3388,13 +3461,26 @@ void SSWCP_MachineOption_Instance::sw_GetFileFilamentMapping()
         }
 
         // filament extruder
-        auto& filament_extruder_map = wxGetApp().app_config->get_filament_extruder_map_ref();
-        if (!filament_extruder_map.empty()) {
+        //
+        // This seeds the page's selection map directly (file filament -> machine extruder).
+        // Once the entries above are emitted extruders the answer is not a preference but a
+        // fact: entry 3 IS head 3, because the gcode says T3. The app-config map is keyed by
+        // project filament and means nothing in this index space, so it is replaced, not
+        // translated.
+        if (remapped) {
             json object;
-            for (const auto& item : filament_extruder_map) {
-                object[std::to_string(item.first)] = std::to_string(item.second);
-            }
+            for (size_t e = 0; e < extruder_filament.size(); ++e)
+                object[std::to_string(e)] = std::to_string(e);
             response["filament_extruder_map"] = object;
+        } else {
+            auto& filament_extruder_map = wxGetApp().app_config->get_filament_extruder_map_ref();
+            if (!filament_extruder_map.empty()) {
+                json object;
+                for (const auto& item : filament_extruder_map) {
+                    object[std::to_string(item.first)] = std::to_string(item.second);
+                }
+                response["filament_extruder_map"] = object;
+            }
         }
 
         //nozzle info
@@ -3477,6 +3563,21 @@ void SSWCP_MachineOption_Instance::sw_GetFileFilamentMapping()
         // file name
         response["filename"] = SSWCP::get_display_filename();
         response["filepath"] = SSWCP::get_active_filename();
+
+        // The page is a black box that answers "Please select filament type" to anything it
+        // dislikes, so leave a record of what it was actually told.
+        {
+            std::ostringstream proj;
+            for (size_t e = 0; e < extruder_filament.size(); ++e)
+                proj << (e ? "," : "") << "T" << e << "<-F" << extruder_filament[e];
+            BOOST_LOG_TRIVIAL(info) << "[WCP] filament mapping payload: "
+                                    << (remapped ? "per emitted extruder [" + proj.str() + "]" : "per project filament")
+                                    << " type=" << response.value("filament_type", json::array()).dump()
+                                    << " colour=" << response.value("filament_color_rgba", json::array()).dump()
+                                    << " weight=" << response.value("filament_weight", json::array()).dump()
+                                    << " nozzle=" << response.value("nozzle_info", json::array()).dump()
+                                    << " extruder_map=" << response.value("filament_extruder_map", json::object()).dump();
+        }
 
         m_res_data = response;
         send_to_js();
@@ -6403,7 +6504,7 @@ std::shared_ptr<SSWCP_Instance> SSWCP::create_sswcp_instance(std::string cmd, co
 
 // Handle incoming web messages
 void SSWCP::handle_web_message(std::string message, wxWebView* webview) {
-    try {        
+    try {
          if (!webview) {
              return;
          }
@@ -6724,7 +6825,7 @@ bool SSWCP::query_machine_info(std::shared_ptr<PrintHost>& host, std::string& ou
                                 }
 
                             }
-                        } else {                
+                        } else {
                             if (product_info["nozzle_diameter"].is_number()) {
                                 double temp = product_info["nozzle_diameter"].get<double>();
                                 if (fabs(temp - 0.2) < 1e-6) {
@@ -6855,5 +6956,3 @@ void SSWCP::send_message_auto(const std::string& message, wxWebView* webview)
 
 
 }}; // namespace Slic3r::GUI
-
-

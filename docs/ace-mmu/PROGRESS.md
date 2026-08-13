@@ -15,10 +15,13 @@
 - **Overall status:** 🟢 End to end on the real 7-colour cube. The U1 Device tab is a Flutter
   webview (`PrinterWebView`+SSWCP, no in-repo source) so ACE can't render there; the native
   "U1 + multiACE" tab and the Prepare/Preview tabs carry the UI instead.
-- **Next action:** **the preprint page blocks multiACE prints** (new, blocking) — see
-  [14-preprint-page.md](14-preprint-page.md) for the analysis and the decision to take.
-  Also left over: the **tray dialog** for C (deferred - the text refusal stands), **real
-  two-ACE hardware** for F, and seeing G's refusal fire on a genuine two-plate project.
+- **Next action:** the preprint page no longer blocks multiACE prints — option A is in and
+  verified ([14-preprint-page.md](14-preprint-page.md) §5). What remains there is watching
+  the **mapping the page produces**: it is a file-filament→machine-extruder map and must
+  come out as the identity for our tool numbers to mean what they say; §6 explains why it
+  should, and that it is unverified on hardware loaded to plan. Also left over: the **tray
+  dialog** for C (deferred - the text refusal stands), **real two-ACE hardware** for F, and
+  seeing G's refusal fire on a genuine two-plate project.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
   - `libslic3r_tests "[ace_mmu]"` → 22 cases / 162 assertions pass (parser, planner,
     reconciliation incl. two ACE units; plus a live-captured fixture).
@@ -91,6 +94,42 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-13 — The preprint page accepts a multiACE plate (option A, verified)
+- User chose **option A** from [14-preprint-page.md](14-preprint-page.md): report the
+  payload per emitted extruder rather than per project filament.
+- **The Flutter page turned out to be readable.** `main.dart.js` is dart2js output -
+  minified, but string literals survive, so the matching and validation logic can be read
+  outright. The previous session's "compiled bundle, black box" was too pessimistic and the
+  doc now says so (§2a). What it does: `filament_type.length` **sizes the whole payload**
+  (weights are padded/truncated to it); entries with zero weight *and* zero length are
+  hidden; `alK(type, colour, nozzle)` requires an **exact `filamentType` match** on some
+  machine extruder, then picks the nearest colour by CIEDE2000; and Send refuses with
+  "Please select filament type" when any file filament ends up mapped to null. Also found:
+  `filament_extruder_map`, which Orca already sends, **seeds the page's selection map**.
+- **Changed** `sw_GetFileFilamentMapping` (`SSWCP.cpp`): one projection
+  `extruder -> first filament that head presents in ace_sequence()`, applied to type,
+  colour (all three colour fields), and to the *density and diameter* used for weight and
+  length - an ACE head's volume was being weighed with the density of whatever project
+  spool shared its index. `filament_extruder_map` is emitted as the identity, which for our
+  gcode is a fact, not a preference. **Empty projection when there is no ACE plan**, so
+  every other printer and plate keeps byte-for-byte the payload it had.
+- Added `info` logging on **both** sides of the match (`[WCP] filament mapping payload:` in
+  `sw_GetFileFilamentMapping`, `[WCP] machine filament info:` in `update_filament_info`) -
+  the page answers everything it dislikes with the same one sentence, so the pair is the
+  only way to see which half is wrong. Note the Orca log file needs
+  `log_severity_level: info`; `--debug 4` alone is overwritten by `MainFrame` at startup.
+- **Result (headless Xvfb against the live U1, six-colour cube):** payload logged as
+  `[T0<-F2,T1<-F3,T2<-F4,T3<-F1]`, types all PLA, colours `#FEC600/#00AE42/#0056B8/#EC008C`,
+  weights `7.27/7.36/7.58/26.52 g` - matching both the assignment dialog's layout and Orca's
+  own per-extruder statistics. The page drew four spools, **mapped all four and enabled
+  Send**. Before the change the same plate refused.
+- **Next, and the new thing to watch:** the page emits a file-filament→machine-extruder map
+  of its own. With the printer loaded PLA-red / PLA-gold / *empty* / PETG it produced
+  `2,2,1,1` - correct for those spools, wrong for our tool numbers, which *are* head
+  numbers. `alK` returns the identity when type **and** exact colour match, i.e. exactly the
+  state the item-G reconciliation gate already demands. Unverified on hardware loaded to
+  plan; see 14-preprint-page.md §6.
 
 ### 2026-08-11 — The Snapmaker preprint page rejects multiACE plates (analysis)
 - Reported by the user: **Print** reaches Snapmaker's *Print Preprocessing* page, which shows
