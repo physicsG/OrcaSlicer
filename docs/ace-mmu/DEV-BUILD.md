@@ -52,6 +52,29 @@ narrow `AceMmu*` headers; when a header edit is unavoidable (e.g. adding a membe
 The Snapmaker-account persistence was implemented as free functions in a tiny
 `SMAccountPersist.hpp` (not `GUI_App.hpp`) specifically to avoid that fan-out.
 
+### The one that looks like nothing: commit, then touch a `CMakeLists.txt`
+
+The top-level `CMakeLists.txt` does
+
+```cmake
+add_definitions("-DGIT_COMMIT_HASH=\"${GIT_COMMIT_HASH}\"")
+```
+
+so **the short hash of `HEAD` is on the command line of every translation unit in the
+project**. It is read at *configure* time, not build time, so a commit on its own changes
+nothing. But editing any `CMakeLists.txt` makes ninja re-run CMake, which re-stamps the
+new hash into all ~2500 compile commands — a different command line is a ccache miss, so
+**everything recompiles**, and with `-flto` the GUI alone is hours.
+
+Cost observed 2026-08-13: adding one test file to `tests/libslic3r/CMakeLists.txt` just
+after committing rebuilt all of libslic3r *and* all of libslic3r_gui. Nothing in the diff
+suggested it; the giveaway is `-- LIBDIR_BIN: …` at the top of the build log, which only
+appears when CMake reconfigures.
+
+Practical order of operations: **build and test first, commit last.** If you must add a
+source file to a `CMakeLists.txt`, do it before the commit that will change the hash, not
+after.
+
 ## Windows — Ninja + sccache (+ optional lld-link)
 
 Use [`../../build_fast_win.bat`](../../build_fast_win.bat) (canonical

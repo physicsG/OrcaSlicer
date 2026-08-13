@@ -291,12 +291,44 @@ untouched, so ordinary remapping keeps working.
 
 This is the same posture as the infeasible-plate case: a hard, textual refusal.
 
-### Still unproven
+### Fired, against the live printer
 
-The parser is tested and the transport is confirmed by reading Orca's own code and log, but
-**the guard has never actually fired** — that needs a real Send, which writes to the
-printer. Two runs would close it: one with the planned spools loaded (expect the identity,
-no refusal, a correct print) and one deliberately mismatched (expect the refusal).
+Run of 2026-08-13, six-colour cube, machine holding PLA red / PLA gold / *nothing* / PETG
+silver. Three gates in sequence, each doing its job:
+
+1. **The reconciliation gate stopped it first.** The assignment dialog read the ACE over LAN
+   and marked all four slots `WRONG` (Kingroon PETG where the plan wants PLA), disabling
+   *Apply to plate* until **"Print anyway — I have checked the spools"** was ticked. Worth
+   noting on its own: this is the first time item G's gate has been seen refusing on
+   hardware, and it is why simply cancelling the dialog aborts the print.
+2. **The page mapped, and mapped wrongly.** Past the override, the preprint page enabled
+   Send with badges `1, 2, 1, 1` — file filaments 0 and 1 onto their own heads, 2 and 3 both
+   onto head 0.
+3. **Send was refused.** Orca logged
+   `[WCP] refusing a tool remap on a multiACE plate: T2->0,T3->0` — precisely the two entries
+   that move, and precisely *not* the two that stay. The page received it as
+   `[preUploadAndPrint] sendGcode failed, error: [-1] multiACE: refusing a tool remap …` and
+   stopped.
+
+The part that matters is what the printer looked like afterwards:
+
+| | baseline | after Send |
+|---|---|---|
+| `print_task_config.extruder_map_table` | `[0,1,2,3,0,0]` | `[0,1,2,3,0,0]` — **unchanged** |
+| `print_stats.state` | `standby` | `standby` |
+| gcode files in `gcodes` root | 184 | 184, no `3h57m` file |
+
+So the remap never reached the machine, nothing was uploaded, and no print began. The guard
+sits before `host->async_send_gcodes`, and that is where it stopped.
+
+### What is still not proven
+
+The complementary run — **planned spools physically loaded, expecting an identity map, no
+refusal, and a correct print** — needs someone to put the right filament in the machine, so
+it is Gordian's to run. Two of its three claims already hold: entries 0 and 1 mapped to
+their own heads in the run above and were correctly *not* flagged, so the identity branch
+is exercised. What remains untested is a *fully* identity mapping passing through to a real
+print.
 
 ## 7. Still open
 

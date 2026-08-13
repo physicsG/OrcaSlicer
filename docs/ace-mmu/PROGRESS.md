@@ -17,9 +17,11 @@
   "U1 + multiACE" tab and the Prepare/Preview tabs carry the UI instead.
 - **Next action:** the preprint page no longer blocks multiACE prints — option A is in and
   verified ([14-preprint-page.md](14-preprint-page.md) §5). What remains there is watching
-  the **mapping the page produces**: it is a file-filament→machine-extruder map and must
-  come out as the identity for our tool numbers to mean what they say; §6 explains why it
-  should, and that it is unverified on hardware loaded to plan. Also left over: the **tray
+  the **mapping the page produces**: it is a file-filament→machine-extruder map that the
+  firmware really applies, so it must come out as the identity or the plate prints on the
+  wrong heads. Orca now refuses a non-identity map on ACE plates and that refusal has been
+  **observed on hardware** ([14-preprint-page.md](14-preprint-page.md) §6). What is left
+  there is one run with the planned spools physically loaded. Also left over: the **tray
   dialog** for C (deferred - the text refusal stands), **real two-ACE hardware** for F, and
   seeing G's refusal fire on a genuine two-plate project.
 - **Build/test env (verified working):** deps in `deps/build/`, toolchain installed.
@@ -126,9 +128,21 @@ Newest first. One block per session: date, what changed (files), result, next.
   One test exists purely to pin a trap: both argument names end in `EXTRUDER`, so a
   substring search reads the same value twice, calls every line an identity and silently
   disables the whole guard.
-- **Not yet fired.** The parser is tested and the transport is confirmed by reading, but
-  proving the guard needs a real Send (a write to the printer). Two runs would close it:
-  planned spools loaded → identity, no refusal; deliberately mismatched → refusal.
+- **Fired, on the live printer** (same day, after the user asked for the runs). Six-colour
+  cube against the U1 holding PLA red / PLA gold / nothing / PETG silver:
+  - **item G's gate refused first** - the assignment dialog marked all four ACE slots
+    `WRONG` and disabled *Apply to plate* until "Print anyway - I have checked the spools"
+    was ticked. First time that gate has been observed refusing on hardware, and it explains
+    why cancelling the dialog aborts the print rather than continuing.
+  - past the override the page enabled Send with badges `1,2,1,1`, and Orca logged
+    `[WCP] refusing a tool remap on a multiACE plate: T2->0,T3->0` - exactly the two entries
+    that move, not the two that stay. The page reported
+    `[preUploadAndPrint] sendGcode failed, error: [-1] multiACE: refusing a tool remap …`.
+  - **the printer was untouched**: `extruder_map_table` still `[0,1,2,3,0,0]`, state still
+    `standby`, still 184 gcode files and no `3h57m` upload.
+- **Still open:** the complementary run (planned spools *physically* loaded → identity map →
+  a real print) needs filament changed by hand. Two of its three claims already hold, since
+  entries 0 and 1 mapped to their own heads and were correctly not flagged.
 
 ### 2026-08-13 — The preprint page accepts a multiACE plate (option A, verified)
 - User chose **option A** from [14-preprint-page.md](14-preprint-page.md): report the
