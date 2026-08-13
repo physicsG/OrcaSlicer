@@ -9,6 +9,7 @@ add_executable(${_TEST_NAME}_tests
 	test_ace_mmu_state.cpp
 	test_ace_mmu_plan.cpp
 	test_ace_mmu_reconcile.cpp
+	test_ace_mmu_tool_map.cpp
 	test_config.cpp
 	test_custom_gcode.cpp
 	test_elephant_foot_compensation.cpp

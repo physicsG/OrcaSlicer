@@ -238,20 +238,65 @@ Send** — no red marks, no "Please select filament type".
 Before the change the same plate drew four spools carrying project filaments 0–3's colours
 over heads 0–3's weights, and refused.
 
-## 6. The mapping is now the next thing to watch
+## 6. `T3` does not mean head 3 — and the page decides what it means
 
-The page's output is a map from file filament to **machine extruder**, and it is composed
-by `alK`, not by us. In the test above it produced `2,2,1,1` — because the printer is
-currently loaded with PLA red, PLA light-gold, *nothing*, and PETG silver, so the only
-slots that could match "PLA" at all were the first two.
+This began as "the mapping is worth watching" and turned into the more serious finding of
+the session. **A `T<n>` in our gcode is a *logical* tool.** The U1 resolves it through
+`print_task_config.extruder_map_table`, a logical→physical table, and Snapmaker's preprint
+page rewrites that table immediately before starting a print:
 
-That is the page behaving correctly for a machine loaded with the wrong spools, but for a
-multiACE plate any non-identity mapping is wrong: our tool numbers *are* head numbers.
-`alK` returns the identity when a slot matches on type **and** exact colour, which is
-precisely the state the ACE reconciliation gate (item G) already requires before it will
-let the print through. **Not yet verified on hardware loaded to plan** — worth one run once
-the planned spools are in the machine, and worth knowing what
-`sw_StartLocalPrint`'s payload carries if they are not.
+```
+SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=<logical> MAP_EXTRUDER=<physical>   (one per filament)
+SET_PRINT_USED_EXTRUDERS EXTRUDERS=<csv>
+SET_PRINT_PREFERENCES <flags>
+```
+
+Evidence, all of it checkable:
+
+- **The page emits it.** `a8s()` (*"setPrePrintConfiguration"*, `main.dart.js`) builds those
+  lines from its selection map and sends them as gcode. It is the last thing Send does
+  before the print starts.
+- **The firmware implements it.** Not a macro in `printer.cfg` and not in
+  `/printer/gcode/help`, but third-party firmware wraps it: AFC-Lite's `SET_MAP` expands to
+  two `SET_PRINT_EXTRUDER_MAP` calls and reads back
+  `printer.print_task_config.extruder_map_table`
+  (`SnapmakerU1-Extended-Firmware/.../afc.cfg`).
+- **The live machine is carrying one.** Queried on firmware `1.5.2.13`:
+  `extruder_map_table = [0,1,2,3,…]` (identity, right now) but
+  `reprint_info.extruder_map_table = [0,1,1,0,…]` — a real, **non-identity** map left by an
+  earlier print. Logical 2 → physical 1, logical 3 → physical 0.
+- **The route runs through us.** The page's gcode goes over WCP as `sw_SendGCodes`
+  (`SSWCP.cpp`) → `PrintHost::async_send_gcodes` → `Moonraker_Mqtt::async_send_gcodes` →
+  `printer.gcode.script`. Confirmed in the captured log, where each page-side
+  `WcpConnection, sendCommand … {jsonrpc: 2.0, method: …}` is followed by
+  `[Moonraker_Mqtt] 发送请求，方法: …`.
+
+For an ordinary plate a remap is a *feature*: it lets a file authored for head 0 print from
+the spool that happens to sit in head 2. **For a multiACE plate it is never right.** The
+plan assigned each filament to a head and the `ACE_SWAP_HEAD HEAD=n` macros name that head
+directly; remapping the tool changes without remapping the swaps desynchronises the two —
+the plate prints on the wrong heads while the ACE feeds a head that stopped asking.
+
+And it is not hypothetical. In the §5 run the page chose `2,2,1,1`, because the machine held
+PLA red, PLA light-gold, *nothing* and PETG silver, so only two slots matched "PLA" at all.
+Correct of the page; ruinous for the plate.
+
+### What Orca now does
+
+`sw_SendGCodes` parses the batch (`AceMmuToolMap.hpp`, unit-tested) and, **when the current
+plate has a feasible ACE plan**, refuses any `SET_PRINT_EXTRUDER_MAP` that would move a tool
+off its own head — naming the moves and pointing at the two ways out (load the planned
+spools, or Upload without Print and start from the printer). Plates with no ACE plan are
+untouched, so ordinary remapping keeps working.
+
+This is the same posture as the infeasible-plate case: a hard, textual refusal.
+
+### Still unproven
+
+The parser is tested and the transport is confirmed by reading Orca's own code and log, but
+**the guard has never actually fired** — that needs a real Send, which writes to the
+printer. Two runs would close it: one with the planned spools loaded (expect the identity,
+no refusal, a correct print) and one deliberately mismatched (expect the refusal).
 
 ## 7. Still open
 

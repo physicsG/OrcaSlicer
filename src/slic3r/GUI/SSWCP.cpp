@@ -7,6 +7,7 @@
 #include "nlohmann/json.hpp"
 #include "slic3r/GUI/Tab.hpp"
 #include "libslic3r/Model.hpp"
+#include "libslic3r/AceMmuToolMap.hpp"
 #include "sentry_wrapper/SentryWrapper.hpp"
 #include <algorithm>
 #include <iterator>
@@ -2434,6 +2435,44 @@ void SSWCP_MachineOption_Instance::sw_FileGetStatus()
     }
 }
 
+// multiACE: refuse a tool remap that would rewire the plate onto the wrong heads.
+//
+// The preprint page ends by writing the machine's logical-tool -> physical-extruder table
+// (`SET_PRINT_EXTRUDER_MAP`, see AceMmuToolMap.hpp) from its own match of the file's
+// filaments against the spools it finds loaded. For an ordinary plate that is a feature.
+// For an ACE plate our tool numbers *are* head numbers - the plan put each filament on a
+// head and the `ACE_SWAP_HEAD` macros name that head - so a remap desynchronises the tool
+// changes from the swaps and the plate prints on the wrong heads, silently, at full speed.
+//
+// Returns the message to refuse with, or empty to let the gcode through. `summary` gets a
+// one-line form of the same thing for the log.
+static wxString ace_tool_remap_refusal(const std::vector<std::string> &codes, std::string &summary)
+{
+    const std::vector<AceMmu::ToolMapEntry> bad = AceMmu::non_identity_tool_map(codes);
+    if (bad.empty())
+        return {};
+
+    PartPlate *plate = wxGetApp().plater() ? wxGetApp().plater()->get_partplate_list().get_curr_plate() : nullptr;
+    const Print *print = plate ? plate->fff_print() : nullptr;
+    if (print == nullptr || !print->ace_plan().feasible || print->ace_plan().head_of.empty())
+        return {}; // not a multiACE plate - remapping is the page's business, not ours
+
+    wxString moves;
+    for (const AceMmu::ToolMapEntry &e : bad) {
+        moves += wxString::Format("\n    T%d → head %d", e.logical, e.physical);
+        summary += (summary.empty() ? "" : ",") + ("T" + std::to_string(e.logical) + "->" + std::to_string(e.physical));
+    }
+
+    return wxString::Format(
+        _L("This plate assigns its filaments to specific heads, and the printer was asked to move them:%s\n\n"
+           "The ACE swap commands in the file name the planned heads directly, so the plate would print on the "
+           "wrong ones. The preprocessing page re-matches filaments by material and colour when the spools in "
+           "the machine are not the ones the plate expects.\n\n"
+           "Load the spools shown in Filament assignment, or choose Upload instead of Upload and Print and "
+           "start the job from the printer."),
+        moves);
+}
+
 void SSWCP_MachineOption_Instance::sw_SendGCodes() {
     try {
         if (m_param_data.count("script")) {
@@ -2449,6 +2488,17 @@ void SSWCP_MachineOption_Instance::sw_SendGCodes() {
                 }
             } else if (m_param_data["script"].is_string()) {
                 str_codes.push_back(m_param_data["script"].get<std::string>());
+            }
+
+            std::string remap_summary;
+            if (const wxString refusal = ace_tool_remap_refusal(str_codes, remap_summary); !refusal.empty()) {
+                BOOST_LOG_TRIVIAL(error) << "[WCP] refusing a tool remap on a multiACE plate: " << remap_summary;
+                wxGetApp().CallAfter([refusal]() {
+                    MessageDialog dlg(nullptr, refusal, _L("multiACE"), wxOK | wxICON_ERROR);
+                    dlg.ShowModal();
+                });
+                handle_general_fail(-1, "multiACE: refusing a tool remap that would print on the wrong heads");
+                return;
             }
 
             if (!host) {

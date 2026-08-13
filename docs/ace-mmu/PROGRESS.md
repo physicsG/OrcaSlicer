@@ -82,7 +82,14 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 - [x] ~~Is `http://<ip>/multiace/api/state` reachable without a Moonraker token on stock firmware?~~
   **RESOLVED 2026-08-05:** yes. `GET http://192.168.2.242/multiace/api/state` returns 200
   unauthenticated over plain HTTP (also `/api/health`), reachable from WSL. multiACE `0.99.6.1b`.
-- [ ] How does Orca submit U1 prints (Moonraker upload)? Is mapping carried only in gcode tool indices?
+- [x] ~~How does Orca submit U1 prints (Moonraker upload)? Is mapping carried only in gcode tool indices?~~
+  **RESOLVED 2026-08-13:** no — and this was the dangerous one. A `T<n>` in the gcode is a
+  *logical* tool; the firmware resolves it through `print_task_config.extruder_map_table`, and
+  Snapmaker's preprint page **rewrites that table** with `SET_PRINT_EXTRUDER_MAP` just before
+  starting. Route: page → `sw_SendGCodes` → `Moonraker_Mqtt::async_send_gcodes` →
+  `printer.gcode.script`. The live U1 was still carrying a non-identity
+  `reprint_info.extruder_map_table = [0,1,1,0,…]` from an earlier print. Orca now refuses such
+  a remap on ACE plates. Full evidence in [14-preprint-page.md](14-preprint-page.md) §6.
 - [ ] Does the U1 profile export `T<n>` per filament? Can we emit physical `ace*4+slot` indices (design A)?
 - [ ] Capability detection: probe `/api/health` vs. printer-profile flag? (`/api/health` confirmed live.)
 - [ ] First release: `multi` mode only, defer `head` mode? **NB:** the live printer runs in
@@ -94,6 +101,34 @@ Mirror of [07-testing-risks-open-questions.md](07-testing-risks-open-questions.m
 ## Session log
 
 Newest first. One block per session: date, what changed (files), result, next.
+
+### 2026-08-13 (cont.) — `T3` is a logical tool, and the preprint page decides what it means
+- Chasing the "watch the mapping" note from the previous block turned up the more serious
+  finding. The page does not merely *display* a filament→extruder mapping: `a8s()`
+  (*setPrePrintConfiguration*) turns it into gcode -
+  `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=<logical> MAP_EXTRUDER=<physical>` - and sends it
+  just before starting. That writes `print_task_config.extruder_map_table`, the table the
+  firmware uses to resolve every `T<n>` in our file.
+- Evidence: third-party firmware wraps the same command (AFC-Lite `SET_MAP` in
+  `SnapmakerU1-Extended-Firmware`), and the **live U1 was still carrying a non-identity map
+  from an earlier print**: `reprint_info.extruder_map_table = [0,1,1,0,…]`. Route confirmed
+  through our own code and log: page → `sw_SendGCodes` → `Moonraker_Mqtt::async_send_gcodes`
+  → `printer.gcode.script`.
+- **Why it matters:** for an ordinary plate a remap is a feature. For an ACE plate our tool
+  numbers *are* head numbers and the `ACE_SWAP_HEAD HEAD=n` macros name heads directly, so a
+  remap desynchronises tool changes from swaps - wrong heads, silently, at full speed. The
+  §5 run really did produce `2,2,1,1`, because the machine held PLA red / PLA gold / nothing
+  / PETG silver.
+- **Added** `src/libslic3r/AceMmuToolMap.hpp` (pure, header-only) + 8 cases in
+  `tests/libslic3r/test_ace_mmu_tool_map.cpp`, and a guard in `sw_SendGCodes`: on a plate
+  with a feasible ACE plan, refuse any `SET_PRINT_EXTRUDER_MAP` that moves a tool off its own
+  head, naming the moves and the two ways out. Plates without a plan are untouched.
+  One test exists purely to pin a trap: both argument names end in `EXTRUDER`, so a
+  substring search reads the same value twice, calls every line an identity and silently
+  disables the whole guard.
+- **Not yet fired.** The parser is tested and the transport is confirmed by reading, but
+  proving the guard needs a real Send (a write to the printer). Two runs would close it:
+  planned spools loaded → identity, no refusal; deliberately mismatched → refusal.
 
 ### 2026-08-13 — The preprint page accepts a multiACE plate (option A, verified)
 - User chose **option A** from [14-preprint-page.md](14-preprint-page.md): report the
