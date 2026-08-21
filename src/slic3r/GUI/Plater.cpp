@@ -578,6 +578,12 @@ wxDEFINE_EVENT(EVT_ADD_CUSTOM_FILAMENT, ColorEvent);
 #define PRINTER_PANEL_SIZE_SMALL (wxSize(FromDIP(98), FromDIP(68)))
 #define PRINTER_PANEL_SIZE_WIDEN (wxSize(FromDIP(136), FromDIP(68)))
 #define PRINTER_PANEL_SIZE (wxSize(FromDIP(98), FromDIP(98)))
+#define SYNC_PANEL_SIZE (wxSize(FromDIP(106), FromDIP(106)))
+#define PLATE_PANEL_SIZE (wxSize(FromDIP(106), FromDIP(106)))
+// Doc 17 measured the plate against a 44x40 slot; the card has room for more than that, and the
+// notches are what the silhouette exists to carry, so they get the pixels. The drawing still
+// letterboxes - the plate is taller than wide, and squashing it would change those proportions.
+#define PLATE_SWATCH_SIZE (wxSize(FromDIP(56), FromDIP(51)))
 
 // Nozzle diameter selection when multiple diameters are reported (e.g. U1 sync).
 // diameters_raw: list from device (may have duplicates or fewer than 4). Dedup and full-list logic inside.
@@ -887,274 +893,43 @@ int SidebarProps::TitlebarMargin() { return 8; }  // Use as side margins on titl
 int SidebarProps::ContentMargin()  { return 12; } // Use as side margins contents of title
 int SidebarProps::IconSpacing()    { return 10; } // Use on main elements
 int SidebarProps::ElementSpacing() { return 5; }  // Use if elements has relation between them like edit button for combo box etc.
-// CustomNotebook.h
-#pragma once
 
-#include <wx/wx.h>
-#include <vector>
-
-class CustomNotebook : public wxControl
+// One asset per bed type. Snapmaker's three U1 plates are photographed from its product shots;
+// Cool Steel and the advanced-mode plates are drawn, because Snapmaker does not sell Cool Steel
+// and the nearest real product is somebody else's - using it would brand a *bed type*, which is
+// an abstract setting, with a vendor the app never otherwise mentions. All seven carry the same
+// measured silhouette in their alpha, so photographed and drawn plates sit in one shape.
+//
+// Keyed off the enum value and never off the label: the same BedType is named differently
+// depending on the printer, and s_keys_map_BedType crosses the identifiers against their strings
+// ("Textured PEI Plate" is btPTE, "High Temp Plate" is btPEI).
+static const char *plate_icon_name(BedType bt)
 {
-public:
-    CustomNotebook(wxWindow* parent, wxWindowID id = wxID_ANY, const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxDefaultSize)
-        : wxControl(parent, id, pos, size, wxBORDER_NONE), m_selectedIndex(-1), m_tabHeight(24), m_tabPadding(10), m_roundRadius(5)
-    {
-        SetBackgroundStyle(wxBG_STYLE_PAINT);
-        UpdateColors();
-
-        Bind(wxEVT_PAINT, &CustomNotebook::OnPaint, this);
-        Bind(wxEVT_ERASE_BACKGROUND, &CustomNotebook::OnEraseBackground, this);
-        Bind(wxEVT_LEFT_DOWN, &CustomNotebook::OnLeftDown, this);
-        Bind(wxEVT_SIZE, &CustomNotebook::OnSize, this);
+    switch (bt) {
+    case btPTE:       return "plate_textured_pei";     // Textured PEI - photographed
+    case btPEI:       return "plate_smooth_pei";       // Smooth PEI / high temp - photographed
+    case btGESP:      return "plate_graphic_effect";   // Graphic Effect - photographed
+    case btSuperTack: return "plate_cool_steel";       // Cool Steel - drawn
+    case btPC:        return "plate_cool";             // drawn
+    case btEP:        return "plate_engineering";      // drawn
+    case btPCT:       return "plate_textured_cool";    // drawn
+    default:          return nullptr;
     }
+}
 
-    void AddPage(wxWindow* page, const wxString& text)
-    {
-        m_tabs.push_back({text, page});
-        if (page) {
-            page->Reparent(this);
-            page->Hide();
-            page->SetBackgroundColour(m_selectedTabColor);
-        }
-
-        if (m_selectedIndex == -1) {
-            SetSelection(0);
-        }
-
-        UpdateLayout();
-        Refresh();
+// Null bitmap when the bed type has no art, or the asset is missing: callers draw nothing
+// rather than paint a placeholder that claims to be a plate.
+static wxBitmap plate_bitmap(wxWindow *win, BedType bt, int height_dip)
+{
+    const char *name = plate_icon_name(bt);
+    if (!name)
+        return wxNullBitmap;
+    try {
+        return create_scaled_bitmap(name, win, height_dip);
+    } catch (...) {
+        return wxNullBitmap;
     }
-
-    void DeleteAllPages()
-    {
-        for (auto& tab : m_tabs) {
-            if (tab.page) {
-                tab.page->Destroy();
-            }
-        }
-        m_tabs.clear();
-        m_selectedIndex = -1;
-        UpdateLayout();
-        Refresh();
-    }
-
-    size_t GetPageCount() const { return m_tabs.size(); }
-
-    wxWindow* GetPage(size_t index) const { return (index < m_tabs.size()) ? m_tabs[index].page : nullptr; }
-
-    int GetSelection() const { return m_selectedIndex; }
-
-    void SetSelection(size_t index)
-    {
-        if (index >= m_tabs.size() || static_cast<int>(index) == m_selectedIndex)
-            return;
-
-        if (m_selectedIndex != -1 && m_tabs[m_selectedIndex].page) {
-            m_tabs[m_selectedIndex].page->Hide();
-        }
-
-        m_selectedIndex = index;
-
-        if (m_selectedIndex != -1 && m_tabs[m_selectedIndex].page) {
-            m_tabs[m_selectedIndex].page->Show();
-        }
-
-        UpdateLayout();
-        Refresh();
-    }
-
-protected:
-    void OnPaint(wxPaintEvent& event)
-    {
-        UpdateColors();
-
-        wxPaintDC dc(this);
-
-        // 1. 绘制背景
-        dc.SetPen(*wxTRANSPARENT_PEN);
-        dc.SetBrush(wxBrush(m_bgColor));
-        dc.DrawRectangle(GetClientRect());
-
-        // 2. 绘制标签背景区域
-        dc.SetPen(wxPen(m_dividerColor, 1));
-        dc.SetBrush(wxBrush(m_dividerColor));
-        wxRect labelRect(0, 0, GetSize().x, m_tabHeight);
-        dc.DrawRoundedRectangle(labelRect, m_roundRadius);
-        dc.DrawRectangle(0, m_tabHeight - 2, GetSize().x, 4);
-
-        // 3. 绘制所有标签
-        wxFont font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
-        font.SetPointSize(m_textSize);
-        dc.SetFont(font);
-
-        auto height = dc.GetCharHeight();
-        if (height > m_tabHeight - 2) {
-            m_tabHeight = height + 2;
-            Layout();
-        }
-
-        int xPos = 0;
-        for (size_t i = 0; i < m_tabs.size(); ++i) {
-            bool isSelected = static_cast<int>(i) == m_selectedIndex;
-
-            int textWidth, textHeight;
-            dc.GetTextExtent(m_tabs[i].text, &textWidth, &textHeight);
-            int tabWidth = textWidth + 2 * m_tabPadding;
-
-            if (isSelected) {
-                dc.SetPen(wxPen(m_dividerColor, 1));
-                dc.SetBrush(wxBrush(m_bgColor));
-                wxRect selectedRect(xPos, 0, tabWidth, m_tabHeight + 2);
-                dc.DrawRectangle(selectedRect);
-                dc.DrawRoundedRectangle(selectedRect, m_roundRadius);
-
-                dc.SetPen(wxPen(m_bgColor, 1));
-                dc.SetBrush(wxBrush(m_bgColor));
-                dc.DrawRectangle(xPos, m_tabHeight, tabWidth, 4);
-            }
-
-            dc.SetTextForeground(isSelected ? m_selectedTextColor : m_textColor);
-            dc.DrawText(m_tabs[i].text, xPos + m_tabPadding, (m_tabHeight - textHeight) / 2);
-
-            xPos += tabWidth;
-        }
-
-        // 4. 绘制外边框
-        dc.SetPen(wxPen(m_borderColor, 1));
-        dc.SetBrush(*wxTRANSPARENT_BRUSH);
-        dc.DrawRoundedRectangle(GetClientRect(), m_roundRadius);
-    }
-
-    void OnLeftDown(wxMouseEvent& event)
-    {
-        wxPoint pos = event.GetPosition();
-        if (pos.y > m_tabHeight) {
-            event.Skip();
-            return;
-        }
-
-        int tabIndex = HitTest(pos);
-        if (tabIndex != -1 && tabIndex != m_selectedIndex) {
-            SetSelection(tabIndex);
-            Refresh();
-        }
-    }
-
-    void OnSize(wxSizeEvent& event)
-    {
-        UpdateLayout();
-        Refresh();
-        event.Skip();
-    }
-
-    void OnEraseBackground(wxEraseEvent& event) {}
-
-private:
-    struct TabInfo
-    {
-        wxString  text;
-        wxWindow* page;
-    };
-
-    wxRect GetTabRect(size_t index) const
-    {
-        if (index >= m_tabs.size())
-            return wxRect();
-
-        wxClientDC dc(const_cast<CustomNotebook*>(this));
-        wxFont     font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
-        font.SetPointSize(m_textSize);
-        dc.SetFont(font);
-
-        int textWidth, textHeight;
-        dc.GetTextExtent(m_tabs[index].text, &textWidth, &textHeight);
-        int tabWidth = textWidth + 2 * m_tabPadding;
-
-        int x = 0;
-        for (size_t i = 0; i < index; ++i) {
-            dc.GetTextExtent(m_tabs[i].text, &textWidth, &textHeight);
-            x += textWidth + 2 * m_tabPadding;
-        }
-
-        return wxRect(x, 0, tabWidth, m_tabHeight);
-    }
-
-    int HitTest(const wxPoint& pt) const
-    {
-        if (pt.y > m_tabHeight)
-            return -1;
-
-        wxClientDC dc(const_cast<CustomNotebook*>(this));
-        wxFont     font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
-        font.SetPointSize(m_textSize);
-        dc.SetFont(font);
-
-        int xPos = 0;
-        for (size_t i = 0; i < m_tabs.size(); ++i) {
-            int textWidth, textHeight;
-            dc.GetTextExtent(m_tabs[i].text, &textWidth, &textHeight);
-            int tabWidth = textWidth + 2 * m_tabPadding;
-
-            if (pt.x >= xPos && pt.x <= xPos + tabWidth) {
-                return i;
-            }
-
-            xPos += tabWidth;
-        }
-
-        return -1;
-    }
-
-    void UpdateColors()
-    {
-        bool is_dark = wxGetApp().app_config->get("dark_color_mode") == "1";
-
-        if (!is_dark) {
-            m_bgColor           = wxColour(255, 255, 255);
-            m_borderColor       = wxColour(240, 240, 240);
-            m_selectedTabColor  = wxColour(255, 255, 255);
-            m_textColor         = wxColour(194, 194, 193);
-            m_dividerColor      = wxColour(240, 240, 240);
-            m_selectedTextColor = wxColour(0, 0, 0);
-        } else {
-            m_bgColor           = wxColour(45, 45, 49);
-            m_borderColor       = wxColour(76, 76, 85);
-            m_selectedTabColor  = wxColour(45, 45, 49);
-            m_textColor         = wxColour(104, 105, 107);
-            m_dividerColor      = wxColour(51, 51, 55);
-            m_selectedTextColor = wxColour(255, 255, 255);
-        }
-    }
-
-    void UpdateLayout()
-    {
-        if (m_selectedIndex != -1 && m_tabs[m_selectedIndex].page) {
-            wxSize size = GetSize();
-            m_tabs[m_selectedIndex].page->SetSize(2, m_tabHeight + 1, size.x - 4, size.y - m_tabHeight - 4);
-            m_tabs[m_selectedIndex].page->Layout();
-        }
-    }
-
-private:
-    std::vector<TabInfo> m_tabs;
-    int                  m_selectedIndex;
-
-    wxColour m_bgColor;
-    wxColour m_borderColor;
-    wxColour m_selectedTabColor;
-    wxColour m_textColor;
-    wxColour m_selectedTextColor;
-    wxColour m_dividerColor;
-
-    int m_tabHeight;
-    int m_tabPadding;
-    int m_roundRadius;
-#ifdef _WIN32
-    int m_textSize = 10;
-#else
-    int m_textSize = 13;
-#endif
-};
+}
 
 struct Sidebar::priv
 {
@@ -1238,13 +1013,22 @@ struct Sidebar::priv
     // BBS printer config
     StaticBox* m_panel_printer_title = nullptr;
     ScalableButton* m_printer_icon = nullptr;
+    StaticBox* m_panel_sync_info = nullptr;
     ScalableButton* m_printerinfo_syncbtn = nullptr;
     ScalableButton* m_printer_setting = nullptr;
     wxStaticText* m_text_printer_settings = nullptr;
     wxPanel* m_panel_printer_content = nullptr;
 
-    // nozzle notebook  and related controls
-    CustomNotebook*                  m_nozzle_notebook{nullptr};
+    // The plate card, and the ACE mode row above the head boxes
+    StaticBox*  panel_plate_preset = nullptr;
+    wxPanel*    m_plate_swatch = nullptr;
+    wxPanel*    m_panel_ace_mode = nullptr;
+    ComboBox*   m_ace_mode_list = nullptr;
+    Label*      m_ace_mode_hint = nullptr;
+
+    // One bordered box per toolhead, wrapped two across; rebuilt by update_nozzle_settings()
+    wxPanel*     m_panel_heads = nullptr;
+    wxGridSizer* m_heads_sizer = nullptr;
     std::vector<ComboBox*>       m_nozzle_diameter_lists;
     std::vector<ScalableButton*> m_nozzle_edit_btns;
 
@@ -2113,148 +1897,6 @@ Sidebar::Sidebar(Plater *parent)
         p->m_printer_icon = new ScalableButton(p->m_panel_printer_title, wxID_ANY, "printer");
         p->m_text_printer_settings = new Label(p->m_panel_printer_title, _L("Printer"), LB_PROPAGATE_MOUSE_EVENT);
 
-        // Use ams_fila_sync icon (sync_nozzle_info.svg does not exist in resources)
-        p->m_printerinfo_syncbtn = new ScalableButton(p->m_panel_printer_title, wxID_ANY, "nozzle_sync");
-        p->m_printerinfo_syncbtn->SetCursor(wxCURSOR_HAND);
-        p->m_printerinfo_syncbtn->SetToolTip(_L("Synchronize nozzle information"));
-        p->m_printerinfo_syncbtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent &e) {
-            bool hasConnectDevice = false;
-            auto devices = wxGetApp().app_config->get_devices();
-            for (const auto& device : devices) {
-                if (device.connected)
-                    hasConnectDevice = true;
-            }
-
-            if (!hasConnectDevice)
-            {
-                // showdialog tips no connect device
-                wxTheApp->CallAfter([this]() {
-                    MessageDialog dlg(wxGetApp().mainframe,
-                                      _L("Printer not connected. Please go to the home page or the device page to connect the printer."),
-                                      _L("Note"), wxOK);
-                    dlg.ShowModal();
-                    });                
-                return;        
-            }
-
-            std::string                machine_type = "";
-            std::vector<std::string>   nozzle_diameters;
-            std::string                device_name = "";
-            std::shared_ptr<PrintHost> host = nullptr;
-            wxGetApp().get_connect_host(host);
-            const bool got_machine_info = SSWCP::query_machine_info(host, machine_type, nozzle_diameters, device_name);
-
-            const auto& sync_nozzle_slots = wxGetApp().preset_bundle->m_connect_machine_info_list;
-            if (!sync_nozzle_slots.empty()) {
-                nozzle_diameters.clear();
-                for (const auto& slot : sync_nozzle_slots) {
-                    std::string nd = slot.nozzle_info;
-                    boost::algorithm::trim(nd);
-                    if (nd.size() > 2 && boost::iends_with(nd, "mm")) {
-                        nd.resize(nd.size() - 2);
-                        boost::algorithm::trim(nd);
-                    }
-                    if (!nd.empty())
-                        nozzle_diameters.push_back(nd);
-                }
-            }
-            if (got_machine_info && machine_type == "Snapmaker U1")
-            {
-                if (nozzle_diameters.size() <= 0)
-                {
-                    wxTheApp->CallAfter([this]() {
-                        MessageDialog dlgEx(wxGetApp().mainframe,
-                                            _L("No nozzle information detected. Please go to the printer settings to configure the nozzle."),
-                                            _L("Note"), wxOK);
-                        dlgEx.ShowModal();
-                    });    
-
-                    return;
-                }
-
-                bool res = false;
-                std::string headNozzleSize = nozzle_diameters[0];
-                for (int i = 1; i < nozzle_diameters.size(); i++)
-                {
-                    if (headNozzleSize != nozzle_diameters[i])
-                    {
-                        res = true;
-                        break;
-                    }
-                }
-
-                if (res)
-                {
-                    std::vector<std::string> diameters_raw = nozzle_diameters;
-                    //std::vector<std::string> diameters_raw = {"0.2", "0.8"};
-                    wxTheApp->CallAfter([this, diameters_raw]() {
-                        NozzleDiameterSelectDialog dlg(
-                            wxGetApp().mainframe,
-                            _L("Note: Inconsistent nozzle diameters. Current version does not support mixed diameter printing. Please select one nozzle for this print."),
-                            _L("Set Nozzle Diameter"),
-                            diameters_raw);
-                        if (dlg.ShowModal() == wxID_OK) {
-                            std::string sel = dlg.GetSelectedDiameter();
-                            if (!sel.empty()) {
-                                auto preset = wxGetApp().preset_bundle->get_similar_printer_preset({}, sel);
-                                if (preset) {
-                                    preset->is_visible = true;
-
-                                    auto diameter = sel;
-                                    auto preset   = wxGetApp().preset_bundle->get_similar_printer_preset({}, diameter);
-                                    if (preset == nullptr) {
-                                        BOOST_LOG_TRIVIAL(error) << "get the similar printer preset fail";
-                                        return;
-                                    }
-                                    preset->is_visible = true; // force visible
-
-                                    for (size_t i = 0; i < p->m_nozzle_diameter_lists.size(); ++i) {
-                                        p->m_nozzle_diameter_lists[i]->SetValue(diameter + "mm");
-                                    }
-
-                                    wxGetApp().get_tab(Preset::TYPE_PRINTER)->select_preset(preset->name);
-                                    wxGetApp().plater()->sidebar().update_all_preset_comboboxes(true);
-                                    wxGetApp().plater()->sidebar().update_nozzle_settings(true);
-                                }
-                            }
-                        }
-                    });
-                    return;
-                }
-                else {
-                    // All tool heads report the same diameter: apply it without opening the picker.
-                    std::string diameter = headNozzleSize;
-                    boost::algorithm::trim(diameter);
-                    if (diameter.size() > 2 && boost::iends_with(diameter, "mm")) {
-                        diameter.resize(diameter.size() - 2);
-                        boost::algorithm::trim(diameter);
-                    }
-                    wxTheApp->CallAfter([this, diameter]() {
-                        auto preset = wxGetApp().preset_bundle->get_similar_printer_preset({}, diameter);
-                        if (preset == nullptr) {
-                            BOOST_LOG_TRIVIAL(error) << "get the similar printer preset fail (uniform nozzle sync)";
-                            return;
-                        }
-                        preset->is_visible = true;
-
-                        for (size_t i = 0; i < p->m_nozzle_diameter_lists.size(); ++i)
-                            p->m_nozzle_diameter_lists[i]->SetValue(diameter + "mm");
-
-                        wxGetApp().get_tab(Preset::TYPE_PRINTER)->select_preset(preset->name);
-                        wxGetApp().plater()->sidebar().update_all_preset_comboboxes(true);
-                        wxGetApp().plater()->sidebar().update_nozzle_settings(true);
-
-                        wxTheApp->CallAfter([this]() {
-                            MessageDialog dlg_Ex(wxGetApp().mainframe, _L("Nozzle settings synchronized successfully"),
-                                                 _L("Note"), wxOK);
-                            dlg_Ex.ShowModal();
-                        });
-                    });
-                }
-            }
-            
-            });
-        
         p->m_printer_setting = new ScalableButton(p->m_panel_printer_title, wxID_ANY, "settings");
         p->m_printer_setting->SetToolTip(_L("settings"));
         p->m_printer_setting->Bind(wxEVT_BUTTON, [this](wxCommandEvent &e) {
@@ -2266,8 +1908,6 @@ Sidebar::Sidebar(Plater *parent)
         h_sizer_title->AddSpacer(FromDIP(SidebarProps::ElementSpacing()));
         h_sizer_title->Add(p->m_text_printer_settings, 0, wxALIGN_CENTER);
         h_sizer_title->AddStretchSpacer();
-        h_sizer_title->Add(p->m_printerinfo_syncbtn, 0, wxALIGN_CENTER);
-        h_sizer_title->wxSizer::AddSpacer(FromDIP(10));
         h_sizer_title->Add(p->m_printer_setting, 0, wxALIGN_CENTER);
         h_sizer_title->AddSpacer(FromDIP(SidebarProps::TitlebarMargin()));
         h_sizer_title->SetMinSize(-1, 3 * em);
@@ -2299,21 +1939,24 @@ Sidebar::Sidebar(Plater *parent)
                                 std::pair<wxColour, int>(wxColour(0x00AE42), StateColor::Hovered),
                                 std::pair<wxColour, int>(wxColour(0xEEEEEE), StateColor::Normal));
 
+        // Three cards across the top - printer, plate, sync - at equal height, the shape the
+        // panel design takes from Bambu Studio's. The plate card absorbs what used to be a
+        // full-width "Bed type" row, which is where the room for the head boxes comes from.
         p->panel_printer_preset = new StaticBox(p->m_panel_printer_content);
         p->panel_printer_preset->SetCornerRadius(8);
         p->panel_printer_preset->SetBorderColor(panel_bd_col);
-        p->panel_printer_preset->SetMinSize(PRINTER_PANEL_SIZE_SMALL);
+        p->panel_printer_preset->SetMinSize(PRINTER_PANEL_SIZE);
         p->panel_printer_preset->Bind(wxEVT_LEFT_DOWN, [this](auto& evt) { p->combo_printer->wxEvtHandler::ProcessEvent(evt); });
 
         PlaterPresetComboBox* combo_printer = new PlaterPresetComboBox(p->panel_printer_preset, Preset::TYPE_PRINTER);
         combo_printer->SetWindowStyle(combo_printer->GetWindowStyle() & ~wxALIGN_MASK | wxALIGN_LEFT);
         combo_printer->SetBorderWidth(0);
-        
+
         ScalableBitmap bitmap_printer(p->panel_printer_preset, "printer_placeholder", 48);
         p->image_printer = new wxStaticBitmap(p->panel_printer_preset, wxID_ANY, bitmap_printer.bmp(), wxDefaultPosition,
                                                                  PRINTER_THUMBNAIL_SIZE, 0);
         p->image_printer->Bind(wxEVT_LEFT_DOWN, [this](auto& evt) { p->combo_printer->wxEvtHandler::ProcessEvent(evt); });
-        
+
         p->combo_printer = combo_printer;
 
         // 绑定 combo 内部按钮的事件处理（按钮现在在 combo 内部）
@@ -2322,7 +1965,7 @@ Sidebar::Sidebar(Plater *parent)
                 if (combo_printer->switch_to_tab())
                     p->editing_filament = 0;
             });
-        
+
         combo_printer->bind_connection_button_handler([this]() {
                 wxGetApp().sm_disconnect_current_machine();
                 PhysicalPrinterDialog dlg(this->GetParent());
@@ -2332,10 +1975,10 @@ Sidebar::Sidebar(Plater *parent)
         combo_printer->bind_machine_connecting_button_handler([this]() {
             // machine_connecting_btn 的处理逻辑（如果有的话）
         });
-        
+
         // 显示编辑按钮（鼠标悬停时原来会显示，现在直接显示）
         combo_printer->set_show_edit_button(true);
-        
+
         // 设置按钮tooltip
         combo_printer->set_connection_tooltip(_L("Connect to printer"));
         combo_printer->set_machine_connecting_tooltip(_L("The machine has been connected and is currently in working mode"));
@@ -2348,50 +1991,71 @@ Sidebar::Sidebar(Plater *parent)
         wxBoxSizer* vsizer_printer = new wxBoxSizer(wxVERTICAL);
         wxBoxSizer* hsizer_printer = new wxBoxSizer(wxHORIZONTAL);
 
-        wxBoxSizer* vsizer = new wxBoxSizer(wxVERTICAL);
-        wxBoxSizer* hsizer = new wxBoxSizer(wxHORIZONTAL);
-
-        // 简化后的布局：打印机图片 + combo_printer（内含所有按钮）
-        combo_printer->SetWindowStyle(combo_printer->GetWindowStyle() & ~wxALIGN_MASK | wxALIGN_LEFT);
-
-        hsizer->Add(p->image_printer, 0, wxLEFT | wxALIGN_CENTER, FromDIP(4));
-        hsizer->Add(combo_printer, 1, wxALIGN_CENTRE | wxLEFT | wxRIGHT, FromDIP(6));
-        hsizer->AddSpacer(FromDIP(10));
-        p->panel_printer_preset->SetSizer(hsizer);
+        // Thumbnail over the preset name, not beside it: the card is a picture of the machine
+        // with its name under it, and the row only has to be one card tall.
+        wxBoxSizer* vsizer_preset = new wxBoxSizer(wxVERTICAL);
+        vsizer_preset->AddSpacer(FromDIP(6));
+        vsizer_preset->Add(p->image_printer, 0, wxALIGN_CENTER_HORIZONTAL);
+        vsizer_preset->AddStretchSpacer();
+        vsizer_preset->Add(combo_printer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(4));
+        p->panel_printer_preset->SetSizer(vsizer_preset);
 
         hsizer_printer->Add(p->panel_printer_preset, 1, wxEXPAND, 0);
-        vsizer_printer->AddSpacer(FromDIP(4));
-        vsizer_printer->Add(hsizer_printer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(4));
-        vsizer_printer->AddSpacer(FromDIP(10));
 
-        /*vsizer_printer->AddSpacer(FromDIP(16));
-        hsizer_printer->Add(p->image_printer, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(3));
-        hsizer_printer->Add(combo_printer, 1, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(3));
-        hsizer_printer->Add(edit_btn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(3));
-        hsizer_printer->Add(FromDIP(8), 0, 0, 0, 0);
-        hsizer_printer->Add(connection_btn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(3));
-        hsizer_printer->Add(machine_connecting_btn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(3));
-        hsizer_printer->Add(FromDIP(8), 0, 0, 0, 0);
+        /* ---------------------------- the plate card ---------------------------- */
+        // Bed type used to own a whole row of the sidebar for one combo. As a card it costs
+        // nothing extra: it sits in the height the printer card already takes.
+        p->panel_plate_preset = new StaticBox(p->m_panel_printer_content);
+        p->panel_plate_preset->SetCornerRadius(8);
+        p->panel_plate_preset->SetBorderColor(panel_bd_col);
+        p->panel_plate_preset->SetMinSize(PLATE_PANEL_SIZE);
+        p->panel_plate_preset->SetMaxSize(PLATE_PANEL_SIZE);
+        p->panel_plate_preset->SetCursor(wxCURSOR_HAND);
+        // The picture is the target, not just the narrow combo under it - the same forwarding the
+        // printer card uses for its preset combo. The info glyph is a button and keeps its own
+        // clicks, so it still reaches the wiki rather than opening the list.
+        p->panel_plate_preset->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent& evt) {
+            m_bed_type_list->wxEvtHandler::ProcessEvent(evt);
+        });
 
-        vsizer_printer->Add(hsizer_printer, 0, wxEXPAND, 0);*/
+        // The swatch is drawn, not photographed: a plate picture would be either a vendor's
+        // product shot (which this repository cannot redistribute) or a new asset per bed type.
+        // A texture that says smooth-vs-grained is all the card needs to say at this size.
+        p->m_plate_swatch = new wxPanel(p->panel_plate_preset, wxID_ANY, wxDefaultPosition, PLATE_SWATCH_SIZE);
+        wxPanel* plate_swatch = p->m_plate_swatch;
+        plate_swatch->SetBackgroundStyle(wxBG_STYLE_PAINT);
+        plate_swatch->SetCursor(wxCURSOR_HAND);
+        plate_swatch->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent& evt) {
+            m_bed_type_list->wxEvtHandler::ProcessEvent(evt);
+        });
+        plate_swatch->Bind(wxEVT_PAINT, [plate_swatch](wxPaintEvent&) {
+            wxAutoBufferedPaintDC dc(plate_swatch);
+            dc.SetBackground(wxBrush(plate_swatch->GetParent()->GetBackgroundColour()));
+            dc.Clear();
+            // Read the bed type itself, never the combo's index: a U1 is offered a different and
+            // shorter list (enum_values_u1) than every other printer, so position means nothing.
+            const BedType bt = wxGetApp().preset_bundle->project_config.opt_enum<BedType>("curr_bed_type");
+            const wxBitmap bmp = plate_bitmap(plate_swatch, bt, 51);
+            if (!bmp.IsOk())
+                return;
+            const wxRect r = plate_swatch->GetClientRect();
+            dc.DrawBitmap(bmp, r.x + (r.width - bmp.GetWidth()) / 2,
+                              r.y + (r.height - bmp.GetHeight()) / 2, true);
+        });
 
-        // Bed type selection
-        // 创建一个像打印机选择那样的容器
-        p->panel_printer_preset = new StaticBox(p->m_panel_printer_content, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-                                                wxTAB_TRAVERSAL | wxBORDER_NONE);
-        p->panel_printer_preset->SetCornerRadius(8);
-        StateColor panel_bd_col1(std::pair<wxColour, int>(wxColour(0x00AE42), StateColor::Pressed),
-                            std::pair<wxColour, int>(wxColour(0x00AE42), StateColor::Hovered),
-                            std::pair<wxColour, int>(wxColour(0xEEEEEE), StateColor::Normal));
-        // p->panel_printer_preset->SetBorderColor(panel_bd_col1);
-        // p->panel_printer_preset->SetMinSize(PRINTER_PANEL_SIZE_SMALL);
 
-        // 创建Bed type选择控件
-        wxBoxSizer* bed_type_sizer = new wxBoxSizer(wxHORIZONTAL);
-        wxStaticText* bed_type_title = new wxStaticText(p->panel_printer_preset, wxID_ANY, _L("Bed type"));
-        bed_type_title->Wrap(-1);
-        bed_type_title->SetFont(Label::Body_14);
-        m_bed_type_list = new ComboBox(p->panel_printer_preset, wxID_ANY, wxString(""), wxDefaultPosition, {-1, FromDIP(30)}, 0, nullptr, wxCB_READONLY);
+        // The wiki link keeps its home: the label was the link, and the card's info glyph is it now.
+        ScalableButton* plate_info_btn = new ScalableButton(p->panel_plate_preset, wxID_ANY, "info", wxEmptyString,
+                                                           wxDefaultSize, wxDefaultPosition,
+                                                           wxBU_EXACTFIT | wxNO_BORDER, false, 14);
+        plate_info_btn->SetCursor(wxCURSOR_HAND);
+        plate_info_btn->SetToolTip(_L("Bed types and what they are for"));
+        plate_info_btn->Bind(wxEVT_BUTTON, [](wxCommandEvent&) {
+            wxLaunchDefaultBrowser("https://github.com/SoftFever/OrcaSlicer/wiki/bed-types");
+        });
+
+        m_bed_type_list = new ComboBox(p->panel_plate_preset, wxID_ANY, wxString(""), wxDefaultPosition, {-1, FromDIP(24)}, 0, nullptr, wxCB_READONLY);
+        m_bed_type_list->SetBorderWidth(0);
         const ConfigOptionDef* bed_type_def = print_config_def.get("curr_bed_type");
         if (bed_type_def && bed_type_def->enum_keys_map) {
             for (const auto& item : bed_type_def->enum_labels)
@@ -2399,25 +2063,8 @@ Sidebar::Sidebar(Plater *parent)
             for (const auto& v : bed_type_def->enum_values)
                 m_bed_type_combo_enum_values.push_back(v);
         }
-
-        // 添加链接事件等
-        bed_type_title->Bind(wxEVT_ENTER_WINDOW, [bed_type_title, this](wxMouseEvent &e) {
-            e.Skip();
-            auto font = bed_type_title->GetFont();
-            font.SetUnderlined(true);
-            bed_type_title->SetFont(font);
-            SetCursor(wxCURSOR_HAND);
-        });
-        bed_type_title->Bind(wxEVT_LEAVE_WINDOW, [bed_type_title, this](wxMouseEvent &e) {
-            e.Skip();
-            auto font = bed_type_title->GetFont();
-            font.SetUnderlined(false);
-            bed_type_title->SetFont(font);
-            SetCursor(wxCURSOR_ARROW);
-        });
-        bed_type_title->Bind(wxEVT_LEFT_UP, [bed_type_title, this](wxMouseEvent &e) {
-            wxLaunchDefaultBrowser("https://github.com/SoftFever/OrcaSlicer/wiki/bed-types");
-        });
+        // Repaint the swatch whenever the choice changes; on_bed_type_change does the rest.
+        m_bed_type_list->Bind(wxEVT_COMBOBOX, [this](wxCommandEvent& e) { refresh_plate_card(); e.Skip(); });
 
         AppConfig *app_config = wxGetApp().app_config;
         std::string str_bed_type = app_config->get("curr_bed_type");
@@ -2430,41 +2077,137 @@ Sidebar::Sidebar(Plater *parent)
 
         int bed_type_idx = bed_type_value - 1;
         m_bed_type_list->Select(bed_type_idx);
+        refresh_plate_card();
 
-        // 布局Bed type控件
-        bed_type_sizer->Add(bed_type_title, 0, wxLEFT | wxRIGHT | wxALIGN_CENTER_VERTICAL, FromDIP(10));
-        bed_type_sizer->Add(m_bed_type_list, 1, wxLEFT | wxRIGHT | wxEXPAND, FromDIP(0));
-        p->panel_printer_preset->SetSizer(bed_type_sizer);
+        // The glyph gets the corner to itself, so the plate can sit centred in the card rather
+        // than pushed off-centre by whatever shares its row.
+        wxBoxSizer* vsizer_plate = new wxBoxSizer(wxVERTICAL);
+        wxBoxSizer* hsizer_plate_info = new wxBoxSizer(wxHORIZONTAL);
+        hsizer_plate_info->AddStretchSpacer();
+        hsizer_plate_info->Add(plate_info_btn, 0, wxRIGHT, FromDIP(3));
+        vsizer_plate->AddSpacer(FromDIP(3));
+        vsizer_plate->Add(hsizer_plate_info, 0, wxEXPAND);
+        vsizer_plate->AddStretchSpacer();
+        vsizer_plate->Add(plate_swatch, 0, wxALIGN_CENTER_HORIZONTAL);
+        vsizer_plate->AddStretchSpacer();
+        vsizer_plate->Add(m_bed_type_list, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(4));
+        p->panel_plate_preset->SetSizer(vsizer_plate);
 
-        // 添加到垂直布局
-        vsizer_printer->Add(p->panel_printer_preset, 0, wxEXPAND | wxALL, FromDIP(4));
+        hsizer_printer->Add(p->panel_plate_preset, 0, wxEXPAND | wxLEFT, FromDIP(4));
+
+        /* ---------------------------- the sync card ---------------------------- */
+        // Sync info, as a card beside the printer rather than an unlabelled glyph in the title
+        // bar. The glyph said nothing about what it syncs and was a 16px hit box; a card carries
+        // the word, matches the printer card's height, and takes the whole click.
+        // Bordered like the cards beside it - StaticBox zeroes its border width under
+        // wxBORDER_NONE, so passing that style here would draw the border colour set below nowhere.
+        p->m_panel_sync_info = new StaticBox(p->m_panel_printer_content);
+        p->m_panel_sync_info->SetCornerRadius(8);
+        p->m_panel_sync_info->SetBorderColor(panel_bd_col);
+        p->m_panel_sync_info->SetMinSize(SYNC_PANEL_SIZE);
+        p->m_panel_sync_info->SetMaxSize(SYNC_PANEL_SIZE);
+        p->m_panel_sync_info->SetCursor(wxCURSOR_HAND);
+        p->m_panel_sync_info->SetToolTip(_L("Synchronize nozzle information"));
+
+        p->m_printerinfo_syncbtn = new ScalableButton(p->m_panel_sync_info, wxID_ANY, "nozzle_sync", wxEmptyString,
+                                                      wxDefaultSize, wxDefaultPosition,
+                                                      wxBU_EXACTFIT | wxNO_BORDER, false, 24);
+        p->m_printerinfo_syncbtn->SetCursor(wxCURSOR_HAND);
+        p->m_printerinfo_syncbtn->SetToolTip(_L("Synchronize nozzle information"));
+        p->m_printerinfo_syncbtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) { sync_printer_info(); });
+
+        // LB_PROPAGATE_MOUSE_EVENT hands the label's clicks to the card, so the card's own
+        // handler is the only one - clicking the word cannot fire the sync twice.
+        auto sync_info_label = new Label(p->m_panel_sync_info, Label::Body_12, _L("Sync info"), LB_PROPAGATE_MOUSE_EVENT);
+
+        wxBoxSizer* sync_info_sizer = new wxBoxSizer(wxVERTICAL);
+        sync_info_sizer->AddStretchSpacer();
+        sync_info_sizer->Add(p->m_printerinfo_syncbtn, 0, wxALIGN_CENTER_HORIZONTAL);
+        sync_info_sizer->AddSpacer(FromDIP(4));
+        sync_info_sizer->Add(sync_info_label, 0, wxALIGN_CENTER_HORIZONTAL);
+        sync_info_sizer->AddStretchSpacer();
+        p->m_panel_sync_info->SetSizer(sync_info_sizer);
+        // Skip() matters: StaticBox's own state handler clears its pressed state on LEFT_UP, and
+        // this handler is bound later, so it runs first and would otherwise swallow that. The
+        // leave is synthesised because every path out of sync_printer_info() opens a modal: the
+        // pointer walks off to that dialog, the card never sees the crossing behind it, and it
+        // would sit drawn as hovered until the pointer happened to cross it again.
+        p->m_panel_sync_info->Bind(wxEVT_LEFT_UP, [this](wxMouseEvent &e) {
+            e.Skip();
+            wxMouseEvent leave(wxEVT_LEAVE_WINDOW);
+            leave.SetEventObject(p->m_panel_sync_info);
+            p->m_panel_sync_info->GetEventHandler()->ProcessEvent(leave);
+            sync_printer_info();
+        });
+
+        // The gap belongs to the card, not to the row: a plain spacer would survive the card
+        // being hidden on a non-U1 printer and leave 4px of nothing beside the plate card.
+        hsizer_printer->Add(p->m_panel_sync_info, 0, wxEXPAND | wxLEFT, FromDIP(4));
+
+        vsizer_printer->AddSpacer(FromDIP(4));
+        vsizer_printer->Add(hsizer_printer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(4));
         vsizer_printer->AddSpacer(FromDIP(8));
 
         auto& project_config = wxGetApp().preset_bundle->project_config;
         BedType bed_type = (BedType)bed_type_value;
         project_config.set_key_value("curr_bed_type", new ConfigOptionEnum<BedType>(bed_type));
 
+        /* ---------------------------- the ACE mode row ---------------------------- */
+        // The printer's own three-way switch, mirrored. It decides whether per-head wiring means
+        // anything at all, so it sits above the head boxes and greys their ACE rows in Normal.
+        p->m_panel_ace_mode = new wxPanel(p->m_panel_printer_content, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
+        p->m_panel_ace_mode->SetBackgroundColour(p->m_panel_printer_content->GetBackgroundColour());
+
+        auto ace_mode_label = new Label(p->m_panel_ace_mode, Label::Body_14, _L("ACE mode"));
+        p->m_ace_mode_list = new ComboBox(p->m_panel_ace_mode, wxID_ANY, wxString(""), wxDefaultPosition, {-1, FromDIP(30)}, 0, nullptr, wxCB_READONLY);
+        p->m_ace_mode_hint = new Label(p->m_panel_ace_mode, Label::Body_10, wxEmptyString);
+        p->m_ace_mode_hint->SetForegroundColour(wxColour(0x6B, 0x72, 0x76));
+
+        const ConfigOptionDef *ace_mode_def = print_config_def.get("ace_mode");
+        if (ace_mode_def)
+            for (const auto &item : ace_mode_def->enum_labels)
+                p->m_ace_mode_list->AppendString(_L(item));
+        p->m_ace_mode_list->SetToolTip(_L("SET_ACE_MODE MODE=normal|multi|head, the printer's own switch. "
+                                          "Setting it here records the wiring in the printer preset; it is not "
+                                          "sent to the machine yet."));
+        p->m_ace_mode_list->Bind(wxEVT_COMBOBOX, [this](wxCommandEvent &e) {
+            e.Skip();
+            const int sel = p->m_ace_mode_list->GetSelection();
+            if (sel < 0)
+                return;
+            auto &printers = wxGetApp().preset_bundle->printers;
+            printers.get_edited_preset().config.set_key_value("ace_mode", new ConfigOptionEnum<AceMode>(AceMode(sel)));
+            wxGetApp().get_tab(Preset::TYPE_PRINTER)->update_dirty();
+            update_nozzle_settings();
+        });
+
+        wxBoxSizer* ace_mode_sizer = new wxBoxSizer(wxVERTICAL);
+        ace_mode_sizer->Add(ace_mode_label, 0, wxLEFT | wxBOTTOM, FromDIP(2));
+        ace_mode_sizer->Add(p->m_ace_mode_list, 0, wxEXPAND);
+        ace_mode_sizer->Add(p->m_ace_mode_hint, 0, wxTOP | wxLEFT, FromDIP(3));
+        p->m_panel_ace_mode->SetSizer(ace_mode_sizer);
+        vsizer_printer->Add(p->m_panel_ace_mode, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(8));
+        vsizer_printer->AddSpacer(FromDIP(8));
+
+        /* ---------------------------- the head boxes ---------------------------- */
+        // One bordered box per toolhead, wrapped two across. update_nozzle_settings() fills it,
+        // because the number of heads follows the preset's nozzle_diameter.
+        p->m_panel_heads = new wxPanel(p->m_panel_printer_content, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
+        p->m_panel_heads->SetBackgroundColour(p->m_panel_printer_content->GetBackgroundColour());
+        p->m_heads_sizer = new wxGridSizer(0, 2, FromDIP(4), FromDIP(4));
+        p->m_panel_heads->SetSizer(p->m_heads_sizer);
+        vsizer_printer->Add(p->m_panel_heads, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
+
         p->m_panel_printer_content->SetSizer(vsizer_printer);
         p->m_panel_printer_content->Layout();
         scrolled_sizer->Add(p->m_panel_printer_content, 0, wxEXPAND, 0);
 
-        // 创建Nozzle notebook的容器
-        StaticBox* nozzle_container = new StaticBox(p->m_panel_printer_content, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-                                                    wxTAB_TRAVERSAL | wxBORDER_NONE);
-        nozzle_container->SetCornerRadius(8);
-        // nozzle_container->SetBorderColor(panel_bd_col);
-
-        // 创建notebook
-        p->m_nozzle_notebook = new CustomNotebook(nozzle_container, wxID_ANY);
-
-        // 创建nozzle_sizer并添加notebook
-        wxBoxSizer* nozzle_sizer = new wxBoxSizer(wxVERTICAL);
-        nozzle_sizer->Add(p->m_nozzle_notebook, 1, wxEXPAND | wxALL, FromDIP(0));
-        nozzle_container->SetSizer(nozzle_sizer);
-        nozzle_container->SetMinSize(wxSize(-1, FromDIP(80)));
-
-        // 添加到主布局
-        vsizer_printer->Add(nozzle_container, 0, wxEXPAND | wxALL, FromDIP(4));
+        // update_presets() settles this on every preset change; do it once here too, or the card
+        // is briefly on screen for a printer that has nothing to sync.
+        const auto *sync_printer_model = wxGetApp().preset_bundle->printers.get_edited_preset()
+                                             .config.option<ConfigOptionString>("printer_model");
+        p->m_panel_sync_info->Show(sync_printer_model && boost::icontains(sync_printer_model->value, "Snapmaker") &&
+                                   boost::icontains(sync_printer_model->value, "U1"));
 
         // Initialize nozzle settings
         update_nozzle_settings();
@@ -3717,6 +3460,7 @@ void Sidebar::update_all_preset_comboboxes(bool reload_printer_view)
         m_bed_type_list->SetSelection(get_selection_index());
         m_bed_type_list->Disable();
     }
+    refresh_plate_card();
 
     if (print_tech == ptFFF) {
         for (PlaterPresetComboBox* cb : p->combos_filament)
@@ -3796,18 +3540,16 @@ void Sidebar::update_presets(Preset::Type preset_type)
 
         auto printer_config = wxGetApp().preset_bundle->printers.get_edited_preset().config;
         auto        printer_model_opt = printer_config.option<ConfigOptionString>("printer_model");
-        if (printer_model_opt)
+        if (printer_model_opt && p->m_panel_sync_info)
         {
             std::string printer_model   = printer_model_opt->value;
             bool        is_snapmaker_u1 = boost::icontains(printer_model, "Snapmaker") && boost::icontains(printer_model, "U1");
 
-            if (is_snapmaker_u1)
-            {
-                p->m_printerinfo_syncbtn->Show();
-            } 
-            else 
-            {
-                p->m_printerinfo_syncbtn->Hide();
+            // The card sits in the printer row and takes width from it, so hiding it has to
+            // re-lay the row out - the title-bar glyph it replaces never did.
+            if (p->m_panel_sync_info->IsShown() != is_snapmaker_u1) {
+                p->m_panel_sync_info->Show(is_snapmaker_u1);
+                p->m_panel_printer_content->Layout();
             }
         }
 
@@ -8953,6 +8695,7 @@ void Sidebar::on_bed_type_change(BedType bed_type)
     int sel_idx = (int)bed_type - 1;
     if (m_bed_type_list != nullptr)
         m_bed_type_list->SetSelection(sel_idx);
+    refresh_plate_card();
 }
 
 std::map<int, DynamicPrintConfig> Sidebar::build_filament_ams_list(MachineObject* obj)
@@ -9327,52 +9070,261 @@ void Sidebar::show_SEMM_buttons(bool bshow)
     Layout();
 }
 
+// The card paints from curr_bed_type, and nothing else tells it that has moved.
+void Sidebar::refresh_plate_card()
+{
+    if (p->m_plate_swatch)
+        p->m_plate_swatch->Refresh();
+}
+
 void Sidebar::update_dynamic_filament_list()
 {
     dynamic_filament_list.update();
     dynamic_filament_list_1_based.update();
 }
 
+// Read the connected machine's nozzle information into the preset. Lifted verbatim out of the
+// title-bar button's lambda when that button became the Sync info card, so the card and the icon
+// on it reach one place instead of two copies of it.
+void Sidebar::sync_printer_info()
+{
+    bool hasConnectDevice = false;
+    auto devices = wxGetApp().app_config->get_devices();
+    for (const auto& device : devices) {
+        if (device.connected)
+            hasConnectDevice = true;
+    }
+
+    if (!hasConnectDevice)
+    {
+        // showdialog tips no connect device
+        wxTheApp->CallAfter([this]() {
+            MessageDialog dlg(wxGetApp().mainframe,
+                              _L("Printer not connected. Please go to the home page or the device page to connect the printer."),
+                              _L("Note"), wxOK);
+            dlg.ShowModal();
+            });                
+        return;        
+    }
+
+    std::string                machine_type = "";
+    std::vector<std::string>   nozzle_diameters;
+    std::string                device_name = "";
+    std::shared_ptr<PrintHost> host = nullptr;
+    wxGetApp().get_connect_host(host);
+    const bool got_machine_info = SSWCP::query_machine_info(host, machine_type, nozzle_diameters, device_name);
+
+    const auto& sync_nozzle_slots = wxGetApp().preset_bundle->m_connect_machine_info_list;
+    if (!sync_nozzle_slots.empty()) {
+        nozzle_diameters.clear();
+        for (const auto& slot : sync_nozzle_slots) {
+            std::string nd = slot.nozzle_info;
+            boost::algorithm::trim(nd);
+            if (nd.size() > 2 && boost::iends_with(nd, "mm")) {
+                nd.resize(nd.size() - 2);
+                boost::algorithm::trim(nd);
+            }
+            if (!nd.empty())
+                nozzle_diameters.push_back(nd);
+        }
+    }
+    if (got_machine_info && machine_type == "Snapmaker U1")
+    {
+        if (nozzle_diameters.size() <= 0)
+        {
+            wxTheApp->CallAfter([this]() {
+                MessageDialog dlgEx(wxGetApp().mainframe,
+                                    _L("No nozzle information detected. Please go to the printer settings to configure the nozzle."),
+                                    _L("Note"), wxOK);
+                dlgEx.ShowModal();
+            });    
+
+            return;
+        }
+
+        bool res = false;
+        std::string headNozzleSize = nozzle_diameters[0];
+        for (int i = 1; i < nozzle_diameters.size(); i++)
+        {
+            if (headNozzleSize != nozzle_diameters[i])
+            {
+                res = true;
+                break;
+            }
+        }
+
+        if (res)
+        {
+            std::vector<std::string> diameters_raw = nozzle_diameters;
+            //std::vector<std::string> diameters_raw = {"0.2", "0.8"};
+            wxTheApp->CallAfter([this, diameters_raw]() {
+                NozzleDiameterSelectDialog dlg(
+                    wxGetApp().mainframe,
+                    _L("Note: Inconsistent nozzle diameters. Current version does not support mixed diameter printing. Please select one nozzle for this print."),
+                    _L("Set Nozzle Diameter"),
+                    diameters_raw);
+                if (dlg.ShowModal() == wxID_OK) {
+                    std::string sel = dlg.GetSelectedDiameter();
+                    if (!sel.empty()) {
+                        auto preset = wxGetApp().preset_bundle->get_similar_printer_preset({}, sel);
+                        if (preset) {
+                            preset->is_visible = true;
+
+                            auto diameter = sel;
+                            auto preset   = wxGetApp().preset_bundle->get_similar_printer_preset({}, diameter);
+                            if (preset == nullptr) {
+                                BOOST_LOG_TRIVIAL(error) << "get the similar printer preset fail";
+                                return;
+                            }
+                            preset->is_visible = true; // force visible
+
+                            for (size_t i = 0; i < p->m_nozzle_diameter_lists.size(); ++i) {
+                                p->m_nozzle_diameter_lists[i]->SetValue(diameter + "mm");
+                            }
+
+                            wxGetApp().get_tab(Preset::TYPE_PRINTER)->select_preset(preset->name);
+                            wxGetApp().plater()->sidebar().update_all_preset_comboboxes(true);
+                            wxGetApp().plater()->sidebar().update_nozzle_settings(true);
+                        }
+                    }
+                }
+            });
+            return;
+        }
+        else {
+            // All tool heads report the same diameter: apply it without opening the picker.
+            std::string diameter = headNozzleSize;
+            boost::algorithm::trim(diameter);
+            if (diameter.size() > 2 && boost::iends_with(diameter, "mm")) {
+                diameter.resize(diameter.size() - 2);
+                boost::algorithm::trim(diameter);
+            }
+            wxTheApp->CallAfter([this, diameter]() {
+                auto preset = wxGetApp().preset_bundle->get_similar_printer_preset({}, diameter);
+                if (preset == nullptr) {
+                    BOOST_LOG_TRIVIAL(error) << "get the similar printer preset fail (uniform nozzle sync)";
+                    return;
+                }
+                preset->is_visible = true;
+
+                for (size_t i = 0; i < p->m_nozzle_diameter_lists.size(); ++i)
+                    p->m_nozzle_diameter_lists[i]->SetValue(diameter + "mm");
+
+                wxGetApp().get_tab(Preset::TYPE_PRINTER)->select_preset(preset->name);
+                wxGetApp().plater()->sidebar().update_all_preset_comboboxes(true);
+                wxGetApp().plater()->sidebar().update_nozzle_settings(true);
+
+                wxTheApp->CallAfter([this]() {
+                    MessageDialog dlg_Ex(wxGetApp().mainframe, _L("Nozzle settings synchronized successfully"),
+                                         _L("Note"), wxOK);
+                    dlg_Ex.ShowModal();
+                });
+            });
+        }
+    }
+}
+
 void Sidebar::update_nozzle_settings(bool switch_machine)
 {
-    if (!p->m_nozzle_notebook)
+    if (!p->m_panel_heads || !p->m_heads_sizer)
         return;
 
-    // Get new nozzle count
-    auto* nozzle_diameter = dynamic_cast<const ConfigOptionFloats*>(
-        wxGetApp().preset_bundle->printers.get_edited_preset().config.option("nozzle_diameter"));
-    size_t new_nozzle_count = nozzle_diameter ? nozzle_diameter->values.size() : 1;
+    const Preset&        printer_preset = wxGetApp().preset_bundle->printers.get_edited_preset();
+    const DynamicConfig& cfg            = printer_preset.config;
 
-    // Clear existing pages and controls
-    p->m_nozzle_notebook->DeleteAllPages();
+    auto* nozzle_diameter = dynamic_cast<const ConfigOptionFloats*>(cfg.option("nozzle_diameter"));
+    size_t head_count = nozzle_diameter ? nozzle_diameter->values.size() : 1;
+
+    // The machine's own interface calls these Toolhead N - see the strings in
+    // resources/web/flutter_web/assets/assets/i10n/en.json. A two-headed IDEX machine keeps the
+    // Left/Right names it has always had, because there the label names a position.
+    const auto *printer_model = cfg.option<ConfigOptionString>("printer_model");
+    const bool is_snapmaker_u1 = printer_model && boost::icontains(printer_model->value, "Snapmaker") &&
+                                 boost::icontains(printer_model->value, "U1");
+
+    const auto *ace_mode_opt = cfg.option<ConfigOptionEnum<AceMode>>("ace_mode");
+    const AceMode ace_mode   = ace_mode_opt ? AceMode(ace_mode_opt->value) : amNormal;
+    const auto *head_unit    = cfg.option<ConfigOptionInts>("ace_head_unit");
+    const auto *head_cap     = cfg.option<ConfigOptionInts>("ace_head_capacity");
+
+    // The mode row belongs to a machine that has ACE units at all. Everything else keeps a
+    // sidebar with no multiACE vocabulary in it.
+    if (p->m_panel_ace_mode) {
+        if (p->m_panel_ace_mode->IsShown() != is_snapmaker_u1)
+            p->m_panel_ace_mode->Show(is_snapmaker_u1);
+        if (is_snapmaker_u1 && p->m_ace_mode_list) {
+            p->m_ace_mode_list->SetSelection(int(ace_mode));
+            switch (ace_mode) {
+            case amHead:  p->m_ace_mode_hint->SetLabel(_L("Each head is a feeder, or wired to one ACE")); break;
+            case amMulti: p->m_ace_mode_hint->SetLabel(_L("Units pooled onto a single ACE head")); break;
+            default:      p->m_ace_mode_hint->SetLabel(_L("Stock feeders only - no ACE")); break;
+            }
+        }
+    }
+
+    p->m_heads_sizer->Clear(true);
     p->m_nozzle_diameter_lists.clear();
     p->m_nozzle_edit_btns.clear();
 
-    // Recreate pages for new nozzle count
-    // Create tabs for each nozzle
-    for (size_t i = 0; i < new_nozzle_count; i++) {
-        wxPanel* nozzle_panel = new wxPanel(p->m_nozzle_notebook, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-                                            wxTAB_TRAVERSAL | wxBORDER_NONE);
-        // nozzle_panel->SetBackgroundColour(wxColour(255, 255, 255));
+    const bool is_dark = wxGetApp().app_config->get("dark_color_mode") == "1";
+    const wxColour row_label_colour = is_dark ? wxColour(194, 194, 194) : wxColour(0, 0, 0);
 
-        wxBoxSizer* tab_sizer = new wxBoxSizer(wxHORIZONTAL);
+    StateColor head_bd_col(std::pair<wxColour, int>(wxColour(0x00AE42), StateColor::Hovered),
+                           std::pair<wxColour, int>(wxColour(0xEEEEEE), StateColor::Normal));
 
-        // Add diameter label and combobox
-        wxBoxSizer*   diameter_sizer = new wxBoxSizer(wxHORIZONTAL);
-        wxStaticText* diameter_label = new wxStaticText(nozzle_panel, wxID_ANY, _L("Diameter"));
-        bool          is_dark        = wxGetApp().app_config->get("dark_color_mode") == "1";
-        if (!is_dark) {
-            diameter_label->SetForegroundColour(wxColor(0, 0, 0));
+    for (size_t i = 0; i < head_count; i++) {
+        StaticBox* head_box = new StaticBox(p->m_panel_heads);
+        head_box->SetCornerRadius(8);
+        head_box->SetBorderColor(head_bd_col);
+
+        wxString head_name;
+        if (is_snapmaker_u1)
+            head_name = wxString::Format(_L("Toolhead %d"), int(i) + 1);
+        else if (head_count == 2)
+            head_name = (i == 0) ? _L("Left Nozzle") : _L("Right Nozzle");
+        else if (head_count > 2)
+            head_name = wxString(_L("Nozzle")) + wxString::Format(" %d", i + 1);
+        else
+            head_name = _L("Nozzle");
+
+        auto* head_label = new Label(head_box, Label::Head_12, head_name);
+        head_label->SetForegroundColour(wxColour(0x4A, 0x52, 0x58));
+
+        wxBoxSizer* box_sizer = new wxBoxSizer(wxVERTICAL);
+        box_sizer->AddSpacer(FromDIP(4));
+        box_sizer->Add(head_label, 0, wxLEFT | wxRIGHT, FromDIP(8));
+
+        // The ACE row - what feeds this head. It reads the preset only: choosing a unit is the
+        // assign popover, which arrives with the ACE row's live contents. In Normal mode no head
+        // is wired to anything, so the row says so rather than showing a stale unit.
+        if (is_snapmaker_u1) {
+            const int unit = (head_unit && i < head_unit->values.size()) ? head_unit->values[i] : -1;
+            const int cap  = (head_cap && i < head_cap->values.size()) ? head_cap->values[i] : 1;
+
+            wxString fed_by = _L("Stock feeder");
+            if (ace_mode != amNormal && unit >= 0)
+                fed_by = wxString::Format(_L("ACE %d"), unit + 1) +
+                         (cap > 1 ? wxString::Format(" · %d", cap) + " " + _L("slots") : wxString());
+
+            auto* ace_key = new Label(head_box, Label::Body_12, _L("ACE"));
+            ace_key->SetForegroundColour(row_label_colour);
+            auto* ace_val = new Label(head_box, Label::Body_12, fed_by);
+            ace_val->SetForegroundColour(ace_mode == amNormal ? wxColour(0x9A, 0x9A, 0x9A) : wxColour(0x4A, 0x52, 0x58));
+
+            wxBoxSizer* ace_row = new wxBoxSizer(wxHORIZONTAL);
+            ace_row->Add(ace_key, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(8));
+            ace_row->AddStretchSpacer();
+            ace_row->Add(ace_val, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
+            box_sizer->Add(ace_row, 0, wxEXPAND | wxTOP, FromDIP(4));
         }
-        else {
-            diameter_label->SetForegroundColour(wxColor(194, 194, 194));
-        }
-        
-        diameter_label->SetFont(Label::Body_14);
 
-        ComboBox* diameter_combo = new ComboBox(nozzle_panel, wxID_ANY, wxEmptyString, wxDefaultPosition, {-1, FromDIP(32)}, 0,
+        // The Diameter row. Every head shows one, and every one of them writes all of them: the
+        // U1 refuses a mixed set, so changing any diameter switches the whole preset.
+        auto* diameter_label = new Label(head_box, Label::Body_12, _L("Diameter"));
+        diameter_label->SetForegroundColour(row_label_colour);
+
+        ComboBox* diameter_combo = new ComboBox(head_box, wxID_ANY, wxEmptyString, wxDefaultPosition, {-1, FromDIP(26)}, 0,
                                                 nullptr, wxCB_READONLY);
-        
 
         // Visible presets for this printer_model (system + user). Imported multi-nozzle variants are
         // usually non-system; diameters_for_same_printer_model() only counted system and kept the combo disabled.
@@ -9381,7 +9333,7 @@ void Sidebar::update_nozzle_settings(bool switch_machine)
             diameter_combo->AppendString(wxString(diameter) + "mm");
         }
         if (diameter_combo->GetCount() == 0) {
-            const auto *pv = wxGetApp().preset_bundle->printers.get_edited_preset().config.option<ConfigOptionString>("printer_variant");
+            const auto *pv = cfg.option<ConfigOptionString>("printer_variant");
             if (pv)
                 diameter_combo->AppendString(wxString(pv->value) + "mm");
         }
@@ -9389,16 +9341,7 @@ void Sidebar::update_nozzle_settings(bool switch_machine)
             diameter_combo->Enable(false);
         }
 
-        diameter_combo->Bind(wxEVT_COMBOBOX, [this, diameter_combo, i](wxCommandEvent& event) {
-
-            //auto* pNotice = p->plater->get_notification_manager();
-            //if (pNotice)
-            //{
-            //    pNotice->close_notification_of_type(NotificationType::CustomNotification);
-            //    pNotice->push_notification(_u8L("Note: Printing PLA Silk on the hot end of 0.6mm hardened steel is not recommended. 0.4mm or smaller specifications are suggested."), 0); 
-            //    pNotice->set_slicing_progress_hidden();            
-            //}
-
+        diameter_combo->Bind(wxEVT_COMBOBOX, [this, diameter_combo](wxCommandEvent& event) {
             auto printer_config    = wxGetApp().preset_bundle->printers.get_edited_preset().config;
             auto printer_model_opt = printer_config.option<ConfigOptionString>("printer_model");
             if (printer_model_opt) {
@@ -9413,14 +9356,14 @@ void Sidebar::update_nozzle_settings(bool switch_machine)
                     {
                         RichMessageDialog dlg(static_cast<wxWindow*>(wxGetApp().mainframe),
                                               _L("Note: Changing this will sync all other nozzles to the same diameter."),
-                                              _L("Set Nozzle Diameter"), 
+                                              _L("Set Nozzle Diameter"),
                                                wxOK);
                         dlg.ShowCheckBox(_L("Don't show this again"), false);
                         auto res = dlg.ShowModal();
                         bool isCheckBox = dlg.IsCheckBoxChecked();
 
                         if (wxID_OK == res)
-                            wxGetApp().app_config->set("app", "sync_diameter_flags", isCheckBox);     
+                            wxGetApp().app_config->set("app", "sync_diameter_flags", isCheckBox);
                     }
                 }
             }
@@ -9432,7 +9375,7 @@ void Sidebar::update_nozzle_settings(bool switch_machine)
                 return;
             }
             preset->is_visible = true; // force visible
-            
+
             for (size_t i = 0; i < p->m_nozzle_diameter_lists.size(); ++i) {
                 //set all nozzle use the diameter
                 p->m_nozzle_diameter_lists[i]->SetValue(diameter + "mm");
@@ -9441,52 +9384,30 @@ void Sidebar::update_nozzle_settings(bool switch_machine)
             wxGetApp().get_tab(Preset::TYPE_PRINTER)->select_preset(preset->name);
             // Do not event.Skip(): select_preset rebuilds nozzle UI and can destroy this combo; skipping would let sidebar treat this as bed-type combo and use-after-free.
         });
-        
-        auto diam_str = wxGetApp().preset_bundle->printers.get_edited_preset().config.option<ConfigOptionString>("printer_variant")->value;
-        
-        diameter_combo->SetValue(diam_str + "mm");
+
+        const auto *variant = cfg.option<ConfigOptionString>("printer_variant");
+        diameter_combo->SetValue((variant ? wxString(variant->value) : wxString("0.4")) + "mm");
 
         p->m_nozzle_diameter_lists.push_back(diameter_combo);
 
-        diameter_sizer->AddSpacer(15);
-        diameter_sizer->Add(diameter_label, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(5));
-        diameter_sizer->AddSpacer(10);
-        diameter_sizer->Add(diameter_combo, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(15));
+        wxBoxSizer* diameter_row = new wxBoxSizer(wxHORIZONTAL);
+        diameter_row->Add(diameter_label, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(8));
+        diameter_row->Add(diameter_combo, 1, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, FromDIP(8));
+        box_sizer->Add(diameter_row, 0, wxEXPAND | wxTOP, FromDIP(4));
+        box_sizer->AddSpacer(FromDIP(6));
 
-        // 删除Flow相关控件
-
-        tab_sizer->Add(diameter_sizer, 1, wxEXPAND | wxALIGN_CENTER_VERTICAL);
-
-        nozzle_panel->SetSizer(tab_sizer);
-
-        // Add tab
-        wxString tab_name = "";
-        switch (new_nozzle_count)
-        {
-        case 1:
-        {
-            tab_name = _L("Nozzle");
-            break;
-        }
-        case 2:
-        {
-            if (i == 0)
-                tab_name = _L("Left Nozzle");
-            else
-                tab_name = _L("Right Nozzle");
-
-            break;
-        }
-        default:
-        {
-            tab_name = wxString(_L("Nozzle")) + wxString::Format(" %d", i + 1);
-        }
-            
-        }
-        p->m_nozzle_notebook->AddPage(nozzle_panel, tab_name);
+        head_box->SetSizer(box_sizer);
+        p->m_heads_sizer->Add(head_box, 1, wxEXPAND);
     }
 
-    p->m_nozzle_notebook->Layout();
+    // An odd head count would leave the grid's last row half empty and stretched; a filler keeps
+    // every box the same width as the ones above it.
+    if (head_count % 2)
+        p->m_heads_sizer->AddStretchSpacer();
+
+    p->m_panel_heads->Layout();
+    p->m_panel_printer_content->Layout();
+    m_scrolled_sizer->Layout();
 
     if (switch_machine) {
         p->combo_printer->SetFocus();

@@ -187,6 +187,8 @@ public:
     void update_dynamic_filament_list();
 
     void update_nozzle_settings(bool switch_machine = false);
+    void sync_printer_info();
+    void refresh_plate_card();
 
     ObjectList*             obj_list();
     ObjectSettings*         obj_settings();
