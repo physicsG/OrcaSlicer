@@ -227,7 +227,7 @@
       </div>
       <p class="note"><b>The trap to remember when they are picked up.</b> The same
         <code>BedType</code> value is named differently depending on the printer:
-        <code>btPTE</code> is <i>Smooth High Temp Plate</i> generically but <i>Smooth PEI Plate</i>
+        <code>btPEI</code> is <i>Smooth High Temp Plate</i> generically but <i>Smooth PEI Plate</i>
         on the U1, and <code>btSuperTack</code> is <i>Cool Plate (SuperTack)</i> generically but
         <i>Cool Steel Plate</i> on the U1. So a thumbnail must key off the <b>enum value</b>, never
         the label — otherwise the U1 shows a Bambu plate under a Snapmaker name, or nothing at all.</p>
@@ -264,8 +264,8 @@
 
   // Each product shot frames the whole plate; ~240% zoom lands inside the surface.
   var PLATES = [
-    { key:"pei",   img:"textured", zoom:185, u1:"Textured PEI Plate", gen:"Textured PEI Plate",      en:"btPEI" },
-    { key:"pte",   img:"smooth",   zoom:190, u1:"Smooth PEI Plate",   gen:"Smooth High Temp Plate",  en:"btPTE" },
+    { key:"pei",   img:"textured", zoom:185, u1:"Textured PEI Plate", gen:"Textured PEI Plate",      en:"btPTE" },
+    { key:"pte",   img:"smooth",   zoom:190, u1:"Smooth PEI Plate",   gen:"Smooth High Temp Plate",  en:"btPEI" },
     { key:"gesp",  img:"graphic",  zoom:195, u1:"Graphic Effect Plate", gen:"Graphic Effect Plate",  en:"btGESP" },
     { key:"stack", drawn:true, u1:"Cool Steel Plate",  gen:"Cool Plate (SuperTack)", en:"btSuperTack" },
     { key:"pc",    img:null,       u1:"—",            gen:"Smooth Cool Plate",      en:"btPC" },

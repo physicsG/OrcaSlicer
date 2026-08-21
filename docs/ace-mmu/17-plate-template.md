@@ -67,8 +67,8 @@ Plate* may own any plate, or none.
 
 | Bed type | Enum | Fill | Source |
 |----------|------|------|--------|
-| Textured PEI Plate | `btPEI` | photo | Snapmaker product shot |
-| Smooth PEI Plate | `btPTE` | photo | Snapmaker product shot |
+| Textured PEI Plate | `btPTE` | photo | Snapmaker product shot |
+| Smooth PEI Plate | `btPEI` | photo | Snapmaker product shot |
 | Graphic Effect Plate | `btGESP` | photo | Snapmaker product shot |
 | Cool Steel Plate | `btSuperTack` | **drawn** | cool blue, soft sheen, no maker's marks |
 
@@ -100,7 +100,7 @@ icon path cannot read. Drawn plates ship as **SVG**.
 ## Two traps
 
 **Key off the enum, never the label.** The same `BedType` is named differently per printer:
-`btPTE` is *Smooth High Temp Plate* generically and *Smooth PEI Plate* on the U1;
+`btPEI` is *Smooth High Temp Plate* generically and *Smooth PEI Plate* on the U1;
 `btSuperTack` is *Cool Plate (SuperTack)* generically and *Cool Steel Plate* on the U1.
 Match on the label and the U1 shows a Bambu plate under a Snapmaker name.
 
