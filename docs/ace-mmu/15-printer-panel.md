@@ -28,7 +28,7 @@ Measured by running the app, not by reading it (`.claude/tools/start.sh headless
 
 ## The shape: Bambu's panel, for four heads
 
-Taken from `bambu_studio_inspiration/Nozzle_and_filament_info/`, piece by piece.
+Taken from `ui-snapshots-inspiration/Nozzle_and_filament_info/`, piece by piece.
 
 - **Three cards across the top** — printer (thumbnail over preset combo), plate
   (texture swatch + ⓘ, absorbing today's `Bed type` row), and **Sync info**.

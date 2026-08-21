@@ -42,3 +42,5 @@ deps_src/build/
 .claude/
 .hermes/
 CLAUDE.md
+# UI reference snapshots — third-party imagery, design reference only (see the folder's README)
+ui-snapshots-inspiration/

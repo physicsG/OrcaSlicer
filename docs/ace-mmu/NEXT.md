@@ -16,7 +16,7 @@
 
 ## Decisions taken — do not reopen without a reason
 
-- **Panel shape:** Bambu Studio's, from `bambu_studio_inspiration/`. Three cards across the
+- **Panel shape:** Bambu Studio's, from `ui-snapshots-inspiration/`. Three cards across the
   top; a bordered box per head wrapped 2×2; one `Nozzle` diameter row, not four tabs.
 - **Naming:** **Toolhead N**, everywhere. Printer Settings already says it; the sidebar
   said *Nozzle N* and the assignment dialog *T1–T4*.
@@ -35,7 +35,7 @@
 
 **1. Licensing of the plate photographs.** Three of the four plate thumbnails are built
 from Snapmaker's product photography, used here as design reference the way
-`bambu_studio_inspiration/` holds Bambu's screenshots. Shipping them inside an
+`ui-snapshots-inspiration/` holds Bambu's screenshots. Shipping them inside an
 **AGPL-3.0** repository needs permission. What can ship: ask Snapmaker, photograph the
 plates yourself, or draw all four the way Cool Steel already is. **This blocks the plate
 card, nothing else** — and it is a swap of the fill, not a redesign: the silhouette,

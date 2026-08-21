@@ -112,7 +112,7 @@ row stays as it is until these exist.
 ## Open
 
 **Licensing.** The three photographs are Snapmaker's, used here as design reference the way
-`bambu_studio_inspiration/` holds Bambu's screenshots. Shipping them in an **AGPL-3.0**
+`ui-snapshots-inspiration/` holds Bambu's screenshots. Shipping them in an **AGPL-3.0**
 repository needs permission. What can ship: ask Snapmaker, photograph the plates yourself,
 or draw all four. The drawn cool plate has no such problem and is the model for anything
 that has to be replaced — the silhouette and the sampling rules are unaffected either way,
