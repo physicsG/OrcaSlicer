@@ -1110,6 +1110,40 @@ private:
     bool m_synced = false;
 };
 
+// The filament panel's rows are rows, not cards, so they carry the mark as a plain check rather
+// than a corner triangle - a triangle only means anything in a corner. Same green, same claim:
+// this filament is one the printer actually has loaded.
+class SyncCheck : public wxWindow
+{
+public:
+    explicit SyncCheck(wxWindow *parent) : wxWindow(parent, wxID_ANY)
+    {
+        const int d = FromDIP(14);
+        m_size      = wxSize(d, d);
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
+        SetMinSize(m_size);
+        SetMaxSize(m_size);
+        Bind(wxEVT_PAINT, [this](wxPaintEvent &) {
+            wxAutoBufferedPaintDC dc(this);
+            dc.SetBackground(wxBrush(GetParent()->GetBackgroundColour()));
+            dc.Clear();
+            const wxSize sz = GetSize();
+            wxPen pen(wxColour(0x00, 0xAE, 0x42), std::max(2, FromDIP(2)));
+            pen.SetCap(wxCAP_ROUND);
+            pen.SetJoin(wxJOIN_ROUND);
+            dc.SetPen(pen);
+            const wxPoint tick[3] = {{sz.x * 18 / 100, sz.y * 52 / 100},
+                                     {sz.x * 40 / 100, sz.y * 76 / 100},
+                                     {sz.x * 84 / 100, sz.y * 26 / 100}};
+            dc.DrawLines(3, tick);
+        });
+    }
+    wxSize DoGetBestSize() const override { return m_size; }
+
+private:
+    wxSize m_size;
+};
+
 // The middle dot, from its own bytes.
 static wxString ace_sep() { return wxString::FromUTF8("\xc2\xb7"); }
 
@@ -1127,6 +1161,8 @@ struct Sidebar::priv
     wxPanel *scrolled;
     PlaterPresetComboBox *combo_print;
     std::vector<PlaterPresetComboBox*> combos_filament;
+    // One per filament combo, shown when that filament is one the machine actually has loaded.
+    std::vector<SyncCheck*> filament_sync_marks;
     int editing_filament = -1;
     wxBoxSizer *sizer_filaments;
     PlaterPresetComboBox *combo_sla_print;
@@ -3013,6 +3049,16 @@ Sidebar::Sidebar(Plater *parent)
     });
     combobox->edit_btn = edit_btn;
 
+    // The sync mark sits between the combo and the edit button, in the same place on every row.
+    {
+        auto* sync_mark = new SyncCheck(p->m_panel_scrolled_filament_content);
+        sync_mark->SetToolTip(_L("This filament is loaded on the printer"));
+        sync_mark->Hide();
+        if (int(p->filament_sync_marks.size()) <= 0)
+            p->filament_sync_marks.resize(0 + 1, nullptr);
+        p->filament_sync_marks[0] = sync_mark;
+        combo_and_btn_sizer->Add(sync_mark, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(2));
+    }
     combo_and_btn_sizer->Add(edit_btn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(SidebarProps::ElementSpacing()) - FromDIP(2)); // ElementSpacing - 2 (from combo box))
     combo_and_btn_sizer->AddSpacer(FromDIP(SidebarProps::ContentMargin()));
 
@@ -3441,6 +3487,16 @@ void Sidebar::init_filament_combo(PlaterPresetComboBox **combo, const int filame
 
     combobox->edit_btn = edit_btn;
 
+    // The sync mark sits between the combo and the edit button, in the same place on every row.
+    {
+        auto* sync_mark = new SyncCheck(p->m_panel_scrolled_filament_content);
+        sync_mark->SetToolTip(_L("This filament is loaded on the printer"));
+        sync_mark->Hide();
+        if (int(p->filament_sync_marks.size()) <= filament_idx)
+            p->filament_sync_marks.resize(filament_idx + 1, nullptr);
+        p->filament_sync_marks[filament_idx] = sync_mark;
+        combo_and_btn_sizer->Add(sync_mark, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(2));
+    }
     combo_and_btn_sizer->Add(edit_btn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(SidebarProps::ElementSpacing()) - FromDIP(2)); // ElementSpacing - 2 (from combo box))
 
     combo_and_btn_sizer->AddSpacer(FromDIP(SidebarProps::ContentMargin()));
@@ -3699,6 +3755,10 @@ void Sidebar::update_all_preset_comboboxes(bool reload_printer_view)
         
     p_mainframe->show_device(preset_bundle.use_bbl_device_tab() && !use_new_connection);
     p_mainframe->m_tabpanel->SetSelection(p_mainframe->m_tabpanel->GetSelection());
+
+    // A filament that has just been switched or recoloured may no longer be one the printer has;
+    // the mark is a diff, so it is recomputed wherever the filaments can have moved.
+    refresh_filament_sync_marks();
 }
 
 void Sidebar::update_presets(Preset::Type preset_type)
@@ -9304,6 +9364,8 @@ void Sidebar::show_sync_filament_dialog()
             NotificationType::CustomNotification,
             NotificationManager::NotificationLevel::RegularNotificationLevel,
             _u8L("Filament types and colors have been successfully synced from the printer."));
+
+        refresh_filament_sync_marks();
     }
 }
 
@@ -9567,9 +9629,10 @@ void Sidebar::finish_printer_sync()
         }
     }
 
-    // Repaint with what was just read: the ACE rows, and the corner ticks that are now a diff
-    // against a machine this panel has actually spoken to.
+    // Repaint with what was just read: the ACE rows, the corner ticks that are now a diff against
+    // a machine this panel has actually spoken to, and the filament rows' own marks.
     update_nozzle_settings();
+    refresh_filament_sync_marks();
 
     // Say which halves ran. Both can fail independently - the nozzles come over the webview
     // bridge, the ACE state over the machine's own HTTP service - and a message claiming the one
@@ -9601,6 +9664,62 @@ void Sidebar::finish_printer_sync()
 // which is all "which ACE feeds this toolhead" is in the preset - and the printer is not told:
 // the machine is authoritative for its own wiring, so this records what the user believes it to be
 // and Sync info is what reconciles the two.
+// Which project filaments the machine actually has loaded.
+//
+// The same claim the corner ticks make, one row lower: this is a diff against what was read, not
+// a record that a sync once happened. Edit a filament's colour or preset afterwards and its mark
+// goes, because it no longer names anything on the printer.
+//
+// Matched on type and colour, which is all the sync itself writes - it says so on its own dialog:
+// "Only filament types and colors are synchronized". Nothing here fetches; a machine that has not
+// been read marks nothing.
+void Sidebar::refresh_filament_sync_marks()
+{
+    if (p->filament_sync_marks.empty())
+        return;
+
+    std::vector<FilamentData> machine;
+    if (p->m_ace_read || !wxGetApp().preset_bundle->m_connect_machine_info_list.empty()) {
+        build_machine_filament_list(wxGetApp().preset_bundle, machine);
+        if (p->m_ace_read)
+            append_ace_filament_list(machine, &p->m_ace_snapshot);
+    }
+
+    std::vector<FilamentData> project;
+    build_design_filament_list(wxGetApp().preset_bundle, project);
+
+    bool layout_changed = false;
+    for (size_t i = 0; i < p->filament_sync_marks.size(); ++i) {
+        SyncCheck* mark = p->filament_sync_marks[i];
+        if (!mark)
+            continue;
+
+        bool synced = false;
+        if (i < project.size()) {
+            const wxColour pc = getMainColor(project[i].m_color);
+            for (const FilamentData& m : machine) {
+                // A row the user could not have picked is not something to claim agreement with:
+                // an empty slot, an ACE-fed head, or the Assign None action.
+                if (is_none_filament(m) || m.m_disabled)
+                    continue;
+                if (m.m_type != project[i].m_type)
+                    continue;
+                const wxColour mc = getMainColor(m.m_color);
+                if (mc.Red() == pc.Red() && mc.Green() == pc.Green() && mc.Blue() == pc.Blue()) {
+                    synced = true;
+                    break;
+                }
+            }
+        }
+        if (mark->IsShown() != synced) {
+            mark->Show(synced);
+            layout_changed = true;
+        }
+    }
+    if (layout_changed)
+        Layout();
+}
+
 void Sidebar::show_ace_assign_popup(size_t head_idx, wxWindow* anchor)
 {
     auto&                printers = wxGetApp().preset_bundle->printers;

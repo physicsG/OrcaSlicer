@@ -194,6 +194,9 @@ public:
     void finish_printer_sync();
     // The assign popover behind a head box's ACE row: which unit feeds this toolhead.
     void show_ace_assign_popup(size_t head_idx, wxWindow* anchor);
+    // Mark the filaments the machine has loaded. A diff, like the corner ticks - not a record
+    // that a sync once ran.
+    void refresh_filament_sync_marks();
     void refresh_plate_card();
 
     ObjectList*             obj_list();
