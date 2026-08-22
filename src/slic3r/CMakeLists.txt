@@ -97,6 +97,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/AceBadge.hpp
     GUI/AceAssignPopup.cpp
     GUI/AceAssignPopup.hpp
+    GUI/SMAccountPersist.cpp
+    GUI/SMAccountPersist.hpp
     GUI/DeviceManager.cpp
     GUI/DeviceManager.hpp
     GUI/Downloader.cpp

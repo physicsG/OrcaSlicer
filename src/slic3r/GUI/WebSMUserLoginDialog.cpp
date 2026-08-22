@@ -26,6 +26,7 @@
 #include <sstream>
 #include <slic3r/GUI/Widgets/WebView.hpp>
 #include "sentry_wrapper/SentryWrapper.hpp"
+#include "SMAccountPersist.hpp"
 using namespace std;
 
 using namespace nlohmann;
@@ -221,6 +222,7 @@ void SMUserLogin::OnNavigationRequest(wxWebViewEvent &evt)
                         sentryReportLog(SENTRY_LOG_TRACE, userInfo, BP_LOGIN);
                         wxGetApp().sm_get_userinfo()->set_user_token(token);
                         wxGetApp().sm_get_userinfo()->set_user_login(true);
+                        Slic3r::GUI::sm_persist_login(); // remember the session across restarts
                     }
                 })
                 .on_error([&](std::string body, std::string error, unsigned status) {

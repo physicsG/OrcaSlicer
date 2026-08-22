@@ -9,6 +9,7 @@
 #include "format.hpp"
 #include "common_func/common_func.hpp"
 #include "Downloader.hpp"
+#include "SMAccountPersist.hpp"
 
 #include "slic3r/GUI/WebUrlDialog.hpp"
 #include "slic3r/GUI/WebPresetDialog.hpp"
@@ -1002,6 +1003,10 @@ void GUI_App::post_init()
 
     m_open_method = "double_click";
     bool switch_to_3d = false;
+
+    // Restore a saved Snapmaker account/session (token) once at startup. app_config was loaded
+    // in the ctor (init_app_config), so the saved section is available.
+    sm_restore_login();
 
     if (!this->init_params->input_files.empty()) {
 
@@ -4299,6 +4304,9 @@ void GUI_App::sm_request_user_logout()
     } catch (std::exception&) {
         ;
     }
+    // Forget the persisted session, after the revoke above has used the token.
+    m_login_userinfo.clear();
+    sm_persist_login();
 }
 
 //BBS
