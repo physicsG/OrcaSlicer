@@ -577,7 +577,7 @@ wxDEFINE_EVENT(EVT_DEL_FILAMENT, SimpleEvent);
 wxDEFINE_EVENT(EVT_ADD_CUSTOM_FILAMENT, ColorEvent);
 
 
-#define PRINTER_THUMBNAIL_SIZE (wxSize(FromDIP(48), FromDIP(48)))
+#define PRINTER_THUMBNAIL_SIZE (wxSize(FromDIP(60), FromDIP(60)))
 #define PRINTER_THUMBNAIL_SIZE_SMALL (wxSize(FromDIP(32), FromDIP(32)))
 #define PRINTER_PANEL_SIZE_SMALL (wxSize(FromDIP(98), FromDIP(68)))
 #define PRINTER_PANEL_SIZE_WIDEN (wxSize(FromDIP(136), FromDIP(68)))
@@ -587,7 +587,7 @@ wxDEFINE_EVENT(EVT_ADD_CUSTOM_FILAMENT, ColorEvent);
 // Doc 17 measured the plate against a 44x40 slot; the card has room for more than that, and the
 // notches are what the silhouette exists to carry, so they get the pixels. The drawing still
 // letterboxes - the plate is taller than wide, and squashing it would change those proportions.
-#define PLATE_SWATCH_SIZE (wxSize(FromDIP(56), FromDIP(51)))
+#define PLATE_SWATCH_SIZE (wxSize(FromDIP(64), FromDIP(58)))
 
 // Nozzle diameter selection when multiple diameters are reported (e.g. U1 sync).
 // diameters_raw: list from device (may have duplicates or fewer than 4). Dedup and full-list logic inside.
@@ -960,7 +960,7 @@ protected:
             return;
 
         const wxSize sz = GetSize();
-        const int    s  = FromDIP(17);
+        const int    s  = FromDIP(22);
         if (sz.x < s || sz.y < s)
             return;
 
@@ -979,16 +979,27 @@ protected:
         dc.DrawPolygon(int(pts.size()), pts.data());
 
         // The check, drawn rather than set as text: a glyph this small lands differently on every
-        // platform's font, and it has to sit inside a 17px triangle on all of them.
+        // platform's font, and it has to sit inside the triangle on all of them.
+        //
+        // Clipped to the mark before it is drawn. The hypotenuse runs (0,0) to (s,s), so the
+        // interior is x >= y; a round cap that crosses that line puts white on the outside of the
+        // triangle, which does not read as a check hanging over an edge - it reads as a notch cut
+        // out of the triangle, because the card behind it is white too. The clip makes that
+        // impossible at any DPI rather than relying on the placement below to have enough margin.
+        wxRegion clip(int(pts.size()), pts.data());
+        dc.SetDeviceClippingRegion(clip);
+
+        // Placed in the corner's thick end, clearing the diagonal by ~0.2s at every point.
         const int      x0 = sz.x - s;
-        const wxPoint  tick[3] = {{x0 + s * 4 / 17, s * 5 / 17},
-                                  {x0 + s * 7 / 17, s * 8 / 17},
-                                  {x0 + s * 13 / 17, s * 2 / 17}};
+        const wxPoint  tick[3] = {{x0 + s * 50 / 100, s * 30 / 100},
+                                  {x0 + s * 62 / 100, s * 42 / 100},
+                                  {x0 + s * 86 / 100, s * 18 / 100}};
         wxPen pen(*wxWHITE, std::max(1, FromDIP(2)));
         pen.SetCap(wxCAP_ROUND);
         pen.SetJoin(wxJOIN_ROUND);
         dc.SetPen(pen);
         dc.DrawLines(3, tick);
+        dc.DestroyClippingRegion();
     }
 
 private:
@@ -2035,7 +2046,7 @@ Sidebar::Sidebar(Plater *parent)
         combo_printer->SetWindowStyle(combo_printer->GetWindowStyle() & ~wxALIGN_MASK | wxALIGN_LEFT);
         combo_printer->SetBorderWidth(0);
 
-        ScalableBitmap bitmap_printer(p->panel_printer_preset, "printer_placeholder", 48);
+        ScalableBitmap bitmap_printer(p->panel_printer_preset, "printer_placeholder", 60);
         p->image_printer = new wxStaticBitmap(p->panel_printer_preset, wxID_ANY, bitmap_printer.bmp(), wxDefaultPosition,
                                                                  PRINTER_THUMBNAIL_SIZE, 0);
         p->image_printer->Bind(wxEVT_LEFT_DOWN, [this](auto& evt) { p->combo_printer->wxEvtHandler::ProcessEvent(evt); });
@@ -2077,7 +2088,11 @@ Sidebar::Sidebar(Plater *parent)
         // Thumbnail over the preset name, not beside it: the card is a picture of the machine
         // with its name under it, and the row only has to be one card tall.
         wxBoxSizer* vsizer_preset = new wxBoxSizer(wxVERTICAL);
-        vsizer_preset->AddSpacer(FromDIP(6));
+        // The thumbnail takes the air rather than the gap under it: a card that is a picture of
+        // the machine should be mostly machine. Stretch spacers above and below centre what is
+        // left over instead of pooling it all beneath the image.
+        vsizer_preset->AddSpacer(FromDIP(4));
+        vsizer_preset->AddStretchSpacer();
         vsizer_preset->Add(p->image_printer, 0, wxALIGN_CENTER_HORIZONTAL);
         vsizer_preset->AddStretchSpacer();
         vsizer_preset->Add(combo_printer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(4));
@@ -2118,7 +2133,7 @@ Sidebar::Sidebar(Plater *parent)
             // Read the bed type itself, never the combo's index: a U1 is offered a different and
             // shorter list (enum_values_u1) than every other printer, so position means nothing.
             const BedType bt = wxGetApp().preset_bundle->project_config.opt_enum<BedType>("curr_bed_type");
-            const wxBitmap bmp = plate_bitmap(plate_swatch, bt, 51);
+            const wxBitmap bmp = plate_bitmap(plate_swatch, bt, 58);
             if (!bmp.IsOk())
                 return;
             const wxRect r = plate_swatch->GetClientRect();
@@ -2168,7 +2183,7 @@ Sidebar::Sidebar(Plater *parent)
         wxBoxSizer* hsizer_plate_info = new wxBoxSizer(wxHORIZONTAL);
         hsizer_plate_info->AddStretchSpacer();
         hsizer_plate_info->Add(plate_info_btn, 0, wxRIGHT, FromDIP(3));
-        vsizer_plate->AddSpacer(FromDIP(3));
+        vsizer_plate->AddSpacer(FromDIP(2));
         vsizer_plate->Add(hsizer_plate_info, 0, wxEXPAND);
         vsizer_plate->AddStretchSpacer();
         vsizer_plate->Add(plate_swatch, 0, wxALIGN_CENTER_HORIZONTAL);
@@ -9906,17 +9921,17 @@ void Sidebar::update_printer_thumbnail()
     std::string printer_type    = selected_preset.get_current_printer_type(preset_bundle);
 
     try {
-        p->image_printer->SetBitmap(create_scaled_bitmap(png_name, this, 48));
+        p->image_printer->SetBitmap(create_scaled_bitmap(png_name, this, 60));
     }
     catch (std::exception& e) {
-        p->image_printer->SetBitmap(create_scaled_bitmap("printer_placeholder", this, 48));
+        p->image_printer->SetBitmap(create_scaled_bitmap("printer_placeholder", this, 60));
     }
     
 
     /*if (printer_thumbnails.find(printer_type) != printer_thumbnails.end())
         p->image_printer->SetBitmap(create_scaled_bitmap(, this, 48));
     else
-        p->image_printer->SetBitmap(create_scaled_bitmap("printer_placeholder", this, 48));*/
+        p->image_printer->SetBitmap(create_scaled_bitmap("printer_placeholder", this, 60));*/
 }
 
 void Sidebar::auto_calc_flushing_volumes(const int modify_id)

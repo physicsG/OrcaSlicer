@@ -24,17 +24,28 @@ static std::optional<wxColour> parse_hash_rgb(const std::string &s)
     return c;
 }
 
-AceBadge::AceBadge(wxWindow *parent, int height_dip) : wxWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize)
+static const wxColour ACE_INK = wxColour(0x6B, 0x6B, 0x6B); // the outlined forms' default stroke
+
+AceBadge::AceBadge(wxWindow *parent, int height_dip, Form form)
+    : wxWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize), m_form(form), m_ink(ACE_INK)
 {
-    const int h = FromDIP(height_dip);
-    m_scale     = double(h) / 26.0;
-    m_size      = wxSize(int(std::lround(44.0 * m_scale)), h);
+    const int    h   = FromDIP(height_dip);
+    const double box = m_form == Form::SquareFace ? 24.0 : 26.0;
+    m_scale          = double(h) / box;
+    m_size           = m_form == Form::SquareFace ? wxSize(h, h)
+                                                 : wxSize(int(std::lround(44.0 * m_scale)), h);
 
     SetBackgroundStyle(wxBG_STYLE_PAINT);
     SetMinSize(m_size);
     SetMaxSize(m_size);
     SetSize(m_size);
     Bind(wxEVT_PAINT, &AceBadge::paintEvent, this);
+}
+
+void AceBadge::SetInk(const wxColour &ink)
+{
+    m_ink = ink;
+    Refresh();
 }
 
 void AceBadge::SetSlots(const std::vector<std::string> &colors_rrggbb)
@@ -65,7 +76,7 @@ void AceBadge::SetUnknown()
     Refresh();
 }
 
-void AceBadge::render(wxDC &dc)
+void AceBadge::render_cabinet(wxDC &dc)
 {
     const double z = m_scale;
     const auto   S = [z](double v) { return int(std::lround(v * z)); };
@@ -90,6 +101,28 @@ void AceBadge::render(wxDC &dc)
     dc.DrawRoundedRectangle(0, S(16), S(44), S(10), S(1.5));
 }
 
+// S4 - the front face alone: one outlined body and four solid bays, no hood and no base step.
+// At 16-24px the hood is what disappears first, so dropping it is what keeps this legible where
+// the wide drawing would not be.
+void AceBadge::render_square(wxDC &dc)
+{
+    const double z = m_scale;
+    const auto   S = [z](double v) { return int(std::lround(v * z)); };
+    const wxColour ink = m_unknown ? ACE_DISABLE : m_ink;
+
+    // The chassis is outlined; the stroke is 1.6 in the drawing's own units.
+    const int stroke = std::max(1, int(std::lround(1.6 * z)));
+    dc.SetPen(wxPen(ink, stroke));
+    dc.SetBrush(*wxTRANSPARENT_BRUSH);
+    dc.DrawRoundedRectangle(S(1.8), S(4.4), S(20.4), S(15.2), S(3.2));
+
+    // Bays solid, in the same ink: the family is carried by the bay treatment, not the outline.
+    dc.SetPen(*wxTRANSPARENT_PEN);
+    dc.SetBrush(wxBrush(ink));
+    for (int i = 0; i < AceMmu::SLOT_COUNT; ++i)
+        dc.DrawRoundedRectangle(S(4.2 + i * 4.2), S(7.4), S(3.2), S(9.2), S(1.6));
+}
+
 void AceBadge::paintEvent(wxPaintEvent &)
 {
     wxAutoBufferedPaintDC dc(this);
@@ -99,9 +132,9 @@ void AceBadge::paintEvent(wxPaintEvent &)
     // GTK's wxDC is already Cairo-backed; MSW's is not, and a 2.5px capsule radius without
     // antialiasing reads as a rectangle.
     wxGCDC gdc(dc);
-    render(gdc);
+    m_form == Form::SquareFace ? render_square(gdc) : render_cabinet(gdc);
 #else
-    render(dc);
+    m_form == Form::SquareFace ? render_square(dc) : render_cabinet(dc);
 #endif
 }
 

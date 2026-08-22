@@ -24,10 +24,10 @@ static const wxColour TICK_OFF   = wxColour(0xCE, 0xCE, 0xCE);
 class FeederMark : public wxWindow
 {
 public:
-    explicit FeederMark(wxWindow *parent, int size_dip = 26) : wxWindow(parent, wxID_ANY)
+    explicit FeederMark(wxWindow *parent, int size_dip = 24) : wxWindow(parent, wxID_ANY)
     {
         const int h = FromDIP(size_dip);
-        m_size      = wxSize(int(std::lround(h * 44.0 / 26.0)), h);
+        m_size      = wxSize(h, h); // square, to sit in the same column as the S4 glyph
         SetBackgroundStyle(wxBG_STYLE_PAINT);
         SetMinSize(m_size);
         SetMaxSize(m_size);
@@ -186,7 +186,11 @@ void AceAssignPopup::add_row(wxWindow *parent, wxSizer *sizer, int unit, int cap
     if (unit < 0) {
         mark = new FeederMark(row);
     } else {
-        auto *badge = new AceBadge(row);
+        // S4, the square front face - doc 16 gives the wide filled badge to a head box and the
+        // square line form to a menu, which is what this list is. It carries no slot colours by
+        // design: the row is choosing a unit, and what is loaded in it is the detail line's job.
+        auto *badge = new AceBadge(row, 24, AceBadge::Form::SquareFace);
+        badge->SetInk(ROW_INK);
         if (live)
             badge->SetUnit(*live);
         else

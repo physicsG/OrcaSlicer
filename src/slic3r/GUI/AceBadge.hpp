@@ -24,8 +24,20 @@ namespace Slic3r { namespace GUI {
 class AceBadge : public wxWindow
 {
 public:
-    // The nominal drawing is 44x26; `height_dip` scales both axes together.
-    explicit AceBadge(wxWindow *parent, int height_dip = 26);
+    // The three forms doc 16 settles, under one rule: outlined chassis, solid bays.
+    enum class Form {
+        Cabinet,    // A - 44x26 filled. A head box's ACE row; carries the slot colours.
+        SquareFace, // S4 - 24x24 line. A menu row, a tab, a ScalableButton. Deliberately NOT the
+                    // same silhouette: it has a third of the width to say the same thing in, so
+                    // the family is carried by the bay treatment and the stroke, not the hood.
+    };
+
+    // The nominal drawing is 44x26 for Cabinet and 24x24 for SquareFace; `height_dip` scales
+    // both axes of whichever form together.
+    explicit AceBadge(wxWindow *parent, int height_dip = 26, Form form = Form::Cabinet);
+
+    // SquareFace draws in one ink rather than in slot colours; this is that ink.
+    void SetInk(const wxColour &ink);
 
     // Bay colours as "#rrggbb", empty for an empty bay. Fewer than four leaves the rest empty.
     void SetSlots(const std::vector<std::string> &colors_rrggbb);
@@ -40,13 +52,16 @@ public:
     wxSize DoGetBestSize() const override { return m_size; }
 
 private:
-    void render(wxDC &dc);
+    void render_cabinet(wxDC &dc);
+    void render_square(wxDC &dc);
     void paintEvent(wxPaintEvent &evt);
 
     std::array<std::optional<wxColour>, AceMmu::SLOT_COUNT> m_bays;
-    bool   m_unknown = true;
-    wxSize m_size;
-    double m_scale = 1.0;
+    bool     m_unknown = true;
+    Form     m_form    = Form::Cabinet;
+    wxColour m_ink;
+    wxSize   m_size;
+    double   m_scale = 1.0;
 };
 
 }} // namespace Slic3r::GUI
