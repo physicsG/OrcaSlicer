@@ -191,6 +191,10 @@
 #include "StepMeshDialog.hpp"
 #include "CloneDialog.hpp"
 #include "WebPreprintDialog.hpp"
+#include "AceMmuProvider.hpp"
+#include "AceAssignPopup.hpp"
+#include "AceBadge.hpp"
+#include "libslic3r/AceMmuTopology.hpp"
 
 #include "filamentsync/SyncConfirmDialog.hpp"
 #include "filamentsync/SyncFilamentColorDialog.hpp"
@@ -931,6 +935,76 @@ static wxBitmap plate_bitmap(wxWindow *win, BedType bt, int height_dip)
     }
 }
 
+// A card that can carry the green corner tick - the mark put on a card that agrees with
+// the connected machine. StaticBox paints its own rounded border, so the tick goes on after it
+// and follows the same corner arc: a plain right triangle would overhang a radius the border
+// curves away from, which is what the mockup's `overflow:hidden` prevents.
+class SyncMarkBox : public StaticBox
+{
+public:
+    explicit SyncMarkBox(wxWindow *parent) : StaticBox(parent) {}
+
+    void SetSynced(bool synced)
+    {
+        if (m_synced == synced)
+            return;
+        m_synced = synced;
+        Refresh();
+    }
+
+protected:
+    void doRender(wxDC &dc) override
+    {
+        StaticBox::doRender(dc);
+        if (!m_synced)
+            return;
+
+        const wxSize sz = GetSize();
+        const int    s  = FromDIP(17);
+        if (sz.x < s || sz.y < s)
+            return;
+
+        // Top edge, round the corner, down the right edge, back to the start.
+        std::vector<wxPoint> pts;
+        pts.emplace_back(sz.x - s, 0);
+        for (int i = 0; i <= 6; ++i) {
+            const double a = M_PI / 2.0 * (double(i) / 6.0);
+            pts.emplace_back(int(std::lround(sz.x - radius + radius * std::sin(a))),
+                             int(std::lround(radius - radius * std::cos(a))));
+        }
+        pts.emplace_back(sz.x, s);
+
+        dc.SetPen(*wxTRANSPARENT_PEN);
+        dc.SetBrush(wxBrush(wxColour(0x00, 0xAE, 0x42)));
+        dc.DrawPolygon(int(pts.size()), pts.data());
+
+        // The check, drawn rather than set as text: a glyph this small lands differently on every
+        // platform's font, and it has to sit inside a 17px triangle on all of them.
+        const int      x0 = sz.x - s;
+        const wxPoint  tick[3] = {{x0 + s * 4 / 17, s * 5 / 17},
+                                  {x0 + s * 7 / 17, s * 8 / 17},
+                                  {x0 + s * 13 / 17, s * 2 / 17}};
+        wxPen pen(*wxWHITE, std::max(1, FromDIP(2)));
+        pen.SetCap(wxCAP_ROUND);
+        pen.SetJoin(wxJOIN_ROUND);
+        dc.SetPen(pen);
+        dc.DrawLines(3, tick);
+    }
+
+private:
+    bool m_synced = false;
+};
+
+// The middle dot, from its own bytes.
+static wxString ace_sep() { return wxString::FromUTF8("\xc2\xb7"); }
+
+// "stock feeder" / "ACE 1, 4 slots" - the same words the head box uses, one-based as every other
+// surface names units.
+static wxString ace_wiring_label(int unit, int cap)
+{
+    return cap <= 1 ? _L("stock feeder") : wxString::Format(_L("ACE %d, %d slots"), unit + 1, cap);
+}
+
 struct Sidebar::priv
 {
     Plater *plater;
@@ -947,7 +1021,7 @@ struct Sidebar::priv
 
     // test
     wxStaticBitmap * image_printer = nullptr;
-    StaticBox*      panel_printer_preset = nullptr;
+    SyncMarkBox*    panel_printer_preset = nullptr;
     
 
     //BBS Sidebar widgets
@@ -1031,6 +1105,16 @@ struct Sidebar::priv
     wxGridSizer* m_heads_sizer = nullptr;
     std::vector<ComboBox*>       m_nozzle_diameter_lists;
     std::vector<ScalableButton*> m_nozzle_edit_btns;
+
+    // What the machine said when Sync info was last pressed, and whether it answered at all.
+    // The corner ticks are a diff against this rather than against a live poll: the U1 connects
+    // as a PrintHost through the webview, so there is nothing pushing its state at us, and a
+    // panel that has not asked has no business claiming the machine agrees with it.
+    bool                     m_machine_read = false;   // model and nozzles were read
+    bool                     m_ace_read     = false;   // the multiACE service answered too
+    std::string              m_machine_model;
+    std::vector<std::string> m_machine_nozzles;
+    AceMmu::AceSnapshot      m_ace_snapshot;
 
     ObjectList          *m_object_list{ nullptr };
     ObjectSettings      *object_settings{ nullptr };
@@ -1939,10 +2023,9 @@ Sidebar::Sidebar(Plater *parent)
                                 std::pair<wxColour, int>(wxColour(0x00AE42), StateColor::Hovered),
                                 std::pair<wxColour, int>(wxColour(0xEEEEEE), StateColor::Normal));
 
-        // Three cards across the top - printer, plate, sync - at equal height, the shape the
-        // panel design takes from Bambu Studio's. The plate card absorbs what used to be a
-        // full-width "Bed type" row, which is where the room for the head boxes comes from.
-        p->panel_printer_preset = new StaticBox(p->m_panel_printer_content);
+        // Three cards across the top - printer, plate, sync - at equal height. The plate card absorbs 
+        // what used to be a full-width "Bed type" row, which is where the room for the head boxes comes from.
+        p->panel_printer_preset = new SyncMarkBox(p->m_panel_printer_content);
         p->panel_printer_preset->SetCornerRadius(8);
         p->panel_printer_preset->SetBorderColor(panel_bd_col);
         p->panel_printer_preset->SetMinSize(PRINTER_PANEL_SIZE);
@@ -2107,13 +2190,13 @@ Sidebar::Sidebar(Plater *parent)
         p->m_panel_sync_info->SetMinSize(SYNC_PANEL_SIZE);
         p->m_panel_sync_info->SetMaxSize(SYNC_PANEL_SIZE);
         p->m_panel_sync_info->SetCursor(wxCURSOR_HAND);
-        p->m_panel_sync_info->SetToolTip(_L("Synchronize nozzle information"));
+        p->m_panel_sync_info->SetToolTip(_L("Synchronize printer information"));
 
         p->m_printerinfo_syncbtn = new ScalableButton(p->m_panel_sync_info, wxID_ANY, "nozzle_sync", wxEmptyString,
                                                       wxDefaultSize, wxDefaultPosition,
                                                       wxBU_EXACTFIT | wxNO_BORDER, false, 24);
         p->m_printerinfo_syncbtn->SetCursor(wxCURSOR_HAND);
-        p->m_printerinfo_syncbtn->SetToolTip(_L("Synchronize nozzle information"));
+        p->m_printerinfo_syncbtn->SetToolTip(_L("Synchronize printer information"));
         p->m_printerinfo_syncbtn->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) { sync_printer_info(); });
 
         // LB_PROPAGATE_MOUSE_EVENT hands the label's clicks to the card, so the card's own
@@ -9095,24 +9178,19 @@ void Sidebar::sync_printer_info()
             hasConnectDevice = true;
     }
 
-    if (!hasConnectDevice)
-    {
-        // showdialog tips no connect device
-        wxTheApp->CallAfter([this]() {
-            MessageDialog dlg(wxGetApp().mainframe,
-                              _L("Printer not connected. Please go to the home page or the device page to connect the printer."),
-                              _L("Note"), wxOK);
-            dlg.ShowModal();
-            });                
-        return;        
-    }
-
+    // No early return on a missing bridge. The nozzle half of this press goes through the webview
+    // connection; the ACE half only needs the machine to be on the network, and refusing to ask a
+    // printer that is answering on its own address would be a gate on the wrong thing. Not being
+    // connected is one of the outcomes this press reports, not a reason to skip it.
     std::string                machine_type = "";
     std::vector<std::string>   nozzle_diameters;
     std::string                device_name = "";
     std::shared_ptr<PrintHost> host = nullptr;
-    wxGetApp().get_connect_host(host);
-    const bool got_machine_info = SSWCP::query_machine_info(host, machine_type, nozzle_diameters, device_name);
+    bool                       got_machine_info = false;
+    if (hasConnectDevice) {
+        wxGetApp().get_connect_host(host);
+        got_machine_info = SSWCP::query_machine_info(host, machine_type, nozzle_diameters, device_name);
+    }
 
     const auto& sync_nozzle_slots = wxGetApp().preset_bundle->m_connect_machine_info_list;
     if (!sync_nozzle_slots.empty()) {
@@ -9128,6 +9206,31 @@ void Sidebar::sync_printer_info()
                 nozzle_diameters.push_back(nd);
         }
     }
+    // One press, two reads, and they are independent. The nozzles came back over the webview
+    // bridge above; the ACE mode and wiring live in the printer's own multiACE service, which
+    // answers plain HTTP and is the only thing that knows which unit feeds which head. Reading it
+    // outside the branch below means a machine on the LAN can still describe its wiring when the
+    // bridge has not connected - which is exactly when the panel has least to go on.
+    p->m_machine_model   = machine_type;
+    p->m_machine_nozzles = nozzle_diameters;
+    p->m_machine_read    = got_machine_info && !nozzle_diameters.empty();
+    p->m_ace_read        = false;
+    const std::string ace_host = AceMmuProvider::resolve_connected_host();
+    if (ace_host.empty()) {
+        BOOST_LOG_TRIVIAL(info) << "sync_printer_info: no host to read the multiACE state from";
+    } else {
+        // Short timeouts, because this blocks the GUI thread: a machine that answered the webview
+        // may still have its multiACE service off, and the press must not hang on it.
+        AceMmuProvider prov(ace_host);
+        if (prov.fetch_once(2, 4)) {
+            p->m_ace_snapshot = prov.snapshot();
+            p->m_ace_read     = true;
+            BOOST_LOG_TRIVIAL(info) << "sync_printer_info: multiACE state read from " << ace_host
+                                    << "; mode=" << p->m_ace_snapshot.mode
+                                    << " device_count=" << p->m_ace_snapshot.device_count;
+        }
+    }
+
     if (got_machine_info && machine_type == "Snapmaker U1")
     {
         if (nozzle_diameters.size() <= 0)
@@ -9185,6 +9288,11 @@ void Sidebar::sync_printer_info()
                             wxGetApp().get_tab(Preset::TYPE_PRINTER)->select_preset(preset->name);
                             wxGetApp().plater()->sidebar().update_all_preset_comboboxes(true);
                             wxGetApp().plater()->sidebar().update_nozzle_settings(true);
+
+                            // After the preset switch, never before: the ACE keys belong to the
+                            // preset being switched to, and writing them first would follow the
+                            // old one out.
+                            wxTheApp->CallAfter([this]() { finish_printer_sync(); });
                         }
                     }
                 }
@@ -9214,14 +9322,160 @@ void Sidebar::sync_printer_info()
                 wxGetApp().plater()->sidebar().update_all_preset_comboboxes(true);
                 wxGetApp().plater()->sidebar().update_nozzle_settings(true);
 
-                wxTheApp->CallAfter([this]() {
-                    MessageDialog dlg_Ex(wxGetApp().mainframe, _L("Nozzle settings synchronized successfully"),
-                                         _L("Note"), wxOK);
-                    dlg_Ex.ShowModal();
-                });
+                wxTheApp->CallAfter([this]() { finish_printer_sync(); });
             });
         }
     }
+    else if (p->m_ace_read) {
+        // The bridge did not name a U1 - it may not have connected at all - but the machine's own
+        // multiACE service answered, so the half of the press that does not need the bridge still
+        // runs rather than the card doing nothing.
+        wxTheApp->CallAfter([this]() { finish_printer_sync(); });
+    }
+    else {
+        // Neither read worked. Pressing a card and getting nothing back is the one outcome that
+        // reads as a broken button, so say which half failed.
+        wxTheApp->CallAfter([this]() {
+            MessageDialog dlg(wxGetApp().mainframe,
+                              _L("Nothing could be read from the printer.\n\n"
+                                 "Check that it is switched on and on the same network. Nozzle sizes and "
+                                 "filaments also need it connected from the home page or the Device page."),
+                              _L("Sync info"), wxOK);
+            dlg.ShowModal();
+        });
+    }
+}
+
+// The second half of one press. The nozzle half has finished - possibly by switching the printer
+// preset - so the ACE mode and wiring read from the machine go into whichever preset is now
+// selected, and the press ends by offering the filament sync rather than stopping at an OK.
+//
+// The machine is authoritative: SET_ACE_MODE and ACE_SET_HEAD_ACE persist the wiring there, and
+// the preset is a cache that lets slicing work with the printer switched off. So divergence is
+// resolved towards the machine, and named line by line rather than corrected quietly - a wrong
+// unit here becomes a wrong ACE= argument in the gcode.
+void Sidebar::finish_printer_sync()
+{
+    wxString changes;
+
+    if (p->m_ace_read) {
+        auto&                printers = wxGetApp().preset_bundle->printers;
+        const DynamicConfig& cfg      = printers.get_edited_preset().config;
+
+        const auto*  nozzle_diameter = cfg.option<ConfigOptionFloats>("nozzle_diameter");
+        const size_t head_count      = nozzle_diameter ? nozzle_diameter->values.size() : 0;
+        const AceMmu::AceTopology topo       = AceMmu::ace_topology_of(p->m_ace_snapshot, head_count);
+
+        const auto*   ace_mode_opt = cfg.option<ConfigOptionEnum<AceMode>>("ace_mode");
+        const AceMode was_mode     = ace_mode_opt ? AceMode(ace_mode_opt->value) : amNormal;
+        if (was_mode != topo.mode) {
+            const ConfigOptionDef* def = print_config_def.get("ace_mode");
+            const auto label = [def](AceMode m) {
+                return def && size_t(m) < def->enum_labels.size() ? _L(def->enum_labels[m]) : wxString();
+            };
+            changes += wxString::Format(_L("  ACE mode: %s -> %s\n"), label(was_mode), label(topo.mode));
+        }
+
+        const auto* head_unit = cfg.option<ConfigOptionInts>("ace_head_unit");
+        const auto* head_cap  = cfg.option<ConfigOptionInts>("ace_head_capacity");
+        for (size_t h = 0; h < head_count; ++h) {
+            const int was_cap  = (head_cap && h < head_cap->values.size()) ? head_cap->values[h] : 1;
+            const int was_unit = (head_unit && h < head_unit->values.size()) ? head_unit->values[h] : -1;
+            if (was_cap != topo.cap[h] || (topo.cap[h] > 1 && was_unit != topo.unit[h]))
+                changes += wxString::Format(_L("  Toolhead %d: %s -> %s\n"), int(h) + 1,
+                                            ace_wiring_label(was_unit, was_cap),
+                                            ace_wiring_label(topo.unit[h], topo.cap[h]));
+        }
+
+        if (!changes.IsEmpty()) {
+            // Written through the edited preset the ACE mode combo already writes to - that is the
+            // same object the printer Tab holds as m_config - then the Tab is told to reread it, so
+            // the Multimaterial page and the dirty markers do not keep the old values on screen.
+            DynamicConfig& edited = printers.get_edited_preset().config;
+            edited.set_key_value("ace_mode", new ConfigOptionEnum<AceMode>(topo.mode));
+            edited.set_key_value("ace_head_unit", new ConfigOptionInts(topo.unit));
+            edited.set_key_value("ace_head_capacity", new ConfigOptionInts(topo.cap));
+            if (Tab* tab = wxGetApp().get_tab(Preset::TYPE_PRINTER)) {
+                tab->reload_config();
+                tab->update_dirty();
+            }
+        }
+    }
+
+    // Repaint with what was just read: the ACE rows, and the corner ticks that are now a diff
+    // against a machine this panel has actually spoken to.
+    update_nozzle_settings();
+
+    // Say which halves ran. Both can fail independently - the nozzles come over the webview
+    // bridge, the ACE state over the machine's own HTTP service - and a message claiming the one
+    // that did not is what makes an absent corner tick look like a bug rather than an answer.
+    wxString msg;
+    if (p->m_ace_read && p->m_machine_read)
+        msg = _L("Successfully synchronized nozzle, ACE mode and ACE unit information.");
+    else if (p->m_ace_read)
+        msg = _L("Synchronized the ACE mode and ACE unit information.") + "\n\n" +
+              _L("The nozzle sizes could not be read: the printer is not connected on the Device page.");
+    else
+        msg = _L("Nozzle settings synchronized successfully.") + "\n\n" +
+              _L("The printer's multiACE service did not answer, so the ACE mode and wiring were "
+                 "left as they are.");
+
+    if (p->m_ace_read)
+        msg += "\n\n" + (changes.IsEmpty() ? _L("The preset already matched the printer's ACE wiring.")
+                                            : _L("Read from the printer:") + "\n" + changes);
+
+    // RichMessageDialog, not MessageDialog: only the rich one carries SetYesNoLabels, and the
+    // step has to name what it continues to rather than offering a bare Yes.
+    RichMessageDialog dlg(wxGetApp().mainframe, msg, _L("Sync info"), wxYES_NO);
+    dlg.SetYesNoLabels(_L("Continue to sync filaments"), _L("Cancel"));
+    if (dlg.ShowModal() == wxID_YES)
+        show_sync_filament_dialog();
+}
+
+// The assign popover. Its two kinds of row write exactly `ace_head_unit` and `ace_head_capacity`,
+// which is all "which ACE feeds this toolhead" is in the preset - and the printer is not told:
+// the machine is authoritative for its own wiring, so this records what the user believes it to be
+// and Sync info is what reconciles the two.
+void Sidebar::show_ace_assign_popup(size_t head_idx, wxWindow* anchor)
+{
+    auto&                printers = wxGetApp().preset_bundle->printers;
+    const DynamicConfig& cfg      = printers.get_edited_preset().config;
+
+    const auto* nozzle_diameter = cfg.option<ConfigOptionFloats>("nozzle_diameter");
+    const size_t head_count     = nozzle_diameter ? nozzle_diameter->values.size() : 0;
+    if (head_idx >= head_count)
+        return;
+
+    // Read into full-length vectors first: a preset that has never been told about ACE carries the
+    // one-element default, and writing a short vector back would leave three heads unaddressable.
+    std::vector<int> units(head_count, -1), caps(head_count, 1);
+    if (const auto* opt = cfg.option<ConfigOptionInts>("ace_head_unit"))
+        for (size_t h = 0; h < head_count && h < opt->values.size(); ++h)
+            units[h] = opt->values[h];
+    if (const auto* opt = cfg.option<ConfigOptionInts>("ace_head_capacity"))
+        for (size_t h = 0; h < head_count && h < opt->values.size(); ++h)
+            caps[h] = opt->values[h];
+
+    // Parented to the sidebar, not to the head box: choosing rebuilds the head boxes, and a popup
+    // whose parent is destroyed under it takes the app with it.
+    auto* popup = new AceAssignPopup(this, head_idx, units, caps, p->m_ace_snapshot, p->m_ace_read);
+    popup->on_choice([this, head_idx, units, caps](int unit, int cap) mutable {
+        if (units[head_idx] == unit && caps[head_idx] == cap)
+            return; // nothing moved; leave the preset clean rather than marking it dirty
+        units[head_idx] = unit;
+        caps[head_idx]  = cap;
+
+        DynamicConfig& edited = wxGetApp().preset_bundle->printers.get_edited_preset().config;
+        edited.set_key_value("ace_head_unit", new ConfigOptionInts(units));
+        edited.set_key_value("ace_head_capacity", new ConfigOptionInts(caps));
+        if (Tab* tab = wxGetApp().get_tab(Preset::TYPE_PRINTER)) {
+            tab->reload_config();
+            tab->update_dirty();
+        }
+        // After the popup has finished dismissing itself: this rebuilds the box the click came from.
+        CallAfter([this]() { update_nozzle_settings(); });
+    });
+    popup->popup_at(anchor);
 }
 
 void Sidebar::update_nozzle_settings(bool switch_machine)
@@ -9262,6 +9516,26 @@ void Sidebar::update_nozzle_settings(bool switch_machine)
         }
     }
 
+    // The corner ticks, computed only from what Sync info actually read. A machine nobody has
+    // spoken to gets no marks at all - the absence is the honest answer, not a defect.
+    if (p->panel_printer_preset) {
+        // The card agrees when the selected preset is the machine's own model at the nozzle size
+        // every head reports. A mixed set never agrees: the preset cannot hold one.
+        bool printer_agrees = p->m_machine_read && printer_model &&
+                              boost::iequals(printer_model->value, p->m_machine_model) &&
+                              !p->m_machine_nozzles.empty();
+        if (printer_agrees) {
+            const auto* pv = cfg.option<ConfigOptionString>("printer_variant");
+            for (const std::string& nd : p->m_machine_nozzles)
+                if (!pv || nd != pv->value) {
+                    printer_agrees = false;
+                    break;
+                }
+        }
+        p->panel_printer_preset->SetSynced(printer_agrees);
+    }
+    const AceMmu::AceTopology machine_topo = p->m_ace_read ? AceMmu::ace_topology_of(p->m_ace_snapshot, head_count) : AceMmu::AceTopology();
+
     p->m_heads_sizer->Clear(true);
     p->m_nozzle_diameter_lists.clear();
     p->m_nozzle_edit_btns.clear();
@@ -9273,9 +9547,12 @@ void Sidebar::update_nozzle_settings(bool switch_machine)
                            std::pair<wxColour, int>(wxColour(0xEEEEEE), StateColor::Normal));
 
     for (size_t i = 0; i < head_count; i++) {
-        StaticBox* head_box = new StaticBox(p->m_panel_heads);
+        SyncMarkBox* head_box = new SyncMarkBox(p->m_panel_heads);
         head_box->SetCornerRadius(8);
         head_box->SetBorderColor(head_bd_col);
+        // Marked when this head's wiring is what the printer last reported. Only a U1 has wiring
+        // to be right about; every other machine's boxes hold a diameter and nothing to check.
+        head_box->SetSynced(is_snapmaker_u1 && p->m_ace_read && AceMmu::ace_head_agrees(cfg, machine_topo, i));
 
         wxString head_name;
         if (is_snapmaker_u1)
@@ -9298,21 +9575,48 @@ void Sidebar::update_nozzle_settings(bool switch_machine)
         // assign popover, which arrives with the ACE row's live contents. In Normal mode no head
         // is wired to anything, so the row says so rather than showing a stale unit.
         if (is_snapmaker_u1) {
-            const int unit = (head_unit && i < head_unit->values.size()) ? head_unit->values[i] : -1;
-            const int cap  = (head_cap && i < head_cap->values.size()) ? head_cap->values[i] : 1;
-
-            wxString fed_by = _L("Stock feeder");
-            if (ace_mode != amNormal && unit >= 0)
-                fed_by = wxString::Format(_L("ACE %d"), unit + 1) +
-                         (cap > 1 ? wxString::Format(" · %d", cap) + " " + _L("slots") : wxString());
+            const int  unit  = (head_unit && i < head_unit->values.size()) ? head_unit->values[i] : -1;
+            const int  cap   = (head_cap && i < head_cap->values.size()) ? head_cap->values[i] : 1;
+            const bool wired = ace_mode != amNormal && unit >= 0 && cap > 1;
 
             auto* ace_key = new Label(head_box, Label::Body_12, _L("ACE"));
             ace_key->SetForegroundColour(row_label_colour);
-            auto* ace_val = new Label(head_box, Label::Body_12, fed_by);
-            ace_val->SetForegroundColour(ace_mode == amNormal ? wxColour(0x9A, 0x9A, 0x9A) : wxColour(0x4A, 0x52, 0x58));
+            ace_key->SetMinSize(wxSize(FromDIP(34), -1));
+
+            // One adjust button per head, in the same place whether a badge or the words Stock
+            // feeder follow it, so it can be found without reading the row first. Disabled in
+            // Normal mode, where no head is wired to anything and the choice would mean nothing.
+            auto* ace_edit = new ScalableButton(head_box, wxID_ANY, "edit", wxEmptyString, wxDefaultSize,
+                                                wxDefaultPosition, wxBU_EXACTFIT | wxNO_BORDER, false, 14);
+            ace_edit->SetToolTip(_L("Which ACE feeds this toolhead"));
+            ace_edit->SetCursor(wxCURSOR_HAND);
+            ace_edit->Enable(ace_mode != amNormal);
+            ace_edit->Bind(wxEVT_BUTTON, [this, i, ace_edit](wxCommandEvent&) { show_ace_assign_popup(i, ace_edit); });
+
+            // The badge carries the unit's own slot colours when the panel has read the machine,
+            // and the disabled greys when it has not - four empty bays would be a claim.
+            wxWindow* ace_val = nullptr;
+            if (wired) {
+                auto* badge = new AceBadge(head_box, 22);
+                const AceMmu::AceUnit* live = p->m_ace_read ? p->m_ace_snapshot.find_unit(unit) : nullptr;
+                if (live)
+                    badge->SetUnit(*live);
+                else
+                    badge->SetUnknown();
+                badge->SetToolTip(wxString::Format(_L("ACE %d"), unit + 1) + " " + ace_sep() + " " +
+                                  wxString::Format("%d ", cap) + _L("slots"));
+                badge->SetCursor(wxCURSOR_HAND);
+                badge->Bind(wxEVT_LEFT_UP, [this, i, ace_edit](wxMouseEvent&) { show_ace_assign_popup(i, ace_edit); });
+                ace_val = badge;
+            } else {
+                auto* txt = new Label(head_box, Label::Body_12, _L("Stock feeder"));
+                txt->SetForegroundColour(ace_mode == amNormal ? wxColour(0x9A, 0x9A, 0x9A) : wxColour(0x4A, 0x52, 0x58));
+                ace_val = txt;
+            }
 
             wxBoxSizer* ace_row = new wxBoxSizer(wxHORIZONTAL);
             ace_row->Add(ace_key, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(8));
+            ace_row->Add(ace_edit, 0, wxALIGN_CENTER_VERTICAL);
             ace_row->AddStretchSpacer();
             ace_row->Add(ace_val, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
             box_sizer->Add(ace_row, 0, wxEXPAND | wxTOP, FromDIP(4));
