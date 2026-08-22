@@ -577,7 +577,7 @@ wxDEFINE_EVENT(EVT_DEL_FILAMENT, SimpleEvent);
 wxDEFINE_EVENT(EVT_ADD_CUSTOM_FILAMENT, ColorEvent);
 
 
-#define PRINTER_THUMBNAIL_SIZE (wxSize(FromDIP(60), FromDIP(60)))
+#define PRINTER_THUMBNAIL_SIZE (wxSize(FromDIP(68), FromDIP(68)))
 #define PRINTER_THUMBNAIL_SIZE_SMALL (wxSize(FromDIP(32), FromDIP(32)))
 #define PRINTER_PANEL_SIZE_SMALL (wxSize(FromDIP(98), FromDIP(68)))
 #define PRINTER_PANEL_SIZE_WIDEN (wxSize(FromDIP(136), FromDIP(68)))
@@ -587,7 +587,7 @@ wxDEFINE_EVENT(EVT_ADD_CUSTOM_FILAMENT, ColorEvent);
 // Doc 17 measured the plate against a 44x40 slot; the card has room for more than that, and the
 // notches are what the silhouette exists to carry, so they get the pixels. The drawing still
 // letterboxes - the plate is taller than wide, and squashing it would change those proportions.
-#define PLATE_SWATCH_SIZE (wxSize(FromDIP(64), FromDIP(58)))
+#define PLATE_SWATCH_SIZE (wxSize(FromDIP(80), FromDIP(72)))
 
 // Nozzle diameter selection when multiple diameters are reported (e.g. U1 sync).
 // diameters_raw: list from device (may have duplicates or fewer than 4). Dedup and full-list logic inside.
@@ -825,6 +825,7 @@ static void append_ace_filament_list(std::vector<FilamentData>& out_list,
                 label += kSep + fd.m_type;
         } else if (!th->filament_detected) {
             label += kSep + "empty";
+            fd.m_disabled = true; // nothing loaded: not a source, the way an empty slot is not
         } else if (th->manual) {
             label += kSep + th->material + kSep + "manual";
         } else if (!th->feeder) {
@@ -2149,7 +2150,7 @@ Sidebar::Sidebar(Plater *parent)
         combo_printer->SetWindowStyle(combo_printer->GetWindowStyle() & ~wxALIGN_MASK | wxALIGN_LEFT);
         combo_printer->SetBorderWidth(0);
 
-        ScalableBitmap bitmap_printer(p->panel_printer_preset, "printer_placeholder", 60);
+        ScalableBitmap bitmap_printer(p->panel_printer_preset, "printer_placeholder", 68);
         p->image_printer = new wxStaticBitmap(p->panel_printer_preset, wxID_ANY, bitmap_printer.bmp(), wxDefaultPosition,
                                                                  PRINTER_THUMBNAIL_SIZE, 0);
         p->image_printer->Bind(wxEVT_LEFT_DOWN, [this](auto& evt) { p->combo_printer->wxEvtHandler::ProcessEvent(evt); });
@@ -2194,7 +2195,7 @@ Sidebar::Sidebar(Plater *parent)
         // The thumbnail takes the air rather than the gap under it: a card that is a picture of
         // the machine should be mostly machine. Stretch spacers above and below centre what is
         // left over instead of pooling it all beneath the image.
-        vsizer_preset->AddSpacer(FromDIP(4));
+        vsizer_preset->AddSpacer(FromDIP(2));
         vsizer_preset->AddStretchSpacer();
         vsizer_preset->Add(p->image_printer, 0, wxALIGN_CENTER_HORIZONTAL);
         vsizer_preset->AddStretchSpacer();
@@ -2224,6 +2225,7 @@ Sidebar::Sidebar(Plater *parent)
         // A texture that says smooth-vs-grained is all the card needs to say at this size.
         p->m_plate_swatch = new wxPanel(p->panel_plate_preset, wxID_ANY, wxDefaultPosition, PLATE_SWATCH_SIZE);
         wxPanel* plate_swatch = p->m_plate_swatch;
+        plate_swatch->SetMinSize(wxSize(-1, FromDIP(40)));
         plate_swatch->SetBackgroundStyle(wxBG_STYLE_PAINT);
         plate_swatch->SetCursor(wxCURSOR_HAND);
         plate_swatch->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent& evt) {
@@ -2236,10 +2238,23 @@ Sidebar::Sidebar(Plater *parent)
             // Read the bed type itself, never the combo's index: a U1 is offered a different and
             // shorter list (enum_values_u1) than every other printer, so position means nothing.
             const BedType bt = wxGetApp().preset_bundle->project_config.opt_enum<BedType>("curr_bed_type");
-            const wxBitmap bmp = plate_bitmap(plate_swatch, bt, 58);
+            wxBitmap bmp = plate_bitmap(plate_swatch, bt, 76);
             if (!bmp.IsOk())
                 return;
             const wxRect r = plate_swatch->GetClientRect();
+            if (r.width <= 0 || r.height <= 0)
+                return;
+            // Fitted to the panel rather than drawn at the size that was asked for. The height the
+            // swatch actually gets is whatever the card has left after the combo and the margins,
+            // and hard-coding a number larger than that is what clipped the plate top and bottom -
+            // DrawBitmap centres, so an oversized drawing loses both ends at once.
+            if (bmp.GetWidth() > r.width || bmp.GetHeight() > r.height) {
+                const double k = std::min(double(r.width) / bmp.GetWidth(), double(r.height) / bmp.GetHeight());
+                wxImage img = bmp.ConvertToImage();
+                img.Rescale(std::max(1, int(bmp.GetWidth() * k)), std::max(1, int(bmp.GetHeight() * k)),
+                            wxIMAGE_QUALITY_HIGH);
+                bmp = wxBitmap(img);
+            }
             dc.DrawBitmap(bmp, r.x + (r.width - bmp.GetWidth()) / 2,
                               r.y + (r.height - bmp.GetHeight()) / 2, true);
         });
@@ -2280,17 +2295,26 @@ Sidebar::Sidebar(Plater *parent)
         m_bed_type_list->Select(bed_type_idx);
         refresh_plate_card();
 
-        // The glyph gets the corner to itself, so the plate can sit centred in the card rather
-        // than pushed off-centre by whatever shares its row.
+        // The glyph is positioned, not laid out. As a sizer row it took about a fifth of a 106px
+        // card to show a 14px button, and that height is the plate's - the card exists to be a
+        // picture of a plate. Overlaid it keeps the same corner and costs nothing. Repositioned on
+        // size because the card's width is not known until it has been laid out, and raised so the
+        // larger swatch cannot come out on top of it.
+        plate_info_btn->Raise();
+        p->panel_plate_preset->Bind(wxEVT_SIZE, [plate_info_btn](wxSizeEvent& evt) {
+            evt.Skip();
+            const wxSize card = evt.GetSize();
+            const wxSize btn  = plate_info_btn->GetSize();
+            plate_info_btn->Move(card.x - btn.x - plate_info_btn->FromDIP(4), plate_info_btn->FromDIP(4));
+        });
+
+        // No stretch spacers around the swatch: they carry proportion 1 as well, so the leftover
+        // height was being split three ways and the drawing got a third of what the card had.
+        // The swatch takes all of it and the drawing centres itself inside.
         wxBoxSizer* vsizer_plate = new wxBoxSizer(wxVERTICAL);
-        wxBoxSizer* hsizer_plate_info = new wxBoxSizer(wxHORIZONTAL);
-        hsizer_plate_info->AddStretchSpacer();
-        hsizer_plate_info->Add(plate_info_btn, 0, wxRIGHT, FromDIP(3));
+        vsizer_plate->AddSpacer(FromDIP(5));
+        vsizer_plate->Add(plate_swatch, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(4));
         vsizer_plate->AddSpacer(FromDIP(2));
-        vsizer_plate->Add(hsizer_plate_info, 0, wxEXPAND);
-        vsizer_plate->AddStretchSpacer();
-        vsizer_plate->Add(plate_swatch, 0, wxALIGN_CENTER_HORIZONTAL);
-        vsizer_plate->AddStretchSpacer();
         vsizer_plate->Add(m_bed_type_list, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(4));
         p->panel_plate_preset->SetSizer(vsizer_plate);
 
@@ -9197,7 +9221,10 @@ void Sidebar::show_sync_filament_dialog()
     dlg.setMixedFilamentInfos(mixedInfos);
     {
         if (wxGetApp().plater()->model().objects.empty()) {
-            dlg.setOverwriteMode();
+            // Nothing on the plate: no object references a filament index, so the project can take
+            // the machine's whole inventory rather than the count it happened to be carrying. With
+            // objects present the mapping dialog opens instead, unchanged.
+            dlg.setOverwriteMode(/*whole_machine=*/true);
         } else {
             dlg.CentreOnScreen();
             if (dlg.ShowModal() != wxID_OK)
@@ -10044,17 +10071,17 @@ void Sidebar::update_printer_thumbnail()
     std::string printer_type    = selected_preset.get_current_printer_type(preset_bundle);
 
     try {
-        p->image_printer->SetBitmap(create_scaled_bitmap(png_name, this, 60));
+        p->image_printer->SetBitmap(create_scaled_bitmap(png_name, this, 68));
     }
     catch (std::exception& e) {
-        p->image_printer->SetBitmap(create_scaled_bitmap("printer_placeholder", this, 60));
+        p->image_printer->SetBitmap(create_scaled_bitmap("printer_placeholder", this, 68));
     }
     
 
     /*if (printer_thumbnails.find(printer_type) != printer_thumbnails.end())
         p->image_printer->SetBitmap(create_scaled_bitmap(, this, 48));
     else
-        p->image_printer->SetBitmap(create_scaled_bitmap("printer_placeholder", this, 60));*/
+        p->image_printer->SetBitmap(create_scaled_bitmap("printer_placeholder", this, 68));*/
 }
 
 void Sidebar::auto_calc_flushing_volumes(const int modify_id)
