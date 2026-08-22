@@ -1,0 +1,959 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The U1 printer panel</title>
+<style>
+  /* Doc tokens from resources/web/aceplan/index.html; UI tokens from the Orca sidebar
+     itself (StateColor 0x00AE42, title bar #F1F1F1) so the panel reads as the real thing. */
+  :root{
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --page:#e6e7e9; --panel:#ffffff; --hbar:#eef0f1; --hbar-line:#e2e4e6;
+    --line:#e4e6e8; --line-soft:#eef0f1; --inset:#f4f5f6;
+    --text:#2f3336; --dim:#7d868d; --faint:#a7aeb4;
+    --teal:#14b8a6; --teal-ink:#fff; --teal-soft:rgba(20,184,166,.12);
+    --blue:#4a90d9; --blue-soft:rgba(74,144,217,.12);
+    --warn:#e2953a; --warn-soft:rgba(226,149,58,.14);
+    --bad:#d0574e; --bad-soft:rgba(208,87,78,.13);
+    --empty:#e7e9eb;
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 26px -18px rgba(16,24,32,.4);
+    /* Orca sidebar chrome — light only; the panel is drawn as the app draws it */
+    --sb-panel:#ffffff; --sb-title:#f1f1f1; --sb-line:#e3e5e6; --sb-field-line:#dcdfe1;
+    --sb-text:#26292c; --sb-dim:#7a8288; --sb-label:#7d8b96; --sb-inset:#f6f7f8;
+    --ace-hood:#e8e8e8; --ace-base:#cfcfcf; --ace-bay:#ffffff;
+    --orca:#00ae42;
+    --view:#dfe1e3; --toast:#2b2f33; --toast-ink:#f1f3f4;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --page:#0f1215; --panel:#181c20; --hbar:#1f242a; --hbar-line:#262c32; --line:#272d33;
+      --line-soft:#20262b; --inset:#1e242a;
+      --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d;
+      --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+      --blue:#5aa0e6; --blue-soft:rgba(90,160,230,.16);
+      --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+      --bad:#e0736a; --bad-soft:rgba(224,115,106,.16);
+      --empty:#232a30;
+      --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+      --sb-panel:#23282c; --sb-title:#2d3338; --sb-line:#383f45; --sb-field-line:#3d454b;
+      --sb-text:#e6eaed; --sb-dim:#98a1a8; --sb-label:#8fa0ac; --sb-inset:#1f2428;
+      --ace-hood:#3d444a; --ace-base:#2f353a; --ace-bay:#59616a;
+      --orca:#00c24b;
+      --view:#15191c; --toast:#31363b; --toast-ink:#f1f3f4;
+    }
+  }
+  :root[data-theme="dark"]{
+    --page:#0f1215; --panel:#181c20; --hbar:#1f242a; --hbar-line:#262c32; --line:#272d33;
+    --line-soft:#20262b; --inset:#1e242a;
+    --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d;
+    --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+    --blue:#5aa0e6; --blue-soft:rgba(90,160,230,.16);
+    --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+    --bad:#e0736a; --bad-soft:rgba(224,115,106,.16);
+    --empty:#232a30;
+    --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+    --sb-panel:#23282c; --sb-title:#2d3338; --sb-line:#383f45; --sb-field-line:#3d454b;
+    --sb-text:#e6eaed; --sb-dim:#98a1a8; --sb-label:#8fa0ac; --sb-inset:#1f2428;
+    --ace-hood:#3d444a; --ace-base:#2f353a; --ace-bay:#59616a;
+      --orca:#00c24b;
+    --view:#15191c; --toast:#31363b; --toast-ink:#f1f3f4;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{font-family:var(--font-sans);color:var(--text);background:var(--page);font-size:14px;line-height:1.45;
+       -webkit-font-smoothing:antialiased;padding:30px 14px 70px;}
+  .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+  code{font-family:var(--font-mono);font-size:12px;background:var(--panel);border:1px solid var(--line);
+       border-radius:4px;padding:1px 5px;}
+
+  .col{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:34px;}
+
+  .lede h1{margin:0 0 6px;font-size:23px;font-weight:700;letter-spacing:-.015em;text-wrap:balance;}
+  .lede p{margin:0;color:var(--dim);font-size:13.5px;max-width:68ch;}
+  .lede p + p{margin-top:9px;}
+  .lede b{color:var(--text);font-weight:600;}
+
+  .eyebrow{display:flex;align-items:baseline;gap:10px;font-size:10.5px;font-weight:800;letter-spacing:.11em;
+           text-transform:uppercase;color:var(--dim);margin-bottom:11px;}
+  .eyebrow .k{color:var(--teal);}
+  .case{display:flex;flex-direction:column;}
+
+  /* ---------- interactive stage: sidebar + a stand-in 3D view ---------- */
+  .stage{display:flex;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;
+         box-shadow:var(--shadow);background:var(--sb-panel);}
+  .stage .view{flex:1 1 320px;min-width:260px;background:var(--view);position:relative;min-height:625px;
+               display:grid;place-items:center;padding:16px;}
+  .stage .view .plate{width:78%;max-width:300px;aspect-ratio:5/4;border-radius:10px;
+        background:linear-gradient(160deg,#3a4045,#22272b);border:1px solid rgba(0,0,0,.25);
+        display:grid;place-items:center;color:#7d868d;font-size:11px;letter-spacing:.14em;text-transform:uppercase;}
+
+  /* ---------- the sidebar panel ---------- */
+  .sb{flex:0 0 462px;max-width:100%;background:var(--sb-panel);border-right:1px solid var(--sb-line);
+      color:var(--sb-text);font-size:13px;position:relative;}
+  .sb .tbar{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--sb-title);
+            border-bottom:1px solid var(--sb-line);}
+  .sb .tbar .ti{font-size:13px;}
+  .sb .tbar .sp{margin-left:auto;}
+  .sb .body{padding:10px;display:flex;flex-direction:column;gap:9px;}
+  .nextsec{display:flex;align-items:center;gap:8px;margin:6px -10px -10px;padding:8px 12px;
+           background:var(--sb-title);border-top:1px solid var(--sb-line);color:var(--sb-dim);font-size:13px;}
+  .nextsec .rt{margin-left:auto;}
+
+  .ic{display:inline-grid;place-items:center;color:var(--sb-dim);font-size:12.5px;line-height:1;}
+  .btn-ic{cursor:pointer;border:0;background:transparent;padding:2px;font:inherit;color:var(--sb-dim);}
+  .btn-ic:hover{color:var(--sb-text);}
+  .btn-ic:focus-visible{outline:2px solid var(--blue);outline-offset:1px;border-radius:4px;}
+
+  /* top row: printer card, plate card, sync card — Bambu's three-up */
+  .cards{display:flex;gap:7px;align-items:stretch;}
+  .card{position:relative;border:1px solid var(--sb-field-line);border-radius:8px;background:var(--sb-panel);
+        display:flex;flex-direction:column;overflow:hidden;}
+  .card.printer{flex:1 1 auto;min-width:0;}
+  .card.plate{flex:0 0 92px;}
+  .card.sync{flex:0 0 96px;align-items:center;justify-content:center;gap:6px;padding:10px 6px;cursor:pointer;
+             background:var(--sb-inset);}
+  .card.sync:hover{border-color:var(--orca);}
+  .card.sync:focus-visible{outline:2px solid var(--blue);outline-offset:-2px;}
+  .card .top{flex:1;display:grid;place-items:center;padding:9px 8px 5px;min-height:56px;}
+  .card .foot{display:flex;align-items:center;gap:5px;padding:5px 8px 7px;font-size:12px;min-width:0;}
+  .card .foot .v{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .card .info{position:absolute;top:4px;right:5px;font-size:11px;color:var(--sb-dim);}
+  .card .sy{font-size:19px;color:var(--sb-dim);line-height:1;}
+  .card .sl{font-size:12px;color:var(--sb-text);}
+
+  .thumb{width:44px;height:40px;border-radius:5px;background:linear-gradient(160deg,#5c646b,#23282c);
+         display:grid;place-items:center;color:#c9d1d7;font-size:8.5px;font-weight:700;letter-spacing:.05em;}
+  .bedthumb{width:44px;height:40px;border-radius:5px;
+            background:repeating-conic-gradient(#c8a86a 0% 25%, #b89a5c 0% 50%) 0/6px 6px;}
+
+  /* the green corner tick, as Bambu marks a card that matches the machine */
+  .corner{position:absolute;top:0;right:0;width:0;height:0;border-top:17px solid var(--orca);
+          border-left:17px solid transparent;}
+  .corner::after{content:"\2713";position:absolute;top:-16px;right:1px;font-size:9px;line-height:1;color:#fff;}
+
+  /* per-head boxes — Bambu's Left/Right Nozzle panes, wrapped to 2x2 */
+  .heads{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+  .hbox{position:relative;border:1px solid var(--sb-field-line);border-radius:8px;padding:7px 9px 9px;
+        display:flex;flex-direction:column;gap:6px;background:var(--sb-panel);}
+  .hbox .hl{font-size:12px;color:var(--sb-label);font-weight:600;padding-right:18px;}
+  .hbox .r{display:flex;align-items:center;gap:8px;min-height:26px;}
+  .hbox .r .k{flex:0 0 auto;width:58px;font-size:12px;color:var(--sb-text);}
+  .hbox .r .c{flex:1;min-width:0;display:flex;align-items:center;gap:6px;border:1px solid var(--sb-field-line);
+              border-radius:5px;padding:4px 7px;font-size:12px;background:var(--sb-panel);}
+  .hbox .r .c .v{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .hbox .r .rt{margin-left:auto;display:flex;align-items:center;gap:5px;}
+  .hbox .r .adj{font-size:11px;border:1px solid transparent;border-radius:4px;padding:2px 4px;line-height:1;}
+  .hbox .r .adj:hover{border-color:var(--sb-field-line);color:var(--sb-text);}
+  .hbox .r .fdtxt{font-size:11.5px;color:var(--sb-dim);}
+
+  /* the little ACE widget in the head box, mirroring Bambu's AMS thumbnail */
+  /* The ACE badge, to the visual standard: 40x26, hood + four bays + base.
+     See docs/ace-mmu/ace-visual-standard.html. */
+  .acetag{appearance:none;border:0;background:transparent;padding:2px;border-radius:5px;cursor:pointer;
+          line-height:0;display:inline-flex;}
+  .acetag:hover{background:var(--sb-inset);}
+  .acetag:focus-visible{outline:2px solid var(--blue);outline-offset:1px;}
+  .acetag svg{display:block;}
+
+  /* the popover — Bambu's "Set the number of AMS installed on the nozzle." */
+  .pop{position:absolute;z-index:8;left:9px;right:9px;background:var(--sb-panel);border:1px solid var(--sb-field-line);
+       border-radius:9px;box-shadow:0 12px 34px -10px rgba(0,0,0,.35);padding:12px 13px;}
+  .pop h5{margin:0 0 10px;font-size:12.5px;font-weight:500;color:var(--sb-label);line-height:1.35;}
+  .pop .list{background:var(--sb-inset);border-radius:7px;padding:5px;display:flex;flex-direction:column;gap:4px;}
+  .pop .li{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:5px;}
+  .pop .li .ub{flex:0 0 auto;line-height:0;color:var(--sb-dim);}
+  .pop .li .ub svg{display:block;}
+  .pop .li .nm{flex:1;font-size:12.5px;}
+  .pop .li.pickrow{cursor:pointer;border:1px solid transparent;}
+  .pop .li.pickrow:hover{background:var(--sb-panel);border-color:var(--sb-field-line);}
+  .pop .li.pickrow.on{background:var(--sb-panel);border-color:var(--orca);}
+  .pop .li .nm{display:flex;flex-direction:column;gap:1px;}
+  .pop .li .nm .sub{font-size:10.5px;color:var(--sb-dim);line-height:1.3;}
+  .pop .tick{flex:0 0 auto;width:19px;height:19px;border-radius:50%;display:grid;place-items:center;
+             border:1.5px solid var(--sb-field-line);color:transparent;font-size:10px;}
+  .pop .tick.on{background:var(--orca);border-color:var(--orca);color:#fff;}
+
+  .sb .combo.pick{cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%;}
+  .sb .combo.pick:hover{border-color:var(--orca);}
+  .sb .combo.pick:focus-visible{outline:2px solid var(--blue);outline-offset:1px;}
+  .sb .hintline{margin:-4px 0 0 68px;font-size:10.5px;color:var(--sb-dim);line-height:1.3;}
+  .pop .note{margin:9px 0 0;font-size:11.5px;color:var(--warn);line-height:1.4;}
+  .pop .close{position:absolute;top:7px;right:9px;}
+
+  /* the toast, anchored over the view as Bambu anchors it */
+  .toast{position:absolute;right:18px;top:104px;max-width:330px;background:var(--toast);color:var(--toast-ink);
+         border-radius:9px;padding:14px 15px;box-shadow:0 18px 40px -14px rgba(0,0,0,.6);
+         display:flex;flex-direction:column;gap:12px;}
+  .toast .msg{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;line-height:1.45;}
+  .toast .mk{flex:0 0 auto;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;
+             font-size:10px;color:#fff;margin-top:1px;}
+  .toast .mk.ok{background:var(--orca);}
+  .toast .mk.no{background:#d0574e;}
+  .toast .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
+  .toast button{appearance:none;font:inherit;font-size:12px;border-radius:5px;padding:6px 12px;cursor:pointer;
+                border:1px solid rgba(255,255,255,.22);background:transparent;color:var(--toast-ink);}
+  .toast button.pri{background:var(--orca);border-color:var(--orca);color:#fff;font-weight:600;}
+  .toast button:focus-visible{outline:2px solid #fff;outline-offset:1px;}
+  .toast .lnk{color:#8fd8a8;text-decoration:underline;}
+
+  /* ---------- deck ---------- */
+  .deck{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 15px;
+        display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow);margin-bottom:13px;}
+  .deck .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .deck .lbl{flex:0 0 auto;width:96px;font-size:10.5px;font-weight:800;letter-spacing:.09em;
+             text-transform:uppercase;color:var(--dim);}
+  .seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:7px;
+       overflow:hidden;background:var(--inset);}
+  .seg button{appearance:none;border:0;background:transparent;color:var(--dim);font:inherit;font-size:12px;
+              padding:5px 11px;cursor:pointer;border-right:1px solid var(--line);white-space:nowrap;}
+  .seg button:last-child{border-right:0;}
+  .seg button:hover{color:var(--text);}
+  .seg button[aria-pressed="true"]{background:var(--teal);color:var(--teal-ink);font-weight:600;}
+  .seg button:focus-visible{outline:2px solid var(--blue);outline-offset:-2px;}
+  .deck .hint{margin:0;font-size:12px;color:var(--dim);}
+  .deck .hint b{color:var(--text);font-weight:600;}
+
+  /* ---------- correspondence rows ---------- */
+  .match{display:flex;flex-direction:column;gap:16px;}
+  .mrow{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;background:var(--panel);
+        border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
+  .shot{flex:0 0 auto;border:1px solid var(--line);border-radius:7px;overflow:hidden;position:relative;
+        background:var(--inset);}
+  /* The reference screenshots are third-party and deliberately not in git. With
+     ui-snapshots-inspiration/ present they load; without it this caption shows through. */
+  .shot::after{content:"Bambu Studio reference — ui-snapshots-inspiration/ (not in git)";
+        position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:14px;
+        font-size:10.5px;line-height:1.5;color:var(--faint);letter-spacing:.04em;z-index:0;}
+  .shot img{position:absolute;display:block;max-width:none;z-index:1;background:#fff;}
+  .mtxt{flex:1 1 300px;min-width:250px;}
+  .mtxt h4{margin:0 0 6px;font-size:13.5px;font-weight:700;}
+  .mtxt p{margin:0;font-size:12.5px;color:var(--dim);line-height:1.5;}
+  .mtxt p + p{margin-top:7px;}
+  .mtxt b{color:var(--text);font-weight:600;}
+  .cap{margin:6px 0 0;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);}
+
+  /* ---------- prose furniture ---------- */
+  .qbox,.foot{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 17px;}
+  .qbox h4,.foot h2{margin:0 0 10px;font-size:13.5px;font-weight:700;}
+  .qbox ol{margin:0;padding-left:19px;display:flex;flex-direction:column;gap:10px;}
+  .qbox li{font-size:13px;color:var(--dim);}
+  .qbox li b{color:var(--text);font-weight:600;}
+  .foot p{margin:0;font-size:13px;color:var(--dim);}
+  .foot p + p{margin-top:9px;}
+  .foot b{color:var(--text);font-weight:600;}
+  table.tp{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.tp th{text-align:left;font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+              color:var(--dim);padding:0 10px 7px 0;border-bottom:1px solid var(--line);}
+  table.tp td{padding:8px 10px 8px 0;border-bottom:1px solid var(--line-soft);color:var(--dim);vertical-align:top;}
+  table.tp tr:last-child td{border-bottom:0;}
+  table.tp td b{color:var(--text);font-weight:600;}
+  .scroll{overflow-x:auto;}
+
+  @media (max-width:860px){
+    .sb{flex:1 1 100%;border-right:0;border-bottom:1px solid var(--sb-line);}
+    .stage{flex-wrap:wrap;}
+    .stage .view{min-height:230px;}
+    .toast{position:static;max-width:none;}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+</style>
+
+<div class="col">
+
+  <header class="lede">
+    <h1>The U1 printer panel</h1>
+    <p><b>Prepare and Preview share one sidebar</b>, so the Printer section at the top of it is a single
+      widget seen in two tabs. This rebuilds it to Bambu Studio's shape: three cards across the top,
+      a bordered box per head, a green corner tick where the app agrees with the machine, an edit
+      popover behind the ACE row, and the two-step <i>Sync info</i> flow that ends by offering to sync
+      filaments.</p>
+    <p>The panel below is interactive, and the <b>Your U1</b> scenario carries <b>real values</b> &mdash;
+      the ACE, its mode and its four PETG spools, read from <code>192.168.2.242</code> on 21&nbsp;Aug&nbsp;2026.
+      They are a <b>snapshot, baked into this page</b>: it is a static file and does not talk to the
+      printer, and as a published artifact it could not reach your LAN even if it tried. Press
+      <b>Sync info</b>, open a head's <b>ACE</b> widget, choose an <b>ACE mode</b>, and switch the machine
+      underneath it. Every screenshot further down is the Bambu original the corresponding piece is
+      copying.</p>
+    <p>One row has no Bambu equivalent, because the U1 needs it: <b>ACE mode</b>. The printer has its
+      own three-way switch &mdash; <code>SET_ACE_MODE MODE=normal|multi|head</code> &mdash; and it
+      decides whether per-toolhead wiring means anything at all. The panel mirrors it, and Sync info
+      reads it. That switch is also the answer to &ldquo;can one unit feed more than one head&rdquo;:
+      in <b>Per toolhead</b> mode, yes &mdash; tick the same unit on two heads.</p>
+  </header>
+
+  <!-- ============================ the live panel ============================ -->
+  <section class="case">
+    <div class="eyebrow"><span class="k">Proposed</span><span>Bambu's panel, for four heads</span></div>
+
+    <div class="deck">
+      <div class="row">
+        <span class="lbl">Machine</span>
+        <span class="seg" id="segMachine">
+          <button data-v="off">Not connected</button>
+          <button data-v="normal">Normal</button>
+          <button data-v="live">Your U1</button>
+          <button data-v="shared">Shared unit</button>
+          <button data-v="multi">Combined</button>
+          <button data-v="diverge">Preset disagrees</button>
+        </span>
+      </div>
+      <p class="hint" id="deckHint"></p>
+    </div>
+
+    <div class="stage">
+      <div class="sb" id="sb"></div>
+      <div class="view" id="view">
+        <div class="plate">Plate 1</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ correspondence ============================ -->
+  <section class="case">
+    <div class="eyebrow"><span class="k">Reference</span><span>Piece by piece, against the original</span></div>
+    <div class="match">
+
+      <div class="mrow">
+        <div>
+          <div class="shot" style="width:423px;height:137px">
+            <img src="../../ui-snapshots-inspiration/Nozzle_and_filament_info/overview.png" alt="Bambu Studio printer cards" style="left:0;top:-38px">
+          </div>
+          <p class="cap">Bambu Studio &middot; H2D</p>
+        </div>
+        <div class="mtxt">
+          <h4>Three cards, and a tick that means something</h4>
+          <p>Printer, plate, and <b>Sync info</b> sit side by side at equal height; the printer card
+            carries its thumbnail above the preset combo, the plate card an <b>&#9432;</b>, and the
+            green corner triangle marks a card that agrees with the connected machine.</p>
+          <p><b>Ours is the same three.</b> The plate card takes over today's <code>Bed type</code> row,
+            which frees the whole row it used. The corner tick appears on the printer card when the
+            selected preset matches the machine's reported model and nozzle size &mdash; and on a head
+            box when its ACE wiring matches what the printer reports. That is a claim we can actually
+            make, because <code>sync_ace_topology</code> already computes exactly that diff.</p>
+        </div>
+      </div>
+
+      <div class="mrow">
+        <div>
+          <div class="shot" style="width:423px;height:148px">
+            <img src="../../ui-snapshots-inspiration/Nozzle_and_filament_info/overview.png" alt="Bambu Studio nozzle boxes" style="left:0;top:-178px">
+          </div>
+          <p class="cap">Bambu Studio &middot; per-nozzle boxes</p>
+        </div>
+        <div class="mtxt">
+          <h4>A box per head, two across</h4>
+          <p>Bambu draws <b>Left Nozzle</b> and <b>Right Nozzle</b> as two bordered panes, each with an
+            <b>AMS</b> row, a <b>Diameter</b> combo and a <b>Flow</b> combo. The AMS row shows a small
+            thumbnail of the loaded spools when a unit is attached, and a chevron when none is.</p>
+          <p><b>Ours is four of the same box, wrapped 2&times;2.</b> Same label position, same row
+            grammar, same widths &mdash; the <b>ACE</b> row shows the unit's spool colours as a strip,
+            or a chevron on a stock feeder. Flow is absent: this fork deleted it deliberately and there
+            is no setting behind it.</p>
+        </div>
+      </div>
+
+      <div class="mrow">
+        <div>
+          <div class="shot" style="width:313px;height:192px">
+            <img src="../../ui-snapshots-inspiration/Nozzle_and_filament_info/AMS_edit_popup.png" alt="Bambu Studio AMS count popup" style="left:0;top:-161px">
+          </div>
+          <p class="cap">Bambu Studio &middot; AMS popover</p>
+        </div>
+        <div class="mtxt">
+          <h4>The popover that sets what is attached</h4>
+          <p>Clicking the pencil beside <b>AMS</b> drops a panel: a sentence, then a grey inset listing
+            each kind of unit with a spinner &mdash; <i>AMS (4 slots)</i>, <i>AMS (1 slot)</i>.</p>
+          <p><b>Ours keeps the sentence and the inset, and swaps the spinner for a tick.</b> A count
+            is the wrong control here: multiACE binds a head to one named unit
+            (<code>ACE_SET_HEAD_ACE HEAD=n ACE=u</code>) or puts it on its own feeder
+            (<code>ACE_SET_HEAD_FEEDER</code>), so the list is a <i>choice</i> &mdash; one row per macro,
+            one tick. Units carry the printer's own names, <i>ACE 1 &middot; ACE 2 Pro</i>, with slots,
+            connection and humidity beneath. Between them the two rows write exactly
+            <code>ace_head_capacity</code> and <code>ace_head_unit</code>. Open <b>Toolhead&nbsp;4</b>'s
+            ACE widget in the panel above to use it.</p>
+        </div>
+      </div>
+
+      <div class="mrow">
+        <div>
+          <div class="shot" style="width:348px;height:124px">
+            <img src="../../ui-snapshots-inspiration/Nozzle_and_filament_info/Sync_info_popup.png" alt="Bambu Studio sync confirmation" style="left:-418px;top:-168px">
+          </div>
+          <p class="cap">Bambu Studio &middot; after Sync info</p>
+        </div>
+        <div class="mtxt">
+          <h4>Sync in two steps, not one</h4>
+          <p>Bambu's <b>Sync info</b> reads nozzle and AMS-count information, then says so and offers
+            <b>Continue to sync filaments</b> beside <b>Cancel</b> &mdash; the count sync and the
+            contents sync are separate presses, chained by an offer.</p>
+          <p><b>Ours chains the two that already exist.</b> Step one is today's nozzle query plus
+            <code>sync_ace_topology</code> in one press; step two hands off to
+            <i>Sync Filament Information</i>, which already lists the four toolheads and every ACE slot.
+            Press <b>Sync info</b> in the panel above to walk it, including what it says when the
+            printer is off and when the preset turns out to be wrong.</p>
+        </div>
+      </div>
+
+      <div class="mrow">
+        <div>
+          <div class="shot" style="width:423px;height:282px">
+            <img src="../../ui-snapshots-inspiration/Nozzle_and_filament_info/overview.png" alt="Bambu Studio project filaments" style="left:0;top:-322px">
+          </div>
+          <p class="cap">Bambu Studio &middot; the section below</p>
+        </div>
+        <div class="mtxt">
+          <h4>And the half of the screenshot below the fold</h4>
+          <p>The same screenshot continues into <b>Project Filaments</b>: a numbered, colour-coded badge
+            per filament in two columns, a <b>&#8942;</b> menu on each, add/remove/sync/settings in the
+            sub-header, a <b>Purging volumes</b> pill on the title bar, and a corner tick on each
+            filament that matches what the AMS holds.</p>
+          <p><b>That is a different section and a different PR.</b> This fork already has it as
+            <i>Filament Management</i> &mdash; badges, combos, per-filament menus, flushing volumes and
+            Color Mixing &mdash; so it is a restyle rather than a rebuild, and it is the natural
+            follow-on once the printer section lands. The panel above ends on its title bar to show
+            where the seam is.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================ deviations ============================ -->
+  <div class="qbox">
+    <h4>The four places it cannot follow Bambu, and what it does instead</h4>
+    <ol>
+      <li><b>Four heads, not two nozzles.</b> Bambu's two boxes sit side by side across the sidebar.
+        Four at that width would be 110&nbsp;px each &mdash; too narrow for a labelled combo. So the same
+        box is wrapped <b>2&times;2</b>, which keeps Bambu's proportions and costs one extra row of
+        height. That row lands in Preview too, where the sidebar competes with the sliced preview:
+        the head boxes are the section to collapse first if it proves too tall.</li>
+
+      <li><b>An ACE is not an AMS, and the popover is a choice rather than a count.</b> Bambu counts
+        interchangeable units by kind, so a spinner fits. multiACE binds a head to a <b>named</b> unit
+        with <code>ACE_SET_HEAD_ACE HEAD=h ACE=a</code>, or puts it on its own feeder with
+        <code>ACE_SET_HEAD_FEEDER HEAD=h ENABLE=1</code> &mdash; two macros, so two kinds of row and a
+        tick rather than a number. Units are named as the printer names them: <i>ACE 1 &middot; ACE 2
+        Pro</i> from <code>protocol: "v2"</code>, <i>ACE Pro</i> from <code>"v1"</code>, with slot
+        count, connection and humidity underneath.</li>
+
+      <li><b>No Flow row.</b> Bambu's third row picks a flow calibration; this fork removed the control
+        and there is no setting behind it. Adding a dead combo to look like the screenshot would be
+        worse than the gap. The head box has two rows, not three.</li>
+
+      <li><b>Contents are LAN-only.</b> Bambu reads AMS state over its cloud, so its panel is populated
+        whenever the printer is online. The multiACE endpoint answers only on the local network, so over
+        a cloud connection there is no snapshot at all. The panel then draws the <b>preset's</b> topology
+        &mdash; which is real, and is what offline slicing uses &mdash; with contents muted rather than
+        blank, so it does not change height when a printer appears.</li>
+    </ol>
+  </div>
+
+  <div class="qbox" style="border-color:var(--warn-soft)">
+    <h4 style="color:var(--warn)">One unit, several heads &mdash; and the two bugs it uncovers</h4>
+    <p style="margin:0 0 11px;font-size:13px;color:var(--dim)">Read from the printer's own firmware
+      (<code>/printer/gcode/help</code> on 192.168.2.242), not inferred:</p>
+    <ol>
+      <li><b>The mode is the printer's, so the panel should not invent one.</b>
+        <code>SET_ACE_MODE MODE=normal|multi|head</code>. <i>Normal</i> is stock feeders and no ACE;
+        <i>head</i> wires each head individually; <i>multi</i> pools units onto one ACE head. Only in
+        <b>head</b> mode does per-toolhead assignment mean anything &mdash; which is why the mode row
+        sits above the head boxes and greys them out in Normal. The live machine is in
+        <code>mode: "head"</code>.</li>
+
+      <li><b>Sharing is legal, and the popover is where it happens.</b> <code>ACE_SET_HEAD_ACE</code>
+        says each head is wired to <em>exactly one</em> ACE &mdash; it says nothing about each ACE
+        feeding exactly one head, and <code>head_ace</code> is a map from head to unit, so several
+        heads may name the same one. In the panel: tick ACE&nbsp;1 on Toolhead&nbsp;4, then tick it on
+        Toolhead&nbsp;1. Each row then reads <i>also feeds Toolhead&nbsp;4</i>, and a warning appears
+        under the boxes. Try the <b>Shared unit</b> scenario.</li>
+
+      <li><b>Bug 1 &mdash; a shared unit double-counts capacity.</b> <code>AceMmuPlan.hpp</code> sums
+        capacity per head (<code>total_cap += cap[h]</code>) and enforces it per head
+        (<code>if (++load[h] &gt; cap[h])</code>). Two heads on one 4-slot unit therefore read as
+        <b>8 places</b> when there are 4. The infeasible-plate refusal &mdash; the whole point of which
+        is to catch exactly this &mdash; would wave through a plate that cannot be laid out. The fix is
+        a per-unit pool constraint beside the per-head one; the panel already computes and shows the
+        honest number.</li>
+
+      <li><b>Bug 2 &mdash; Combined mode cannot be emitted today.</b> <code>ace_head_capacity</code>
+        already offers <i>ACE &ndash; 6 slots</i> and <i>ACE &ndash; 8 slots</i>, but
+        <code>GCode.cpp</code>'s <code>unit_of_head()</code> returns the single
+        <code>ace_head_unit[h]</code>, and the plan's slot is an index <em>within the head</em>. So slot
+        5 of an 8-slot head emits <code>ACE=&lt;first unit&gt; SLOT=5</code> where the machine needs
+        <code>ACE=&lt;second unit&gt; SLOT=1</code> &mdash; wrong unit, wrong slot, wrong colour. Those
+        two enum values are not safe until the emitter maps slot &rarr; (unit, slot).</li>
+    </ol>
+    <p style="margin:11px 0 0;font-size:13px;color:var(--dim)"><b>So the sequencing I would take:</b>
+      ship the panel with <b>Normal</b> and <b>Per toolhead</b>, and leave <b>Combined</b> in the list
+      but disabled with the reason on it, until the emitter fix lands. Sharing can ship with the panel
+      &mdash; it is drawn honestly and warns &mdash; but the planner's per-unit pool should be the very
+      next PR, because a wrong capacity is a silently wrong plate.</p>
+  </div>
+
+  <!-- ============================ touch points ============================ -->
+  <div class="foot">
+    <h2>What already exists</h2>
+    <div class="scroll">
+      <table class="tp">
+        <thead><tr><th>Piece</th><th>Where</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td><b>The panel</b></td><td class="mono">Plater.cpp:2199&ndash;2565</td>
+              <td>Title bar, preset card, Bed type row, nozzle notebook &mdash; built once in the Sidebar constructor. The three-card row replaces the first two.</td></tr>
+          <tr><td><b>The head boxes</b></td><td class="mono">Sidebar::update_nozzle_settings, Plater.cpp:8682</td>
+              <td>Already rebuilds one page per <code>nozzle_diameter</code> entry. Becomes a 2&times;2 grid of boxes instead of a notebook.</td></tr>
+          <tr><td><b>Sync, step one (nozzles)</b></td><td class="mono">Plater.cpp:2214&ndash;2350</td>
+              <td>Queries the machine, opens <code>NozzleDiameterSelectDialog</code> on mixed diameters, selects the matching preset. Keep as-is; it becomes half the press.</td></tr>
+          <tr><td><b>Sync, step one (topology)</b></td><td class="mono">TabPrinter::sync_ace_topology, Tab.cpp:4652</td>
+              <td>Reads <code>/multiace/api/state</code>, diffs per head, writes both options and reports what changed. Lift out of <code>TabPrinter</code> so the sidebar can call it too.</td></tr>
+          <tr><td><b>Sync, step two (filaments)</b></td><td class="mono">Sidebar::show_sync_filament_dialog, Plater.cpp:8467</td>
+              <td>The non-destructive filament sync, already listing U1 toolheads <i>and</i> ACE slots via <code>append_ace_filament_list</code>. This is what <i>Continue to sync filaments</i> opens.</td></tr>
+          <tr><td><b>The topology</b></td><td class="mono">ace_head_capacity, ace_head_unit</td>
+              <td>Per-head <code>coInts</code> in the printer preset, so the panel and offline slicing share one source.</td></tr>
+          <tr><td><b>Live contents</b></td><td class="mono">AceMmuProvider, AceSnapshot</td>
+              <td>Units, slots, colours, materials, humidity, per-head <code>ace</code>/<code>slot</code> bindings. One <code>fetch_once()</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:11px"><b>One thing to know before building:</b> the U1 connects as a
+      <code>PrintHost</code> through the webview, not as a <code>MachineObject</code>, so this panel
+      cannot lean on <code>MachineObject::poll_ace_ams()</code> the way the AMS UI does. It resolves a
+      host with <code>AceMmuProvider::resolve_connected_host()</code> and reads on demand &mdash; which
+      is the other reason Bambu's press-to-sync flow fits the U1 better than a background poll.</p>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // Modes are the printer's own: SET_ACE_MODE MODE=normal|multi|head, read from
+  // /printer/gcode/help on the machine at 192.168.2.242.
+  var S = { scen:"live", mode:"head", pop:-1, modeOpen:false, toast:null };
+
+  // assign[h] = list of ACE unit indices feeding head h. Empty = stock feeder.
+  // One entry in head mode (ACE_SET_HEAD_ACE binds a head to exactly one unit);
+  // several in multi mode, where units combine onto one head.
+  var ASSIGN = [[],[],[],[]];
+
+  var FEED = [ {mat:"PLA",hex:"#e8443a"}, {mat:"PLA",hex:"#2e7bd6"}, null ];
+
+  // The four slots actually in the ACE on 192.168.2.242, read from /multiace/api/state.
+  var LIVE1 = [
+    {mat:"PETG", hex:"#83aeff", brand:"Kingroon"},
+    {mat:"PETG", hex:"#8fa7c8", brand:"Kingroon"},
+    {mat:"PETG", hex:"#632c2c", brand:"Generic"},
+    {mat:"PETG", hex:"#c47053", brand:"Kingroon"}
+  ];
+  var UNIT2 = [ {mat:"TPU",hex:"#ff7a45"}, {mat:"PLA",hex:"#f2f3f4"}, null, null ];
+
+  // What the machine reports. `units` is the ACE inventory; `wiring` is head -> units.
+  var SCEN = {
+    off: { live:false, mode:"head", units:[], wiring:[[],[],[],[0]],
+           heads:[null,null,null,null] },
+
+    normal: { live:true, mode:"normal",
+              units:[{u:0,proto:"v2",conn:true,rh:39,slots:LIVE1}],
+              wiring:[[],[],[],[]],
+              heads:[FEED[0],FEED[1],null,{mat:"PETG",hex:"#632c2c"}] },
+
+    live: { live:true, mode:"head",
+            units:[{u:0,proto:"v2",conn:true,rh:39,slots:LIVE1}],
+            wiring:[[],[],[],[0]],
+            heads:[FEED[0],FEED[1],null,{mat:"PETG",hex:"#632c2c"}] },
+
+    shared: { live:true, mode:"head",
+              units:[{u:0,proto:"v2",conn:true,rh:39,slots:LIVE1}],
+              wiring:[[0],[],[],[0]],
+              heads:[{mat:"PETG",hex:"#83aeff"},FEED[1],null,{mat:"PETG",hex:"#632c2c"}] },
+
+    multi: { live:true, mode:"multi",
+             units:[{u:0,proto:"v2",conn:true,rh:39,slots:LIVE1},
+                    {u:1,proto:"v1",conn:true,rh:31,slots:UNIT2}],
+             wiring:[[],[],[],[0,1]],
+             heads:[FEED[0],FEED[1],null,{mat:"PETG",hex:"#632c2c"}] },
+
+    diverge: { live:true, mode:"head",
+               units:[{u:0,proto:"v2",conn:true,rh:39,slots:LIVE1},
+                      {u:1,proto:"v1",conn:false,rh:null,slots:UNIT2}],
+               wiring:[[],[],[],[1]],
+               presetWiring:[[],[],[],[0]], presetMode:"head",
+               heads:[FEED[0],FEED[1],null,{mat:"PETG",hex:"#632c2c"}] }
+  };
+
+  function sc(){ return SCEN[S.scen]; }
+
+  /* ---- the ACE visual standard: badge (40x26) and its outlined twin (28x24) ---- */
+  function badgeSVG(cols, off){
+    var o = ['<svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true">'];
+    o.push('<path d="M2 9a7 7 0 0 1 7-7h26a7 7 0 0 1 7 7v17H2Z" fill="' +
+           (off ? "var(--sb-inset,#f6f7f8)" : "var(--ace-hood,#e8e8e8)") + '"/>');
+    for (var i = 0; i < 4; i++) {
+      var f = off ? "var(--ace-base,#cfcfcf)"
+                  : (cols[i] === null ? "var(--ace-bay,#ffffff)" : cols[i]);
+      o.push('<rect x="' + (6 + i*9) + '" y="4.5" width="5" height="14" rx="2.5" fill="' + f + '"/>');
+    }
+    o.push('<rect x="0" y="16" width="44" height="10" rx="1.5" fill="var(--ace-base,#cfcfcf)"/></svg>');
+    return o.join("");
+  }
+  // The outlined twin of the badge: the SAME cabinet silhouette, drawn in line with
+  // solid bays (variant O2). No single-bay form — every ACE unit has exactly four slots.
+  function glyphSVG(){
+    var o = ['<svg width="44" height="26" viewBox="0 0 44 26" fill="none" stroke="currentColor" ' +
+             'stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">'];
+    o.push('<path d="M1 17H4V9a6 6 0 0 1 6-6h24a6 6 0 0 1 6 6v8h3v8H1Z"/>');
+    for (var i = 0; i < 4; i++)
+      o.push('<rect x="' + (6 + i*9) + '" y="6.4" width="5" height="10.6" rx="2.5" ' +
+             'fill="currentColor" stroke="none"/>');
+    return o.join("") + '</svg>';
+  }
+  function feederSVG(){
+    return '<svg width="28" height="24" viewBox="0 0 28 24" fill="none" stroke="currentColor" ' +
+           'stroke-width="1.7" stroke-linecap="round" aria-hidden="true">' +
+           '<circle cx="12" cy="12" r="7.2"/><circle cx="12" cy="12" r="2.1" fill="currentColor" stroke="none"/>' +
+           '<path d="M19.2 12H25"/></svg>';
+  }
+  // Bay colours for whatever unit(s) feed head h.
+  function baysFor(h){
+    var s = sc(), out = [null, null, null, null];
+    if (!ASSIGN[h].length) return out;
+    var un = unitById(ASSIGN[h][0]);
+    if (!un || !s.live) return out;
+    for (var i = 0; i < 4; i++) out[i] = un.slots[i] ? un.slots[i].hex : null;
+    return out;
+  }
+
+  function headName(i){ return "Toolhead " + (i+1); }
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+
+  // multiACE names its units by protocol; this is the mapping our own
+  // resources/web/multiace/index.html already uses.
+  function unitModel(proto){
+    return proto === "v2" ? "ACE 2 Pro" : (proto === "v1" ? "ACE Pro" : "ACE");
+  }
+  function unitName(u){ return "ACE " + (u.u + 1) + " · " + unitModel(u.proto); }
+
+  function capOf(h){ return ASSIGN[h].length ? 4 * ASSIGN[h].length : 1; }
+  function isAce(h){ return ASSIGN[h].length > 0; }
+  function unitById(u){
+    var us = sc().units;
+    for (var i = 0; i < us.length; i++) if (us[i].u === u) return us[i];
+    return null;
+  }
+  // Other heads drawing from the same unit — how one unit feeds more than one head.
+  function alsoFeeds(u, notHead){
+    var out = [];
+    for (var h = 0; h < 4; h++)
+      if (h !== notHead && ASSIGN[h].indexOf(u) >= 0) out.push(h);
+    return out;
+  }
+  // Total ACE places, counted per UNIT. The planner counts them per head today,
+  // which is the bug a shared unit exposes.
+  function acePlaces(){
+    var seen = {}, n = 0;
+    for (var h = 0; h < 4; h++)
+      ASSIGN[h].forEach(function(u){ if (!seen[u]) { seen[u] = 1; n += 4; } });
+    return n;
+  }
+  function acePlacesPerHead(){
+    var n = 0;
+    for (var h = 0; h < 4; h++) if (isAce(h)) n += capOf(h);
+    return n;
+  }
+
+  function reset(){
+    var s = sc();
+    S.mode = s.presetMode || s.mode;
+    var w = s.presetWiring || s.wiring;
+    ASSIGN = w.map(function(a){ return a.slice(); });
+    S.pop = -1; S.modeOpen = false; S.toast = null;
+  }
+
+  function headAgrees(h){
+    var s = sc();
+    if (!s.live) return false;
+    var mine = ASSIGN[h].slice().sort().join(",");
+    var theirs = s.wiring[h].slice().sort().join(",");
+    return mine === theirs;
+  }
+
+  function swatch(f){
+    if (!f) return '<i class="none"></i>';
+    return '<i style="background:' + f.hex + '"></i>';
+  }
+
+  var MODES = {
+    normal: ["Normal", "Stock feeders only — no ACE"],
+    head:   ["Per toolhead", "Each head is a feeder, or wired to one ACE"],
+    multi:  ["Combined", "Units pooled onto a single ACE head"]
+  };
+
+  /* ------------------------------- the panel ------------------------------- */
+  function panel(){
+    var s = sc(), o = [];
+
+    o.push('<div class="tbar"><span class="ic">&#9636;</span><span class="ti">Printer</span>' +
+           '<span class="sp"><button class="btn-ic" title="Printer settings">&#9881;</button></span></div>');
+    o.push('<div class="body">');
+
+    o.push('<div class="cards">');
+    o.push('<div class="card printer">' + (s.live ? '<span class="corner"></span>' : '') +
+           '<div class="top"><span class="thumb">U1</span></div>' +
+           '<div class="foot"><span class="ic">&#9662;</span>' +
+           '<span class="v">Snapmaker U1 (0.4 nozzle) - multiACE</span></div></div>');
+    o.push('<div class="card plate"><span class="info">&#9432;</span>' +
+           '<div class="top"><span class="bedthumb"></span></div>' +
+           '<div class="foot"><span class="ic">&#9662;</span><span class="v">Textur&hellip;</span></div></div>');
+    o.push('<button class="card sync" id="btnSync"><span class="sy">&#8635;</span>' +
+           '<span class="sl">Sync info</span></button>');
+    o.push('</div>');
+
+    // The printer's own mode, as a labelled combo — never the raw word alone.
+    o.push('<div class="field"><span class="lb">ACE mode</span>' +
+           '<button class="combo pick" id="btnMode" title="SET_ACE_MODE MODE=' + S.mode + '">' +
+           '<span class="ic">&#9662;</span><span class="v">' + esc(MODES[S.mode][0]) +
+           '</span></button></div>');
+    o.push('<p class="hintline">' + esc(MODES[S.mode][1]) + '</p>');
+
+    o.push('<div class="heads">');
+    for (var h = 0; h < 4; h++) {
+      var ace = isAce(h), ok = headAgrees(h);
+      o.push('<div class="hbox">' + (ok ? '<span class="corner"></span>' : ''));
+      o.push('<div class="hl">' + esc(headName(h)) + '</div>');
+
+      o.push('<div class="r"><span class="k">ACE</span>');
+      // One adjust button on every head, in the same place, whatever it is fed by.
+      o.push('<button class="btn-ic adj" data-pop="' + h + '" ' +
+             'title="Which ACE feeds this toolhead">&#9998;</button>');
+      if (ace) {
+        o.push('<button class="acetag" data-pop="' + h + '" title="Which ACE feeds this toolhead">' +
+               badgeSVG(baysFor(h), !s.live) + '</button>');
+      } else {
+        o.push('<span class="fdtxt">Stock feeder</span>');
+      }
+      o.push('</div>');
+
+      o.push('<div class="r"><span class="k">Diameter</span>' +
+             '<span class="c"><span class="ic">&#9662;</span><span class="v">0.4</span></span></div>');
+      o.push('</div>');
+    }
+    o.push('</div>');
+
+    // A shared unit is legal and the panel must say what it costs.
+    var sharedMsg = sharedNote();
+    if (sharedMsg) o.push('<div class="banner warn"><span>&#9888;</span><span>' + sharedMsg + '</span></div>');
+
+    o.push('<div class="nextsec"><span class="ic">&#9636;</span><span>Filament Management</span>' +
+           '<span class="rt">&#8942;</span></div>');
+    o.push('</div>');
+
+    if (S.modeOpen) o.push(modeMenu());
+    else if (S.pop >= 0) o.push(popover(S.pop));
+    return o.join("");
+  }
+
+  // The mode dropdown: same rows and ticks as the ACE popover, so one grammar covers both.
+  function modeMenu(){
+    var o = [];
+    o.push('<div class="pop" style="top:166px">');
+    o.push('<button class="btn-ic close" id="modeClose" title="Close">&#10005;</button>');
+    o.push('<h5>How the ACE units are wired to the toolheads.</h5>');
+    o.push('<div class="list">');
+    [["normal",0],["head",4],["multi",8]].forEach(function(pair){
+      var m = pair[0], on = (S.mode === m);
+      var warn = (m === "multi")
+        ? '<span class="sub" style="color:var(--warn)">Emits the wrong ACE= today</span>' : '';
+      o.push('<div class="li pickrow' + (on ? ' on' : '') + '" data-mode="' + m + '">' +
+             '<span class="ub">' + (pair[1] === 0 ? feederSVG() : glyphSVG()) + '</span>' +
+             '<span class="nm">' + esc(MODES[m][0]) +
+             '<span class="sub">' + esc(MODES[m][1]) + '</span>' + warn + '</span>' +
+             '<span class="tick' + (on ? ' on' : '') + '">&#10003;</span></div>');
+    });
+    o.push('</div>');
+    o.push('<p class="note" style="color:var(--sb-dim)">The printer\'s own switch &mdash; ' +
+           '<code>SET_ACE_MODE MODE=' + S.mode + '</code>. Sync info reads it back.</p>');
+    o.push('</div>');
+    return o.join("");
+  }
+
+  function sharedNote(){
+    var seen = {}, shared = [];
+    for (var h = 0; h < 4; h++)
+      ASSIGN[h].forEach(function(u){
+        if (seen[u] !== undefined && shared.indexOf(u) < 0) shared.push(u);
+        seen[u] = h;
+      });
+    if (!shared.length) return "";
+    var u = shared[0], hs = [];
+    for (var h2 = 0; h2 < 4; h2++) if (ASSIGN[h2].indexOf(u) >= 0) hs.push(headName(h2));
+    return "<b>ACE " + (u+1) + " feeds " + hs.join(" and ") + ".</b> Its 4 slots are shared, " +
+           "so this printer has <b>" + acePlaces() + " ACE places</b> — not " +
+           acePlacesPerHead() + ", which is what the planner counts today.";
+  }
+
+  /* ------------------------------- the popover ------------------------------- */
+  function popover(h){
+    var s = sc(), o = [];
+    var multi = (S.mode === "multi");
+    var top = (h > 1) ? 352 : 247;
+
+    o.push('<div class="pop" style="top:' + top + 'px">');
+    o.push('<button class="btn-ic close" id="popClose" title="Close">&#10005;</button>');
+
+    if (S.mode === "normal") {
+      o.push('<h5>ACE mode is <b>Normal</b>, so no toolhead is ACE-fed.</h5>');
+      o.push('<p class="note" style="color:var(--sb-dim);margin-top:0">Switch the mode above to ' +
+             '<b>Per toolhead</b> to wire this head to a unit.</p></div>');
+      return o.join("");
+    }
+
+    o.push('<h5>' + (multi ? 'Which ACE units feed ' + esc(headName(h)) + '?'
+                           : 'Which ACE feeds ' + esc(headName(h)) + '?') + '</h5>');
+    o.push('<div class="list">');
+
+    // Row one is ACE_SET_HEAD_FEEDER ENABLE=1; every other row is ACE_SET_HEAD_ACE.
+    var feeder = !isAce(h);
+    o.push('<div class="li pickrow' + (feeder ? ' on' : '') + '" data-pick="' + h + ':-1">' +
+           '<span class="ub">' + feederSVG() + '</span>' +
+           '<span class="nm">Stock feeder<span class="sub">One spool, loaded at the head</span></span>' +
+           '<span class="tick' + (feeder ? ' on' : '') + '">&#10003;</span></div>');
+
+    var units = s.units.length ? s.units
+              : [{u:0,proto:"",conn:false,rh:null,slots:[null,null,null,null]}];
+    units.forEach(function(un){
+      var on    = ASSIGN[h].indexOf(un.u) >= 0;
+      var other = alsoFeeds(un.u, h);
+      var sub   = "4 slots · " + (un.conn ? "connected" : "not connected");
+      if (un.conn && un.rh !== null && un.rh !== undefined) sub += " · " + un.rh + "% RH";
+      if (other.length) sub += " · also feeds " + other.map(headName).join(", ");
+      o.push('<div class="li pickrow' + (on ? ' on' : '') + '" data-pick="' + h + ':' + un.u + '">' +
+             '<span class="ub">' + glyphSVG() + '</span>' +
+             '<span class="nm">' + esc(unitName(un)) + '<span class="sub">' + esc(sub) + '</span></span>' +
+             '<span class="tick' + (on ? ' on' : '') + '">&#10003;</span></div>');
+    });
+    o.push('</div>');
+
+    if (multi)
+      o.push('<p class="note">Combined units emit the wrong <code>ACE=</code> today — see ' +
+             'the note below the panel. Tick more than one to see the count change.</p>');
+    else
+      o.push('<p class="note" style="color:var(--sb-dim)">A head is wired to exactly one unit ' +
+             '(<code>ACE_SET_HEAD_ACE</code>). Tick the same unit on another toolhead to share it.</p>');
+
+    o.push('</div>');
+    return o.join("");
+  }
+
+  /* ------------------------------- the toast ------------------------------- */
+  function toast(){
+    var s = sc();
+    if (!S.toast) return "";
+    var body = "", acts = "";
+
+    if (S.toast === "offline") {
+      body = '<span class="mk no">&#10005;</span><span>Printer not connected, so nozzle and ACE ' +
+             'information cannot be read. Connect it from the Device page, or set each head by hand.</span>';
+      acts = '<button data-act="close">Close</button>';
+    } else if (S.toast === "ok") {
+      var extra = "";
+      if (s.presetWiring) extra = " " + headName(3) + ": ACE 1 &rarr; ACE 2.";
+      body = '<span class="mk ok">&#10003;</span><span>Successfully synchronized nozzle, ACE mode ' +
+             'and ACE unit information.' + extra + '</span>';
+      acts = '<button class="pri" data-act="fil">Continue to sync filaments</button>' +
+             '<button data-act="close">Cancel</button>';
+    } else if (S.toast === "fil") {
+      body = '<span class="mk ok">&#10003;</span><span>Opens <b>Sync Filament Information</b> &mdash; ' +
+             'the existing dialog, already listing the four toolheads and every ACE slot.</span>';
+      acts = '<button data-act="close">Close</button>';
+    }
+    return '<div class="toast"><div class="msg">' + body + '</div><div class="acts">' + acts + '</div></div>';
+  }
+
+  /* ------------------------------- wiring ------------------------------- */
+  function render(){
+    document.getElementById("sb").innerHTML = panel();
+    document.getElementById("view").innerHTML = '<div class="plate">Plate 1</div>' + toast();
+    hint();
+  }
+
+  function hint(){
+    var h = {
+      off:     "No printer on the LAN — the ordinary case over a cloud connection. Nothing is confirmed, so no corner ticks.",
+      normal:  "<code>mode=normal</code>. Four stock feeders, no ACE anywhere; the assign popover has nothing to offer.",
+      live:    "Snapshot of your printer, read 21 Aug 2026: <code>mode=head</code>, one connected <b>ACE 2 Pro</b> at 39% RH on Toolhead 4, four PETG spools. Baked in — this page makes no network calls.",
+      shared:  "The same unit ticked on <b>two</b> heads — legal in head mode, and the case that exposes the capacity bug.",
+      multi:   "<code>mode=multi</code>: two units pooled onto one head. Eight slots, and an <code>ACE=</code> the emitter cannot write yet.",
+      diverge: "Preset says ACE 1, printer says ACE 2. Toolhead 4 loses its tick; Sync info names the change."
+    }[S.scen];
+    document.getElementById("deckHint").innerHTML = "<b>Scenario:</b> " + h;
+  }
+
+  document.addEventListener("click", function(e){
+    var t = e.target.closest("[data-pop],[data-pick],[data-mode],[data-act],#btnSync,#popClose,#btnMode,#modeClose");
+    if (!t) {
+      if ((S.pop >= 0 || S.modeOpen) && !e.target.closest(".pop")) {
+        S.pop = -1; S.modeOpen = false; render();
+      }
+      return;
+    }
+    if (t.id === "btnSync") {
+      S.pop = -1;
+      if (!sc().live) { S.toast = "offline"; render(); return; }
+      S.modeOpen = false;
+      S.mode  = sc().mode;                                   // the mode comes from the printer too
+      ASSIGN  = sc().wiring.map(function(a){ return a.slice(); });
+      S.toast = "ok";
+      render(); return;
+    }
+    if (t.id === "btnMode") {
+      S.modeOpen = !S.modeOpen; S.pop = -1;
+      render(); return;
+    }
+    if (t.id === "modeClose") { S.modeOpen = false; render(); return; }
+    if (t.dataset.mode !== undefined) {
+      S.mode = t.dataset.mode;
+      if (S.mode === "normal") ASSIGN = [[],[],[],[]];
+      if (S.mode === "head") ASSIGN = ASSIGN.map(function(a){ return a.slice(0,1); });
+      S.modeOpen = false;
+      render(); return;
+    }
+    if (t.id === "popClose") { S.pop = -1; render(); return; }
+    if (t.dataset.pop !== undefined) {
+      var hh = +t.dataset.pop;
+      S.pop = (S.pop === hh) ? -1 : hh;
+      render(); return;
+    }
+    if (t.dataset.pick !== undefined) {
+      var p = t.dataset.pick.split(":"), H = +p[0], U = +p[1];
+      if (U < 0) ASSIGN[H] = [];
+      else if (S.mode === "multi") {
+        var at = ASSIGN[H].indexOf(U);
+        if (at >= 0) ASSIGN[H].splice(at, 1); else ASSIGN[H].push(U);
+        ASSIGN[H].sort();
+      } else {
+        ASSIGN[H] = (ASSIGN[H].length === 1 && ASSIGN[H][0] === U) ? [] : [U];
+      }
+      render(); return;
+    }
+    if (t.dataset.act !== undefined) {
+      S.toast = (t.dataset.act === "fil") ? "fil" : null;
+      render(); return;
+    }
+  });
+
+  var box = document.getElementById("segMachine");
+  box.addEventListener("click", function(e){
+    var b = e.target.closest("button");
+    if (!b) return;
+    S.scen = b.dataset.v;
+    reset(); mark(); render();
+  });
+  function mark(){
+    Array.prototype.forEach.call(box.querySelectorAll("button"), function(b){
+      b.setAttribute("aria-pressed", String(b.dataset.v === S.scen));
+    });
+  }
+
+  reset(); mark(); render();
+})();
+</script>

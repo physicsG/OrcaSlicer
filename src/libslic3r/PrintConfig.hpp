@@ -320,6 +320,15 @@ static std::unordered_map<std::string, NozzleType>NozzleTypeStrToEumn = {
     {"brass", NozzleType::ntBrass}
 };
 
+// How the printer wires its ACE units to its toolheads. These are the firmware's own three
+// words - SET_ACE_MODE MODE=normal|multi|head - so the value can be sent and read back without
+// a translation table, and matches AceSnapshot::mode as the printer reports it.
+enum AceMode {
+    amNormal = 0,   // stock feeders only, no ACE
+    amHead,         // each head is a feeder, or wired to exactly one ACE
+    amMulti         // units pooled onto a single ACE head
+};
+
 // BBS
 enum PrinterStructure {
     psUndefine=0,
@@ -488,6 +497,7 @@ CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(PrintHostType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(AuthorizationType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(WipeTowerWallType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(PerimeterGeneratorType)
+CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(AceMode)
 
 #undef CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS
 
@@ -1236,6 +1246,9 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionBool,                auxiliary_fan))
     ((ConfigOptionBool,                support_air_filtration))
     ((ConfigOptionEnum<PrinterStructure>,printer_structure))
+    ((ConfigOptionEnum<AceMode>,      ace_mode))
+    ((ConfigOptionInts,               ace_head_capacity))
+    ((ConfigOptionInts,               ace_head_unit))
     ((ConfigOptionBool,                support_chamber_temp_control))
 
 

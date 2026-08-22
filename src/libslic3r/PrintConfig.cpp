@@ -435,6 +435,14 @@ static t_config_enum_values s_keys_map_PrinterStructure {
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(PrinterStructure)
 
+// The firmware's own words, so the stored value is the SET_ACE_MODE argument verbatim.
+static t_config_enum_values s_keys_map_AceMode {
+    {"normal",          int(AceMode::amNormal)},
+    {"head",            int(AceMode::amHead)},
+    {"multi",           int(AceMode::amMulti)}
+};
+CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(AceMode)
+
 static t_config_enum_values s_keys_map_PerimeterGeneratorType{
     { "classic", int(PerimeterGeneratorType::Classic) },
     { "arachne", int(PerimeterGeneratorType::Arachne) }
@@ -3978,6 +3986,72 @@ void PrintConfigDef::init_fff_params()
     def->max = 100;
     def->set_default_value(new ConfigOptionFloats { 0.4 });
 
+    def = this->add("ace_mode", coEnum);
+    def->label = L("ACE mode");
+    def->tooltip = L("How the printer wires its ACE units to its toolheads, mirroring the machine's own "
+                     "three-way switch (SET_ACE_MODE MODE=normal|multi|head). \"Normal\" means stock "
+                     "feeders only and no ACE. \"Per toolhead\" is the one that makes per-head wiring "
+                     "mean anything: each head is either its own feeder or wired to exactly one unit. "
+                     "\"Combined\" pools several units onto a single head.");
+    def->enum_keys_map = &ConfigOptionEnum<AceMode>::get_enum_values();
+    def->enum_values.push_back("normal");
+    def->enum_values.push_back("head");
+    def->enum_values.push_back("multi");
+    def->enum_labels.push_back(L("Normal"));
+    def->enum_labels.push_back(L("Per toolhead"));
+    def->enum_labels.push_back(L("Combined"));
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionEnum<AceMode>(amNormal));
+
+    def = this->add("ace_head_unit", coInts);
+    // Stored 0-based because that is the ACE= argument the firmware takes, but never shown
+    // that way: every other surface calls the first unit "ACE 1". Closed list - a unit that
+    // does not exist is not a value worth being able to type.
+    def->gui_type = ConfigOptionDef::GUIType::i_enum_open;
+    def->enum_values.push_back("-1");
+    def->enum_values.push_back("0");
+    def->enum_values.push_back("1");
+    def->enum_values.push_back("2");
+    def->enum_values.push_back("3");
+    def->enum_labels.push_back(L("None"));
+    def->enum_labels.push_back(L("ACE 1"));
+    def->enum_labels.push_back(L("ACE 2"));
+    def->enum_labels.push_back(L("ACE 3"));
+    def->enum_labels.push_back(L("ACE 4"));
+    def->label = L("ACE unit");
+    def->tooltip = L("Which ACE unit feeds this toolhead. Each ACE-fed head is wired to exactly one unit "
+                     "(ACE_SET_HEAD_ACE on the printer), and this value becomes the ACE= argument of every "
+                     "filament swap, so a wrong choice addresses the wrong hardware. Units are numbered as "
+                     "they appear on the device page: ACE 1 is the first unit. \"None\" is what a stock "
+                     "feeder shows, since no ACE addresses it.");
+    def->mode = comAdvanced;
+    def->min = -1;
+    // None by default: the matching default for ace_head_capacity is a stock feeder, and
+    // showing "ACE 1" there claims a unit that is not feeding anything.
+    def->set_default_value(new ConfigOptionInts { -1 });
+
+    def = this->add("ace_head_capacity", coInts);
+    // Labelled choices rather than a bare number: "1" meaning "no ACE at all" is exactly
+    // the kind of magic value that got a head wired to the first ACE configured as unit 1.
+    def->gui_type = ConfigOptionDef::GUIType::i_enum_open;
+    def->enum_values.push_back("1");
+    def->enum_values.push_back("2");
+    def->enum_values.push_back("4");
+    def->enum_values.push_back("6");
+    def->enum_values.push_back("8");
+    def->enum_labels.push_back(L("Stock feeder"));
+    def->enum_labels.push_back(L("ACE - 2 slots"));
+    def->enum_labels.push_back(L("ACE - 4 slots"));
+    def->enum_labels.push_back(L("ACE - 6 slots"));
+    def->enum_labels.push_back(L("ACE - 8 slots"));
+    def->label = L("Fed by");
+    def->tooltip = L("How this toolhead gets filament. \"Stock feeder\" is the head's own side feeder - "
+                     "one spool, no ACE. Otherwise it is the number of slots the ACE unit presents to this "
+                     "head (sum them when several units are combined onto one head).");
+    def->mode = comAdvanced;
+    def->min = 1;
+    def->set_default_value(new ConfigOptionInts { 1 });
+
     def = this->add("notes", coString);
     def->label = L("Configuration notes");
     def->tooltip = L("You can put here your personal notes. This text will be added to the G-code "
@@ -6429,7 +6503,7 @@ void PrintConfigDef::init_extruder_option_keys()
 {
     // ConfigOptionFloats, ConfigOptionPercents, ConfigOptionBools, ConfigOptionStrings
     m_extruder_option_keys = {
-        "nozzle_diameter", "min_layer_height", "max_layer_height", "extruder_offset",
+        "nozzle_diameter", "ace_head_capacity", "ace_head_unit", "min_layer_height", "max_layer_height", "extruder_offset",
         "retraction_length", "z_hop", "z_hop_types", "z_hop_when_prime", "travel_slope", "retract_lift_above", "retract_lift_below", "retract_lift_enforce", "retraction_speed", "deretraction_speed",
         "retract_before_wipe", "retract_restart_extra", "retraction_minimum_travel", "wipe", "wipe_distance",
         "retract_when_changing_layer", "retract_length_toolchange", "retract_restart_extra_toolchange", "extruder_colour",
