@@ -775,6 +775,109 @@ void build_machine_filament_list(PresetBundle* preset_bundle, std::vector<Filame
     }
 }
 
+
+// The filament sync's machine list, with the ACE in it.
+//
+// build_machine_filament_list above gives one row per U1 toolhead, from what the webview bridge
+// pushed. That is only half the machine: a head fed by an ACE carries whatever slot is loaded at
+// that moment, and the other three slots in the unit are invisible. This relabels the heads with
+// their source and appends every ACE slot, so the non-destructive sync maps against the whole
+// inventory rather than a snapshot of four heads.
+//
+// `snap_in` is what Sync info already read, when it read anything; otherwise a fresh fetch. A
+// machine that cannot be reached leaves the list exactly as it was - the toolhead rows still work.
+static void append_ace_filament_list(std::vector<FilamentData>& out_list,
+                                     const AceMmu::AceSnapshot* snap_in)
+{
+    AceMmu::AceSnapshot fetched;
+    if (!snap_in) {
+        const std::string host = AceMmuProvider::resolve_connected_host();
+        if (host.empty())
+            return;
+        AceMmuProvider prov(host);
+        if (!prov.fetch_once(2, 4))
+            return;
+        fetched = prov.snapshot();
+        snap_in = &fetched;
+    }
+    const AceMmu::AceSnapshot& snap = *snap_in;
+
+    unsigned next_index = 0;
+    for (const auto& fd : out_list)
+        next_index = std::max(next_index, fd.m_index + 1);
+
+    // Built as UTF-8 rather than typed: a narrow literal goes through the current locale on the
+    // way into wxString, and this string reaches the picker as a std::string.
+    const std::string kSep = " \xC2\xB7 ";
+
+    // Relabel the toolhead rows with where their filament comes from, matching by head index.
+    for (auto& fd : out_list) {
+        const AceMmu::AceToolhead* th = nullptr;
+        for (const auto& t : snap.toolheads)
+            if (static_cast<unsigned>(t.idx) == fd.m_index) {
+                th = &t;
+                break;
+            }
+
+        std::string label = "T" + std::to_string(static_cast<int>(fd.m_index) + 1);
+        if (!th) {
+            if (!fd.m_type.empty())
+                label += kSep + fd.m_type;
+        } else if (!th->filament_detected) {
+            label += kSep + "empty";
+        } else if (th->manual) {
+            label += kSep + th->material + kSep + "manual";
+        } else if (!th->feeder) {
+            // Fed by an ACE: shown for context but not selectable. Mapping the head would
+            // address whichever slot happens to be loaded now; the slot rows below are the
+            // stable thing to map to, and they are all listed.
+            label += kSep + "from " + (th->ace.has_value() ? "A" + std::to_string(*th->ace + 1) : std::string("ACE"));
+            fd.m_disabled = true;
+        } else {
+            label += kSep + th->material;
+        }
+        fd.m_label = label;
+    }
+
+    // Every slot of every unit, occupied or not - the same way an empty head still gets a row.
+    // "A<unit>-S<slot>", one-based, because every other surface numbers units from 1.
+    for (const auto& unit : snap.units) {
+        for (const auto& slot : unit.slots) {
+            const std::string tag = "A" + std::to_string(unit.idx + 1) + "-S" + std::to_string(slot.idx + 1);
+            FilamentData fd;
+            fd.m_index = next_index++;
+            fd.m_name  = tag;
+            if (!slot.occupied) {
+                fd.m_type  = ""; // NONE -> greyed and not selectable, like an empty head
+                fd.m_label = tag + kSep + "empty";
+                fd.m_color = FilamentColor::FromColors({"#CCCCCC"}, FilamentColorMode::Segment);
+                out_list.push_back(std::move(fd));
+                continue;
+            }
+            fd.m_type  = slot.material;
+            fd.m_label = tag + kSep + slot.material;
+            std::vector<std::string> colors;
+            if (!slot.color_rrggbb.empty())
+                colors.push_back(slot.color_rrggbb);
+            fd.m_color = FilamentColor::FromColors(colors, FilamentColorMode::Segment);
+            out_list.push_back(std::move(fd));
+        }
+    }
+
+    // An explicit way back to unmapped. Empty-slot rows are NONE-typed and unclickable by
+    // design, so without this there is no way to say "this project filament has no source".
+    {
+        FilamentData none;
+        none.m_index       = next_index++;
+        none.m_name        = "NONE";
+        none.m_type        = "NONE";
+        none.m_label       = "None";
+        none.m_assign_none = true;
+        none.m_color       = FilamentColor::FromColors({"#CCCCCC"}, FilamentColorMode::Segment);
+        out_list.push_back(std::move(none));
+    }
+}
+
 } // namespace
 
 bool Plater::has_illegal_filename_characters(const wxString& wxs_name)
@@ -8979,7 +9082,22 @@ void Sidebar::show_sync_filament_dialog()
         }
     }
 
-    if (!host && !device_machine) {
+    // The ACE half of the inventory does not come through either of those: it is read from the
+    // machine's own service over plain HTTP. Sync info usually leaves a snapshot behind; without
+    // one, ask now, because whether that answers decides whether "not connected" is even true.
+    AceMmu::AceSnapshot        ace_snap;
+    bool                       have_ace = p->m_ace_read;
+    if (have_ace) {
+        ace_snap = p->m_ace_snapshot;
+    } else if (const std::string ace_host = AceMmuProvider::resolve_connected_host(); !ace_host.empty()) {
+        AceMmuProvider prov(ace_host);
+        if (prov.fetch_once(2, 4)) {
+            ace_snap = prov.snapshot();
+            have_ace = true;
+        }
+    }
+
+    if (!host && !device_machine && !have_ace) {
         SyncRichConfirmDialog dlg(this,
             _L("No printer is connected. Please connect your U1 from the Device page before syncing."),
             wxYES_NO);
@@ -9032,6 +9150,11 @@ void Sidebar::show_sync_filament_dialog()
 
     std::vector<FilamentData> machineFilamentList;
     build_machine_filament_list(preset_bundle, machineFilamentList);
+    // Both sources, in one list: the toolheads the bridge reported, relabelled with where each
+    // one is fed from, then every ACE slot. Reuses the snapshot Sync info took when this dialog
+    // is the second step of that press, so the two halves cannot disagree about the machine.
+    if (have_ace)
+        append_ace_filament_list(machineFilamentList, &ace_snap);
     auto nonEmptyFilaments = [](const std::vector<FilamentData>& filamentDatas) {
         for (const auto& filament : filamentDatas) {
             if (!is_none_filament(filament))

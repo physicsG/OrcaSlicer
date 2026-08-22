@@ -27,6 +27,18 @@ struct FilamentData
     std::string  m_name;
     std::string  m_type;
     FilamentColor m_color;
+    // Optional display label (e.g. "T1 · PLA", "A1-S2 · PETG"); when set, the picker
+    // shows this instead of the bare type. Does not affect matching (which uses
+    // m_type/m_name). Used to surface the U1-toolhead / ACE-slot source.
+    std::string  m_label;
+    // When true, this is an explicit, selectable "Assign None" action (unmap the
+    // project filament). The picker normally ignores clicks on NONE-typed rows
+    // (they represent empty machine slots); this flag opts a row back into being
+    // clickable without changing that behaviour for other printers.
+    bool         m_assign_none = false;
+    // When true, the row is shown for context but greyed and not selectable (e.g. a
+    // U1 toolhead that is fed by the ACE — map the ACE slot instead of the head).
+    bool         m_disabled = false;
 };
 
 struct MixedFilamentPreviewInfo
