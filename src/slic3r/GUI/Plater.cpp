@@ -1043,6 +1043,58 @@ static wxBitmap plate_bitmap(wxWindow *win, BedType bt, int height_dip)
 // the connected machine. StaticBox paints its own rounded border, so the tick goes on after it
 // and follows the same corner arc: a plain right triangle would overhang a radius the border
 // curves away from, which is what the mockup's `overflow:hidden` prevents.
+// The sync mark: a green corner triangle with a white check, in the top-right of whatever it
+// marks. Drawn into `win`'s own DC at its own top-right corner, so a card and a combo carry the
+// identical mark rather than two that merely resemble each other.
+//
+// `radius` is the corner radius the thing being marked is drawn with; the mark follows that arc
+// instead of overhanging it. `size_dip` lets a combo take a smaller triangle than a 106px card.
+static void draw_sync_mark(wxWindow *win, wxDC &dc, double radius, int size_dip = 22)
+{
+    const wxSize sz = win->GetSize();
+    const int    s  = win->FromDIP(size_dip);
+    if (sz.x < s || sz.y < s)
+        return;
+
+    // Top edge, round the corner, down the right edge, back to the start.
+    std::vector<wxPoint> pts;
+    pts.emplace_back(sz.x - s, 0);
+    for (int i = 0; i <= 6; ++i) {
+        const double a = M_PI / 2.0 * (double(i) / 6.0);
+        pts.emplace_back(int(std::lround(sz.x - radius + radius * std::sin(a))),
+                         int(std::lround(radius - radius * std::cos(a))));
+    }
+    pts.emplace_back(sz.x, s);
+
+    dc.SetPen(*wxTRANSPARENT_PEN);
+    dc.SetBrush(wxBrush(wxColour(0x00, 0xAE, 0x42)));
+    dc.DrawPolygon(int(pts.size()), pts.data());
+
+    // The check, drawn rather than set as text: a glyph this small lands differently on every
+    // platform's font, and it has to sit inside the triangle on all of them.
+    //
+    // Clipped to the mark before it is drawn. The hypotenuse runs (0,0) to (s,s), so the interior
+    // is x >= y; a round cap that crosses that line puts white on the outside of the triangle,
+    // which does not read as a check hanging over an edge - it reads as a notch cut out of the
+    // triangle, because what is behind it is usually white too. The clip makes that impossible at
+    // any DPI rather than relying on the placement below to have enough margin.
+    wxRegion clip(int(pts.size()), pts.data());
+    dc.SetDeviceClippingRegion(clip);
+
+    // Placed in the corner's thick end, clearing the diagonal by ~0.2s at every point.
+    const int     x0 = sz.x - s;
+    const wxPoint tick[3] = {{x0 + s * 50 / 100, s * 30 / 100},
+                             {x0 + s * 62 / 100, s * 42 / 100},
+                             {x0 + s * 86 / 100, s * 18 / 100}};
+    wxPen pen(*wxWHITE, std::max(1, win->FromDIP(2)));
+    pen.SetCap(wxCAP_ROUND);
+    pen.SetJoin(wxJOIN_ROUND);
+    dc.SetPen(pen);
+    dc.DrawLines(3, tick);
+    dc.DestroyClippingRegion();
+}
+
+// A card that can carry the mark.
 class SyncMarkBox : public StaticBox
 {
 public:
@@ -1060,88 +1112,78 @@ protected:
     void doRender(wxDC &dc) override
     {
         StaticBox::doRender(dc);
-        if (!m_synced)
-            return;
-
-        const wxSize sz = GetSize();
-        const int    s  = FromDIP(22);
-        if (sz.x < s || sz.y < s)
-            return;
-
-        // Top edge, round the corner, down the right edge, back to the start.
-        std::vector<wxPoint> pts;
-        pts.emplace_back(sz.x - s, 0);
-        for (int i = 0; i <= 6; ++i) {
-            const double a = M_PI / 2.0 * (double(i) / 6.0);
-            pts.emplace_back(int(std::lround(sz.x - radius + radius * std::sin(a))),
-                             int(std::lround(radius - radius * std::cos(a))));
-        }
-        pts.emplace_back(sz.x, s);
-
-        dc.SetPen(*wxTRANSPARENT_PEN);
-        dc.SetBrush(wxBrush(wxColour(0x00, 0xAE, 0x42)));
-        dc.DrawPolygon(int(pts.size()), pts.data());
-
-        // The check, drawn rather than set as text: a glyph this small lands differently on every
-        // platform's font, and it has to sit inside the triangle on all of them.
-        //
-        // Clipped to the mark before it is drawn. The hypotenuse runs (0,0) to (s,s), so the
-        // interior is x >= y; a round cap that crosses that line puts white on the outside of the
-        // triangle, which does not read as a check hanging over an edge - it reads as a notch cut
-        // out of the triangle, because the card behind it is white too. The clip makes that
-        // impossible at any DPI rather than relying on the placement below to have enough margin.
-        wxRegion clip(int(pts.size()), pts.data());
-        dc.SetDeviceClippingRegion(clip);
-
-        // Placed in the corner's thick end, clearing the diagonal by ~0.2s at every point.
-        const int      x0 = sz.x - s;
-        const wxPoint  tick[3] = {{x0 + s * 50 / 100, s * 30 / 100},
-                                  {x0 + s * 62 / 100, s * 42 / 100},
-                                  {x0 + s * 86 / 100, s * 18 / 100}};
-        wxPen pen(*wxWHITE, std::max(1, FromDIP(2)));
-        pen.SetCap(wxCAP_ROUND);
-        pen.SetJoin(wxJOIN_ROUND);
-        dc.SetPen(pen);
-        dc.DrawLines(3, tick);
-        dc.DestroyClippingRegion();
+        if (m_synced)
+            draw_sync_mark(this, dc, radius);
     }
 
 private:
     bool m_synced = false;
 };
 
-// The filament panel's rows are rows, not cards, so they carry the mark as a plain check rather
-// than a corner triangle - a triangle only means anything in a corner. Same green, same claim:
-// this filament is one the printer actually has loaded.
-class SyncCheck : public wxWindow
+// The mark on a filament row, laid over the combo's own top-right corner rather than set beside
+// it, so a filament is marked the way a card is - the mark covers the thing it is about.
+//
+// An overlay window rather than a paint hook: the combo is a shared control (TextInput, and every
+// preset combo in the app is one), and this mark belongs to six rows in one panel, not to the
+// class. It forwards its clicks, because a corner that swallowed them would be a dead spot on a
+// dropdown, and it is raised so the combo's own children cannot cover it.
+class SyncMarkOverlay : public wxWindow
 {
 public:
-    explicit SyncCheck(wxWindow *parent) : wxWindow(parent, wxID_ANY)
+    // 18, not the card's 22 and not smaller: the check has to fit inside the triangle with the
+    // stroke's own width to spare, and below about 18 there is no room left for it - the mark
+    // reads as a plain green corner. A combo is 30 tall, so this is as much of it as the mark can
+    // take without crowding the text.
+    explicit SyncMarkOverlay(wxWindow *combo, double radius, int size_dip = 18)
+        : wxWindow(combo, wxID_ANY), m_radius(radius), m_size_dip(size_dip)
     {
-        const int d = FromDIP(14);
-        m_size      = wxSize(d, d);
+        const int d = FromDIP(size_dip);
+        SetSize(wxSize(d, d));
         SetBackgroundStyle(wxBG_STYLE_PAINT);
-        SetMinSize(m_size);
-        SetMaxSize(m_size);
+        Hide();
+
         Bind(wxEVT_PAINT, [this](wxPaintEvent &) {
             wxAutoBufferedPaintDC dc(this);
             dc.SetBackground(wxBrush(GetParent()->GetBackgroundColour()));
             dc.Clear();
-            const wxSize sz = GetSize();
-            wxPen pen(wxColour(0x00, 0xAE, 0x42), std::max(2, FromDIP(2)));
-            pen.SetCap(wxCAP_ROUND);
-            pen.SetJoin(wxJOIN_ROUND);
-            dc.SetPen(pen);
-            const wxPoint tick[3] = {{sz.x * 18 / 100, sz.y * 52 / 100},
-                                     {sz.x * 40 / 100, sz.y * 76 / 100},
-                                     {sz.x * 84 / 100, sz.y * 26 / 100}};
-            dc.DrawLines(3, tick);
+            draw_sync_mark(this, dc, m_radius, m_size_dip);
         });
+
+        for (auto evt : {wxEVT_LEFT_DOWN, wxEVT_LEFT_UP, wxEVT_LEFT_DCLICK})
+            Bind(evt, [this](wxMouseEvent &e) { GetParent()->GetEventHandler()->ProcessEvent(e); });
+
+        // The combo's width is not known until it has been laid out, and changes with the panel.
+        combo->Bind(wxEVT_SIZE, [this](wxSizeEvent &e) {
+            e.Skip();
+            reposition();
+        });
+        reposition();
     }
-    wxSize DoGetBestSize() const override { return m_size; }
+
+    void SetSynced(bool synced)
+    {
+        if (IsShown() == synced)
+            return;
+        Show(synced);
+        if (synced) {
+            Raise();
+            reposition();
+        }
+        GetParent()->Refresh();
+    }
 
 private:
-    wxSize m_size;
+    void reposition()
+    {
+        const wxSize parent_sz = GetParent()->GetSize();
+        const wxSize sz        = GetSize();
+        // Inset by the border the combo draws, so the mark sits inside its outline rather than
+        // on top of it.
+        Move(parent_sz.x - sz.x - 1, 1);
+    }
+
+    double m_radius;
+    int    m_size_dip;
 };
 
 // The middle dot, from its own bytes.
@@ -1162,7 +1204,7 @@ struct Sidebar::priv
     PlaterPresetComboBox *combo_print;
     std::vector<PlaterPresetComboBox*> combos_filament;
     // One per filament combo, shown when that filament is one the machine actually has loaded.
-    std::vector<SyncCheck*> filament_sync_marks;
+    std::vector<SyncMarkOverlay*> filament_sync_marks;
     int editing_filament = -1;
     wxBoxSizer *sizer_filaments;
     PlaterPresetComboBox *combo_sla_print;
@@ -3049,15 +3091,13 @@ Sidebar::Sidebar(Plater *parent)
     });
     combobox->edit_btn = edit_btn;
 
-    // The sync mark sits between the combo and the edit button, in the same place on every row.
+    // The mark rides on the combo's own corner, so it joins no sizer.
     {
-        auto* sync_mark = new SyncCheck(p->m_panel_scrolled_filament_content);
+        auto* sync_mark = new SyncMarkOverlay(combobox, 4.0);
         sync_mark->SetToolTip(_L("This filament is loaded on the printer"));
-        sync_mark->Hide();
         if (int(p->filament_sync_marks.size()) <= 0)
-            p->filament_sync_marks.resize(0 + 1, nullptr);
+            p->filament_sync_marks.resize(1, nullptr);
         p->filament_sync_marks[0] = sync_mark;
-        combo_and_btn_sizer->Add(sync_mark, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(2));
     }
     combo_and_btn_sizer->Add(edit_btn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(SidebarProps::ElementSpacing()) - FromDIP(2)); // ElementSpacing - 2 (from combo box))
     combo_and_btn_sizer->AddSpacer(FromDIP(SidebarProps::ContentMargin()));
@@ -3487,15 +3527,13 @@ void Sidebar::init_filament_combo(PlaterPresetComboBox **combo, const int filame
 
     combobox->edit_btn = edit_btn;
 
-    // The sync mark sits between the combo and the edit button, in the same place on every row.
+    // The mark rides on the combo's own corner, so it joins no sizer.
     {
-        auto* sync_mark = new SyncCheck(p->m_panel_scrolled_filament_content);
+        auto* sync_mark = new SyncMarkOverlay(combobox, 4.0);
         sync_mark->SetToolTip(_L("This filament is loaded on the printer"));
-        sync_mark->Hide();
         if (int(p->filament_sync_marks.size()) <= filament_idx)
             p->filament_sync_marks.resize(filament_idx + 1, nullptr);
         p->filament_sync_marks[filament_idx] = sync_mark;
-        combo_and_btn_sizer->Add(sync_mark, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(2));
     }
     combo_and_btn_sizer->Add(edit_btn, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(SidebarProps::ElementSpacing()) - FromDIP(2)); // ElementSpacing - 2 (from combo box))
 
@@ -9688,9 +9726,8 @@ void Sidebar::refresh_filament_sync_marks()
     std::vector<FilamentData> project;
     build_design_filament_list(wxGetApp().preset_bundle, project);
 
-    bool layout_changed = false;
     for (size_t i = 0; i < p->filament_sync_marks.size(); ++i) {
-        SyncCheck* mark = p->filament_sync_marks[i];
+        SyncMarkOverlay* mark = p->filament_sync_marks[i];
         if (!mark)
             continue;
 
@@ -9711,13 +9748,8 @@ void Sidebar::refresh_filament_sync_marks()
                 }
             }
         }
-        if (mark->IsShown() != synced) {
-            mark->Show(synced);
-            layout_changed = true;
-        }
+        mark->SetSynced(synced);
     }
-    if (layout_changed)
-        Layout();
 }
 
 void Sidebar::show_ace_assign_popup(size_t head_idx, wxWindow* anchor)
