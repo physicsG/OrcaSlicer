@@ -22,6 +22,12 @@ void sm_persist_login();
 // token simply fails on the next API call and the user re-logs in.
 void sm_restore_login();
 
+// Re-announce the current account to whatever has subscribed since. sm_restore_login()
+// runs before the webview exists, so the notify() inside it reaches nobody; this is
+// called once the webview is up so the page learns the session it was too early to hear
+// about. No-op when logged out.
+void sm_announce_login();
+
 }} // namespace Slic3r::GUI
 
 #endif // slic3r_GUI_SMAccountPersist_hpp_

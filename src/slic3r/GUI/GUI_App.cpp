@@ -1004,9 +1004,10 @@ void GUI_App::post_init()
     m_open_method = "double_click";
     bool switch_to_3d = false;
 
-    // Restore a saved Snapmaker account/session (token) once at startup. app_config was loaded
-    // in the ctor (init_app_config), so the saved section is available.
-    sm_restore_login();
+    // The account was restored in init_app_config(), before the webview existed - so the notify()
+    // that went with it reached no subscribers. Say it again now the page is listening, or it
+    // keeps offering Login/Register over a live session.
+    sm_announce_login();
 
     if (!this->init_params->input_files.empty()) {
 
@@ -2239,6 +2240,12 @@ void GUI_App::init_app_config()
         }
         // Save orig_version here, so its empty if no app_config existed before this run.
         m_last_config_version = app_config->orig_version();//parse_semver_from_ini(app_config->config_path());
+
+        // Restore the saved Snapmaker account here rather than in post_init(): the webview asks
+        // for the login state once, early, and post_init() runs after that. Restoring later left
+        // the account live in C++ while the home page still offered Login/Register - seen on a
+        // real restore, and the placement PR #715 arrived at independently.
+        sm_restore_login();
     }
     else {
 #ifdef _WIN32

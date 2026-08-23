@@ -25,6 +25,15 @@ void sm_persist_login()
     BOOST_LOG_TRIVIAL(info) << "sm_persist_login: saved account (login=" << ui->is_user_login() << ", has_token=" << !ui->get_user_token().empty() << ")";
 }
 
+void sm_announce_login()
+{
+    auto* ui = wxGetApp().sm_get_userinfo();
+    if (!ui || !ui->is_user_login())
+        return;
+    ui->notify();
+    BOOST_LOG_TRIVIAL(info) << "sm_announce_login: re-announced " << ui->get_user_account();
+}
+
 void sm_restore_login()
 {
     auto*      ui  = wxGetApp().sm_get_userinfo();
