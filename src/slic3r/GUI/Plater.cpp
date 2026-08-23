@@ -1049,7 +1049,12 @@ static wxBitmap plate_bitmap(wxWindow *win, BedType bt, int height_dip)
 //
 // `radius` is the corner radius the thing being marked is drawn with; the mark follows that arc
 // instead of overhanging it. `size_dip` lets a combo take a smaller triangle than a 106px card.
-static void draw_sync_mark(wxWindow *win, wxDC &dc, double radius, int size_dip = 22)
+// One size wherever the mark appears. A combo is a third the height of a card, so this is a much
+// larger share of a filament row than of the printer card - but the mark means the same thing in
+// both places, and reading as the same mark matters more than sitting at the same proportion.
+static constexpr int SYNC_MARK_DIP = 22;
+
+static void draw_sync_mark(wxWindow *win, wxDC &dc, double radius, int size_dip = SYNC_MARK_DIP)
 {
     const wxSize sz = win->GetSize();
     const int    s  = win->FromDIP(size_dip);
@@ -1130,14 +1135,10 @@ private:
 class SyncMarkOverlay : public wxWindow
 {
 public:
-    // 18, not the card's 22 and not smaller: the check has to fit inside the triangle with the
-    // stroke's own width to spare, and below about 18 there is no room left for it - the mark
-    // reads as a plain green corner. A combo is 30 tall, so this is as much of it as the mark can
-    // take without crowding the text.
-    explicit SyncMarkOverlay(wxWindow *combo, double radius, int size_dip = 18)
-        : wxWindow(combo, wxID_ANY), m_radius(radius), m_size_dip(size_dip)
+    explicit SyncMarkOverlay(wxWindow *combo, double radius)
+        : wxWindow(combo, wxID_ANY), m_radius(radius)
     {
-        const int d = FromDIP(size_dip);
+        const int d = FromDIP(SYNC_MARK_DIP);
         SetSize(wxSize(d, d));
         SetBackgroundStyle(wxBG_STYLE_PAINT);
         Hide();
@@ -1146,7 +1147,7 @@ public:
             wxAutoBufferedPaintDC dc(this);
             dc.SetBackground(wxBrush(GetParent()->GetBackgroundColour()));
             dc.Clear();
-            draw_sync_mark(this, dc, m_radius, m_size_dip);
+            draw_sync_mark(this, dc, m_radius);
         });
 
         for (auto evt : {wxEVT_LEFT_DOWN, wxEVT_LEFT_UP, wxEVT_LEFT_DCLICK})
@@ -1183,7 +1184,6 @@ private:
     }
 
     double m_radius;
-    int    m_size_dip;
 };
 
 // The middle dot, from its own bytes.
