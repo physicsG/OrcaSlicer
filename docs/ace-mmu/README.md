@@ -17,7 +17,7 @@ and the traps on this branch. Read it before touching anything.
 
 | # | Document | Contents |
 |---|----------|----------|
-| 15 | [15-printer-panel.md](15-printer-panel.md) | **The U1 printer panel** in Prepare/Preview: the five defects, Bambu Studio's shape applied to four heads, the ACE mode switch, two defects it uncovered, and the shipping order |
+| 15 | [15-printer-panel.md](15-printer-panel.md) | **The U1 printer panel** in Prepare/Preview: the five defects, the reference shape applied to four heads, the ACE mode switch, two defects it uncovered, and the shipping order |
 | 16 | [16-ace-visuals.md](16-ace-visuals.md) | **The ACE visual standard**: one way to draw an ACE, taken from Orca's own AMS widget geometry — badge, glyph, spool box, moisture pill |
 | 17 | [17-plate-template.md](17-plate-template.md) | **The U1 plate template**: the measured silhouette, the emphasised path the app draws, and when a plate is photographed rather than drawn |
 

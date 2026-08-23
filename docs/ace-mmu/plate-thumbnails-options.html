@@ -147,7 +147,7 @@
       colours. Same U1 mount, so the measured silhouette carries over unchanged.</p>
     <p><b>Scope: these three, plus Cool Steel.</b> The app can offer more — turning on
       <code>support_multi_bed_types</code> swaps the U1's list for a longer one that includes Cool
-      Plate, Engineering Plate and the rest of the Bambu-lineage set. Those are
+      Plate, Engineering Plate and the rest of the upstream-lineage set. Those are
       <b>deliberately out of scope here</b>; §3 records what they are and what they would need, so
       the decision is on paper rather than rediscovered later.</p>
   </header>
@@ -200,7 +200,7 @@
     <div class="eyebrow"><span class="k">2</span><span>In the panel</span></div>
     <div class="card">
       <h3>The plate card, and the picker behind it</h3>
-      <p class="sub">The card is 92&nbsp;px — the width Bambu uses — so the label clips to
+      <p class="sub">The card is 92&nbsp;px — the width the reference slicer uses — so the label clips to
         <i>Textur…</i> and the picture carries the identification. Click a plate below to change
         the card.</p>
       <div id="ctx"></div>
@@ -215,7 +215,7 @@
     <div class="card">
       <h3>What else the enum can offer, and why it waits</h3>
       <p class="sub"><code>PrintConfig.cpp</code> holds <b>three</b> bed-type lists, not one: the
-        generic Bambu set of six, the U1's own set (<code>// U1 only 4</code>), and a seven-entry
+        generic upstream set of six, the U1's own set (<code>// U1 only 4</code>), and a seven-entry
         set used when <code>support_multi_bed_types</code> is on (<code>// U1 use 7 …</code>).
         Only the first three rows below are plates Snapmaker sells for the U1 — the rest appear
         only in that advanced mode, and are <b>left alone for now</b>.</p>
@@ -230,7 +230,7 @@
         <code>btPEI</code> is <i>Smooth High Temp Plate</i> generically but <i>Smooth PEI Plate</i>
         on the U1, and <code>btSuperTack</code> is <i>Cool Plate (SuperTack)</i> generically but
         <i>Cool Steel Plate</i> on the U1. So a thumbnail must key off the <b>enum value</b>, never
-        the label — otherwise the U1 shows a Bambu plate under a Snapmaker name, or nothing at all.</p>
+        the label — otherwise the U1 shows another vendor's plate under a Snapmaker name, or nothing at all.</p>
       <p class="note"><b>Cool Steel is the awkward one</b> and worth flagging now: it sits in the
         U1's <em>default</em> list of four, yet Snapmaker does not sell it separately — it ships
         with the printer, so there is no product page to photograph from. If the U1's default set
@@ -242,8 +242,8 @@
     <div class="eyebrow"><span class="k">4</span><span>Before any of this ships</span></div>
     <div class="card">
       <p class="note" style="margin-top:0"><b>These images are Snapmaker's.</b> They are used here
-        as a design reference, the same way <code>ui-snapshots-inspiration/</code> holds Bambu's
-        screenshots. Shipping them inside an <b>AGPL-3.0</b> repository is a different question and
+        as a design reference rather than as shipped art. Shipping them inside an <b>AGPL-3.0</b>
+        repository is a different question and
         the answer is probably no without permission — so the options that actually ship are: ask
         Snapmaker, photograph the plates yourself, or draw them.
         <span class="chip warn">decide before PR</span></p>

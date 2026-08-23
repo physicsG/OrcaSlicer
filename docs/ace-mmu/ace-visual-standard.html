@@ -305,7 +305,7 @@
     <div class="eyebrow"><span class="k">1</span><span>The badge &mdash; four spools in a box</span></div>
     <div class="card">
       <h3>Five ways to draw it &mdash; all 44&times;26</h3>
-      <p class="sub">The icon Bambu puts beside <b>AMS</b> in a nozzle box is <b>not
+      <p class="sub">The icon the reference slicer puts beside <b>AMS</b> in a nozzle box is <b>not
         <code>AMSPreview</code></b> &mdash; not a row of cubes but a little cabinet seen head-on, and
         Orca ships no equivalent (<code>ams_icon.svg</code> is a 155&times;128 illustration). So here are
         five candidates, from the faithful copy to the ones that lean on what this fork already draws.
@@ -315,7 +315,7 @@
         four bays</b>, so they are interchangeable in code &mdash; one function, one argument. Pick with
         the <b>Badge</b> row in the deck and the rest of this page follows, including the states below.
         Every one is shown twice: enlarged, and at true size in the row it actually lives in.</p>
-      <p class="note"><b>A</b> is the faithful distillation of Bambu's icon &mdash; hood, bays, base
+      <p class="note"><b>A</b> is the faithful distillation of that icon &mdash; hood, bays, base
         drawn over them. <b>B</b> keeps that silhouette but draws the chassis in line rather than fill,
         so the colours carry and the grey mass goes away. <b>C</b> drops the chassis entirely and stands
         the bays on <code>AMSPreview</code>'s own ground, which is the least new invention of the five.
@@ -358,7 +358,7 @@
           <code>ace_badge()</code>, <code>ace_glyph()</code> and <code>ace_glyph_square()</code>
           and nothing else.</p>
       </div>
-      <p class="note" style="margin-top:14px"><b>There is no single-bay variant.</b> Bambu needs one
+      <p class="note" style="margin-top:14px"><b>There is no single-bay variant.</b> The reference needs one
         because an AMS Lite holds one spool; <b>every ACE unit has exactly four slots</b> &mdash;
         <code>/api/state</code> returns <code>"slots": [/* exactly 4 */]</code> and
         <code>SLOT_COUNT = 4</code> is a constant, not a configuration. A one-bay glyph would depict a
@@ -429,7 +429,7 @@
         is: unit number in a brand-coloured square, the model name the printer gives it
         (<code>protocol: "v2"</code> &rarr; <b>ACE 2 Pro</b>, <code>"v1"</code> &rarr; <b>ACE Pro</b>), the
         toolhead it feeds <span class="flag">ACE</span>, and the moisture pill hard right &mdash; which is
-        where Bambu puts it on the AMS.</p>
+        where the reference puts it on the AMS.</p>
       <p class="note"><b>Where the level comes from &mdash; and the one thing to settle.</b> The AMS has
         <code>material_remain</code> 0&ndash;100 and draws it directly. <b>An ACE slot has no such
         field</b>: <code>/api/state</code>'s <code>slots[]</code> carries material, brand, colour and
@@ -571,7 +571,7 @@
            '" viewBox="0 0 44 26" aria-hidden="true">';
   }
 
-  // A · Cabinet — hood, bays, base drawn over them. The Bambu distillation.
+  // A · Cabinet — hood, bays, base drawn over them. The distillation of the reference icon.
   function badgeA(cols, z, off, parts){
     parts = parts || {hood:1, bays:1, base:1};
     var o = [svgOpen(z)];
@@ -633,7 +633,7 @@
 
   var BADGES = { a:badgeA, b:badgeB, c:badgeC, d:badgeD, e:badgeE };
   var BADGE_META = {
-    a:["Cabinet", "CHOSEN. Bambu's icon, distilled: hood, bays, base drawn over them."],
+    a:["Cabinet", "CHOSEN. The reference icon, distilled: hood, bays, base drawn over them."],
     b:["Outlined", "Same shape in line. Colours carry; nothing competes with them."],
     c:["Tray", "No chassis at all — AMSPreview's ground with capsules. Least invented."],
     d:["Bays", "The ACE seen head-on: four bays in one body. Boldest colour."],
@@ -670,7 +670,7 @@
   }
   var LINE_META = {
     o1:["Outlined bays", "Every part in line. Lightest, but 5 px bays outlined at 1.3 get thin."],
-    o2:["Solid bays",    "CHOSEN. Chassis in line, bays filled. Closest to Bambu's own popup rows."],
+    o2:["Solid bays",    "CHOSEN. Chassis in line, bays filled. Closest to the reference's own popup rows."],
     o3:["Bay ticks",     "Bays as four strokes. Simplest to draw, reads at any size."],
     o4:["Cabinet only",  "No bays — for when the glyph means \u201Can ACE\u201D, not a particular one."]
   };

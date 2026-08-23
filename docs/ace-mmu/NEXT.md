@@ -7,7 +7,7 @@
 
 | File | What it is |
 |------|------------|
-| [15-printer-panel.md](15-printer-panel.md) | The panel design: five measured defects, Bambu's shape for four heads, the ACE mode switch, two defects it uncovered, touch points, shipping order |
+| [15-printer-panel.md](15-printer-panel.md) | The panel design: five measured defects, the reference shape adapted to four heads, the ACE mode switch, two defects it uncovered, touch points, shipping order |
 | [16-ace-visuals.md](16-ace-visuals.md) | The ACE visual standard: three forms under one rule, the spool box, the moisture pill, where a fill level comes from |
 | [17-plate-template.md](17-plate-template.md) | The U1 plate template: the measured silhouette, the path the app draws, and when a plate is photographed rather than drawn |
 | [printer-panel-mockup.html](printer-panel-mockup.html) | The panel, interactive: six machine states, the sync flow, the assign popover, the mode dropdown |
@@ -16,7 +16,7 @@
 
 ## Decisions taken — do not reopen without a reason
 
-- **Panel shape:** Bambu Studio's, from `ui-snapshots-inspiration/`. Three cards across the
+- **Panel shape:** taken from the reference slicer this is modelled on. Three cards across the
   top; a bordered box per head wrapped 2×2; one `Nozzle` diameter row, not four tabs.
 - **Naming:** **Toolhead N**, everywhere. Printer Settings already says it; the sidebar
   said *Nozzle N* and the assignment dialog *T1–T4*.
@@ -34,9 +34,8 @@
 ## Open — the only things still undecided
 
 **1. Licensing of the plate photographs.** Three of the four plate thumbnails are built
-from Snapmaker's product photography, used here as design reference the way
-`ui-snapshots-inspiration/` holds Bambu's screenshots. Shipping them inside an
-**AGPL-3.0** repository needs permission. What can ship: ask Snapmaker, photograph the
+from Snapmaker's product photography, used here as design reference rather than as
+shipped art. Shipping them inside an **AGPL-3.0** repository needs permission. What can ship: ask Snapmaker, photograph the
 plates yourself, or draw all four the way Cool Steel already is. **This blocks the plate
 card, nothing else** — and it is a swap of the fill, not a redesign: the silhouette,
 sampling and sizes in [17-plate-template.md](17-plate-template.md) hold either way.

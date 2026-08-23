@@ -104,7 +104,7 @@
   .btn-ic:hover{color:var(--sb-text);}
   .btn-ic:focus-visible{outline:2px solid var(--blue);outline-offset:1px;border-radius:4px;}
 
-  /* top row: printer card, plate card, sync card — Bambu's three-up */
+  /* top row: printer card, plate card, sync card — the reference's three-up */
   .cards{display:flex;gap:7px;align-items:stretch;}
   .card{position:relative;border:1px solid var(--sb-field-line);border-radius:8px;background:var(--sb-panel);
         display:flex;flex-direction:column;overflow:hidden;}
@@ -126,12 +126,12 @@
   .bedthumb{width:44px;height:40px;border-radius:5px;
             background:repeating-conic-gradient(#c8a86a 0% 25%, #b89a5c 0% 50%) 0/6px 6px;}
 
-  /* the green corner tick, as Bambu marks a card that matches the machine */
+  /* the green corner tick, as the reference marks a card that matches the machine */
   .corner{position:absolute;top:0;right:0;width:0;height:0;border-top:17px solid var(--orca);
           border-left:17px solid transparent;}
   .corner::after{content:"\2713";position:absolute;top:-16px;right:1px;font-size:9px;line-height:1;color:#fff;}
 
-  /* per-head boxes — Bambu's Left/Right Nozzle panes, wrapped to 2x2 */
+  /* per-head boxes — the reference's Left/Right Nozzle panes, wrapped to 2x2 */
   .heads{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
   .hbox{position:relative;border:1px solid var(--sb-field-line);border-radius:8px;padding:7px 9px 9px;
         display:flex;flex-direction:column;gap:6px;background:var(--sb-panel);}
@@ -146,7 +146,7 @@
   .hbox .r .adj:hover{border-color:var(--sb-field-line);color:var(--sb-text);}
   .hbox .r .fdtxt{font-size:11.5px;color:var(--sb-dim);}
 
-  /* the little ACE widget in the head box, mirroring Bambu's AMS thumbnail */
+  /* the little ACE widget in the head box, mirroring the reference's AMS thumbnail */
   /* The ACE badge, to the visual standard: 40x26, hood + four bays + base.
      See docs/ace-mmu/ace-visual-standard.html. */
   .acetag{appearance:none;border:0;background:transparent;padding:2px;border-radius:5px;cursor:pointer;
@@ -155,7 +155,7 @@
   .acetag:focus-visible{outline:2px solid var(--blue);outline-offset:1px;}
   .acetag svg{display:block;}
 
-  /* the popover — Bambu's "Set the number of AMS installed on the nozzle." */
+  /* the popover — the reference's "Set the number of AMS installed on the nozzle." */
   .pop{position:absolute;z-index:8;left:9px;right:9px;background:var(--sb-panel);border:1px solid var(--sb-field-line);
        border-radius:9px;box-shadow:0 12px 34px -10px rgba(0,0,0,.35);padding:12px 13px;}
   .pop h5{margin:0 0 10px;font-size:12.5px;font-weight:500;color:var(--sb-label);line-height:1.35;}
@@ -180,7 +180,7 @@
   .pop .note{margin:9px 0 0;font-size:11.5px;color:var(--warn);line-height:1.4;}
   .pop .close{position:absolute;top:7px;right:9px;}
 
-  /* the toast, anchored over the view as Bambu anchors it */
+  /* the toast, anchored over the view as the reference anchors it */
   .toast{position:absolute;right:18px;top:104px;max-width:330px;background:var(--toast);color:var(--toast-ink);
          border-radius:9px;padding:14px 15px;box-shadow:0 18px 40px -14px rgba(0,0,0,.6);
          display:flex;flex-direction:column;gap:12px;}
@@ -217,20 +217,11 @@
   .match{display:flex;flex-direction:column;gap:16px;}
   .mrow{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;background:var(--panel);
         border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
-  .shot{flex:0 0 auto;border:1px solid var(--line);border-radius:7px;overflow:hidden;position:relative;
-        background:var(--inset);}
-  /* The reference screenshots are third-party and deliberately not in git. With
-     ui-snapshots-inspiration/ present they load; without it this caption shows through. */
-  .shot::after{content:"Bambu Studio reference — ui-snapshots-inspiration/ (not in git)";
-        position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:14px;
-        font-size:10.5px;line-height:1.5;color:var(--faint);letter-spacing:.04em;z-index:0;}
-  .shot img{position:absolute;display:block;max-width:none;z-index:1;background:#fff;}
   .mtxt{flex:1 1 300px;min-width:250px;}
   .mtxt h4{margin:0 0 6px;font-size:13.5px;font-weight:700;}
   .mtxt p{margin:0;font-size:12.5px;color:var(--dim);line-height:1.5;}
   .mtxt p + p{margin-top:7px;}
   .mtxt b{color:var(--text);font-weight:600;}
-  .cap{margin:6px 0 0;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);}
 
   /* ---------- prose furniture ---------- */
   .qbox,.foot{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 17px;}
@@ -263,7 +254,7 @@
   <header class="lede">
     <h1>The U1 printer panel</h1>
     <p><b>Prepare and Preview share one sidebar</b>, so the Printer section at the top of it is a single
-      widget seen in two tabs. This rebuilds it to Bambu Studio's shape: three cards across the top,
+      widget seen in two tabs. This rebuilds it to the shape the reference slicer uses: three cards across the top,
       a bordered box per head, a green corner tick where the app agrees with the machine, an edit
       popover behind the ACE row, and the two-step <i>Sync info</i> flow that ends by offering to sync
       filaments.</p>
@@ -272,9 +263,8 @@
       They are a <b>snapshot, baked into this page</b>: it is a static file and does not talk to the
       printer, and as a published artifact it could not reach your LAN even if it tried. Press
       <b>Sync info</b>, open a head's <b>ACE</b> widget, choose an <b>ACE mode</b>, and switch the machine
-      underneath it. Every screenshot further down is the Bambu original the corresponding piece is
-      copying.</p>
-    <p>One row has no Bambu equivalent, because the U1 needs it: <b>ACE mode</b>. The printer has its
+      underneath it. The notes further down record what each piece takes from that reference.</p>
+    <p>One row has no equivalent there, because the U1 needs it: <b>ACE mode</b>. The printer has its
       own three-way switch &mdash; <code>SET_ACE_MODE MODE=normal|multi|head</code> &mdash; and it
       decides whether per-toolhead wiring means anything at all. The panel mirrors it, and Sync info
       reads it. That switch is also the answer to &ldquo;can one unit feed more than one head&rdquo;:
@@ -283,7 +273,7 @@
 
   <!-- ============================ the live panel ============================ -->
   <section class="case">
-    <div class="eyebrow"><span class="k">Proposed</span><span>Bambu's panel, for four heads</span></div>
+    <div class="eyebrow"><span class="k">Proposed</span><span>A mature multi-head panel, for four heads</span></div>
 
     <div class="deck">
       <div class="row">
@@ -310,16 +300,10 @@
 
   <!-- ============================ correspondence ============================ -->
   <section class="case">
-    <div class="eyebrow"><span class="k">Reference</span><span>Piece by piece, against the original</span></div>
+    <div class="eyebrow"><span class="k">Reference</span><span>Piece by piece, against the reference</span></div>
     <div class="match">
 
       <div class="mrow">
-        <div>
-          <div class="shot" style="width:423px;height:137px">
-            <img src="../../ui-snapshots-inspiration/Nozzle_and_filament_info/overview.png" alt="Bambu Studio printer cards" style="left:0;top:-38px">
-          </div>
-          <p class="cap">Bambu Studio &middot; H2D</p>
-        </div>
         <div class="mtxt">
           <h4>Three cards, and a tick that means something</h4>
           <p>Printer, plate, and <b>Sync info</b> sit side by side at equal height; the printer card
@@ -334,15 +318,9 @@
       </div>
 
       <div class="mrow">
-        <div>
-          <div class="shot" style="width:423px;height:148px">
-            <img src="../../ui-snapshots-inspiration/Nozzle_and_filament_info/overview.png" alt="Bambu Studio nozzle boxes" style="left:0;top:-178px">
-          </div>
-          <p class="cap">Bambu Studio &middot; per-nozzle boxes</p>
-        </div>
         <div class="mtxt">
           <h4>A box per head, two across</h4>
-          <p>Bambu draws <b>Left Nozzle</b> and <b>Right Nozzle</b> as two bordered panes, each with an
+          <p>The reference draws <b>Left Nozzle</b> and <b>Right Nozzle</b> as two bordered panes, each with an
             <b>AMS</b> row, a <b>Diameter</b> combo and a <b>Flow</b> combo. The AMS row shows a small
             thumbnail of the loaded spools when a unit is attached, and a chevron when none is.</p>
           <p><b>Ours is four of the same box, wrapped 2&times;2.</b> Same label position, same row
@@ -353,12 +331,6 @@
       </div>
 
       <div class="mrow">
-        <div>
-          <div class="shot" style="width:313px;height:192px">
-            <img src="../../ui-snapshots-inspiration/Nozzle_and_filament_info/AMS_edit_popup.png" alt="Bambu Studio AMS count popup" style="left:0;top:-161px">
-          </div>
-          <p class="cap">Bambu Studio &middot; AMS popover</p>
-        </div>
         <div class="mtxt">
           <h4>The popover that sets what is attached</h4>
           <p>Clicking the pencil beside <b>AMS</b> drops a panel: a sentence, then a grey inset listing
@@ -375,15 +347,9 @@
       </div>
 
       <div class="mrow">
-        <div>
-          <div class="shot" style="width:348px;height:124px">
-            <img src="../../ui-snapshots-inspiration/Nozzle_and_filament_info/Sync_info_popup.png" alt="Bambu Studio sync confirmation" style="left:-418px;top:-168px">
-          </div>
-          <p class="cap">Bambu Studio &middot; after Sync info</p>
-        </div>
         <div class="mtxt">
           <h4>Sync in two steps, not one</h4>
-          <p>Bambu's <b>Sync info</b> reads nozzle and AMS-count information, then says so and offers
+          <p>The reference's <b>Sync info</b> reads nozzle and AMS-count information, then says so and offers
             <b>Continue to sync filaments</b> beside <b>Cancel</b> &mdash; the count sync and the
             contents sync are separate presses, chained by an offer.</p>
           <p><b>Ours chains the two that already exist.</b> Step one is today's nozzle query plus
@@ -395,12 +361,6 @@
       </div>
 
       <div class="mrow">
-        <div>
-          <div class="shot" style="width:423px;height:282px">
-            <img src="../../ui-snapshots-inspiration/Nozzle_and_filament_info/overview.png" alt="Bambu Studio project filaments" style="left:0;top:-322px">
-          </div>
-          <p class="cap">Bambu Studio &middot; the section below</p>
-        </div>
         <div class="mtxt">
           <h4>And the half of the screenshot below the fold</h4>
           <p>The same screenshot continues into <b>Project Filaments</b>: a numbered, colour-coded badge
@@ -420,15 +380,15 @@
 
   <!-- ============================ deviations ============================ -->
   <div class="qbox">
-    <h4>The four places it cannot follow Bambu, and what it does instead</h4>
+    <h4>The four places it cannot follow the reference, and what it does instead</h4>
     <ol>
-      <li><b>Four heads, not two nozzles.</b> Bambu's two boxes sit side by side across the sidebar.
+      <li><b>Four heads, not two nozzles.</b> The reference's two boxes sit side by side across the sidebar.
         Four at that width would be 110&nbsp;px each &mdash; too narrow for a labelled combo. So the same
-        box is wrapped <b>2&times;2</b>, which keeps Bambu's proportions and costs one extra row of
+        box is wrapped <b>2&times;2</b>, which keeps those proportions and costs one extra row of
         height. That row lands in Preview too, where the sidebar competes with the sliced preview:
         the head boxes are the section to collapse first if it proves too tall.</li>
 
-      <li><b>An ACE is not an AMS, and the popover is a choice rather than a count.</b> Bambu counts
+      <li><b>An ACE is not an AMS, and the popover is a choice rather than a count.</b> The reference counts
         interchangeable units by kind, so a spinner fits. multiACE binds a head to a <b>named</b> unit
         with <code>ACE_SET_HEAD_ACE HEAD=h ACE=a</code>, or puts it on its own feeder with
         <code>ACE_SET_HEAD_FEEDER HEAD=h ENABLE=1</code> &mdash; two macros, so two kinds of row and a
@@ -436,11 +396,11 @@
         Pro</i> from <code>protocol: "v2"</code>, <i>ACE Pro</i> from <code>"v1"</code>, with slot
         count, connection and humidity underneath.</li>
 
-      <li><b>No Flow row.</b> Bambu's third row picks a flow calibration; this fork removed the control
+      <li><b>No Flow row.</b> The reference's third row picks a flow calibration; this fork removed the control
         and there is no setting behind it. Adding a dead combo to look like the screenshot would be
         worse than the gap. The head box has two rows, not three.</li>
 
-      <li><b>Contents are LAN-only.</b> Bambu reads AMS state over its cloud, so its panel is populated
+      <li><b>Contents are LAN-only.</b> The reference reads AMS state over its cloud, so its panel is populated
         whenever the printer is online. The multiACE endpoint answers only on the local network, so over
         a cloud connection there is no snapshot at all. The panel then draws the <b>preset's</b> topology
         &mdash; which is real, and is what offline slicing uses &mdash; with contents muted rather than
@@ -518,7 +478,7 @@
       <code>PrintHost</code> through the webview, not as a <code>MachineObject</code>, so this panel
       cannot lean on <code>MachineObject::poll_ace_ams()</code> the way the AMS UI does. It resolves a
       host with <code>AceMmuProvider::resolve_connected_host()</code> and reads on demand &mdash; which
-      is the other reason Bambu's press-to-sync flow fits the U1 better than a background poll.</p>
+      is the other reason a press-to-sync flow fits the U1 better than a background poll.</p>
   </div>
 
 </div>

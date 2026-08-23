@@ -26,16 +26,17 @@ Measured by running the app, not by reading it (`.claude/tools/start.sh headless
 | 4 | **No contents, and no way to ask.** The spool colours at each head are known when the printer is on the LAN — they already drive the filament sync — but never reach this panel. | `append_ace_filament_list`, Plater.cpp:773 |
 | 5 | **Two half-syncs.** The sidebar glyph syncs nozzle diameters only; multiACE topology sync is a separate button buried in Printer Settings › Multimaterial. | Plater.cpp:2214, Tab.cpp:4652 |
 
-## The shape: Bambu's panel, for four heads
+## The shape: a mature multi-head panel, for four heads
 
-Taken from `ui-snapshots-inspiration/Nozzle_and_filament_info/`, piece by piece.
+Taken piece by piece from the reference slicer this panel is modelled on - a two-nozzle
+machine's printer section, which solves most of the same problems already.
 
 - **Three cards across the top** — printer (thumbnail over preset combo), plate
   (texture swatch + ⓘ, absorbing today's `Bed type` row), and **Sync info**.
 - **A green corner tick** on any card that agrees with the connected machine. On a head
   box it means the ACE wiring matches what the printer reports — a claim we can make,
   because `sync_ace_topology` already computes exactly that diff.
-- **A bordered box per head**, Bambu's Left/Right Nozzle panes wrapped **2×2**: an
+- **A bordered box per head**, the reference's Left/Right Nozzle panes wrapped **2×2**: an
   `ACE` row (badge when a unit feeds it, `Stock feeder` otherwise, adjust button always)
   and a `Diameter` row. No `Flow` row — this fork deleted the control and there is no
   setting behind it.

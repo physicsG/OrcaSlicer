@@ -27,7 +27,7 @@ spool, an ACE never does.
 
 **Badge** — hood, four bays, base drawn *over* them; the base is slightly wider than the
 hood, which is what makes it read as a cabinet rather than a bar chart. Bays are 5×14
-capsules at x 6/15/24/33 — **padding 4 = gap 4**, matching the proportions of Bambu's
+capsules at x 6/15/24/33 — **padding 4 = gap 4**, matching the proportions of the reference's
 own icon. Colour and emptiness are all that survive at this size, so the badge carries
 colour only; an empty bay is white against the grey hood, with no outline. Trust and
 staleness live wherever the badge is a control.

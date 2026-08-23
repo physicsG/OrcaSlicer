@@ -102,18 +102,17 @@ icon path cannot read. Drawn plates ship as **SVG**.
 **Key off the enum, never the label.** The same `BedType` is named differently per printer:
 `btPEI` is *Smooth High Temp Plate* generically and *Smooth PEI Plate* on the U1;
 `btSuperTack` is *Cool Plate (SuperTack)* generically and *Cool Steel Plate* on the U1.
-Match on the label and the U1 shows a Bambu plate under a Snapmaker name.
+Match on the label and the U1 shows the wrong vendor's plate under a Snapmaker name.
 
-**The card cannot be narrow without a picture.** Bambu's plate card is 92 px, so the label
+**The card cannot be narrow without a picture.** The reference's plate card is 92 px, so the label
 clips to *Textur…* and the picture carries the identification. Without art, a 92 px card is
 just clipped text — worse than the full-width `Bed type` row it replaces. Which is why the
 row stays as it is until these exist.
 
 ## Open
 
-**Licensing.** The three photographs are Snapmaker's, used here as design reference the way
-`ui-snapshots-inspiration/` holds Bambu's screenshots. Shipping them in an **AGPL-3.0**
-repository needs permission. What can ship: ask Snapmaker, photograph the plates yourself,
+**Licensing.** The three photographs are Snapmaker's, used here as design reference rather
+than as shipped art. Shipping them in an **AGPL-3.0** repository needs permission. What can ship: ask Snapmaker, photograph the plates yourself,
 or draw all four. The drawn cool plate has no such problem and is the model for anything
 that has to be replaced — the silhouette and the sampling rules are unaffected either way,
 so it is a swap of the fill, not a redesign.
