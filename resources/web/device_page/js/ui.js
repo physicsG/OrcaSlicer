@@ -1,0 +1,629 @@
+/*
+ * ui.js - rendering for the Device tab.
+ *
+ * The layout mirrors the shipped Flutter page: a left rail, then a column of
+ * three panels (Camera / Control / Printing Task), each a 40px header bar over
+ * a white body. Measurements and colours come from the real page - see
+ * docs/u1-webui/02-device-page/05-visual-reference.md
+ */
+'use strict';
+
+import { LIMITS, PRINT_STATE, TASK_CONFIG, DEVICE, deviceLabel }
+  from '../../shared/js/protocol.js';
+import { openDialog, numberField } from './overlay.js';
+import { lookupFault } from '../../shared/js/errors.js';
+
+export const $ = (sel, root = document) => root.querySelector(sel);
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+function icon(name, cls) {
+  const i = el('img', cls);
+  i.src = `icons/${name}.svg`;
+  i.alt = '';
+  return i;
+}
+
+/** "_ /_ °C" is what the shipped page shows before any reading arrives. */
+function temps(cur, target) {
+  const f = (v) => (Number.isFinite(v) && v > 0 ? v.toFixed(1) : '_');
+  return `${f(cur)} /${f(target)}°C`;
+}
+
+/* ---- rail ----------------------------------------------------------- */
+
+/**
+ * The selector names the machine even when it is not connected — Orca keeps
+ * saved printers in app_config whether or not a session is up, and showing
+ * "Unconnected" for a machine the user has configured just hides it.
+ */
+export function renderRail(device, connection, devices = [], reachable = false) {
+  const nameEl = $('#dev-name');
+  const dot = $('#dev-state');
+
+  if (!device) {
+    nameEl.textContent = devices.length ? 'Select a printer' : 'Unconnected';
+    nameEl.title = devices.length ? `${devices.length} saved` : 'No printer configured';
+    dot.dataset.state = 'none';
+    return;
+  }
+
+  const label = deviceLabel(device);
+  // Live state beats the persisted flag - see the note in app.js render().
+  const linked = reachable || !!device[DEVICE.CONNECTED];
+  nameEl.textContent = label;
+  nameEl.title = [
+    label,
+    device[DEVICE.MODEL],
+    device[DEVICE.SN] ? `SN ${device[DEVICE.SN]}` : '',
+    device[DEVICE.IP] || '',
+    linked ? 'connected' : 'not connected',
+    connection && connection.message ? connection.message : '',
+  ].filter(Boolean).join('\n');
+  dot.dataset.state = linked ? 'on' : 'off';
+}
+
+/* ---- camera --------------------------------------------------------- */
+
+/**
+ * `cam` is { mode, streaming, frame, timelapses[], error }.
+ *
+ * A frame arrives as whatever the printer sends on camera.start_monitor. The
+ * field name is not recoverable from the bundle, so several plausible ones are
+ * tried and the raw payload is left in the WCP trace when none matches.
+ */
+export function pickFrame(payload) {
+  if (!payload) return null;
+  const d = payload.data !== undefined ? payload.data : payload;
+  if (typeof d === 'string' && d.length > 256) return d;
+  for (const k of ['image', 'frame', 'jpeg', 'jpg', 'base64', 'picture', 'img', 'data']) {
+    const v = d && d[k];
+    if (typeof v === 'string' && v.length > 256) return v;
+  }
+  return null;
+}
+
+export function renderCamera(root, connected, cam, handlers) {
+  const key = `${connected ? 'on' : 'off'}:${cam.mode}:${cam.streaming ? 1 : 0}:`
+            + `${cam.frame ? cam.frame.length : 0}:${(cam.timelapses || []).length}`;
+  if (root.dataset.state === key) return;
+  root.dataset.state = key;
+  root.innerHTML = '';
+
+  if (cam.mode === 'timelapse') {
+    const list = cam.timelapses || [];
+    if (!list.length) {
+      const wrap = el('div');
+      wrap.style.textAlign = 'center';
+      illustration(wrap);
+      wrap.appendChild(el('div', 'cam-msg', cam.error || 'No time-lapse recordings'));
+      root.appendChild(wrap);
+      return;
+    }
+    const grid = el('div', 'tl-grid');
+    list.forEach((t) => {
+      const card = el('button', 'tl-card');
+      const thumb = t.thumbnail || t.thumb || '';
+      if (thumb) {
+        const im = el('img');
+        im.src = thumb.startsWith('data:') ? thumb : `data:image/jpeg;base64,${thumb}`;
+        card.appendChild(im);
+      }
+      card.appendChild(el('span', 'tl-name', t.name || t.filename || 'recording'));
+      card.onclick = () => handlers.openTimelapse(t);
+      grid.appendChild(card);
+    });
+    root.appendChild(grid);
+    return;
+  }
+
+  // live view
+  if (cam.streaming && cam.frame) {
+    const im = el('img', 'cam-frame');
+    im.src = cam.frame.startsWith('data:') ? cam.frame
+           : `data:image/jpeg;base64,${cam.frame}`;
+    im.alt = 'Live view';
+    root.appendChild(im);
+    return;
+  }
+
+  const wrap = el('div');
+  wrap.style.textAlign = 'center';
+  illustration(wrap);
+  if (connected) {
+    const msg = el('div', 'cam-msg', cam.error || (cam.streaming ? 'Waiting for video…' : 'Camera is off'));
+    wrap.appendChild(msg);
+    const b = el('button', 'btn', cam.streaming ? 'Stop' : 'Start live view');
+    b.style.marginTop = '10px';
+    b.onclick = () => (cam.streaming ? handlers.stopCamera() : handlers.startCamera());
+    wrap.appendChild(b);
+  }
+  root.appendChild(wrap);
+}
+
+/* ---- control: left status card -------------------------------------- */
+
+/** Edit a temperature target through a modal, with the shipped page's limits. */
+function editTemp(title, limit, current, hint, apply) {
+  let input;
+  openDialog({
+    title,
+    build: (b) => {
+      input = numberField(b, {
+        label: 'Target temperature', value: Math.round(current || 0),
+        min: limit.min, max: limit.max, unit: limit.unit, hint,
+      });
+    },
+    confirmLabel: 'Set',
+    onConfirm: () => {
+      const v = Number(input.value);
+      if (!Number.isFinite(v) || v < limit.min || v > limit.max) {
+        input.focus();
+        return false;   // out of range: keep the dialog open
+      }
+      apply(v);
+      return true;
+    },
+  });
+}
+
+export function renderStatusCard(root, toolheads, bed, led, fans, purifier, handlers) {
+  root.innerHTML = '';
+
+  toolheads.forEach((t, i) => {
+    const row = el('div', 'status-row');
+    row.appendChild(icon(`iconExtruder${i + 1}`));
+    row.appendChild(el('span', 'val', temps(t.temperature, t.target)));
+    row.title = `Toolhead ${i + 1} — click to set target`;
+    row.onclick = () => editTemp(
+      `Toolhead ${i + 1} temperature`, LIMITS.nozzleTemp, t.target,
+      `Between ${LIMITS.nozzleTemp.min}°C and ${LIMITS.nozzleTemp.max}°C`,
+      (v) => handlers.setExtruderTemp(i, v));
+    root.appendChild(row);
+  });
+
+  const bedRow = el('div', 'status-row');
+  bedRow.appendChild(icon('iconHotBedTemperature'));
+  bedRow.appendChild(el('span', 'val', temps(bed.temperature, bed.target)));
+  bedRow.title = 'Heated bed — click to set target';
+  bedRow.onclick = () => editTemp(
+    'Heated bed temperature', LIMITS.bedTemp, bed.target,
+    // verbatim from the bundle's own validation string
+    `Heated bed temperature must be set between ${LIMITS.bedTemp.min}°C `
+    + `and ${LIMITS.bedTemp.max}°C`,
+    (v) => handlers.setBedTemp(v));
+  root.appendChild(bedRow);
+
+  const ledRow = el('div', 'status-row');
+  ledRow.appendChild(icon('iconLed'));
+  const sw = el('button', 'switch');
+  sw.setAttribute('aria-checked', led.on ? 'true' : 'false');
+  sw.setAttribute('role', 'switch');
+  sw.title = 'Chamber light';
+  sw.onclick = (e) => { e.stopPropagation(); handlers.setLed(!led.on); };
+  ledRow.appendChild(sw);
+  root.appendChild(ledRow);
+
+  const fanRow = el('div', 'status-row');
+  fanRow.appendChild(icon('iconFan'));
+  fanRow.appendChild(el('span', 'val', `${fans.main}%`));
+  fanRow.appendChild(el('span', 'go', '›'));
+  fanRow.title = 'Cooling fans';
+  fanRow.onclick = () => {
+    let main, cavity;
+    openDialog({
+      title: 'Cooling',
+      build: (b) => {
+        main = numberField(b, { label: 'Main cooling fan', value: fans.main,
+                                min: 0, max: 100, unit: '%' });
+        cavity = numberField(b, { label: 'Assist cooling fan', value: fans.cavity,
+                                  min: 0, max: 100, unit: '%' });
+      },
+      confirmLabel: 'Apply',
+      onConfirm: () => {
+        handlers.setMainFan(Number(main.value));
+        handlers.setCavityFan(Number(cavity.value));
+      },
+    });
+  };
+  root.appendChild(fanRow);
+
+  const purRow = el('div', 'status-row');
+  purRow.appendChild(icon('iconSpeed'));
+  purRow.appendChild(el('span', 'val', purifier.present ? String(purifier.mode ?? '_') : '_'));
+  purRow.appendChild(el('span', 'go', '›'));
+  purRow.title = 'Air purifier';
+  purRow.onclick = () => {
+    let sel;
+    openDialog({
+      title: 'Air purifier',
+      build: (b) => {
+        const wrap = el('label', 'field');
+        wrap.appendChild(el('span', 'field-label', 'Mode'));
+        sel = document.createElement('select');
+        sel.className = 'field-row';
+        // the two modes the shipped page offers
+        [['inner', 'Recirculation Mode'], ['exhaust', 'Exhaust Mode']].forEach(([v, t]) => {
+          const o = document.createElement('option');
+          o.value = v; o.textContent = t;
+          if (purifier.mode === v) o.selected = true;
+          sel.appendChild(o);
+        });
+        wrap.appendChild(sel);
+        b.appendChild(wrap);
+      },
+      confirmLabel: 'Apply',
+      onConfirm: () => handlers.setPurifierMode(sel.value),
+    });
+  };
+  root.appendChild(purRow);
+}
+
+/* ---- control: right cluster ----------------------------------------- */
+const STEPS = ['10mm', '1mm', '0.1mm'];
+let activeTool = 0;
+let activeStep = 0;
+
+export function renderControlMain(root, toolheads, handlers) {
+  root.innerHTML = '';
+
+  const top = el('div', 'control-top');
+
+  const tools = el('div', 'seg tools');
+  toolheads.forEach((t, i) => {
+    const b = el('button', i === activeTool ? 'is-active' : null, `Tool${i + 1}`);
+    b.onclick = () => { activeTool = i; renderControlMain(root, toolheads, handlers); };
+    tools.appendChild(b);
+  });
+  top.appendChild(tools);
+
+  const steps = el('div', 'seg steps');
+  STEPS.forEach((s, i) => {
+    const b = el('button', i === activeStep ? 'is-active' : null, s);
+    b.onclick = () => { activeStep = i; renderControlMain(root, toolheads, handlers); };
+    steps.appendChild(b);
+  });
+  top.appendChild(steps);
+
+  const home = el('button', 'home-btn');
+  home.title = 'Home all axes';
+  home.appendChild(icon('deviceActionHome'));
+  home.onclick = () => handlers.home();
+  top.appendChild(home);
+
+  root.appendChild(top);
+
+  // jog: an extruder column, the XY rosette, and the Z column
+  const jog = el('div', 'jog');
+  jog.appendChild(axisColumn('E', handlers));
+  jog.appendChild(rosette(handlers));
+  jog.appendChild(axisColumn('Z', handlers));
+  root.appendChild(jog);
+
+  root.appendChild(el('div', 'extrude-bar', '--------'));
+
+  // Print speed override - the command was wired long before it had a control.
+  const speedRow = el('div', 'speed-row');
+  speedRow.id = 'speed-row';
+  root.appendChild(speedRow);
+}
+
+function stepMm() { return parseFloat(STEPS[activeStep]); }
+
+function axisColumn(axis, handlers) {
+  const col = el('div', 'axis-col');
+  const up = el('button', 'round-btn');
+  up.appendChild(el('span', 'tri', '▲'));
+  up.onclick = () => handlers.jog(axis, +stepMm(), activeTool);
+  const down = el('button', 'round-btn');
+  down.appendChild(el('span', 'tri', '▼'));
+  down.onclick = () => handlers.jog(axis, -stepMm(), activeTool);
+  col.appendChild(up);
+  col.appendChild(el('div', 'axis-label', '------'));
+  col.appendChild(down);
+  return col;
+}
+
+function rosette(handlers) {
+  const r = el('div', 'rosette');
+  const mk = (cls, glyph, ax, sign) => {
+    const b = el('button', cls, glyph);
+    b.onclick = () => handlers.jog(ax, sign * stepMm(), activeTool);
+    return b;
+  };
+  r.appendChild(mk('up', '▲', 'Y', +1));
+  r.appendChild(mk('down', '▼', 'Y', -1));
+  r.appendChild(mk('left', '◀', 'X', -1));
+  r.appendChild(mk('right', '▶', 'X', +1));
+  r.appendChild(el('div', 'hub', 'XY'));
+  return r;
+}
+
+/* ---- printing task -------------------------------------------------- */
+
+function illustration(root) {
+  const wrap = el('div');
+  wrap.style.textAlign = 'center';
+  const img = el('img', 'placeholder');
+  img.src = 'icons/deviceNotConnected.webp';
+  img.alt = '';
+  img.onerror = () => img.remove();
+  wrap.appendChild(img);
+  root.appendChild(wrap);
+}
+
+/** hh:mm:ss from seconds, the granularity the shipped page uses for a job. */
+function clock(sec) {
+  const s = Math.max(0, Math.round(Number(sec) || 0));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return `${h}h ${String(m).padStart(2, '0')}m`;
+}
+
+export function renderTask(root, job, tab, files, handlers) {
+  root.innerHTML = '';
+  if (tab === 'files') return renderFiles(root, files, handlers);
+
+  const active = job.state === PRINT_STATE.PRINTING || job.state === PRINT_STATE.PAUSED;
+  if (!active) { illustration(root); return; }
+
+  const wrap = el('div', 'job');
+  wrap.appendChild(el('div', 'job-name', job.filename));
+
+  const pct = Math.round(job.progress * 100);
+  const bar = el('div', 'job-bar');
+  const fill = el('div');
+  fill.style.width = `${pct}%`;
+  bar.appendChild(fill);
+  wrap.appendChild(bar);
+
+  const meta = el('div', 'job-meta');
+  meta.appendChild(el('span', null, `${pct}%`));
+  meta.appendChild(el('span', null, `elapsed ${clock(job.printDuration)}`));
+  meta.appendChild(el('span', null, `${(job.filamentUsed / 1000).toFixed(2)} m filament`));
+  meta.appendChild(el('span', 'job-state', job.state));
+  wrap.appendChild(meta);
+
+  // Print control - the commands existed but had no way to reach them.
+  const btns = el('div', 'job-btns');
+  const paused = job.state === PRINT_STATE.PAUSED;
+  const primary = el('button', 'btn primary', paused ? 'Resume' : 'Pause');
+  primary.onclick = () => (paused ? handlers.resume() : handlers.pause());
+  const stop = el('button', 'btn', 'Cancel');
+  stop.onclick = () => handlers.confirmCancel();
+  btns.appendChild(primary);
+  btns.appendChild(stop);
+  wrap.appendChild(btns);
+
+  root.appendChild(wrap);
+}
+
+/* ---- machine file browser -------------------------------------------- */
+
+function fmtSize(n) {
+  const v = Number(n) || 0;
+  if (v > 1024 * 1024) return `${(v / 1048576).toFixed(1)} MB`;
+  if (v > 1024) return `${(v / 1024).toFixed(0)} KB`;
+  return `${v} B`;
+}
+
+/**
+ * `files` is { loading, error, root, roots[], items[] }.
+ * Items come from sw_GetFileListPage / sw_MachineFilesGetDirectory, whose
+ * results differ between firmware builds, so field lookup is tolerant.
+ */
+export function renderFiles(root, files, handlers) {
+  root.innerHTML = '';
+  const wrap = el('div', 'files');
+
+  const bar = el('div', 'files-bar');
+  (files.roots || []).forEach((r) => {
+    const name = (typeof r === 'string') ? r : (r.name || r.root || '');
+    if (!name) return;
+    const b = el('button', 'chip' + (name === files.root ? ' is-active' : ''), name);
+    b.onclick = () => handlers.openRoot(name);
+    bar.appendChild(b);
+  });
+  const reload = el('button', 'chip', 'Refresh');
+  reload.onclick = () => handlers.openRoot(files.root);
+  bar.appendChild(reload);
+  wrap.appendChild(bar);
+
+  if (files.loading) {
+    wrap.appendChild(el('div', 'empty', 'Reading the machine…'));
+  } else if (files.error) {
+    wrap.appendChild(el('div', 'empty', files.error));
+  } else if (!(files.items || []).length) {
+    wrap.appendChild(el('div', 'empty', 'No files on this machine'));
+  } else {
+    const list = el('div', 'file-list');
+    files.items.forEach((f) => {
+      const path = f.path || f.filename || f.name || '';
+      const row = el('div', 'file-row');
+      row.appendChild(icon('iconFile'));
+      const meta = el('div', 'file-meta');
+      meta.appendChild(el('span', 'file-name', path.split('/').pop() || path));
+      const sub = [];
+      if (f.size != null) sub.push(fmtSize(f.size));
+      if (f.modified) sub.push(new Date(Number(f.modified) * 1000).toLocaleString());
+      meta.appendChild(el('span', 'file-sub', sub.join(' · ')));
+      row.appendChild(meta);
+
+      const info = el('button', 'btn', 'Details');
+      info.title = 'Metadata, thumbnail and download';
+      info.onclick = () => handlers.fileDetails(path);
+      row.appendChild(info);
+
+      const print = el('button', 'btn', 'Print');
+      print.onclick = () => handlers.printFile(path);
+      row.appendChild(print);
+
+      const del = el('button', 'btn', 'Delete');
+      del.onclick = () => handlers.deleteFile(path);
+      row.appendChild(del);
+
+      list.appendChild(row);
+    });
+    wrap.appendChild(list);
+  }
+  root.appendChild(wrap);
+}
+
+/* ---- trace ---------------------------------------------------------- */
+export function makeTrace(pane) {
+  return (kind, packet) => {
+    if (!pane || pane.dataset.paused === '1') return;
+    const line = el('div', `t t-${kind}`);
+    const cmd = (packet && packet.payload && packet.payload.cmd)
+      || (packet && packet.header && packet.header.event_id ? 'push' : '');
+    line.textContent = `${String(kind).padEnd(9)} ${cmd}`;
+    line.title = JSON.stringify(packet);
+    pane.appendChild(line);
+    while (pane.childElementCount > 200) pane.removeChild(pane.firstChild);
+    pane.scrollTop = pane.scrollHeight;
+  };
+}
+
+/* ---- filament ------------------------------------------------------- */
+
+/**
+ * Four slots, drawn on the bundle's own extruder artwork.
+ *
+ * Values come from `print_task_config` - the same object the print-processing
+ * popup edits. See docs/u1-webui/00-shared/01-shared-models.md
+ */
+export function renderFilament(root, taskConfig, handlers) {
+  root.innerHTML = '';
+  const types = taskConfig[TASK_CONFIG.TYPE] || [];
+  const colors = taskConfig[TASK_CONFIG.COLOR] || [];
+  const exists = taskConfig[TASK_CONFIG.EXISTS] || [];
+  const vendors = taskConfig[TASK_CONFIG.VENDOR] || [];
+
+  for (let i = 0; i < 4; i++) {
+    const loaded = exists[i] !== false && !!types[i];
+    const slot = el('button', 'slot');
+    slot.title = loaded
+      ? `Slot ${i + 1}: ${vendors[i] ? vendors[i] + ' ' : ''}${types[i]}`
+      : `Slot ${i + 1}: empty`;
+
+    const dot = el('div', 'dot', String(i + 1));
+    if (loaded) {
+      dot.dataset.loaded = '1';
+      dot.style.background = colors[i] || '#C4C4C4';
+      // keep the number legible on dark filament
+      dot.style.color = isDark(colors[i]) ? '#fff' : '#333';
+    }
+    slot.appendChild(dot);
+
+    slot.appendChild(el('div', 'bar', loaded ? types[i] : '/'));
+
+    const pen = icon('iconFilamentEdit', 'pencil');
+    slot.appendChild(pen);
+
+    slot.onclick = () => editSlot(i, { loaded, type: types[i], color: colors[i],
+                                       vendor: vendors[i] }, handlers);
+    root.appendChild(slot);
+  }
+}
+
+/** #RRGGBB(AA) -> is it dark enough to need light text? */
+function isDark(hex) {
+  const m = /^#?([0-9a-f]{6})/i.exec(String(hex || ''));
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) < 140;
+}
+
+function editSlot(index, cur, handlers) {
+  let type, color;
+  openDialog({
+    title: `Filament slot ${index + 1}`,
+    build: (b) => {
+      const t = el('label', 'field');
+      t.appendChild(el('span', 'field-label', 'Type'));
+      const row = el('div', 'field-row');
+      type = document.createElement('input');
+      type.value = cur.type || '';
+      type.placeholder = 'PLA';
+      row.appendChild(type);
+      t.appendChild(row);
+      b.appendChild(t);
+
+      const c = el('label', 'field');
+      c.appendChild(el('span', 'field-label', 'Colour'));
+      const crow = el('div', 'field-row');
+      color = document.createElement('input');
+      color.type = 'color';
+      color.value = (cur.color || '#cccccc').slice(0, 7);
+      crow.appendChild(color);
+      c.appendChild(crow);
+      c.appendChild(el('span', 'field-hint',
+        'Written back to print_task_config, which the print-processing popup also reads.'));
+      b.appendChild(c);
+    },
+    confirmLabel: 'Save',
+    onConfirm: () => handlers.setFilament(index, type.value.trim(), color.value),
+  });
+}
+
+/* ---- fault banner ---------------------------------------------------- */
+
+/**
+ * `machine_state_manager.action_code` carries the active fault. Decode it
+ * against the 442-code catalogue shipped in the bundle rather than showing a
+ * bare number - see shared/js/errors.js, which is generated from it.
+ */
+export function renderFault(root, activity, exception, handlers) {
+  const code = (exception && (exception.code || exception.action_code))
+            || activity.actionCode;
+  const fault = lookupFault(code);
+  if (!fault) { root.hidden = true; root.innerHTML = ''; return; }
+
+  const key = String(fault.code);
+  if (root.dataset.code === key) return;
+  root.dataset.code = key;
+  root.hidden = false;
+  root.innerHTML = '';
+  // class 0003 is advisory in the catalogue's own numbering; anything else stops work
+  root.dataset.severity = fault.errorClass === '0003' ? 'warn' : 'error';
+
+  root.appendChild(icon('exclamationMark'));
+  const body = el('div', 'fault-body');
+  body.appendChild(el('div', 'fault-title', fault.title));
+  body.appendChild(el('div', 'fault-desc', fault.description));
+
+  const bits = [`code ${fault.code}`];
+  if (fault.subsystemName && fault.subsystemName !== 'unknown') bits.push(fault.subsystemName);
+  if (fault.toolhead) bits.push(`toolhead ${fault.toolhead}`);
+  if (!fault.known) bits.push('not in the shipped catalogue');
+  body.appendChild(el('div', 'fault-code', bits.join(' · ')));
+  root.appendChild(body);
+
+  const again = el('button', 'btn', 'Re-check');
+  again.onclick = () => handlers.queryException();
+  root.appendChild(again);
+}
+
+/* ---- print speed ----------------------------------------------------- */
+export function renderSpeed(root, speed, handlers) {
+  const cur = speed.factorPct == null ? 100 : speed.factorPct;
+  if (root.dataset.pct === String(cur)) return;
+  root.dataset.pct = String(cur);
+  root.innerHTML = '';
+  root.appendChild(el('span', null, 'Print Speed'));
+  const range = document.createElement('input');
+  range.type = 'range';
+  range.min = String(LIMITS.printSpeed.min);
+  range.max = String(LIMITS.printSpeed.max);
+  range.value = String(cur);
+  const val = el('span', 'val', `${cur}%`);
+  range.oninput = () => { val.textContent = `${range.value}%`; };
+  range.onchange = () => handlers.setSpeed(Number(range.value));
+  root.appendChild(range);
+  root.appendChild(val);
+}

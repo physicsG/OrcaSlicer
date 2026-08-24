@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snapmaker U1 — Print processing</title>
+<link rel="stylesheet" href="../shared/css/base.css">
+<link rel="stylesheet" href="css/preprint.css">
+</head>
+<body>
+<div class="sheet">
+
+  <div class="topbar">
+    <span id="status" class="status">starting…</span>
+    <span id="mode" class="mode">—</span>
+  </div>
+
+  <div class="card" id="model"></div>
+  <div class="card" id="printer"></div>
+  <div class="card" id="filament"></div>
+  <div class="card" id="preferences"></div>
+
+  <div class="sendbar">
+    <div class="progress"><div id="progress-fill"></div></div>
+    <span id="progress-pct" class="pct">0%</span>
+    <button id="send" class="btn primary" disabled>Send</button>
+  </div>
+
+  <details class="trace-wrap">
+    <summary>WCP trace</summary>
+    <div id="trace" data-paused="0"></div>
+  </details>
+
+</div>
+
+<div id="build-badge"></div>
+
+<!--
+  The print-processing popup. Orca opens this modal at ?path=4 (upload and
+  print) or ?path=5 (upload only); this reconstruction takes the same choice
+  from ?mode=print | upload, defaulting to print.
+
+  Force the simulator with ?mock=1; with no window.wx host it simulates anyway.
+-->
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

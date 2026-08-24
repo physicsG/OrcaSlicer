@@ -1,0 +1,214 @@
+/*
+ * preprint.css - the print-processing popup.
+ *
+ * Layered on ../shared/css/base.css. Sized to the dialog Orca actually opens:
+ * WebPreprintDialog sets 714x750 DIP.
+ */
+
+.sheet {
+  max-width: 714px;
+  margin: 0 auto;
+  min-height: 100vh;
+  /* bottom room so content can scroll clear of the fixed build badge */
+  padding: 10px 12px 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.status.ok   { color: var(--ok); }
+.status.warn { color: var(--warn); }
+.status.err  { color: var(--err); }
+.status.mock { color: var(--accent); }
+.mode {
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  letter-spacing: .04em;
+}
+.mode.mock { color: var(--accent); border-color: var(--accent); }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.card[hidden] { display: none; }
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 0;
+}
+.card-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.card-body { padding: 10px 14px 14px; }
+
+.icon-btn {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink-2);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+  cursor: pointer;
+  font-size: 13px;
+}
+.icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- model / printer rows ---- */
+.model-row { display: flex; gap: 14px; align-items: flex-start; }
+.thumb {
+  flex: 0 0 96px;
+  height: 76px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.thumb-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: .06em;
+}
+.printer-thumb { background: var(--panel-2); }
+
+.facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.facts dt { color: var(--muted); font-size: 12px; }
+.facts dd { margin: 0; font-size: 12px; color: var(--ink); }
+
+.picker { flex: 1; min-width: 0; }
+.select {
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.select:hover { border-color: var(--accent); }
+.warn-line { margin: 8px 0 0; font-size: 12px; color: var(--warn); }
+.empty { margin: 0; font-size: 12px; color: var(--muted); }
+
+/* ---- filament ---- */
+.fil-grid { display: flex; flex-direction: column; gap: 8px; }
+.fil-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+.chip {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, .18);
+  flex: 0 0 auto;
+}
+.fil-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.fil-name { font-size: 12px; color: var(--ink); }
+.fil-sub  { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.arrow { color: var(--muted); }
+.slot {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+/* ---- preferences ---- */
+.prefs { display: flex; flex-direction: column; }
+.pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+.pref-row + .pref-row { border-top: 1px solid var(--line); }
+.pref-label { color: var(--ink-2); }
+
+/* ---- send bar ---- */
+.sendbar {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 6px;
+}
+.progress {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+#progress-fill { height: 100%; width: 0; background: var(--accent); }
+.pct {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ok);
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: right;
+}
+.btn {
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 26px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-in);
+  font-weight: 600;
+}
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---- trace ---- */
+.trace-wrap { font-family: var(--mono); font-size: 11px; }
+.trace-wrap summary { color: var(--muted); cursor: pointer; padding: 4px 0; }
+#trace {
+  max-height: 130px;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+#trace .t { white-space: pre; color: var(--ink-2); }
+#trace .t-mock-rx   { color: var(--accent); }
+#trace .t-mock-push { color: var(--muted); }

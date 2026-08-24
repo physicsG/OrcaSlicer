@@ -1,0 +1,588 @@
+/*
+ * device.css - the U1 Device tab.
+ *
+ * Rebuilt to match the shipped Flutter page rather than to a taste of its own.
+ * Every colour and dimension below was measured off the real page: computed
+ * styles pulled out of its DOM over CDP, plus pixel samples for the raster
+ * layers. See docs/u1-webui/02-device-page/05-visual-reference.md
+ *
+ * Layered on ../shared/css/base.css, whose tokens it overrides wholesale - this
+ * surface is a fixed light design, not a theme-following one. It must therefore
+ * define every token base.css styles against (the build badge included).
+ */
+:root {
+  /* measured from the shipped page */
+  --page:        #F5F6FA;   /* app ground, right of the rail            */
+  --rail:        #FFFFFF;   /* left rail                                */
+  --rail-line:   #D9D9D9;   /* 1px divider between rail and content     */
+  --panel:       #FFFFFF;   /* panel body                               */
+  --panel-head:  #E8E8E8;   /* panel header bar                         */
+  --tab-active:  #FFFFFF;   /* selected tab pill inside a header        */
+  --pill:        #F5F6FA;   /* "Print Preferences" pill                 */
+  --accent:      #0C63E2;   /* selection tint, used at 10% on the rail  */
+  --accent-soft: rgba(12, 99, 226, .10);
+  --ink:         #333333;   /* panel + header text                      */
+  --ink-nav:     #242424;   /* rail nav text and icon strokes           */
+  --ink-dim:     #666666;   /* the "|" separator                        */
+  --line:        #E6E6E6;   /* card and control outlines                */
+  --line-face:   #EDEFF2;   /* faint outline used by the jog controls   */
+  --line-soft:   #F0F0F0;
+
+  --rail-w:   262px;
+  --col-w:    830px;   /* panel column width */
+  --head-h:    40px;
+  --radius:     8px;
+
+  /* aliases so ../shared/css/base.css components inherit this palette */
+  --bg: var(--page);
+  --panel-2: var(--pill);
+  --ink-2: var(--ink);
+  --muted: var(--ink-dim);
+  --accent-in: #FFFFFF;
+  --ok: #1F7A4D;
+  --warn: #9A5B12;
+  --err: #E03131;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--page);
+  color: var(--ink);
+  font: 14px/1.45 var(--sans);
+  overflow: auto;
+}
+
+/* ---- frame ---------------------------------------------------------- */
+.app { display: flex; min-height: 100%; align-items: stretch; }
+
+.rail {
+  width: var(--rail-w);
+  flex: 0 0 var(--rail-w);
+  background: var(--rail);
+  border-right: 1px solid var(--rail-line);
+}
+
+/*
+ * The shipped page is responsive: one centred column when narrow, a 2x2 grid
+ * once there is room. Measured on the real page (viewport -> panel width):
+ *
+ *   1280 -> 830   1330 -> 860   1400 -> 902      one column
+ *   1450 -> 564   1600 -> 639   1920 -> 799      two columns
+ *
+ * Single column fits `0.6 * available + 219` exactly across all three samples;
+ * two columns fit `(viewport - 322) / 2`, which is what a 2-track grid with
+ * 21px side padding and a 20px gap produces. The switch happens between 1400
+ * and 1450.
+ */
+.content {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  align-content: start;
+  gap: 20px;
+  padding: 20px 0 40px;
+}
+
+@media (min-width: 1420px) {
+  .content {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    justify-items: stretch;
+    padding: 20px 21px 40px;
+  }
+}
+
+/* ---- rail ----------------------------------------------------------- */
+.device-select {
+  width: 100%;
+  height: 114px;            /* nav starts at y=114 on the shipped page */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 0 35px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.device-select .dev-icon {
+  width: 26px; height: 26px; flex: 0 0 26px;
+  border-radius: 6px;
+  background: #101418;
+  display: grid; place-items: center;
+  color: #fff; font-weight: 700; font-size: 13px; font-style: italic;
+}
+.device-select .dev-name {
+  font-size: 16px; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1; min-width: 0;
+}
+.device-select .chev { width: 20px; height: 20px; opacity: .54; flex: 0 0 20px; }
+
+.nav-item {
+  display: flex; align-items: center; gap: 19px;
+  height: 48px;
+  padding: 0 47px;
+  color: var(--ink-nav);
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.nav-item.is-active { background: var(--accent-soft); }
+.nav-item img { width: 22px; height: 22px; }
+
+/* ---- panels --------------------------------------------------------- */
+.panel { width: calc(60% + 219px); min-width: 0; }
+
+@media (min-width: 1420px) {
+  /* in the grid each panel simply fills its track */
+  .panel { width: auto; }
+}
+
+.panel-head {
+  height: var(--head-h);
+  background: var(--panel-head);
+  border-radius: var(--radius) var(--radius) 0 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 15px 0 28px;
+}
+.panel-title { font-size: 14px; color: var(--ink); }
+.panel-head .sep { color: var(--ink-dim); font-size: 14px; margin: 0 20px; }
+.panel-head .spacer { flex: 1; }
+/* Control's header has no separator: the title, a 36px gap, then the pill */
+.panel-head .gap-36 { width: 36px; flex: 0 0 36px; }
+
+/* a header tab pill: white when selected, transparent otherwise */
+.tab {
+  height: 36px; min-width: 52px;
+  display: grid; place-items: center;
+  border: 0; border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  padding: 0 14px;
+}
+.tab.is-active { background: var(--tab-active); }
+.tab img { width: 24px; height: 24px; }
+.tab.wide { min-width: 56px; height: 40px; }
+
+.pref-pill {
+  height: 24px;
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 0 7px;           /* measured 120x24 on the shipped page */
+  background: var(--pill);
+  border: 0; border-radius: 4px;
+  color: var(--ink);
+  font: 12px/1 var(--sans);
+  cursor: pointer;
+}
+.pref-pill .chev { width: 9px; height: 13px; }
+
+/* The body scales with the panel rather than being a fixed height: 548/830 at
+   1280 single-column, and close to the same ratio at every two-column width.
+   Keeping it proportional is what makes the 2x2 grid sit correctly. */
+.panel-body {
+  background: var(--panel);
+  aspect-ratio: 830 / 548;
+  min-height: 320px;
+  border-radius: 0 0 var(--radius) var(--radius);
+  overflow: hidden;
+}
+
+/* ---- camera --------------------------------------------------------- */
+.camera-body { display: grid; place-items: center; }
+/* The bundle's illustration is 803x509 and the shipped page draws it at panel
+   width, with the printer artwork occupying the middle third. Anything smaller
+   makes it read as a stray thumbnail. */
+.camera-body img.placeholder { width: 803px; max-width: 100%; height: auto; display: block; }
+.camera-body .cam-msg {
+  margin-top: 6px; color: #B9BFC8; font-size: 13px; text-align: center;
+}
+
+/* ---- control -------------------------------------------------------- */
+/* content spans x=390..1148 inside an 830px panel: 34 left, 38 right */
+.control-body { padding: 20px 38px 24px 34px; overflow: auto; }
+
+/* the whole control area dims until the machine is reachable, exactly as the
+   shipped page does - it renders the full layout and fades it, rather than
+   hiding it */
+.control-grid { display: flex; gap: 25px; align-items: flex-start; min-width: 0; }
+.control-grid[data-enabled="0"] { opacity: .18; pointer-events: none; }
+
+/* left status card */
+.status-card {
+  width: 160px; flex: 0 0 160px;
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 6px 0;
+}
+.status-row {
+  height: 56px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 14px;
+  font-size: 13px; color: var(--ink);
+}
+.status-row img { width: 18px; height: 18px; flex: 0 0 18px; opacity: .85; }
+.status-row .val { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.status-row .go { margin-left: auto; color: #B9BFC8; }
+
+.switch {
+  margin-left: auto;
+  width: 34px; height: 18px; border-radius: 999px;
+  background: #D5D9E0; position: relative; cursor: pointer; border: 0;
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%; background: #fff;
+  transition: left .12s ease;
+}
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { left: 18px; }
+@media (prefers-reduced-motion: reduce) { .switch::after { transition: none; } }
+
+/* right side */
+.control-main { flex: 1; min-width: 0; }
+.control-top { display: flex; align-items: center; gap: 32px; flex-wrap: nowrap; }
+.control-top .seg.tools  { width: 233px; }
+.control-top .seg.steps  { width: 205px; margin-left: 0; }
+.control-top .home-btn   { margin-left: auto; }   /* right-aligned, as on the original */
+
+.seg {
+  display: inline-flex; align-items: center;
+  height: 50px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: #fff;
+  padding: 5px;
+  gap: 2px;
+}
+.seg button {
+  flex: 1 1 0; min-width: 0;
+  height: 40px; padding: 0 6px;
+  border: 0; border-radius: 7px; background: none;
+  font: 14px/1 var(--sans); color: #9AA3AF; cursor: pointer;
+  white-space: nowrap;
+}
+.seg button.is-active { background: #fff; color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+
+.home-btn {
+  width: 83px; flex: 0 0 83px; height: 50px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: #fff; cursor: pointer;
+  display: grid; place-items: center;
+}
+.home-btn img { width: 26px; height: 26px; }
+
+/* jog cluster */
+.jog {
+  margin-top: 34px;
+  display: flex; align-items: center; justify-content: center;
+  gap: clamp(16px, 6%, 74px); flex-wrap: wrap;
+}
+.axis-col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.axis-col .axis-label { color: #C6CBD3; font-size: 13px; letter-spacing: .08em; }
+.round-btn {
+  width: 80px; height: 80px; border-radius: 50%;
+  border: 1px solid var(--line-soft); background: #fff;
+  display: grid; place-items: center; cursor: pointer;
+}
+.round-btn .tri { color: #D3D8DF; font-size: 22px; line-height: 1; }
+
+.rosette {
+  width: 202px; height: 202px; border-radius: 50%;
+  border: 1px solid var(--line-soft); background: #fff;
+  position: relative;
+}
+.rosette button {
+  position: absolute; border: 0; background: none; cursor: pointer;
+  color: #D3D8DF; font-size: 22px; line-height: 1; padding: 6px;
+}
+.rosette .up    { top: 22px;  left: 50%; transform: translateX(-50%); }
+.rosette .down  { bottom: 22px; left: 50%; transform: translateX(-50%); }
+.rosette .left  { left: 22px;  top: 50%; transform: translateY(-50%); }
+.rosette .right { right: 22px; top: 50%; transform: translateY(-50%); }
+.rosette .hub {
+  position: absolute; inset: 50% auto auto 50%; transform: translate(-50%, -50%);
+  width: 58px; height: 58px; border-radius: 50%;
+  border: 1px solid var(--line-soft); background: #fff;
+  display: grid; place-items: center;
+  color: #C6CBD3; font-size: 13px;
+}
+
+.extrude-bar {
+  margin: 30px 0 0;
+  width: 235px; height: 50px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: #fff;
+  display: grid; place-items: center;
+  color: #C6CBD3; letter-spacing: .1em;
+}
+
+/* ---- printing task -------------------------------------------------- */
+.task-body { display: grid; place-items: center; }
+.task-body img.placeholder { width: 803px; max-width: 100%; height: auto; display: block; }
+.task-body .empty { color: #9AA3AF; font-size: 13px; }
+
+/* ---- trace (development aid, not part of the shipped page) ---------- */
+.trace-panel { width: 100%; grid-column: 1 / -1; }
+.trace-panel summary {
+  cursor: pointer; color: #9AA3AF; font-size: 12px;
+  font-family: var(--mono); padding: 6px 2px;
+}
+#trace {
+  max-height: 150px; overflow: auto;
+  background: #fff; border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 10px; font: 11px/1.6 var(--mono); color: #6B7280;
+}
+#trace .t { white-space: pre; }
+#trace .t-tx, #trace .t-mock-rx { color: var(--accent); }
+#trace .t-mock-push { color: #B9BFC8; }
+
+.status-line {
+  width: 100%; grid-column: 1 / -1;
+  font: 11px/1 var(--mono); color: #9AA3AF;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.status-line .mode { color: var(--accent); }
+
+/* ---- filament panel -------------------------------------------------- */
+.icon-only {
+  border: 0; background: none; cursor: pointer;
+  width: 20px; height: 20px; padding: 0;
+  display: grid; place-items: center;
+}
+.icon-only img { width: 20px; height: 20px; }
+
+.filament-body {
+  display: flex; align-items: center; justify-content: center;
+  /* cards are 64 wide and the measured pitch is 174; let the gap shrink
+     rather than overflow once a grid track gets narrow */
+  gap: clamp(24px, 8%, 110px);
+}
+
+/* Each slot is the bundle's own 64x140 extruder artwork with the live values
+   laid over it, at the offsets measured off the shipped page. */
+.slot {
+  position: relative;
+  width: 64px; height: 140px;
+  background: url("../icons/extruderBackground.svg") no-repeat center / 64px 140px;
+  border: 0; padding: 0; cursor: pointer;
+}
+.slot .dot {
+  position: absolute; left: 15px; top: 29px;
+  width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 14px; color: #333;
+  /* checkerboard reads as "no filament", exactly as the shipped page draws it */
+  background-image:
+    linear-gradient(45deg, #C4C4C4 25%, transparent 25%, transparent 75%, #C4C4C4 75%),
+    linear-gradient(45deg, #C4C4C4 25%, transparent 25%, transparent 75%, #C4C4C4 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+  background-color: #E4E4E4;
+}
+.slot .dot[data-loaded="1"] { background-image: none; }
+.slot .bar {
+  position: absolute; left: 3px; top: 71px;
+  width: 58px; height: 19px; border-radius: 10px;
+  background: #6E6E6E; color: #fff;
+  font-size: 11px; line-height: 19px; text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.slot .pencil {
+  position: absolute; left: 50%; top: 100px; transform: translateX(-50%);
+  width: 20px; height: 20px; opacity: .8;
+  border-bottom: 1px solid #9B9B9B; padding-bottom: 2px;
+}
+.slot:hover .pencil { opacity: 1; }
+.slot:disabled { cursor: default; }
+
+/* ---- anchored menu --------------------------------------------------- */
+.menu {
+  position: fixed; z-index: 200; min-width: 214px;
+  background: #fff; border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(16, 24, 40, .14), 0 1px 3px rgba(16, 24, 40, .08);
+  padding: 6px 0;
+}
+.menu-item {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 11px 16px; border: 0; background: none;
+  font: 14px/1 var(--sans); color: var(--ink-nav); cursor: pointer; text-align: left;
+}
+.menu-item:hover { background: #F2F5FA; }
+.menu-item img { width: 18px; height: 18px; }
+.menu-item.is-muted { color: #9AA3AF; }
+.menu-sep { height: 1px; background: var(--line-soft); margin: 5px 12px; }
+
+/* ---- dialog ---------------------------------------------------------- */
+.scrim {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(16, 24, 40, .32);
+  display: grid; place-items: center;
+}
+.dialog {
+  width: 360px; max-width: calc(100vw - 40px);
+  background: #fff; border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(16, 24, 40, .22);
+  overflow: hidden;
+}
+.dialog.wide { width: 520px; }
+.dialog-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px 8px;
+}
+.dialog-head h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink-nav); }
+.dialog-x {
+  border: 0; background: none; cursor: pointer;
+  font-size: 20px; line-height: 1; color: #9AA3AF; padding: 0 2px;
+}
+.dialog-body { padding: 6px 18px 4px; }
+.dialog-foot {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 14px 18px 18px;
+}
+.btn {
+  font: 14px/1 var(--sans); padding: 9px 18px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: #fff; color: var(--ink); cursor: pointer;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn:hover { border-color: #C7CDD6; }
+.btn.primary:hover { background: #0B58C9; }
+
+.field { display: block; margin: 12px 0 16px; }
+.field-label { display: block; font-size: 13px; color: var(--ink-nav); margin-bottom: 6px; }
+.field-row { display: flex; align-items: center; gap: 8px; }
+.field-row input {
+  flex: 1; font: 14px/1 var(--sans); padding: 9px 10px;
+  border: 1px solid var(--line); border-radius: 8px; color: var(--ink);
+}
+.field-row input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.field-unit { color: #9AA3AF; font-size: 13px; }
+.field-hint { display: block; margin-top: 6px; font-size: 12px; color: #9AA3AF; }
+.field-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 0; font-size: 13px; color: var(--ink-nav);
+  border-top: 1px solid var(--line-soft);
+}
+
+/* connection dot beside the device name in the rail */
+.device-select .dev-state {
+  width: 7px; height: 7px; border-radius: 50%;
+  flex: 0 0 7px; background: #C9CED6;
+}
+.device-select .dev-state[data-state="on"]  { background: #1F9254; }
+.device-select .dev-state[data-state="off"] { background: #D9A23B; }
+.device-select .dev-state[data-state="none"] { background: #C9CED6; }
+
+/* ---- print job ------------------------------------------------------- */
+.job { width: 100%; padding: 22px 28px; }
+.job-name { font-size: 13px; color: var(--ink); }
+.job-bar {
+  height: 6px; border-radius: 999px; background: #EEF1F5;
+  margin: 14px 0 10px; overflow: hidden;
+}
+.job-bar > div { height: 100%; background: var(--accent); }
+.job-meta {
+  display: flex; gap: 18px; align-items: center;
+  font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums;
+}
+.job-state { margin-left: auto; text-transform: capitalize; color: var(--ink); }
+.job-btns { display: flex; gap: 10px; margin-top: 18px; }
+
+/* ---- machine files --------------------------------------------------- */
+.files { width: 100%; height: 100%; padding: 14px 18px; display: flex;
+         flex-direction: column; gap: 12px; min-height: 0; }
+.files-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  font: 12px/1 var(--sans); padding: 7px 12px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: #fff; color: var(--ink-dim); cursor: pointer;
+}
+.chip.is-active { border-color: var(--accent); color: var(--accent); }
+.file-list { overflow: auto; display: flex; flex-direction: column; min-height: 0; }
+.file-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 4px; border-bottom: 1px solid var(--line-soft);
+}
+.file-row img { width: 18px; height: 18px; opacity: .7; }
+.file-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.file-name { font-size: 13px; color: var(--ink); overflow: hidden;
+             text-overflow: ellipsis; white-space: nowrap; }
+.file-sub  { font-size: 11px; color: var(--ink-dim); }
+.file-row .btn { padding: 6px 12px; font-size: 12px; }
+
+/* ---- camera ---------------------------------------------------------- */
+.cam-frame { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.tl-grid {
+  width: 100%; height: 100%; overflow: auto; padding: 16px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;
+}
+.tl-card {
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  padding: 0 0 8px; cursor: pointer; overflow: hidden; text-align: left;
+}
+.tl-card img { width: 100%; height: 92px; object-fit: cover; display: block; }
+.tl-name { display: block; padding: 8px 10px 0; font-size: 12px; color: var(--ink);
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- fault banner ---------------------------------------------------- */
+.fault {
+  grid-column: 1 / -1;
+  width: 100%;
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 13px 16px;
+  border: 1px solid #F0CFC6; border-left: 3px solid #C0432B;
+  border-radius: var(--radius);
+  background: #FDF3F1;
+}
+.fault[data-severity="warn"] { border-color: #F0DFC0; border-left-color: #B8801F;
+                               background: #FDF8EE; }
+.fault img { width: 20px; height: 20px; margin-top: 1px; flex: 0 0 20px; }
+.fault-body { flex: 1; min-width: 0; }
+.fault-title { font-size: 13px; font-weight: 600; color: #7A2A18; }
+.fault[data-severity="warn"] .fault-title { color: #7A5410; }
+.fault-desc { font-size: 12px; color: var(--ink-2); margin-top: 3px; line-height: 1.5; }
+.fault-code {
+  font-family: var(--mono); font-size: 11px; color: var(--ink-dim); margin-top: 6px;
+}
+.fault .btn { padding: 6px 12px; font-size: 12px; }
+
+/* ---- info sheet ------------------------------------------------------- */
+.info-grid { display: grid; grid-template-columns: auto 1fr; gap: 7px 16px; }
+.info-grid dt { color: var(--ink-dim); font-size: 12px; }
+.info-grid dd { margin: 0; font-size: 12px; color: var(--ink);
+                font-variant-numeric: tabular-nums; word-break: break-all; }
+.bar-mini { height: 6px; border-radius: 999px; background: #EEF1F5; overflow: hidden;
+            margin-top: 6px; }
+.bar-mini > div { height: 100%; background: var(--accent); }
+
+/* ---- discovery list --------------------------------------------------- */
+.found-list { display: flex; flex-direction: column; max-height: 260px; overflow: auto; }
+.found-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 2px; border-bottom: 1px solid var(--line-soft);
+}
+.found-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.found-name { font-size: 13px; color: var(--ink); }
+.found-sub { font-size: 11px; color: var(--ink-dim); }
+
+/* ---- file thumbnail --------------------------------------------------- */
+.file-thumb {
+  width: 40px; height: 40px; flex: 0 0 40px; border-radius: 4px;
+  border: 1px solid var(--line); object-fit: cover; background: var(--panel-2);
+}
+
+/* ---- print speed ------------------------------------------------------ */
+.speed-row {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 18px; font-size: 12px; color: var(--ink-dim);
+}
+.speed-row input[type="range"] { flex: 1; max-width: 260px; accent-color: var(--accent); }
+.speed-row .val { font-variant-numeric: tabular-nums; color: var(--ink); min-width: 44px; }

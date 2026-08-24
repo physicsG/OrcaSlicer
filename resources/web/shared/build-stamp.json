@@ -1,0 +1,8 @@
+{
+ "commit": "40ce3f0c38",
+ "commit_full": "40ce3f0c3882367e54e7d90fd1995e52fc0b78a3",
+ "branch": "re/u1-device-page",
+ "dirty": true,
+ "subject": "refactor(sidebar): one size for the sync mark, everywhere it appears",
+ "committed": "2026-08-23T10:41:59+02:00"
+}

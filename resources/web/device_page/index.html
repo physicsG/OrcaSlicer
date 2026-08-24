@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snapmaker U1 — Device</title>
+<link rel="stylesheet" href="../shared/css/base.css">
+<link rel="stylesheet" href="css/device.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- left rail: device selector above a nav list -->
+  <aside class="rail">
+    <button class="device-select" id="device-select">
+      <span class="dev-icon">S</span>
+      <span class="dev-name" id="dev-name">Unconnected</span>
+      <span class="dev-state" id="dev-state" data-state="none"></span>
+      <img class="chev" src="icons/keyboardArrowDropDown.svg" alt="">
+    </button>
+    <nav>
+      <div class="nav-item is-active">
+        <img src="icons/deviceControl.svg" alt="">
+        <span>Device control</span>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="content">
+
+    <div id="fault" class="fault" hidden></div>
+
+    <section class="panel">
+      <header class="panel-head">
+        <span class="panel-title">Camera</span>
+        <span class="sep">|</span>
+        <button class="tab is-active" title="Live view">
+          <img src="icons/videoCall.svg" alt="Live view">
+        </button>
+        <button class="tab" title="Time-lapse">
+          <img src="icons/videoImgPlay.svg" alt="Time-lapse">
+        </button>
+      </header>
+      <div class="panel-body camera-body" id="camera"></div>
+    </section>
+
+    <section class="panel">
+      <header class="panel-head">
+        <span class="panel-title">Control</span>
+        <span class="gap-36"></span>
+        <button class="tab wide is-active" id="refresh" title="Refresh">
+          <img src="icons/refresh.svg" alt="Refresh">
+        </button>
+        <span class="spacer"></span>
+        <button class="pref-pill" id="print-prefs">
+          Print Preferences <img class="chev" src="icons/printPreferenceArrow.svg" alt="">
+        </button>
+      </header>
+      <div class="panel-body control-body">
+        <div class="control-grid" id="control-grid" data-enabled="0">
+          <div class="status-card" id="status-card"></div>
+          <div class="control-main" id="control-main"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <header class="panel-head">
+        <span class="panel-title">Printing Task</span>
+        <span class="sep">|</span>
+        <button class="tab is-active" title="Job info">
+          <img src="icons/exclamationMark.svg" alt="Job info">
+        </button>
+        <button class="tab" title="Files">
+          <img src="icons/iconModelFileFolder.svg" alt="Files">
+        </button>
+      </header>
+      <div class="panel-body task-body" id="task"></div>
+    </section>
+
+    <section class="panel">
+      <header class="panel-head">
+        <span class="panel-title">Filament</span>
+        <span class="gap-36"></span>
+        <button class="tab wide is-active" id="filament-refresh" title="Refresh">
+          <img src="icons/refresh.svg" alt="Refresh">
+        </button>
+        <span class="spacer"></span>
+        <button class="icon-only" id="filament-help" title="About filament slots">
+          <img src="icons/help.svg" alt="Help">
+        </button>
+      </header>
+      <div class="panel-body filament-body" id="filament"></div>
+    </section>
+
+    <!--
+      Development aids, not part of the shipped page: a one-line host status and
+      the live WCP trace. Collapsed by default so they stay out of the way.
+    -->
+    <div class="status-line">
+      <span id="status">starting…</span>
+      <span id="mode" class="mode">—</span>
+    </div>
+    <details class="trace-panel">
+      <summary>WCP trace</summary>
+      <div id="trace" data-paused="0"></div>
+    </details>
+
+  </main>
+</div>
+
+<div id="build-badge"></div>
+
+<!--
+  Talks to Orca through window.wx.postMessage, exactly like the shipped Flutter
+  bundle. With no host present it loads a simulated U1 instead, so it can be
+  exercised standalone. Force the simulator with ?mock=1
+-->
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
