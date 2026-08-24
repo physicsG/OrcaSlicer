@@ -622,10 +622,17 @@ check("the wait re-reads the objects the stream does not carry",
 check("homing finishes on the machine reporting homed, not on a busy->idle edge",
       "done: () => state.toolhead().allHomed === true" in app_src,
       "the edge never came, because nothing ever reported busy")
-check("idle_timeout is not treated as a busy signal",
-      "idle_timeout.state` is deliberately NOT" in state_src
-      or "deliberately NOT treated as busy" in state_src,
-      "it reads Printing on an idle U1")
+check("homing progress drives the wait's label",
+      "Homing \\u2014" in state_src and "homed_axes" in state_src,
+      "homed_axes walking '' -> z -> y -> xy is the only thing that reports the long "
+      "phase of a toolchange; both previously-trusted sources are silent for it")
+check("idle_timeout counts as busy, having been measured bracketing the operation",
+      "idle.state === 'Printing'" in state_src,
+      "excluded before on a lingering read; the capture shows it Printing at 0.7s and "
+      "Ready at 32.7s, and every wait has its own done() besides")
+check("the wait polls the fields that actually move",
+      "activating_move" in app_src and "homed_axes" in app_src,
+      "neither is on the subscribed stream with the fields the page asks for")
 
 # The bed is the Z axis and Z measures the nozzle-to-bed gap, so raising the bed is a
 # NEGATIVE Z move. The machine's own config settles it: stepper_z homes positive to

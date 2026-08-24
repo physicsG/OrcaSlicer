@@ -452,3 +452,38 @@ The arrows now send `Z−` for up and `Z+` for down, and each button's tooltip n
 the physical direction and the G-code it will send — *"Move the bed up, toward the nozzle
 by 1 mm (Z−1)"*. An arrow on its own is ambiguous the moment the moving part is the bed
 rather than the head, and that ambiguity is what the bug was made of.
+
+### What a toolchange actually reports
+
+The dialog stayed blank through a toolchange because it was watching two objects that say
+nothing during one. Settled by driving a real `T0 A0` on an unhomed U1 over MQTT and
+logging every field that moved:
+
+```
+ 0.7s  toolhead.homed_axes "z"      idle_timeout.state "Printing"
+ 2.7s  toolhead.homed_axes ""
+ 4.7s  toolhead.homed_axes "y"
+14.7s  toolhead.homed_axes "xy"        <- the "XY calibration" a user sees
+28.7s  extruder.activating_move true
+30.7s  extruder.state "ACTIVATE"       <- done
+32.7s  idle_timeout.state "Ready"
+```
+
+Silent for the entire 31 seconds: **`machine_state_manager`** (`{main_state: 0,
+action_code: 0}` throughout) and **`extruder_offset_calibration.calibration_step`**
+(`"idle"` throughout). Those were the two the wait consulted. `display_status.message`
+never set either.
+
+So the progress signal is **`toolhead.homed_axes`**, bracketed by `idle_timeout`. Neither
+is available on the stream as the page subscribes it — `toolhead` is not subscribed at
+all, and `activating_move` is not among `EXTRUDER_FIELDS` — so the wait polls both once a
+second.
+
+`idle_timeout` is now trusted as a busy signal, having been excluded earlier for reading
+`"Printing"` on an apparently idle machine. That was Klipper's timeout not having elapsed,
+not a false reading, and across the capture it bracketed the operation exactly. Every wait
+has its own `done()` and a hard cap besides, so a lingering `Printing` costs nothing.
+
+Measured durations, both verified live: **4 s** when the machine is already homed,
+**31 s** when it is not. The second is the case that outran the bridge's 15 s request
+timeout and made a working toolchange look like a failure.

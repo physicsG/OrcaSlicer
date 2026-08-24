@@ -1086,7 +1086,17 @@ async function refreshWaitState() {
   try {
     const snap = await bridge.request(CMD.GET_MACHINE_STATE, {
       objects: {
+        // `homed_axes` is the toolchange's real progress signal - it walks
+        // "" -> z -> "" -> y -> xy across the long homing phase - and `toolhead` is not
+        // subscribed, so it has to be asked for.
         toolhead: ['extruder', 'position', 'homed_axes'],
+        // `activating_move` marks the moment the head is being grabbed. It is on an
+        // object the page does subscribe, but not among EXTRUDER_FIELDS, and that list
+        // is pinned to the bundle's - so it is fetched rather than subscribed.
+        extruder: ['state', 'activating_move'],
+        extruder1: ['state', 'activating_move'],
+        extruder2: ['state', 'activating_move'],
+        extruder3: ['state', 'activating_move'],
         extruder_offset_calibration: null,
       },
     });

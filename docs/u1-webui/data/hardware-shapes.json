@@ -142,5 +142,56 @@
         "server": "offline"
       }
     }
+  },
+  "toolchange": {
+    "_comment": [
+      "A real `T0 A0` on an unhomed U1, watched over MQTT end to end.",
+      "Times are seconds from dispatch. This is what a manual toolchange reports,",
+      "and just as importantly what it does NOT."
+    ],
+    "_captured": "2026-08-24",
+    "duration_s": 31,
+    "timeline": [
+      {
+        "t": 0.7,
+        "toolhead.homed_axes": "z",
+        "idle_timeout.state": "Printing"
+      },
+      {
+        "t": 2.7,
+        "toolhead.homed_axes": ""
+      },
+      {
+        "t": 4.7,
+        "toolhead.homed_axes": "y"
+      },
+      {
+        "t": 14.7,
+        "toolhead.homed_axes": "xy"
+      },
+      {
+        "t": 28.7,
+        "extruder.activating_move": true
+      },
+      {
+        "t": 30.7,
+        "extruder.state": "ACTIVATE",
+        "extruder.park_pin": false,
+        "extruder.grab_valid_pin": true
+      },
+      {
+        "t": 32.7,
+        "idle_timeout.state": "Ready"
+      }
+    ],
+    "silent_throughout": {
+      "machine_state_manager": {
+        "main_state": 0,
+        "action_code": 0
+      },
+      "extruder_offset_calibration.calibration_step": "idle",
+      "display_status.message": null
+    },
+    "conclusion": "The progress signal is toolhead.homed_axes, bracketed by idle_timeout. machine_state_manager and calibration_step report nothing for a manual toolchange, so a UI that watches only those has nothing to show."
   }
 }

@@ -261,31 +261,46 @@ def main():
           homed({}) == ("null", "true"),
           "before the first query, refusing everything would be worse than allowing it")
 
-    # --- why the machine is busy ------------------------------------------
-    print("\n== busy, from every source that answers ==")
+    # --- why the machine is busy, replayed from a real toolchange ---------
+    print("\n== the captured toolchange, step by step ==")
+    tl = hw["toolchange"]["timeline"]
 
-    def reason(objs):
-        js(ctx3, f"var b=new MachineState(); b.apply({json.dumps(objs)});")
-        return json.loads(js(ctx3, "JSON.stringify(b.busyReason())").to_string())
+    js(ctx3, "var m = new MachineState();")
 
-    r = reason({"extruder_offset_calibration": {"calibration_step": "probe_xy_offset"}})
-    check("a running docking calibration is named and counts as busy",
-          r["busy"] and "probe xy offset" in r["label"],
-          "this is what makes a toolchange take minutes, and machine_state_manager "
-          "reports 0/0 throughout it on this firmware")
-    check("an idle calibration step is not busy",
-          not reason({"extruder_offset_calibration": {"calibration_step": "idle"}})["busy"])
-    check("a macro's own message is shown when there is one",
-          reason({"display_status": {"message": "Cleaning nozzle"}})["label"]
-          == "Cleaning nozzle")
-    check("physical motion counts as busy on its own",
-          reason({"motion_report": {"live_velocity": 42.0}})["busy"],
-          "whatever the firmware chooses to call it, a moving gantry is not finished")
-    check("idle_timeout is never treated as busy",
-          not reason({"idle_timeout": {"state": "Printing"},
-                      "motion_report": {"live_velocity": 0}})["busy"],
-          "it reads Printing on an idle U1, so it would keep a wait alive forever")
-    check("a quiet machine is quiet", not reason({})["busy"])
+    def step(objs):
+        js(ctx3, f"m.apply({json.dumps(objs)});")
+        return json.loads(js(ctx3, "JSON.stringify(m.busyReason())").to_string())
+
+    r = step({"toolhead": {"homed_axes": "z"}, "idle_timeout": {"state": "Printing"}})
+    check("0.7s - homing starts, and says which axis is done",
+          r["busy"] and r["label"] == "Homing \u2014 Z done")
+    r = step({"toolhead": {"homed_axes": "y"}})
+    check("4.7s - the label follows the axes as they complete",
+          r["busy"] and r["label"] == "Homing \u2014 Y done",
+          "this is the phase a user reads as 'XY calibration'")
+    r = step({"toolhead": {"homed_axes": "xy"}})
+    check("14.7s - still homing, now X and Y",
+          r["busy"] and r["label"] == "Homing \u2014 X, Y done")
+    r = step({"extruder": {"activating_move": True}})
+    check("28.7s - the grab is named separately from the homing",
+          r["busy"] and r["label"] == "Engaging toolhead 1\u2026")
+    r = step({"extruder": {"activating_move": False, "state": "ACTIVATE"},
+              "toolhead": {"homed_axes": "xyz"}})
+    check("30.7s - the head is live", js(ctx3, "String(m.toolhead().activeIndex)")
+          .to_string() == "0")
+    r = step({"idle_timeout": {"state": "Ready"}})
+    check("32.7s - and the machine goes quiet",
+          not r["busy"] and r["label"] is None)
+
+    # the two sources that were trusted before, and reported nothing at all
+    silent = hw["toolchange"]["silent_throughout"]
+    js(ctx3, "var q = new MachineState();")
+    js(ctx3, f"q.apply({json.dumps({'machine_state_manager': silent['machine_state_manager'], 'extruder_offset_calibration': {'calibration_step': 'idle'}})});")
+    check("machine_state_manager and calibration_step say nothing for a toolchange",
+          js(ctx3, "String(q.busyReason().label)").to_string() == "null"
+          and not js(ctx3, "q.busyReason().busy").to_boolean(),
+          "which is why the dialog had nothing to show - both were measured silent "
+          "across the whole 31s operation")
 
     print(f"\n{checks - len(fails)}/{checks} checks passed")
     return 1 if fails else 0

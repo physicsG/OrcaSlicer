@@ -302,52 +302,68 @@ export class MachineState {
   }
 
   /**
-   * Why the machine is busy, from every source that actually answers.
+   * Why the machine is busy, from the sources that actually answer.
    *
-   * `machine_state_manager` is the obvious one and the one the shipped UI uses, but on
-   * this firmware it reads {main_state: 0, action_code: 0} through a manual toolchange -
-   * so a wait that consulted only it stayed silent for exactly the long operations that
-   * need explaining. These are the others, in order of how specific they are:
+   * Measured, not assumed. A real `T0 A0` on an unhomed U1 was watched end to end
+   * (2026-08-24, 31 s) and this is what moved:
    *
-   *   extruder_offset_calibration.calibration_step  the toolhead docking calibration
-   *                                                 that makes a toolchange take
-   *                                                 minutes. NOT subscribed - the
-   *                                                 shipped page does not subscribe it
-   *                                                 and the object list is pinned to
-   *                                                 the bundle's - so it arrives from a
-   *                                                 one-shot query while waiting.
-   *   display_status.message                        what a running macro says about
-   *                                                 itself
-   *   motion_report.live_velocity                   physically moving, whatever it
-   *                                                 chooses to call it
+   *     0.7s  homed_axes "z"   idle_timeout "Printing"
+   *     2.7s  homed_axes ""
+   *     4.7s  homed_axes "y"
+   *    14.7s  homed_axes "xy"          <- the "XY calibration" a user sees
+   *    28.7s  extruder.activating_move true
+   *    30.7s  extruder.state "ACTIVATE"
+   *    32.7s  idle_timeout "Ready"
    *
-   * `idle_timeout.state` is deliberately NOT treated as busy. It reads "Printing" on an
-   * idle machine here, so it would keep a wait alive forever; it is only ever a label.
+   * Two things did NOT move at any point: `machine_state_manager`, which stayed
+   * {main_state: 0, action_code: 0}, and `extruder_offset_calibration.calibration_step`,
+   * which stayed "idle". Both were previously trusted here and both are silent for a
+   * manual toolchange, which is why the dialog had nothing to say.
    *
-   * Returns { label, busy }. `busy` is what may extend a wait; `label` is what to show.
+   * `idle_timeout` is now treated as busy after all. It was excluded for reading
+   * "Printing" on an apparently idle machine - but that is Klipper's timeout not having
+   * elapsed yet, not a lie, and across the capture it bracketed the operation exactly.
+   * Lingering is harmless because every wait also has its own done() and a hard cap.
    */
   busyReason() {
     const act = this.activity();
+    const th = this.objects['toolhead'] || {};
     const cal = this.objects['extruder_offset_calibration'] || {};
     const disp = this.objects['display_status'] || {};
     const mr = this.objects['motion_report'] || {};
     const idle = this.objects['idle_timeout'] || {};
 
+    const running = idle.state === 'Printing';
     const step = typeof cal.calibration_step === 'string' ? cal.calibration_step : '';
     const calibrating = !!step && step !== 'idle';
     const moving = Math.abs(num(mr.live_velocity)) > 0.001;
     const msg = typeof disp.message === 'string' && disp.message.trim()
       ? disp.message.trim() : null;
 
+    const hasHomed = Object.prototype.hasOwnProperty.call(th, 'homed_axes');
+    const homed = String(th.homed_axes || '').toLowerCase();
+    // Homing while the machine is running is the long phase of a toolchange. Naming the
+    // axes still outstanding turns a frozen spinner into something that visibly moves.
+    const homing = running && hasHomed && homed !== 'xyz';
+    const engaging = TOOLHEADS.findIndex(
+      (k) => (this.objects[k] || {}).activating_move === true);
+
     let label = null;
     if (calibrating) label = `Calibrating \u2014 ${prettyStep(step)}`;
-    else if (msg) label = msg;
+    else if (engaging >= 0) label = `Engaging toolhead ${engaging + 1}\u2026`;
+    else if (homing) {
+      const done = ['x', 'y', 'z'].filter((a) => homed.includes(a));
+      label = done.length ? `Homing \u2014 ${done.join(', ').toUpperCase()} done`
+                          : 'Homing axes\u2026';
+    } else if (msg) label = msg;
     else if (moving) label = 'Moving\u2026';
-    else if (idle.state && idle.state !== 'Idle' && idle.state !== 'Ready') label = null;
+    else if (running) label = 'Working\u2026';
 
     return {
       label,
-      busy: calibrating || moving,
+      busy: calibrating || moving || running || engaging >= 0,
+      homing,
+      homedAxes: hasHomed ? homed : null,
       calibrationStep: calibrating ? step : null,
     };
   }
