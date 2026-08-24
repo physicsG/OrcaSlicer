@@ -62,14 +62,17 @@
   .panel-head{height:40px;display:flex;align-items:center;padding:0 14px;font-size:13px;
               font-weight:600;background:var(--panel-2);border-bottom:1px solid var(--line);
               border-radius:10px 10px 0 0}
-  /* Variant C: no rules between the columns - 40px of gap does the separating, at
-     device.css's real panel width. Whitespace only separates when there is enough of
-     it, which is why this pairs with the wide panel and not the snug one. `.colB` is
-     flex:1, so the surplus lands in the motion column and the wheel stays centred
-     under it rather than the gaps stretching unevenly. */
-  .cols{display:flex;gap:40px;padding:20px;align-items:flex-start}
+  /* Variant C, with the seams doing the work honestly.
+     `.colB` sizes to its content instead of flexing, and space-between hands the surplus
+     to the two gaps rather than to the motion column. Before this the gap was 40px in
+     the stylesheet and 40px / 98px on screen: colB was flex:1, so it grew to 388px and
+     centred a 272px wheel inside it, putting 58px of slack on each side of the wheel and
+     78px of dead space at the right edge. Now both gaps are equal at any panel width,
+     and the wheel ends flush with the panel's padding. */
+  .cols{display:flex;gap:40px;padding:20px;align-items:flex-start;
+        justify-content:space-between}
   .colA{width:126px;flex:0 0 126px}
-  .colB{flex:1;display:flex;flex-direction:column;align-items:center;gap:12px}
+  .colB{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:12px}
 
   /* ---------------- icon-only status rows ---------------- */
   .trow{display:flex;align-items:center;gap:5px;height:37px;padding:0 7px;
