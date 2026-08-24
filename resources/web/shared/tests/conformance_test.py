@@ -392,9 +392,44 @@ check("a running camera can be stopped",
 check("the idle task panel offers something besides an illustration",
       "showFiles" in ui_src,
       "an image with no text and no buttons is not a state")
-check("selecting a toolhead reaches the machine",
-      "handlers.selectTool" in ui_src,
-      "the buttons used to set a local variable and send nothing")
+app_src = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
+check("choosing which toolhead to jog does NOT move the machine",
+      "handlers.selectTool" not in ui_src,
+      "selection is a UI choice; a toolchange must be deliberate, not a side effect")
+check("changing the live toolhead is its own action",
+      "handlers.pickTool" in ui_src and "pickTool:" in app_src,
+      "there must be a dedicated control, not an overloaded segmented button")
+check("a toolchange blocks the surface while the gantry moves",
+      "openBlockingDialog" in app_src,
+      "a second command sent mid-change is not what the user meant")
+check("the toolchange is confirmed by the machine, not by the ack",
+      "activeIndex === idx" in app_src,
+      "the G-code ack only says the command was queued")
+
+print("\n== panel invariants ==")
+css = open(os.path.join(WEB, "device_page", "css", "device.css"), encoding="utf-8").read()
+
+# `.fault{display:flex}` is a class rule and beats the UA stylesheet's
+# [hidden]{display:none}, so setting .hidden in JS did nothing and an empty banner
+# sat above the panels permanently. Any element the page hides by attribute needs this.
+check("the fault banner honours [hidden]",
+      re.search(r"\.fault\[hidden\]\s*\{[^}]*display:\s*none", css) is not None,
+      "display:flex on .fault overrides the UA [hidden] rule")
+
+# three rows, three glyphs: sharing one made the purifier look like the fan
+icons = dict(re.findall(r"(\w+Row)\.appendChild\(icon\('([A-Za-z0-9]+)'\)\)", ui_src))
+row_icons = [v for k, v in icons.items() if k in ("fanRow", "purRow", "spRow")]
+check("fan, purifier and print speed each have their own icon",
+      len(row_icons) == 3 and len(set(row_icons)) == 3,
+      f"got {icons}")
+for name in set(row_icons):
+    check(f"icon asset exists: {name}.svg",
+          os.path.exists(os.path.join(WEB, "device_page", "icons", f"{name}.svg")))
+
+# every value row in the left column opens a sheet rather than editing in place
+check("print speed opens a sheet, like the fan and purifier rows",
+      "spRow.onclick" in ui_src and "title: 'Print speed'" in ui_src,
+      "an inline row of buttons changes the setting by brushing past it")
 
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)

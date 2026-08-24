@@ -13,7 +13,8 @@ import { CMD, SUBSCRIBE_OBJECTS, NAMED, LIMITS, TASK_CONFIG, PRINT_PREFERENCES,
          asDeviceList, deviceLabel, DEVICE, hasTlsMaterial,
          CAMERA_DOMAIN, CAMERA_INTERVAL, cssColor }
   from '../../shared/js/protocol.js';
-import { openMenu, openDialog, toggleField, numberField } from './overlay.js';
+import { openMenu, openDialog, openBlockingDialog, toggleField, numberField }
+  from './overlay.js';
 import { connect as connectDevice, disconnect as disconnectDevice } from './connection.js';
 import { Sswcp } from '../../shared/js/sswcp.js';
 import { MachineState } from '../../shared/js/state.js';
@@ -43,6 +44,8 @@ let heartbeat = null;   // interval handle
 let findSub = null;     // discovery subscription
 let found = [];         // machines discovery has turned up
 const HISTORY_PAGE = 20;
+// a toolchange is mechanical; this is how long to wait for the machine to say so
+const TOOL_CHANGE_TIMEOUT_MS = 45000;
 let history = { loading: false, error: '', items: [], hasMore: false };
 
 function setStatus(text, kind = '') {
@@ -225,15 +228,43 @@ const handlers = {
   },
 
   /**
-   * Change the live toolhead.
+   * Change the live toolhead, and hold the surface while it happens.
    *
-   * The buttons used to set a local variable only, so the panel could disagree with the
-   * machine indefinitely. `T<n>` is what actually switches, and `toolhead.extruder`
-   * reports the result back, so the button state follows the printer rather than the
-   * click.
+   * This is deliberately not what the Tool1..4 buttons do - those only choose what jog
+   * and extrude address. A toolchange parks one head and picks up another, so it gets a
+   * confirmation step and a modal that cannot be dismissed while the gantry is moving.
+   *
+   * The machine is the only thing that says it worked: the target extruder reports
+   * `state: "ACTIVATE"`, which arrives on the subscribed stream. Polling that beats
+   * trusting the G-code's own ack, which only says the command was queued.
    */
-  selectTool: (i) => send(CMD.SEND_GCODES, { script: `T${Number(i) || 0}` },
-                          `select toolhead ${Number(i) + 1}`),
+  pickTool: async (i) => {
+    const idx = Number(i) || 0;
+    const dlg = openBlockingDialog({
+      title: `Switching to toolhead ${idx + 1}`,
+      message: 'Parking the current toolhead…',
+    });
+    try {
+      await bridge.request(CMD.SEND_GCODES, { script: `T${idx}` });
+    } catch (e) {
+      dlg.fail(`The printer refused the change: ${e.message}`);
+      return;
+    }
+    dlg.update('Waiting for the printer to confirm…');
+
+    const deadline = Date.now() + TOOL_CHANGE_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      if (state.toolhead().activeIndex === idx) {
+        dlg.close();
+        render();
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    dlg.fail(`Toolhead ${idx + 1} did not report active within `
+             + `${Math.round(TOOL_CHANGE_TIMEOUT_MS / 1000)}s. `
+             + 'The printer may still be working, or the change may have failed.');
+  },
 
   /** Jump to the file browser - the idle task panel's one useful action. */
   showFiles: () => {

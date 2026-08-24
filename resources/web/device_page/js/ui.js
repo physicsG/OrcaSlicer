@@ -265,7 +265,7 @@ export function renderStatusCard(root, toolheads, bed, led, fans, purifier,
   root.appendChild(fanRow);
 
   const purRow = el('div', 'status-row');
-  purRow.appendChild(icon('iconSpeed'));
+  purRow.appendChild(icon('iconPurifier'));
   purRow.appendChild(el('span', 'val',
     purifier.present ? (purifier.modeName || String(purifier.mode ?? '_')) : '_'));
   purRow.appendChild(el('span', 'go', '›'));
@@ -295,22 +295,39 @@ export function renderStatusCard(root, toolheads, bed, led, fans, purifier,
   };
   root.appendChild(purRow);
 
-  // Print speed lives at the foot of the left column, and moves in whole 50% steps -
-  // the shipped page offers a small set of discrete rates, not a continuous slider.
-  // It is here rather than under the jog pad because it belongs with the other
-  // machine-wide settings, not with motion.
-  const spRow = el('div', 'status-row speed-row-inline');
-  spRow.appendChild(icon('iconSpeed'));
+  // Print speed lives at the foot of the left column and opens a sheet, the same way
+  // the fan and purifier rows do - a row of buttons inline made it the one setting you
+  // could change by brushing past it.
   const cur = speed && speed.factorPct != null ? speed.factorPct : 100;
-  const seg = el('div', 'seg speeds');
-  for (let v = LIMITS.printSpeed.min; v <= LIMITS.printSpeed.max; v += SPEED_STEP) {
-    const b = el('button', v === cur ? 'is-active' : null, `${v}%`);
-    b.title = `Set print speed to ${v}%`;
-    b.onclick = (e) => { e.stopPropagation(); handlers.setSpeed(v); };
-    seg.appendChild(b);
-  }
-  spRow.appendChild(seg);
+  const spRow = el('div', 'status-row');
+  spRow.appendChild(icon('iconSpeed'));
+  spRow.appendChild(el('span', 'val', `${cur}%`));
+  spRow.appendChild(el('span', 'go', '\u203A'));
   spRow.title = 'Print speed';
+  spRow.onclick = () => {
+    let chosen = cur;
+    openDialog({
+      title: 'Print speed',
+      build: (b) => {
+        b.appendChild(el('p', 'ms-note',
+          `Whole ${SPEED_STEP}% steps, between ${LIMITS.printSpeed.min}% and `
+          + `${LIMITS.printSpeed.max}% \u2014 the rates the printer accepts.`));
+        const seg = el('div', 'seg speeds wide');
+        for (let v = LIMITS.printSpeed.min; v <= LIMITS.printSpeed.max; v += SPEED_STEP) {
+          const btn = el('button', v === chosen ? 'is-active' : null, `${v}%`);
+          btn.onclick = () => {
+            chosen = v;
+            seg.querySelectorAll('button').forEach((x) => x.classList.remove('is-active'));
+            btn.classList.add('is-active');
+          };
+          seg.appendChild(btn);
+        }
+        b.appendChild(seg);
+      },
+      confirmLabel: 'Apply',
+      onConfirm: () => handlers.setSpeed(chosen),
+    });
+  };
   root.appendChild(spRow);
 }
 
@@ -321,30 +338,22 @@ let activeStep = 0;
 let head = {};          // last `toolhead` snapshot, for the readouts and homing state
 
 /*
- * A tool change is a request, not a setting.
+ * Two different things, kept apart.
  *
- * The machine owns which tool is live; the click only asks. Storing the click in the
- * same variable that mirrors the machine meant the very next render - the click's own,
- * and then every state push a second later - overwrote it, so the selection visibly
- * sprang back. `pendingTool` holds the request until the machine agrees (its extruder
- * reports ACTIVATE) or the request ages out, and the button says which of the two it is.
+ * `activeTool` is which toolhead the jog and extrude controls address - a UI choice,
+ * local, instant, and harmless. Picking it must NOT move the machine: that was wrong,
+ * and it made an idle click into a mechanical operation.
+ *
+ * Actually changing the live toolhead is a separate, deliberate action behind its own
+ * button, and it blocks the surface while it runs - the gantry is moving and a second
+ * command sent into that window is not what anyone meant. `machineTool` is what the
+ * machine reports, and it is never inferred from a click.
  */
-let pendingTool = null;
-let pendingSince = 0;
-const TOOL_CHANGE_TIMEOUT_MS = 45000;   // a toolchange is mechanical; give it room
-
 export function renderControlMain(root, toolheads, handlers, th) {
   root.innerHTML = '';
   if (th) head = th;
 
   const machineTool = head.activeIndex != null ? head.activeIndex : null;
-  if (pendingTool != null
-      && (machineTool === pendingTool || Date.now() - pendingSince > TOOL_CHANGE_TIMEOUT_MS)) {
-    pendingTool = null;                 // confirmed, or given up on
-  }
-  // what the panel acts on: the request while it is outstanding, else the machine
-  activeTool = pendingTool != null ? pendingTool
-             : (machineTool != null ? machineTool : activeTool);
 
   const top = el('div', 'control-top');
 
@@ -355,17 +364,10 @@ export function renderControlMain(root, toolheads, handlers, th) {
   for (let i = 0; i < count; i++) {
     const b = el('button', i === activeTool ? 'is-active' : null, `Tool${i + 1}`);
     if (i === machineTool) b.dataset.live = '1';
-    if (i === pendingTool && i !== machineTool) b.dataset.pending = '1';
-    b.title = i === machineTool ? `Toolhead ${i + 1} — active on the machine`
-            : i === pendingTool ? `Switching to toolhead ${i + 1}…`
-            : `Switch to toolhead ${i + 1}`;
-    b.onclick = () => {
-      if (i === machineTool) { pendingTool = null; renderControlMain(root, toolheads, handlers); return; }
-      pendingTool = i;
-      pendingSince = Date.now();
-      handlers.selectTool(i);
-      renderControlMain(root, toolheads, handlers);
-    };
+    b.title = i === machineTool
+      ? `Toolhead ${i + 1} — target for jog and extrude, and live on the machine`
+      : `Target jog and extrude at toolhead ${i + 1} (does not change the tool)`;
+    b.onclick = () => { activeTool = i; renderControlMain(root, toolheads, handlers); };
     tools.appendChild(b);
   }
   top.appendChild(tools);
@@ -377,6 +379,15 @@ export function renderControlMain(root, toolheads, handlers, th) {
     steps.appendChild(b);
   });
   top.appendChild(steps);
+
+  // Changing the live toolhead is its own action, not a side effect of selection.
+  const pick = el('button', 'home-btn pick-btn');
+  pick.title = machineTool != null
+    ? `Change the live toolhead (currently ${machineTool + 1})`
+    : 'Change the live toolhead';
+  pick.appendChild(icon('iconExtruderHead'));
+  pick.onclick = () => pickExtruder(toolheads, machineTool, handlers);
+  top.appendChild(pick);
 
   const home = el('button', 'home-btn');
   home.title = 'Home all axes';
@@ -394,6 +405,53 @@ export function renderControlMain(root, toolheads, handlers, th) {
   root.appendChild(jog);
 
   root.appendChild(el('div', 'extrude-bar', '--------'));
+}
+
+/**
+ * Choose the live toolhead.
+ *
+ * Deliberately a two-step: pick, then confirm. A toolchange parks one head and grabs
+ * another, so it is not something to trigger by brushing a segmented control.
+ */
+function pickExtruder(toolheads, machineTool, handlers) {
+  let chosen = machineTool != null ? machineTool : 0;
+  openDialog({
+    title: 'Pick extruder',
+    build: (b) => {
+      b.appendChild(el('p', 'ms-note',
+        'The printer will park the current toolhead and pick up the one you choose. '
+        + 'The controls stay locked until it reports the change.'));
+      const list = el('div', 'pick-list');
+      const count = Math.max(toolheads.length, 4);
+      for (let i = 0; i < count; i++) {
+        const t = toolheads[i] || {};
+        const row = el('button', 'pick-row');
+        if (i === chosen) row.dataset.chosen = '1';
+        if (i === machineTool) row.dataset.live = '1';
+        const name = el('div', 'pick-name', `Toolhead ${i + 1}`);
+        row.appendChild(name);
+        const meta = [];
+        if (t.nozzleDiameter) meta.push(`${t.nozzleDiameter} mm`);
+        if (t.temperature != null) meta.push(`${Math.round(t.temperature)} °C`);
+        if (i === machineTool) meta.push('live');
+        row.appendChild(el('div', 'pick-meta', meta.join(' · ')));
+        row.onclick = () => {
+          chosen = i;
+          list.querySelectorAll('.pick-row').forEach((r, k) => {
+            if (k === i) r.dataset.chosen = '1'; else delete r.dataset.chosen;
+          });
+        };
+        list.appendChild(row);
+      }
+      b.appendChild(list);
+    },
+    confirmLabel: 'Change toolhead',
+    onConfirm: () => {
+      if (chosen === machineTool) return true;   // nothing to do
+      handlers.pickTool(chosen);
+      return true;
+    },
+  });
 }
 
 function stepMm() { return parseFloat(STEPS[activeStep]); }

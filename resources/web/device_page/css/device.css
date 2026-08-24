@@ -623,19 +623,8 @@ body {
   display: inline-block;
   vertical-align: middle;
 }
-.seg.tools button[data-pending="1"] {
-  font-style: italic;
-  opacity: .8;
-}
-.seg.tools button[data-pending="1"]::after {
-  content: "…";
-  margin-left: 3px;
-}
 
-/* Print speed, at the foot of the left column, in whole 50% steps. */
-.status-row.speed-row-inline { align-items: center; }
-.status-row.speed-row-inline .seg.speeds { margin-left: auto; }
-.seg.speeds button { padding: 2px 7px; font-size: 11px; }
+
 
 /* An RFID-identified spool, distinguished from a hand-typed one. */
 .slot .slot-tag {
@@ -722,3 +711,53 @@ body {
   font-size: 11px;
   color: #8B8B8B;
 }
+
+/* The banner is display:flex, which beats the UA stylesheet's [hidden]{display:none} -
+   so hiding it in JS did nothing and an empty pink bar sat above the panels forever. */
+.fault[hidden] { display: none; }
+
+/* Speed choices inside the sheet. */
+.seg.speeds.wide { display: flex; margin-top: 4px; }
+.seg.speeds.wide button { flex: 1; padding: 7px 0; font-size: 12px; }
+
+/* ---- pick extruder --------------------------------------------------- */
+.pick-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.pick-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: 1px solid #E6E6E6;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+.pick-row[data-chosen="1"] { border-color: var(--accent); background: #F5F9FF; }
+.pick-row[data-live="1"] .pick-name::after {
+  content: "";
+  display: inline-block;
+  width: 5px; height: 5px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #16A34A;
+  vertical-align: middle;
+}
+.pick-name { font-size: 13px; color: #262E30; }
+.pick-meta { font-size: 11px; color: #8B8B8B; margin-top: 2px; }
+
+/* ---- blocking modal -------------------------------------------------- */
+.dialog.blocking .dialog-body { text-align: center; padding-top: 18px; }
+.blocking-msg { font-size: 13px; color: #39434F; margin: 14px 0 4px; line-height: 1.5; }
+.spinner {
+  width: 26px; height: 26px;
+  margin: 0 auto;
+  border: 3px solid #E6E6E6;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 900ms linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+
+/* The pick button sits beside Home and reads as an action, not a mode. */
+.pick-btn { margin-right: 6px; }

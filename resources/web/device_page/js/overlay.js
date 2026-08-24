@@ -27,7 +27,7 @@ document.addEventListener('click', (e) => {
   }
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeMenu(); closeDialog(); }
+  if (e.key === 'Escape') { closeMenu(); if (!blocking) closeDialog(); }
 });
 
 /**
@@ -63,9 +63,11 @@ export function openMenu(anchor, items) {
 /* ---- modal dialog --------------------------------------------------- */
 
 let openDialogEl = null;
+let blocking = false;      // a blocking dialog ignores Escape, the scrim and the X
 
 export function closeDialog() {
   if (openDialogEl) { openDialogEl.remove(); openDialogEl = null; }
+  blocking = false;
 }
 
 /**
@@ -98,7 +100,7 @@ export function openDialog({ title, build, confirmLabel = 'OK', onConfirm, wide 
   box.appendChild(foot);
 
   scrim.appendChild(box);
-  scrim.onclick = (e) => { if (e.target === scrim) closeDialog(); };
+  scrim.onclick = (e) => { if (e.target === scrim && !blocking) closeDialog(); };
   document.body.appendChild(scrim);
   openDialogEl = scrim;
 
@@ -134,4 +136,51 @@ export function toggleField(parent, { label, checked }) {
   row.appendChild(input);
   parent.appendChild(row);
   return input;
+}
+
+/**
+ * A modal that cannot be dismissed, for an operation the machine is in the middle of.
+ *
+ * The shipped page blocks the surface while a toolchange runs, and it is right to: the
+ * gantry is moving, and a second command sent into that window is not something the
+ * user meant. No close button, no scrim click, no Escape - it goes away when the caller
+ * says the operation is over.
+ *
+ * Returns { update(text), fail(text), close() }.
+ */
+export function openBlockingDialog({ title, message }) {
+  closeDialog();
+  const scrim = el('div', 'scrim');
+  const box = el('div', 'dialog blocking');
+
+  const head = el('div', 'dialog-head');
+  head.appendChild(el('h3', null, title));
+  box.appendChild(head);
+
+  const body = el('div', 'dialog-body');
+  const spinner = el('div', 'spinner');
+  body.appendChild(spinner);
+  const msg = el('p', 'blocking-msg', message || '');
+  body.appendChild(msg);
+  box.appendChild(body);
+
+  scrim.appendChild(box);
+  document.body.appendChild(scrim);
+  openDialogEl = scrim;
+  blocking = true;
+
+  return {
+    update(text) { msg.textContent = text; },
+    fail(text) {
+      msg.textContent = text;
+      spinner.remove();
+      blocking = false;                       // let the user out again
+      const foot = el('div', 'dialog-foot');
+      const ok = el('button', 'btn primary', 'Close');
+      ok.onclick = closeDialog;
+      foot.appendChild(ok);
+      box.appendChild(foot);
+    },
+    close() { blocking = false; closeDialog(); },
+  };
 }
