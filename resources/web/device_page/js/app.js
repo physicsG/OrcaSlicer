@@ -230,35 +230,34 @@ const handlers = {
   /**
    * Change the live toolhead, and hold the surface while it happens.
    *
-   * This is deliberately not what the Tool1..4 buttons do - those only choose what jog
-   * and extrude address. A toolchange parks one head and picks up another, so it gets a
-   * confirmation step and a modal that cannot be dismissed while the gantry is moving.
+   * `T<n> A0` is what the printer's own UI sends - recovered from the shipped bundle,
+   * where the same button dispatches PARK_EXTRUDER when the head reads ACTIVATE and
+   * `"T" + index + " A0"` when it does not. The A0 matters: the firmware's own
+   * SM_PRINT_CHECK_SWITCH_EXTRUDER macro passes it too, and a bare T<n> is not what
+   * either of them sends.
+   *
+   * Neither command appears in printer.gcode.help, because they register without help
+   * strings - the same is true of T0..T3 - so their absence there is not evidence.
    *
    * The machine is the only thing that says it worked: the target extruder reports
-   * `state: "ACTIVATE"`, which arrives on the subscribed stream. Polling that beats
-   * trusting the G-code's own ack, which only says the command was queued.
+   * state ACTIVATE on the subscribed stream. The G-code ack only says it was queued.
    */
   pickTool: async (i) => {
     const idx = Number(i) || 0;
     const dlg = openBlockingDialog({
       title: `Switching to toolhead ${idx + 1}`,
-      message: 'Parking the current toolhead…',
+      message: 'Parking the current toolhead\u2026',
     });
     try {
-      await bridge.request(CMD.SEND_GCODES, { script: `T${idx}` });
+      await bridge.request(CMD.SEND_GCODES, { script: `T${idx} A0` });
     } catch (e) {
       dlg.fail(`The printer refused the change: ${e.message}`);
       return;
     }
-    dlg.update('Waiting for the printer to confirm…');
-
+    dlg.update('Waiting for the printer to confirm\u2026');
     const deadline = Date.now() + TOOL_CHANGE_TIMEOUT_MS;
     while (Date.now() < deadline) {
-      if (state.toolhead().activeIndex === idx) {
-        dlg.close();
-        render();
-        return;
-      }
+      if (state.toolhead().activeIndex === idx) { dlg.close(); render(); return; }
       await new Promise((r) => setTimeout(r, 500));
     }
     dlg.fail(`Toolhead ${idx + 1} did not report active within `
@@ -269,17 +268,26 @@ const handlers = {
   /**
    * Park the live toolhead, leaving none engaged.
    *
-   * Not a duplicate of pickTool: that ends with a *different* head engaged, this ends
-   * with none, which is the state wanted before a lid comes off or a nozzle is changed.
-   * The machine draws the same distinction - extruder.state reads PARKED or ACTIVATE.
+   * PARK_EXTRUDER for index 0 and PARK_EXTRUDER1..3 above it, mirroring Klipper's own
+   * `extruder` / `extruder1` naming. Taken from the shipped bundle rather than guessed:
+   * an earlier attempt sent `T-1`, which has nothing behind it and did nothing.
+   *
+   * Only the live head can be parked, so this ignores the panel's selection and acts on
+   * whatever the machine reports as ACTIVATE.
    */
   parkTool: async () => {
+    const idx = state.toolhead().activeIndex;
+    if (idx == null) {
+      setStatus('No toolhead is engaged', 'warn');
+      return;
+    }
     const dlg = openBlockingDialog({
-      title: 'Parking the toolhead',
+      title: `Parking toolhead ${idx + 1}`,
       message: 'Waiting for the printer to park\u2026',
     });
     try {
-      await bridge.request(CMD.SEND_GCODES, { script: 'T-1' });
+      await bridge.request(CMD.SEND_GCODES,
+                           { script: `PARK_EXTRUDER${idx === 0 ? '' : idx}` });
     } catch (e) {
       dlg.fail(`The printer refused to park: ${e.message}`);
       return;

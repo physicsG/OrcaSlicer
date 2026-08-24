@@ -209,7 +209,18 @@ body {
 
 /* ---- control -------------------------------------------------------- */
 /* content spans x=390..1148 inside an 830px panel: 34 left, 38 right */
-.control-body { padding: 20px 38px 24px 34px; overflow: auto; }
+/* The Control panel sizes to its content instead of inheriting .panel-body's
+   aspect-ratio. That ratio comes from the measured original and is right for the
+   camera, whose illustration scales with the panel - but the control content is a
+   fixed-size cluster, so on a panel wider than 830px the ratio only bought a taller
+   panel and a growing band of empty space beneath the wheel. Releasing it hands that
+   height back to the panels below. */
+.control-body {
+  padding: 20px 38px 24px 34px;
+  aspect-ratio: auto;
+  min-height: 0;
+  overflow: auto;
+}
 
 /* the whole control area dims until the machine is reachable, exactly as the
    shipped page does - it renders the full layout and fades it, rather than
@@ -789,11 +800,13 @@ body {
 /* ---- readings: icon and value, no label ---------------------------- */
 .status-row {
   display: flex; align-items: center; gap: 5px;
-  height: 37px; padding: 0 7px;
+  height: 38px; padding: 0 6px;
   border: 2px solid transparent; border-radius: 8px;
   font-size: 13px; color: var(--ink);
 }
-.status-row img { width: 17px; height: 17px; flex: 0 0 17px; opacity: .8; }
+/* 20px, the size the picker boxes use - a 17px glyph read as a smaller class of
+   thing than the toolhead it names. */
+.status-row img { width: 20px; height: 20px; flex: 0 0 20px; opacity: .85; }
 .status-row .cur { font-variant-numeric: tabular-nums; font-weight: 600; }
 .status-row .sl { color: var(--ink-dim); }
 .status-row .unit { color: var(--ink-dim); font-size: 12px; }
@@ -830,7 +843,7 @@ body {
   border: 2px solid transparent; border-radius: 8px;
   background: var(--pill); cursor: pointer; font: inherit;
 }
-.qtile img { width: 19px; height: 19px; }
+.qtile img { width: 20px; height: 20px; }
 .qtile b { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink); }
 .qtile:hover { background: var(--line); }
 .qtile[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }

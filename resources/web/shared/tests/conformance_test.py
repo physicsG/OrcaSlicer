@@ -476,5 +476,89 @@ check("the control row is capped so the gaps cannot drift with panel width",
       re.search(r"\.control-grid\s*\{[^}]*max-width:", css) is not None,
       "space-between hands every extra pixel to the gaps")
 
+# The status card is repainted on every state push - about once a second. Rebuilding it
+# destroyed whatever was being typed, which made entering a temperature a race.
+check("the status card is not rebuilt on every state push",
+      "root.dataset.built" in ui_src,
+      "innerHTML='' once a second takes the focused input with it")
+check("a focused target is never overwritten by an incoming reading",
+      "document.activeElement !== tgt" in ui_src,
+      "the machine's value must not land in a field being typed into")
+check("the row's target is read from the DOM, not from a closure",
+      "tgt.dataset.target" in ui_src,
+      "a captured value goes stale as soon as the printer changes it")
+
+# Granularity and labelling are different questions: a step-1 fan labelled at every
+# step printed 101 ticks across the panel.
+check("slider ticks are chosen separately from the step",
+      re.search(r"function sliderRow\([^)]*ticks\)", ui_src) is not None
+      and "FAN_TICKS" in ui_src,
+      "labelling every step is only right when the steps are few")
+check("the fan is labelled at quarters, not at every percent",
+      re.search(r"FAN_TICKS\s*=\s*\[\s*0\s*,\s*25\s*,\s*50\s*,\s*75\s*,\s*100\s*\]", ui_src)
+      is not None)
+
+check("the Control panel sizes to its content",
+      re.search(r"\.control-body\s*\{[^}]*aspect-ratio:\s*auto", css) is not None,
+      "inheriting .panel-body's ratio only bought empty space below the wheel")
+
+# Both commands were recovered from the shipped Flutter bundle, which is the printer's
+# own UI. Neither appears in printer.gcode.help - they register without help strings, as
+# T0..T3 do - so there is nothing else to check them against. An earlier guess of `T-1`
+# for park did nothing at all.
+check("picking a toolhead sends T<n> A0, as the printer's own UI does",
+      re.search(r"`T\$\{idx\} A0`", app_src) is not None,
+      "a bare T<n> is not what the firmware's own macro sends either")
+check("parking uses PARK_EXTRUDER, numbered like Klipper's extruders",
+      "PARK_EXTRUDER" in app_src and "idx === 0 ? '' : idx" in app_src,
+      "PARK_EXTRUDER for 0, PARK_EXTRUDER1..3 above it")
+check("park follows the machine, pick follows the selection",
+      "state.toolhead().activeIndex" in app_src and "handlers.pickTool(activeTool)" in ui_src,
+      "only the live head can be parked; the selection is what the user asked to pick")
+check("picking no longer opens a dialog to re-ask the same question",
+      "pickExtruder(" not in ui_src,
+      "the selection above is already a deliberate click")
+
+# A constant used but never declared is a ReferenceError at the moment the user opens
+# the panel, and nothing before that notices: it is valid syntax, so check_syntax passes,
+# and it only runs on a click. FAN_TICKS shipped that way for one commit, because the
+# edit meant to declare it silently matched nothing.
+def _strip_js(src):
+    """Remove comments and string/template literals so identifiers can be counted."""
+    out, i, n = [], 0, len(src)
+    while i < n:
+        c = src[i]
+        if c == "/" and i + 1 < n and src[i + 1] == "/":
+            i = src.find("\n", i)
+            if i == -1: break
+        elif c == "/" and i + 1 < n and src[i + 1] == "*":
+            i = src.find("*/", i)
+            if i == -1: break
+            i += 2
+        elif c in "\"'`":
+            q, i = c, i + 1
+            while i < n and src[i] != q:
+                i += 2 if src[i] == "\\" else 1
+            i += 1
+        else:
+            out.append(c); i += 1
+    return "".join(out)
+
+for label, path in (("device_page/js/ui.js", os.path.join(WEB, "device_page", "js", "ui.js")),
+                    ("device_page/js/app.js", os.path.join(WEB, "device_page", "js", "app.js"))):
+    src_js = open(path, encoding="utf-8").read()
+    code = _strip_js(src_js)
+    declared = set(re.findall(r"(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)", code))
+    for m in re.finditer(r"import\s*\{([^}]*)\}", src_js, re.S):
+        declared |= {x.strip().split(" as ")[-1].strip()
+                     for x in m.group(1).split(",") if x.strip()}
+    # not preceded by a dot: CMD.SEND_GCODES is a property of an import,
+    # not an identifier this module has to declare
+    used = set(re.findall(r"(?<![.\w$])([A-Z][A-Z0-9_]{2,})\b", code))
+    JS_GLOBALS = {"JSON", "URL", "NaN", "XML", "HTML", "SVG"}
+    undefined = sorted(u for u in used if u not in declared and u not in JS_GLOBALS)
+    check(f"{label}: every constant it uses is declared or imported",
+          not undefined, f"undefined: {undefined}")
+
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)

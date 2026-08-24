@@ -177,6 +177,16 @@ export function renderCamera(root, connected, cam, handlers) {
 
 // Print speed moves in whole 50% steps: 50 / 100 / 150 across LIMITS.printSpeed.
 const SPEED_STEP = 50;
+// Granularity and labelling are different questions. The fans are continuous - step 1,
+// so any value is reachable - but labelling every step printed 101 ticks across the
+// panel. These are the marks that get drawn; `step` is only what the knob snaps to.
+const FAN_TICKS = [0, 25, 50, 75, 100];
+/** Speed is labelled at exactly the values the machine accepts - there are only three. */
+function speedTicks() {
+  const out = [];
+  for (let v = LIMITS.printSpeed.min; v <= LIMITS.printSpeed.max; v += SPEED_STEP) out.push(v);
+  return out;
+}
 
 /**
  * A row is an icon and a reading. No label: the shipped icons carry the identity -
@@ -187,32 +197,33 @@ const SPEED_STEP = 50;
  * row is hovered. Committing on Enter or blur rather than on every keystroke, because
  * each commit is a G-code round trip to the machine.
  */
-function tempRow(iconName, cur, target, limit, title, apply) {
+function tempRow(key, iconName, limit, title, apply) {
   const row = el('div', 'status-row');
+  row.dataset.k = key;
   row.title = title;
   row.appendChild(icon(iconName));
 
-  row.appendChild(el('span', 'cur', fmtTemp(cur)));
+  row.appendChild(el('span', 'cur', '_'));
   row.appendChild(el('span', 'sl', '/'));
 
   const tgt = document.createElement('input');
   tgt.className = 'tgt';
   tgt.type = 'number';
-  tgt.value = String(Math.round(target || 0));
   tgt.min = String(limit.min);
   tgt.max = String(limit.max);
   tgt.setAttribute('aria-label', title);
+  // The machine's current target lives on the element, not in a closure: the row is
+  // never rebuilt, so a captured value would go stale the moment the printer changed it.
+  tgt.dataset.target = '0';
+  const revert = () => { tgt.value = tgt.dataset.target; };
   const commit = () => {
     const v = Number(tgt.value);
-    if (!Number.isFinite(v) || v < limit.min || v > limit.max) {
-      tgt.value = String(Math.round(target || 0));   // refuse rather than clamp silently
-      return;
-    }
-    if (v !== Math.round(target || 0)) apply(v);
+    if (!Number.isFinite(v) || v < limit.min || v > limit.max) return revert();
+    if (v !== Number(tgt.dataset.target)) apply(v);
   };
   tgt.onkeydown = (e) => {
     if (e.key === 'Enter') { e.preventDefault(); tgt.blur(); }
-    if (e.key === 'Escape') { tgt.value = String(Math.round(target || 0)); tgt.blur(); }
+    if (e.key === 'Escape') { revert(); tgt.blur(); }
   };
   tgt.onblur = commit;
   row.appendChild(tgt);
@@ -221,75 +232,122 @@ function tempRow(iconName, cur, target, limit, title, apply) {
   return row;
 }
 
+/**
+ * Push new readings into a row without touching its DOM.
+ *
+ * The status card used to be rebuilt on every state push - roughly once a second - which
+ * destroyed whatever input the user was typing into. That is what made entering a
+ * temperature feel like a race: you had a sub-second window before the field was
+ * replaced under you. Values are written in place instead, and the target field is left
+ * alone entirely while it has focus.
+ */
+function updateTempRow(row, cur, target) {
+  const t = String(Math.round(Number(target) || 0));
+  row.querySelector('.cur').textContent = fmtTemp(cur);
+  const tgt = row.querySelector('.tgt');
+  tgt.dataset.target = t;
+  if (document.activeElement !== tgt) tgt.value = t;
+}
+
 function fmtTemp(v) {
   const n = Number(v);
   return Number.isFinite(n) ? String(Math.round(n)) : '_';
 }
 
 /** One quick-setting tile: icon over a value, opening its own panel underneath. */
-function tile(iconName, value, title, onOpen, opts = {}) {
+function tile(key, iconName, title, onOpen, control) {
   const b = el('button', 'qtile');
+  b.dataset.k = key;
   b.title = title;
   b.appendChild(icon(iconName));
-  if (opts.absent) b.dataset.absent = '1';
-  if (opts.control) {
-    b.appendChild(opts.control);
-  } else {
-    b.appendChild(el('b', null, value));
-  }
+  b.appendChild(control || el('b', null, '_'));
   if (onOpen) b.onclick = () => onOpen(b);
   return b;
 }
 
 export function renderStatusCard(root, toolheads, bed, led, fans, purifier,
                                  speed, handlers) {
+  // Rebuild only when the shape changes; otherwise write the new numbers into the DOM
+  // that is already there. Beyond keeping focus, this also keeps a tile alive while its
+  // popover is anchored to it - replacing the anchor would orphan the panel.
+  const sig = `${toolheads.length}`;
+  if (root.dataset.built !== sig) {
+    root.dataset.built = sig;
+    buildStatusCard(root, toolheads, handlers);
+  }
+
+  const rows = root.querySelectorAll('.status-row');
+  toolheads.forEach((t, i) => {
+    if (rows[i]) updateTempRow(rows[i], t.temperature, t.target);
+  });
+  const bedRow = root.querySelector('.status-row[data-k="bed"]');
+  if (bedRow) updateTempRow(bedRow, bed.temperature, bed.target);
+
+  const q = (k) => root.querySelector(`.qtile[data-k="${k}"]`);
+  const setVal = (k, v) => { const n = q(k); if (n) n.querySelector('b').textContent = v; };
+  setVal('speed', `${speed.factorPct == null ? 100 : speed.factorPct}%`);
+  setVal('fan', `${fans.main}%`);
+
+  const purAbsent = !purifier.present || !purifier.powerDetected;
+  const pur = q('pur');
+  if (pur) {
+    pur.querySelector('b').textContent = purAbsent ? '\u2014' : (purifier.modeName || '_');
+    if (purAbsent) pur.dataset.absent = '1'; else delete pur.dataset.absent;
+    pur.title = purAbsent ? 'Air purifier - not connected' : 'Air purifier';
+  }
+  const sw = root.querySelector('.qtile[data-k="led"] .switch');
+  if (sw) sw.setAttribute('aria-checked', led.on ? 'true' : 'false');
+
+  // the panels read live state when they open, so they are wired once at build time
+  root.__state = { toolheads, bed, led, fans, purifier, speed, purAbsent };
+}
+
+function buildStatusCard(root, toolheads, handlers) {
   root.innerHTML = '';
 
   toolheads.forEach((t, i) => {
-    root.appendChild(tempRow(`iconExtruder${i + 1}`, t.temperature, t.target,
-                             LIMITS.nozzleTemp, `Toolhead ${i + 1} temperature`,
+    root.appendChild(tempRow(`e${i}`, `iconExtruder${i + 1}`, LIMITS.nozzleTemp,
+                             `Toolhead ${i + 1} temperature`,
                              (v) => handlers.setExtruderTemp(i, v)));
   });
-  root.appendChild(tempRow('iconHotBedTemperature', bed.temperature, bed.target,
-                           LIMITS.bedTemp, 'Heated bed temperature',
-                           (v) => handlers.setBedTemp(v)));
+  root.appendChild(tempRow('bed', 'iconHotBedTemperature', LIMITS.bedTemp,
+                           'Heated bed temperature', (v) => handlers.setBedTemp(v)));
 
+  const st = () => root.__state || {};
   const tiles = el('div', 'qtiles');
 
-  tiles.appendChild(tile('iconSpeed', `${speed.factorPct == null ? 100 : speed.factorPct}%`,
-    'Print speed', (anchor) => openPopover(anchor, {
-      title: 'Print speed',
-      width: 300,
-      build: (b) => {
-        // 50/100/150 is the whole of what the machine accepts, so the track snaps
-        b.appendChild(sliderRow('iconSpeed', 'Print Speed',
-          speed.factorPct == null ? 100 : speed.factorPct,
-          LIMITS.printSpeed.min, LIMITS.printSpeed.max, SPEED_STEP,
-          (v) => handlers.setSpeed(v)));
-      },
-    })));
+  tiles.appendChild(tile('speed', 'iconSpeed', 'Print speed', (anchor) => {
+    const { speed } = st();
+    openPopover(anchor, {
+      title: 'Print speed', width: 300,
+      build: (b) => b.appendChild(sliderRow('iconSpeed', 'Print Speed',
+        speed.factorPct == null ? 100 : speed.factorPct,
+        LIMITS.printSpeed.min, LIMITS.printSpeed.max, SPEED_STEP,
+        (v) => handlers.setSpeed(v), speedTicks())),
+    });
+  }));
 
-  tiles.appendChild(tile('iconMainCooling', `${fans.main}%`,
-    'Fan control', (anchor) => openPopover(anchor, {
-      title: 'Fan control',
-      width: 330,
+  tiles.appendChild(tile('fan', 'iconMainCooling', 'Fan control', (anchor) => {
+    const { fans } = st();
+    openPopover(anchor, {
+      title: 'Fan control', width: 330,
       build: (b) => {
         b.appendChild(sliderRow('iconMainCooling', 'Main Cooling Fan Speed',
-          fans.main, 0, 100, 1, (v) => handlers.setMainFan(v)));
+          fans.main, 0, 100, 1, (v) => handlers.setMainFan(v), FAN_TICKS));
         b.appendChild(sliderRow('iconAuxiliaryCooling', 'Assist Cooling Fan Speed',
-          fans.cavity, 0, 100, 1, (v) => handlers.setCavityFan(v)));
+          fans.cavity, 0, 100, 1, (v) => handlers.setCavityFan(v), FAN_TICKS));
       },
-    })));
+    });
+  }));
 
-  // A purifier that is not plugged in cannot be set. The modes stay visible so the
-  // panel keeps its shape, but they are plainly out of reach and the panel says why.
-  const purAbsent = !purifier.present || !purifier.powerDetected;
-  tiles.appendChild(tile('iconPurifier', purAbsent ? '\u2014' : (purifier.modeName || '_'),
-    purAbsent ? 'Air purifier - not connected' : 'Air purifier',
-    (anchor) => openPopover(anchor, {
-      title: 'Air purifier',
-      width: 290,
+  tiles.appendChild(tile('pur', 'iconPurifier', 'Air purifier', (anchor) => {
+    const { purifier, purAbsent } = st();
+    openPopover(anchor, {
+      title: 'Air purifier', width: 290,
       build: (b) => {
+        // A control for hardware that is not attached is a claim the machine would
+        // refuse. The modes stay visible so the panel keeps its shape when one is
+        // plugged in, but they are plainly out of reach and the panel says why.
         if (purAbsent) {
           const e = el('div', 'pop-empty');
           e.appendChild(icon('iconPurifier'));
@@ -307,14 +365,17 @@ export function renderStatusCard(root, toolheads, bed, led, fans, purifier,
         });
         b.appendChild(seg);
       },
-    }), { absent: purAbsent }));
+    });
+  }));
 
   // A binary needs no panel - the switch is the whole control
   const sw = el('button', 'switch');
   sw.setAttribute('role', 'switch');
-  sw.setAttribute('aria-checked', led.on ? 'true' : 'false');
-  sw.onclick = (e) => { e.stopPropagation(); handlers.setLed(!led.on); };
-  tiles.appendChild(tile('iconLed', null, 'Chamber light', null, { control: sw }));
+  sw.onclick = (e) => {
+    e.stopPropagation();
+    handlers.setLed(!(root.__state && root.__state.led.on));
+  };
+  tiles.appendChild(tile('led', 'iconLed', 'Chamber light', null, sw));
 
   root.appendChild(tiles);
 }
@@ -323,7 +384,7 @@ export function renderStatusCard(root, toolheads, bed, led, fans, purifier,
  * The shipped fan control's own shape: a titled slider with ticks and the value on the
  * right. `step` is what keeps a knob from landing where the machine cannot go.
  */
-function sliderRow(iconName, label, value, min, max, step, apply) {
+function sliderRow(iconName, label, value, min, max, step, apply, ticks) {
   const wrap = el('div', 'sctl');
 
   const head = el('div', 'sctl-head');
@@ -333,13 +394,17 @@ function sliderRow(iconName, label, value, min, max, step, apply) {
   head.appendChild(num);
   wrap.appendChild(head);
 
-  const marks = [];
-  for (let v = min; v <= max; v += step) marks.push(v);
-  const ticks = el('div', 'sl-ticks');
-  marks.forEach(() => ticks.appendChild(el('i')));
+  // Granularity and labelling are different questions. A fan is continuous - step 1, so
+  // any value is reachable - but labelling every step printed 101 of them across the
+  // panel. `marks` is what gets drawn; `step` is only what the knob snaps to.
+  const marks = ticks && ticks.length ? ticks.slice() : [];
+  if (!marks.length) for (let v = min; v <= max; v += step) marks.push(v);
+
+  const tickEls = el('div', 'sl-ticks');
+  marks.forEach(() => tickEls.appendChild(el('i')));
 
   const slot = el('div', 'sl-wrap');
-  slot.appendChild(ticks);
+  slot.appendChild(tickEls);
   const range = document.createElement('input');
   range.type = 'range';
   range.min = String(min); range.max = String(max); range.step = String(step);
@@ -488,11 +553,21 @@ export function renderControlMain(root, toolheads, handlers, th) {
   pick.appendChild(boxes);
 
   const acts = el('div', 'pick-acts');
+  // Acts on the toolhead selected above - no intermediate dialog, which is what the
+  // printer's own UI does. The selection is already a deliberate click, and asking
+  // twice for the same choice is not a safety measure, just a step.
   const pickBtn = el('button', 'btn primary', 'Pick extruder');
-  pickBtn.title = 'Change the live toolhead - blocks while the gantry moves';
-  pickBtn.onclick = () => pickExtruder(toolheads, machineTool, handlers);
+  pickBtn.disabled = activeTool === machineTool;
+  pickBtn.title = activeTool === machineTool
+    ? `Toolhead ${activeTool + 1} is already live`
+    : `Make toolhead ${activeTool + 1} live - blocks while the gantry moves`;
+  pickBtn.onclick = () => handlers.pickTool(activeTool);
+  // Only the live head can be parked, so this follows the machine, not the selection.
   const parkBtn = el('button', 'btn', 'Park extruder');
-  parkBtn.title = 'Park the live toolhead, leaving none engaged';
+  parkBtn.disabled = machineTool == null;
+  parkBtn.title = machineTool == null
+    ? 'No toolhead is engaged'
+    : `Park toolhead ${machineTool + 1}, leaving none engaged`;
   parkBtn.onclick = () => handlers.parkTool();
   acts.appendChild(pickBtn);
   acts.appendChild(parkBtn);
@@ -532,54 +607,6 @@ export function renderControlMain(root, toolheads, handlers, th) {
   });
   motion.appendChild(bedRow);
   root.appendChild(motion);
-}
-
-/**
- * Choose the live toolhead: pick, then confirm. A toolchange parks one head and grabs
- * another, so it is not something to trigger by brushing a segmented control.
- */
-function pickExtruder(toolheads, machineTool, handlers) {
-  let chosen = machineTool != null ? machineTool : 0;
-  openDialog({
-    title: 'Pick extruder',
-    build: (b) => {
-      const p = document.createElement('p');
-      p.className = 'dlg-note';
-      p.textContent = 'The printer will park the current toolhead and pick up the one you '
-                    + 'choose. The controls stay locked until it reports the change.';
-      b.appendChild(p);
-      const list = el('div', 'pick-list');
-      const count = Math.max(toolheads.length, 4);
-      for (let i = 0; i < count; i++) {
-        const t = toolheads[i] || {};
-        const row = el('button', 'pick-opt');
-        if (i === chosen) row.dataset.chosen = '1';
-        if (i === machineTool) row.dataset.live = '1';
-        row.appendChild(icon(`iconExtruder${i + 1}`));
-        const meta = [];
-        if (t.nozzleDiameter) meta.push(`${t.nozzleDiameter} mm`);
-        if (t.temperature != null) meta.push(`${Math.round(t.temperature)} \u00B0C`);
-        if (i === machineTool) meta.push('live');
-        const txt = el('span', 'pick-opt-txt');
-        txt.appendChild(el('span', 'pick-opt-name', `Toolhead ${i + 1}`));
-        txt.appendChild(el('span', 'pick-opt-meta', meta.join(' \u00B7 ')));
-        row.appendChild(txt);
-        row.onclick = () => {
-          chosen = i;
-          list.querySelectorAll('.pick-opt').forEach((r, k) => {
-            if (k === i) r.dataset.chosen = '1'; else delete r.dataset.chosen;
-          });
-        };
-        list.appendChild(row);
-      }
-      b.appendChild(list);
-    },
-    confirmLabel: 'Change toolhead',
-    onConfirm: () => {
-      if (chosen !== machineTool) handlers.pickTool(chosen);
-      return true;
-    },
-  });
 }
 
 /* ---- printing task -------------------------------------------------- */
