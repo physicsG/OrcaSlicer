@@ -175,28 +175,99 @@ A second pass found one more of my own: tool selection stored the *request* in t
 variable that mirrors the *machine*, so the click's own re-render put it straight back.
 It is now a pending-until-confirmed model.
 
+## Where this got to (session ending 2026-08-24)
+
+The Control panel is **rebuilt and running against real hardware**, driven by a design
+study that is still in the tree:
+[02-device-page/panel-popover-mockup.html](02-device-page/panel-popover-mockup.html).
+Open it — it is self-contained, needs no server and no JavaScript, and every option that
+was weighed is still in it (sections 06–09: colour, slider style, column separation,
+wheel size), so the decisions can be revisited without re-deriving them.
+
+**Layout.** Three columns — readings, toolhead picker, motion — at 830 px with equal
+gaps. Readings are icon-only using the shipped numbered `iconExtruder1..4`, with the
+target temperature editing in place. Quick settings are four tiles (speed, fans,
+purifier, light) opening panels anchored under the tile that owns them. The jog wheel is
+four quadrants by three bands: **the ring is the step size**, so the old 10/1/0.1
+selector and its hidden state are gone. Z is a separate bed row.
+
+**Commands, recovered from the shipped bundle rather than guessed:**
+
+| | |
+|---|---|
+| pick | `T<n> A0` — the `A0` is not optional; the firmware's own macro sends it |
+| park | `PARK_EXTRUDER`, `PARK_EXTRUDER1..3` — numbered like Klipper's extruders |
+| bed up | `Z−` — Z measures the nozzle-to-bed gap, so raising the bed is negative |
+
+Neither pick nor park appears in `printer.gcode.help`: they register without help
+strings, as `T0`–`T3` do. **Absence there is not evidence** — reading it as evidence cost
+an afternoon.
+
+**The bug class that dominated this session,** worth stating because it will recur: the
+page kept trusting one source that was silent or stale.
+
+- `toolhead` is **not subscribed** — it arrives only from an explicit query — so reading
+  the active tool from `toolhead.extruder` froze it at connect, and every pick and park
+  timed out *having actually worked*.
+- `machine_state_manager` reads `{main_state: 0, action_code: 0}` straight through a
+  manual toolchange and home on this firmware, so a wait watching only it saw silence and
+  called a finished home a timeout.
+- `homed_axes: ""` is the machine saying *nothing is homed*, not *unknown*; treating it
+  as unknown let every Z jog through to a printer that refuses them, so the bed buttons
+  looked dead.
+
+`state.busyReason()` is the answer to the second: it reads
+`extruder_offset_calibration.calibration_step`, `display_status.message` and
+`motion_report.live_velocity` as well. `idle_timeout` is deliberately excluded — it reads
+`"Printing"` on an idle U1 and would keep a wait alive forever.
+
+**Also this session:** the whole MQTT topic map (seven topics, four undocumented), the
+camera proven to be HTTP-fetched rather than pushed, `sw_GetPrintHistory` added to the
+C++, and the JSON-RPC envelope unwrapped centrally — the simulator had been agreeing with
+the client rather than with the printer, which is how all of it survived so long.
+
+### Tooling worth knowing about
+
+```bash
+python3 docs/u1-webui/tools/u1_probe.py      # response shapes, straight over MQTT
+python3 docs/u1-webui/tools/u1_topics.py     # every topic, both legs
+python3 resources/web/shared/tests/unit_jsc.py   # 60 checks, real JS engine
+python3 resources/web/shared/tests/conformance_test.py   # 106 checks
+```
+
+`mqtt_min.py` is MQTT 3.1.1 in ~200 lines of standard library, because paho is not
+installable here. The probes need **Orca closed** — they authenticate with the saved
+`clientId` and a broker evicts the older holder.
+
+`unit_jsc.py` drives **JavaScriptCore via PyGObject**, which is how JS gets executed at
+all here: playwright is absent and the vendored chromium will not start (no
+`libnspr4`/`libnss3`), so **the 28 browser checks have not run for this entire session.**
+Installing those two libraries would restore them and is probably the highest-value
+half-hour available.
+
 ## What to pick up next
 
 In rough order of value:
 
-1. **Confirm the rebuilt camera and thumbnail paths on hardware.** The client now acts on
-   what the printer does — `cameraFrameUrl()` fetches the frame over HTTP, `startCamera`
-   sends `domain: "lan"`, and `fileDetails` asks the base64 command first — and eleven
-   conformance checks pin those to `data/hardware-shapes.json`. What has **not** been
-   done is watching it run in Orca: the MQTT leg was measured directly, so which bridge
-   channel delivers `{state, url}` (the ack or the push) is still assumption, and the
-   client deliberately accepts either. One session with the Device tab open settles it.
-   Discovery is the one shape still unmeasured.
-2. **Fault banner against a real fault.** The decoder and the 442-code catalogue are in
-   place (`shared/js/errors.js`, generated); it has never seen a real `action_code`.
-3. **`sw_SetSubscribeFilter` fails at boot** and is fired best-effort. It succeeds once a
-   session exists. Worth confirming it is genuinely optional rather than papered over.
-4. **Not built:** firmware update, calibration wizards, time-lapse playback. Each is a
-   surface of its own; `check_coverage.py` lists every command not implemented, with a
-   reason.
-5. **The print-processing popup has never been driven against hardware** — only the
-   Device tab has. Its send path (`sw_GetPrintZip` → `sw_StartLocalPrint` → the close
-   protocol) is unproven.
+1. **Drive the rebuilt Control panel on hardware, watching the WCP trace.** Everything
+   below the UI is measured; the UI itself has only been reasoned about. Specifically
+   unverified: whether the bridge delivers a camera `{state, url}` as the subscribe ack
+   or as a push (the client accepts either), and what `calibration_step` actually reads
+   during a toolchange — the step name is shown raw because no label table exists
+   anywhere for it.
+2. **Confirm the camera and thumbnail paths.** `cameraFrameUrl()` fetches the frame over
+   HTTP, `startCamera` sends `domain: "lan"`, `fileDetails` asks the base64 command
+   first. Pinned to `data/hardware-shapes.json`, never watched end to end in Orca.
+3. **Fault banner against a real fault.** The decoder and the 442-code catalogue are in
+   place; neither has seen a real `action_code`.
+4. **Discovery results** — the last unmeasured pass-through shape. `sw_StartMachineFind`
+   is Orca's own Bonjour sweep, so the MQTT probes cannot reach it; it needs the app.
+5. **`sw_SetSubscribeFilter` fails at boot** and is fired best-effort. Worth confirming
+   it is genuinely optional rather than papered over.
+6. **Not built:** firmware update, calibration wizards, time-lapse playback.
+   `check_coverage.py` lists every command not implemented, with a reason.
+7. **The print-processing popup has never been driven against hardware.** Its send path
+   (`sw_GetPrintZip` → `sw_StartLocalPrint` → the close protocol) is unproven.
 
 ## Keeping it honest
 
