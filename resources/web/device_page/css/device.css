@@ -773,11 +773,18 @@ body {
   gap: 40px;
   align-items: flex-start;
   justify-content: space-between;
+  /* The panel is calc(60% + 219px), so it grows past the 830px this layout was drawn
+     against. Without a cap, space-between hands every extra pixel to the two gaps and
+     the three groups drift apart - 162px each at a 1010px panel, against the ~96px the
+     design uses. Capping the row keeps the geometry the mockup was measured at, and
+     matches the shipped page, whose control content spans 830 regardless of panel. */
+  max-width: 758px;
 }
 /* The motion column sizes to its content. As flex:1 it swallowed the surplus and
    centred the wheel inside itself, which made an equal `gap` render unequally. */
 .control-main { flex: 0 0 auto; display: flex; gap: 40px; align-items: flex-start; }
 .status-card  { width: 126px; flex: 0 0 126px; border: 0; padding: 0; }
+.status-card .status-row + .status-row { margin-top: 2px; }
 
 /* ---- readings: icon and value, no label ---------------------------- */
 .status-row {
@@ -815,7 +822,7 @@ body {
 .status-row .tgt:invalid { border-color: var(--warn); color: var(--warn); }
 
 /* ---- quick settings ------------------------------------------------- */
-.qtiles { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.qtiles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
 .qtile {
   flex: 1 1 calc(50% - 3px); min-width: 0;
   display: flex; flex-direction: column; align-items: center; gap: 3px;

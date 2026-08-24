@@ -459,5 +459,22 @@ check("an absent purifier disables its own modes",
       "purAbsent" in ui_src and 'aria-disabled' in ui_src,
       "a control for hardware that is not attached is a claim the machine would refuse")
 
+# A class the JS emits and the CSS never styles is silent: the element renders, just
+# unstyled. `.status-row` shipped as `trow` for a commit and the temperature rows lost
+# their layout and grew native number spinners, with nothing failing anywhere.
+js_classes = set()
+for m in re.finditer(r"el\('\w+',\s*'([a-z0-9 \-]+)'", ui_src):
+    js_classes |= set(m.group(1).split())
+for m in re.finditer(r"\.className\s*=\s*'([a-z0-9 \-]+)'", ui_src):
+    js_classes |= set(m.group(1).split())
+css_classes = set(re.findall(r"\.([a-z][a-z0-9\-]+)", css))
+unstyled = sorted(c for c in js_classes if c not in css_classes)
+check("every class the Device page emits is styled somewhere",
+      not unstyled, f"unstyled: {unstyled}")
+
+check("the control row is capped so the gaps cannot drift with panel width",
+      re.search(r"\.control-grid\s*\{[^}]*max-width:", css) is not None,
+      "space-between hands every extra pixel to the gaps")
+
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)

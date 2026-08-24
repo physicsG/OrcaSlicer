@@ -188,7 +188,7 @@ const SPEED_STEP = 50;
  * each commit is a G-code round trip to the machine.
  */
 function tempRow(iconName, cur, target, limit, title, apply) {
-  const row = el('div', 'trow');
+  const row = el('div', 'status-row');
   row.title = title;
   row.appendChild(icon(iconName));
 
