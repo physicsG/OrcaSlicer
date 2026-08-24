@@ -1,0 +1,1176 @@
+{
+ "sw_AddDevice": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 52,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_manage",
+  "wire_name": "sw_AddDevice"
+ },
+ "sw_BedMesh_AbortProbeMesh": {
+  "dart_enum_value": "setBedMeshAbortProbeMesh",
+  "implemented_in_cpp": true,
+  "index": 87,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_BedMesh_AbortProbeMesh"
+ },
+ "sw_CameraStartMonitor": {
+  "dart_enum_value": "cameraStartMonitor",
+  "implemented_in_cpp": true,
+  "index": 24,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_CameraStartMonitor"
+ },
+ "sw_CameraStopMonitor": {
+  "dart_enum_value": "cameraStopMonitor",
+  "implemented_in_cpp": true,
+  "index": 25,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_CameraStopMonitor"
+ },
+ "sw_CancelDownload": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "login",
+  "wire_name": "sw_CancelDownload"
+ },
+ "sw_CancelPullCloudFile": {
+  "dart_enum_value": "cancelPullCloudFile",
+  "implemented_in_cpp": true,
+  "index": 38,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_CancelPullCloudFile"
+ },
+ "sw_Connect": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 1,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_connect",
+  "wire_name": "sw_Connect"
+ },
+ "sw_ConnectOtherMachine": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 2,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_connect",
+  "wire_name": "sw_ConnectOtherMachine"
+ },
+ "sw_ControlBedTemp": {
+  "dart_enum_value": "setControlBedTemp",
+  "implemented_in_cpp": true,
+  "index": 91,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_ControlBedTemp"
+ },
+ "sw_ControlExtruderTemp": {
+  "dart_enum_value": "setControlExtruderTemp",
+  "implemented_in_cpp": true,
+  "index": 92,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_ControlExtruderTemp"
+ },
+ "sw_ControlGenericFan": {
+  "dart_enum_value": "setControlGenericFan",
+  "implemented_in_cpp": true,
+  "index": 90,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_ControlGenericFan"
+ },
+ "sw_ControlLed": {
+  "dart_enum_value": "setControlLed",
+  "implemented_in_cpp": true,
+  "index": 85,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_ControlLed"
+ },
+ "sw_ControlMainFan": {
+  "dart_enum_value": "setControlMainFan",
+  "implemented_in_cpp": true,
+  "index": 89,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_ControlMainFan"
+ },
+ "sw_ControlPrintSpeed": {
+  "dart_enum_value": "setControlPrintSpeed",
+  "implemented_in_cpp": true,
+  "index": 86,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_ControlPrintSpeed"
+ },
+ "sw_ControlPurifier": {
+  "dart_enum_value": "setControlPurifier",
+  "implemented_in_cpp": true,
+  "index": 88,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_ControlPurifier"
+ },
+ "sw_DefectDetactionConfig": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "machine_option",
+  "wire_name": "sw_DefectDetactionConfig"
+ },
+ "sw_DeleteCameraTimelapse": {
+  "dart_enum_value": "deleteCameraTimelapse",
+  "implemented_in_cpp": true,
+  "index": 101,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_DeleteCameraTimelapse"
+ },
+ "sw_DeleteDevices": {
+  "dart_enum_value": "deleteDevices",
+  "implemented_in_cpp": true,
+  "index": 56,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_manage",
+  "wire_name": "sw_DeleteDevices"
+ },
+ "sw_DeleteMachineFile": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "machine_option",
+  "wire_name": "sw_DeleteMachineFile"
+ },
+ "sw_DeleteRecentFiles": {
+  "dart_enum_value": "deleteRecentFiles",
+  "implemented_in_cpp": true,
+  "index": 48,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "project",
+  "wire_name": "sw_DeleteRecentFiles"
+ },
+ "sw_Disconnect": {
+  "dart_enum_value": "disconnectMachine",
+  "implemented_in_cpp": true,
+  "index": 3,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_connect",
+  "wire_name": "sw_Disconnect"
+ },
+ "sw_DownLoadFile": {
+  "dart_enum_value": "downLoadTimelapseFile",
+  "implemented_in_cpp": true,
+  "index": 103,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_DownLoadFile"
+ },
+ "sw_DownLoadFileAndOpen": {
+  "dart_enum_value": "downLoadFileAndOpen",
+  "implemented_in_cpp": true,
+  "index": 114,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_DownLoadFileAndOpen"
+ },
+ "sw_DownloadMachineFile": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 30,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_DownloadMachineFile"
+ },
+ "sw_Exit": {
+  "dart_enum_value": "exit",
+  "implemented_in_cpp": true,
+  "index": 113,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_Exit"
+ },
+ "sw_FileGetStatus": {
+  "dart_enum_value": "filesGetStatus",
+  "implemented_in_cpp": true,
+  "index": 32,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_FileGetStatus"
+ },
+ "sw_FileLog": {
+  "dart_enum_value": "writeFileLog",
+  "implemented_in_cpp": true,
+  "index": 73,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_FileLog"
+ },
+ "sw_FileView": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 107,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_FileView"
+ },
+ "sw_FilesThumbnailsBase64": {
+  "dart_enum_value": "setFilesThumbnailsBase64",
+  "implemented_in_cpp": true,
+  "index": 94,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_FilesThumbnailsBase64"
+ },
+ "sw_FinishFilamentMapping": {
+  "dart_enum_value": "finishFilamentMapping",
+  "implemented_in_cpp": true,
+  "index": 28,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_FinishFilamentMapping"
+ },
+ "sw_FinishPreprint": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "machine_option",
+  "wire_name": "sw_FinishPreprint"
+ },
+ "sw_GetActiveFile": {
+  "dart_enum_value": "getActiveFile",
+  "implemented_in_cpp": true,
+  "index": 60,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_GetActiveFile"
+ },
+ "sw_GetCache": {
+  "dart_enum_value": "getCache",
+  "implemented_in_cpp": true,
+  "index": 65,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_GetCache"
+ },
+ "sw_GetCameraTimelapseInstance": {
+  "dart_enum_value": "getCameraTimelapseInstance",
+  "implemented_in_cpp": true,
+  "index": 99,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_GetCameraTimelapseInstance"
+ },
+ "sw_GetConnectedMachine": {
+  "dart_enum_value": "getConnectedMachine",
+  "implemented_in_cpp": true,
+  "index": 11,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_connect",
+  "wire_name": "sw_GetConnectedMachine"
+ },
+ "sw_GetDeviceDataStorageSpace": {
+  "dart_enum_value": "getDeviceDataStorageSpace",
+  "implemented_in_cpp": true,
+  "index": 36,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_GetDeviceDataStorageSpace"
+ },
+ "sw_GetFileFilamentMapping": {
+  "dart_enum_value": "getFileFilamentMapping",
+  "implemented_in_cpp": true,
+  "index": 26,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_GetFileFilamentMapping"
+ },
+ "sw_GetFileListPage": {
+  "dart_enum_value": "getFileListPage",
+  "implemented_in_cpp": true,
+  "index": 96,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_GetFileListPage"
+ },
+ "sw_GetFileStream": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 59,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_GetFileStream"
+ },
+ "sw_GetFilesFromDir": {
+  "dart_enum_value": "getFilesFromDir",
+  "implemented_in_cpp": true,
+  "index": 106,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_GetFilesFromDir"
+ },
+ "sw_GetLocalDevices": {
+  "dart_enum_value": "getLocalDevices",
+  "implemented_in_cpp": true,
+  "index": 51,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_manage",
+  "wire_name": "sw_GetLocalDevices"
+ },
+ "sw_GetMachineFilamentMapping": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": false,
+  "index": 29,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_GetMachineFilamentMapping"
+ },
+ "sw_GetMachineFindSupportInfo": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "machine_find",
+  "wire_name": "sw_GetMachineFindSupportInfo"
+ },
+ "sw_GetMachineObjects": {
+  "dart_enum_value": "getMachineObjects",
+  "implemented_in_cpp": true,
+  "index": 8,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_GetMachineObjects"
+ },
+ "sw_GetMachineState": {
+  "dart_enum_value": "getMachinState",
+  "implemented_in_cpp": true,
+  "index": 5,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_GetMachineState"
+ },
+ "sw_GetMachineSystemInfo": {
+  "dart_enum_value": "getMachineSystemInfo",
+  "implemented_in_cpp": true,
+  "index": 13,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_GetMachineSystemInfo"
+ },
+ "sw_GetPincode": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 62,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_connect",
+  "wire_name": "sw_GetPincode"
+ },
+ "sw_GetPrintLegal": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "machine_option",
+  "wire_name": "sw_GetPrintLegal"
+ },
+ "sw_GetPrintZip": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "machine_option",
+  "wire_name": "sw_GetPrintZip"
+ },
+ "sw_GetPrinterInfo": {
+  "dart_enum_value": "getPrinterInfo",
+  "implemented_in_cpp": true,
+  "index": 12,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_GetPrinterInfo"
+ },
+ "sw_GetRecentProjects": {
+  "dart_enum_value": "getRecentProjects",
+  "implemented_in_cpp": true,
+  "index": 46,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "project",
+  "wire_name": "sw_GetRecentProjects"
+ },
+ "sw_GetSoftwareInfo": {
+  "dart_enum_value": "getSoftwareInfo",
+  "implemented_in_cpp": true,
+  "index": 115,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_GetSoftwareInfo"
+ },
+ "sw_GetUserLoginState": {
+  "dart_enum_value": "getUserLoginState",
+  "implemented_in_cpp": true,
+  "index": 43,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_GetUserLoginState"
+ },
+ "sw_GetUserUpdatePrivacy": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 112,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_GetUserUpdatePrivacy"
+ },
+ "sw_LaunchConsole": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 70,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_LaunchConsole"
+ },
+ "sw_Log": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 71,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_Log"
+ },
+ "sw_MachineFilesGetDirectory": {
+  "dart_enum_value": "machineFilesGetDirectory",
+  "implemented_in_cpp": true,
+  "index": 23,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_MachineFilesGetDirectory"
+ },
+ "sw_MachineFilesMetadata": {
+  "dart_enum_value": "machineFilesMetadata",
+  "implemented_in_cpp": true,
+  "index": 21,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_MachineFilesMetadata"
+ },
+ "sw_MachineFilesRoots": {
+  "dart_enum_value": "machineFilesRoots",
+  "implemented_in_cpp": true,
+  "index": 20,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_MachineFilesRoots"
+ },
+ "sw_MachineFilesThumbnails": {
+  "dart_enum_value": "machineFilesThumbnails",
+  "implemented_in_cpp": true,
+  "index": 22,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_MachineFilesThumbnails"
+ },
+ "sw_MachineHeartbeat": {
+  "dart_enum_value": "machineHeartbeat",
+  "implemented_in_cpp": true,
+  "index": 39,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_MachineHeartbeat"
+ },
+ "sw_MachinePrintCancel": {
+  "dart_enum_value": "matchinePrintCancel",
+  "implemented_in_cpp": true,
+  "index": 19,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_MachinePrintCancel"
+ },
+ "sw_MachinePrintPause": {
+  "dart_enum_value": "matchinePrintPause",
+  "implemented_in_cpp": true,
+  "index": 17,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_MachinePrintPause"
+ },
+ "sw_MachinePrintResume": {
+  "dart_enum_value": "matchinePrintResume",
+  "implemented_in_cpp": true,
+  "index": 18,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_MachinePrintResume"
+ },
+ "sw_MachinePrintStart": {
+  "dart_enum_value": "matchinePrintStart",
+  "implemented_in_cpp": true,
+  "index": 16,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_MachinePrintStart"
+ },
+ "sw_NewProject": {
+  "dart_enum_value": "createProject",
+  "implemented_in_cpp": true,
+  "index": 44,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "project",
+  "wire_name": "sw_NewProject"
+ },
+ "sw_NotifyUploadTimelaspe": {
+  "dart_enum_value": "notifyUploadTimelapse",
+  "implemented_in_cpp": true,
+  "index": 104,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_NotifyUploadTimelaspe"
+ },
+ "sw_OpenBrowser": {
+  "dart_enum_value": "openBrowser",
+  "implemented_in_cpp": true,
+  "index": 75,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_OpenBrowser"
+ },
+ "sw_OpenNetworkDialog": {
+  "dart_enum_value": "openNetworkDialog",
+  "implemented_in_cpp": true,
+  "index": 50,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_OpenNetworkDialog"
+ },
+ "sw_OpenOrcaWebview": {
+  "dart_enum_value": "openOrcaWebview",
+  "implemented_in_cpp": true,
+  "index": 76,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_OpenOrcaWebview"
+ },
+ "sw_OpenProject": {
+  "dart_enum_value": "openProject",
+  "implemented_in_cpp": true,
+  "index": 45,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "project",
+  "wire_name": "sw_OpenProject"
+ },
+ "sw_OpenRecentFile": {
+  "dart_enum_value": "openRecentFile",
+  "implemented_in_cpp": true,
+  "index": 47,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "project",
+  "wire_name": "sw_OpenRecentFile"
+ },
+ "sw_OpenTimelapseFolder": {
+  "dart_enum_value": "openTimelapseFolder",
+  "implemented_in_cpp": true,
+  "index": 108,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_OpenTimelapseFolder"
+ },
+ "sw_PrinterDefectDetection": {
+  "dart_enum_value": "setPrinterDefectDetection",
+  "implemented_in_cpp": true,
+  "index": 93,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_PrinterDefectDetection"
+ },
+ "sw_PullCloudFile": {
+  "dart_enum_value": "pullCloudFile",
+  "implemented_in_cpp": true,
+  "index": 37,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_PullCloudFile"
+ },
+ "sw_RemoveCache": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 66,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_RemoveCache"
+ },
+ "sw_RenameDevice": {
+  "dart_enum_value": "renameDevice",
+  "implemented_in_cpp": true,
+  "index": 54,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_manage",
+  "wire_name": "sw_RenameDevice"
+ },
+ "sw_SendCommand": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": false,
+  "index": 15,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_SendCommand"
+ },
+ "sw_SendGCodes": {
+  "dart_enum_value": "sendGCodes",
+  "implemented_in_cpp": true,
+  "index": 14,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_SendGCodes"
+ },
+ "sw_ServerClientManagerSetUserinfo": {
+  "dart_enum_value": "serverClientManagerSetUserinfo",
+  "implemented_in_cpp": true,
+  "index": 109,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_ServerClientManagerSetUserinfo"
+ },
+ "sw_SetCache": {
+  "dart_enum_value": "setCache",
+  "implemented_in_cpp": true,
+  "index": 64,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_SetCache"
+ },
+ "sw_SetDeviceName": {
+  "dart_enum_value": "setDeviceName",
+  "implemented_in_cpp": true,
+  "index": 84,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_SetDeviceName"
+ },
+ "sw_SetFilamentMappingComplete": {
+  "dart_enum_value": "setFilamentMappingComplete",
+  "implemented_in_cpp": true,
+  "index": 27,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_SetFilamentMappingComplete"
+ },
+ "sw_SetLogLevel": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 72,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_SetLogLevel"
+ },
+ "sw_SetSubscribeFilter": {
+  "dart_enum_value": "setSubscribeFilter",
+  "implemented_in_cpp": true,
+  "index": 9,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_SetSubscribeFilter"
+ },
+ "sw_StartCloudPrint": {
+  "dart_enum_value": "startCloudPrint",
+  "implemented_in_cpp": true,
+  "index": 34,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_StartCloudPrint"
+ },
+ "sw_StartLocalPrint": {
+  "dart_enum_value": "startLocalPrint",
+  "implemented_in_cpp": true,
+  "index": 35,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_StartLocalPrint"
+ },
+ "sw_StartMachineFind": {
+  "dart_enum_value": "startMachineFind",
+  "implemented_in_cpp": true,
+  "index": 0,
+  "push_channel": "send_machine_list",
+  "referenced_in_bundle": true,
+  "routing_group": "machine_find",
+  "wire_name": "sw_StartMachineFind"
+ },
+ "sw_StopMachineFind": {
+  "dart_enum_value": "stopMachineFind",
+  "implemented_in_cpp": true,
+  "index": 4,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_find",
+  "wire_name": "sw_StopMachineFind"
+ },
+ "sw_StopMachineStateSubscription": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 10,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_StopMachineStateSubscription"
+ },
+ "sw_SubUserUpdatePrivacy": {
+  "dart_enum_value": "subUserUpdatePrivacy",
+  "implemented_in_cpp": true,
+  "index": 111,
+  "push_channel": "subUserUpdatePrivacy",
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_SubUserUpdatePrivacy"
+ },
+ "sw_SubscribeCacheKey": {
+  "dart_enum_value": "subscribeCacheKey",
+  "implemented_in_cpp": true,
+  "index": 68,
+  "push_channel": "subscribeCacheKey",
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_SubscribeCacheKey"
+ },
+ "sw_SubscribeDownloadState": {
+  "dart_enum_value": "subscribeTimelapseDownloadState",
+  "implemented_in_cpp": true,
+  "index": 105,
+  "push_channel": "subscribeTimelapseDownloadState",
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_SubscribeDownloadState"
+ },
+ "sw_SubscribeLocalDevices": {
+  "dart_enum_value": "subscribeLocalDevices",
+  "implemented_in_cpp": true,
+  "index": 53,
+  "push_channel": "subscribeLocalDevices",
+  "referenced_in_bundle": true,
+  "routing_group": "machine_manage",
+  "wire_name": "sw_SubscribeLocalDevices"
+ },
+ "sw_SubscribeMachineState": {
+  "dart_enum_value": "subscribeMachineState",
+  "implemented_in_cpp": true,
+  "index": 6,
+  "push_channel": "subscribeMachineState",
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_SubscribeMachineState"
+ },
+ "sw_SubscribePageStateChange": {
+  "dart_enum_value": "subscribePageStateChange",
+  "implemented_in_cpp": true,
+  "index": 110,
+  "push_channel": "subscribePageStateChange",
+  "referenced_in_bundle": true,
+  "routing_group": "page_state",
+  "wire_name": "sw_SubscribePageStateChange"
+ },
+ "sw_SubscribeRecentFiles": {
+  "dart_enum_value": "subscribeRecentFiles",
+  "implemented_in_cpp": true,
+  "index": 49,
+  "push_channel": "subscribeRecentFiles",
+  "referenced_in_bundle": true,
+  "routing_group": "project",
+  "wire_name": "sw_SubscribeRecentFiles"
+ },
+ "sw_SubscribeUserLoginState": {
+  "dart_enum_value": "subscribeUserLoginState",
+  "implemented_in_cpp": true,
+  "index": 42,
+  "push_channel": "subscribesUserLoginState",
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_SubscribeUserLoginState"
+ },
+ "sw_SwitchModel": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 55,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_manage",
+  "wire_name": "sw_SwitchModel"
+ },
+ "sw_SwitchTab": {
+  "dart_enum_value": "switchTab",
+  "implemented_in_cpp": true,
+  "index": 61,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_SwitchTab"
+ },
+ "sw_SystemGetDeviceInfo": {
+  "dart_enum_value": "systemDeviceInfo",
+  "implemented_in_cpp": true,
+  "index": 33,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_SystemGetDeviceInfo"
+ },
+ "sw_Test_connect": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "machine_connect",
+  "wire_name": "sw_Test_connect"
+ },
+ "sw_UnSubscribeMachineState": {
+  "dart_enum_value": "unSubscribeMachineState",
+  "implemented_in_cpp": false,
+  "index": 7,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_UnSubscribeMachineState"
+ },
+ "sw_UnsubscribeAll": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": null,
+  "wire_name": "sw_UnsubscribeAll"
+ },
+ "sw_UnsubscribeCacheKeys": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 69,
+  "push_channel": "unsubscribeCacheKeys",
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_UnsubscribeCacheKeys"
+ },
+ "sw_UnsubscribeDownloadState": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "login",
+  "wire_name": "sw_UnsubscribeDownloadState"
+ },
+ "sw_UnsubscribePageStateChange": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "page_state",
+  "wire_name": "sw_UnsubscribePageStateChange"
+ },
+ "sw_Unsubscribe_Filter": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 98,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_Unsubscribe_Filter"
+ },
+ "sw_UpdateMachineFilamentInfo": {
+  "dart_enum_value": "updateMachineFilamentInfo",
+  "implemented_in_cpp": true,
+  "index": 67,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_UpdateMachineFilamentInfo"
+ },
+ "sw_UploadAsyncTimelapseInstance": {
+  "dart_enum_value": "uploadAsyncTimelapseInstance",
+  "implemented_in_cpp": true,
+  "index": 102,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_UploadAsyncTimelapseInstance"
+ },
+ "sw_UploadCameraTimelapse": {
+  "dart_enum_value": "uploadCameraTimelapse",
+  "implemented_in_cpp": true,
+  "index": 100,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_UploadCameraTimelapse"
+ },
+ "sw_UploadEvent": {
+  "dart_enum_value": "uploadEvent",
+  "implemented_in_cpp": true,
+  "index": 74,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_UploadEvent"
+ },
+ "sw_UploadFile": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": false,
+  "index": 57,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_UploadFile"
+ },
+ "sw_UploadFileResult": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": false,
+  "index": 58,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_UploadFileResult"
+ },
+ "sw_UploadFiletoMachine": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 31,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_UploadFiletoMachine"
+ },
+ "sw_UserLogin": {
+  "dart_enum_value": "userLogin",
+  "implemented_in_cpp": true,
+  "index": 40,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_UserLogin"
+ },
+ "sw_UserLogout": {
+  "dart_enum_value": "userLogout",
+  "implemented_in_cpp": true,
+  "index": 41,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "login",
+  "wire_name": "sw_UserLogout"
+ },
+ "sw_WakeupFind": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "machine_find",
+  "wire_name": "sw_WakeupFind"
+ },
+ "sw_Webview_Unsubscribe": {
+  "dart_enum_value": "webviewUnsubscribe",
+  "implemented_in_cpp": true,
+  "index": 97,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_Webview_Unsubscribe"
+ },
+ "sw_create_mqtt_client": {
+  "dart_enum_value": "createMqttClient",
+  "implemented_in_cpp": true,
+  "index": 77,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "mqtt_agent",
+  "wire_name": "sw_create_mqtt_client"
+ },
+ "sw_exception_query": {
+  "dart_enum_value": "setExceptionQuery",
+  "implemented_in_cpp": true,
+  "index": 95,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "machine_option",
+  "wire_name": "sw_exception_query"
+ },
+ "sw_mqtt_connect": {
+  "dart_enum_value": "mqttConnect",
+  "implemented_in_cpp": true,
+  "index": 78,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "mqtt_agent",
+  "wire_name": "sw_mqtt_connect"
+ },
+ "sw_mqtt_disconnect": {
+  "dart_enum_value": "mqttDisconnect",
+  "implemented_in_cpp": true,
+  "index": 79,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "mqtt_agent",
+  "wire_name": "sw_mqtt_disconnect"
+ },
+ "sw_mqtt_publish": {
+  "dart_enum_value": "mqttPublish",
+  "implemented_in_cpp": true,
+  "index": 82,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "mqtt_agent",
+  "wire_name": "sw_mqtt_publish"
+ },
+ "sw_mqtt_set_engine": {
+  "dart_enum_value": "mqttSetEngine",
+  "implemented_in_cpp": true,
+  "index": 83,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": "mqtt_agent",
+  "wire_name": "sw_mqtt_set_engine"
+ },
+ "sw_mqtt_subscribe": {
+  "dart_enum_value": "mqttSubscribe",
+  "implemented_in_cpp": true,
+  "index": 80,
+  "push_channel": "responseCb",
+  "referenced_in_bundle": true,
+  "routing_group": "mqtt_agent",
+  "wire_name": "sw_mqtt_subscribe"
+ },
+ "sw_mqtt_unpublish": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "mqtt_agent",
+  "wire_name": "sw_mqtt_unpublish"
+ },
+ "sw_mqtt_unsubscribe": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 81,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_mqtt_unsubscribe"
+ },
+ "sw_test_mqtt_moonraker": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": 63,
+  "push_channel": null,
+  "referenced_in_bundle": true,
+  "routing_group": null,
+  "wire_name": "sw_test_mqtt_moonraker"
+ }
+}

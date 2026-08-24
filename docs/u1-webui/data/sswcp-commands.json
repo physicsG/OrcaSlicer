@@ -1,0 +1,1222 @@
+{
+ "sw_AddDevice": {
+  "handlers": [
+   "sw_AddDevice"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_BedMesh_AbortProbeMesh": {
+  "handlers": [
+   "sw_BedMesh_AbortProbeMesh"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_CameraStartMonitor": {
+  "handlers": [
+   "sw_CameraStartMonitor"
+  ],
+  "params": [
+   "domain",
+   "expect_pw",
+   "interval"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_CameraStopMonitor": {
+  "handlers": [
+   "sw_CameraStopMonitor"
+  ],
+  "params": [
+   "domain"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_CancelDownload": {
+  "handlers": [
+   "sw_CancelDownload"
+  ],
+  "params": [
+   "task_id"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_CancelPullCloudFile": {
+  "handlers": [
+   "sw_CancelPullCloudFile"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_Connect": {
+  "handlers": [
+   "sw_connect"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_ConnectOtherMachine": {
+  "handlers": [
+   "sw_connect_other_device"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_ControlBedTemp": {
+  "handlers": [
+   "sw_ControlBedTemp"
+  ],
+  "params": [
+   "temp"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_ControlExtruderTemp": {
+  "handlers": [
+   "sw_ControlExtruderTemp"
+  ],
+  "params": [
+   "index",
+   "map",
+   "temp"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_ControlGenericFan": {
+  "handlers": [
+   "sw_ControlGenericFan"
+  ],
+  "params": [
+   "name",
+   "speed"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_ControlLed": {
+  "handlers": [
+   "sw_ControlLed"
+  ],
+  "params": [
+   "name",
+   "white"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_ControlMainFan": {
+  "handlers": [
+   "sw_ControlMainFan"
+  ],
+  "params": [
+   "speed"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_ControlPrintSpeed": {
+  "handlers": [
+   "sw_ControlPrintSpeed"
+  ],
+  "params": [
+   "percentage"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_ControlPurifier": {
+  "handlers": [
+   "sw_ControlPurifier"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_DefectDetactionConfig": {
+  "handlers": [
+   "sw_DefectDetactionConfig"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_DeleteCameraTimelapse": {
+  "handlers": [
+   "sw_DeleteCameraTimelapse"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_DeleteDevices": {
+  "handlers": [
+   "handle_general_fail",
+   "sw_DeleteDevices"
+  ],
+  "params": [
+   "dev_ids"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_DeleteMachineFile": {
+  "handlers": [
+   "sw_DeleteMachineFile"
+  ],
+  "params": [
+   "path"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_DeleteRecentFiles": {
+  "handlers": [
+   "sw_DeleteRecentFiles"
+  ],
+  "params": [
+   "paths"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_Disconnect": {
+  "handlers": [
+   "sw_disconnect"
+  ],
+  "params": [
+   "dev_id",
+   "need_reload"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_DownLoadFile": {
+  "handlers": [
+   "sw_DownLoadFile"
+  ],
+  "params": [
+   "timelapse"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_DownLoadFileAndOpen": {
+  "handlers": [
+   "sw_DownloadFileAndOpen"
+  ],
+  "params": [
+   "file_name",
+   "file_url"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_DownloadMachineFile": {
+  "handlers": [
+   "sw_DownloadMachineFile"
+  ],
+  "params": [
+   "filename",
+   "url"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_Exit": {
+  "handlers": [
+   "sw_Exit"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_FileGetStatus": {
+  "handlers": [
+   "sw_FileGetStatus"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_FileLog": {
+  "handlers": [
+   "sw_FileLog"
+  ],
+  "params": [
+   "content",
+   "level"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_FileView": {
+  "handlers": [
+   "sw_FileView"
+  ],
+  "params": [
+   "file_path"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_FilesThumbnailsBase64": {
+  "handlers": [
+   "sw_FilesThumbnailsBase64"
+  ],
+  "params": [
+   "path"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_FinishFilamentMapping": {
+  "handlers": [
+   "sw_FinishFilamentMapping"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_FinishPreprint": {
+  "handlers": [
+   "sw_FinishPreprint"
+  ],
+  "params": [
+   "status"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetActiveFile": {
+  "handlers": [
+   "sw_GetActiveFile"
+  ],
+  "params": [
+   "is_zip"
+  ],
+  "response": [
+   "checksum",
+   "file_name",
+   "file_path",
+   "metadata",
+   "origin_size",
+   "url"
+  ],
+  "rpc": []
+ },
+ "sw_GetCache": {
+  "handlers": [
+   "sw_GetCache"
+  ],
+  "params": [
+   "keys"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetCameraTimelapseInstance": {
+  "handlers": [
+   "sw_GetCameraTimelapseInstance"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetConnectedMachine": {
+  "handlers": [
+   "sw_get_connect_machine"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetDeviceDataStorageSpace": {
+  "handlers": [
+   "handle_general_fail",
+   "sw_GetDeviceDataStorageSpace"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetFileFilamentMapping": {
+  "handlers": [
+   "sw_GetFileFilamentMapping"
+  ],
+  "params": [
+   "filename"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetFileListPage": {
+  "handlers": [
+   "sw_GetFileListPage"
+  ],
+  "params": [
+   "files_per_page",
+   "page_number",
+   "root"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetFileStream": {
+  "handlers": [
+   "sw_GetFileStream"
+  ],
+  "params": [
+   "is_zip"
+  ],
+  "response": [
+   "checksum",
+   "file_name",
+   "file_url",
+   "origin_size"
+  ],
+  "rpc": []
+ },
+ "sw_GetFilesFromDir": {
+  "handlers": [
+   "sw_GetFilesFromDir"
+  ],
+  "params": [
+   "dir_path",
+   "sn"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetLocalDevices": {
+  "handlers": [
+   "sw_GetLocalDevices"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetMachineFindSupportInfo": {
+  "handlers": [
+   "sw_GetMachineFindSupportInfo"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetMachineObjects": {
+  "handlers": [
+   "sw_GetMachineObjects"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetMachineState": {
+  "handlers": [
+   "sw_GetMachineState"
+  ],
+  "params": [
+   "objects"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetMachineSystemInfo": {
+  "handlers": [
+   "sw_GetSystemInfo"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetPincode": {
+  "handlers": [
+   "handle_general_fail",
+   "sw_get_pin_code"
+  ],
+  "params": [
+   "ip",
+   "nickname",
+   "port",
+   "userid"
+  ],
+  "response": [],
+  "rpc": [
+   "server.client_manager.request_pin_code"
+  ]
+ },
+ "sw_GetPrintLegal": {
+  "handlers": [
+   "sw_GetPrintLegal"
+  ],
+  "params": [
+   "connected_model"
+  ],
+  "response": [
+   "legal",
+   "preset_model"
+  ],
+  "rpc": []
+ },
+ "sw_GetPrintZip": {
+  "handlers": [
+   "sw_GetPrintZip"
+  ],
+  "params": [],
+  "response": [
+   "content",
+   "name"
+  ],
+  "rpc": []
+ },
+ "sw_GetPrinterInfo": {
+  "handlers": [
+   "sw_GetPrintInfo"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetRecentProjects": {
+  "handlers": [
+   "sw_GetRecentProjects"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetSoftwareInfo": {
+  "handlers": [
+   "handle_general_fail",
+   "sw_GetSoftwareInfo"
+  ],
+  "params": [],
+  "response": [
+   "http_host",
+   "version"
+  ],
+  "rpc": []
+ },
+ "sw_GetUserLoginState": {
+  "handlers": [
+   "sw_GetUserLoginState"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_GetUserUpdatePrivacy": {
+  "handlers": [
+   "sw_GetUserUpdatePrivacy"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_LaunchConsole": {
+  "handlers": [
+   "sw_LaunchConsole"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_Log": {
+  "handlers": [
+   "sw_Log"
+  ],
+  "params": [
+   "content",
+   "level",
+   "module",
+   "time"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_MachineFilesGetDirectory": {
+  "handlers": [
+   "sw_MachineFilesGetDirectory"
+  ],
+  "params": [
+   "extended",
+   "path"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_MachineFilesMetadata": {
+  "handlers": [
+   "sw_MachineFilesMetadata"
+  ],
+  "params": [
+   "filename"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_MachineFilesRoots": {
+  "handlers": [
+   "sw_MachineFilesRoots"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_MachineFilesThumbnails": {
+  "handlers": [
+   "sw_MachineFilesThumbnails"
+  ],
+  "params": [
+   "filename"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_MachineHeartbeat": {
+  "handlers": [
+   "sw_MachineHeartbeat"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_MachinePrintCancel": {
+  "handlers": [
+   "sw_MachinePrintCancel"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_MachinePrintPause": {
+  "handlers": [
+   "sw_MachinePrintPause"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_MachinePrintResume": {
+  "handlers": [
+   "sw_MachinePrintResume"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_MachinePrintStart": {
+  "handlers": [
+   "sw_MachinePrintStart"
+  ],
+  "params": [
+   "filename"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_NewProject": {
+  "handlers": [
+   "sw_NewProject"
+  ],
+  "params": [
+   "preset_name"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_NotifyUploadTimelaspe": {
+  "handlers": [
+   "handle_general_fail",
+   "sw_NotifyUploadTimelaspe"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_OpenBrowser": {
+  "handlers": [
+   "sw_OpenBrowser"
+  ],
+  "params": [
+   "url"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_OpenNetworkDialog": {
+  "handlers": [
+   "sw_OpenNetworkDialog"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_OpenOrcaWebview": {
+  "handlers": [
+   "sw_OpenOrcaWebview"
+  ],
+  "params": [
+   "url"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_OpenProject": {
+  "handlers": [
+   "sw_OpenProject"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_OpenRecentFile": {
+  "handlers": [
+   "sw_OpenRecentFile"
+  ],
+  "params": [
+   "path"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_OpenTimelapseFolder": {
+  "handlers": [
+   "sw_OpenTimelapseFolder"
+  ],
+  "params": [
+   "file_path"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_PrinterDefectDetection": {
+  "handlers": [
+   "sw_PrinterDefectDetection"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_PullCloudFile": {
+  "handlers": [
+   "sw_PullCloudFile"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_RemoveCache": {
+  "handlers": [
+   "sw_RemoveCache"
+  ],
+  "params": [
+   "keys"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_RenameDevice": {
+  "handlers": [
+   "sw_RenameDevice"
+  ],
+  "params": [
+   "dev_id",
+   "dev_name"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SendGCodes": {
+  "handlers": [
+   "sw_SendGCodes"
+  ],
+  "params": [
+   "script"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_ServerClientManagerSetUserinfo": {
+  "handlers": [
+   "sw_ServerClientManagerSetUserinfo"
+  ],
+  "params": [
+   "auther"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SetCache": {
+  "handlers": [
+   "sw_SetCache"
+  ],
+  "params": [
+   "objects"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SetDeviceName": {
+  "handlers": [
+   "sw_SetDeviceName"
+  ],
+  "params": [
+   "name"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SetFilamentMappingComplete": {
+  "handlers": [
+   "sw_SetFilamentMappingComplete"
+  ],
+  "params": [
+   "status"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SetLogLevel": {
+  "handlers": [
+   "sw_SetLogLevel"
+  ],
+  "params": [
+   "level"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SetSubscribeFilter": {
+  "handlers": [
+   "sw_SetMachineSubscribeFilter"
+  ],
+  "params": [
+   "objects"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_StartCloudPrint": {
+  "handlers": [
+   "sw_StartCloudPrint"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_StartLocalPrint": {
+  "handlers": [
+   "sw_StartLocalPrint"
+  ],
+  "params": [
+   "path",
+   "type"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_StartMachineFind": {
+  "handlers": [
+   "sw_StartMachineFind"
+  ],
+  "params": [
+   "last_time"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_StopMachineFind": {
+  "handlers": [
+   "sw_StopMachineFind"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_StopMachineStateSubscription": {
+  "handlers": [
+   "sw_UnSubscribeMachineState"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SubUserUpdatePrivacy": {
+  "handlers": [
+   "sw_SubUserUpdatePrivacy"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SubscribeCacheKey": {
+  "handlers": [
+   "sw_SubscribeCacheKey"
+  ],
+  "params": [
+   "key"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SubscribeDownloadState": {
+  "handlers": [
+   "sw_SubscribeDownloadState"
+  ],
+  "params": [
+   "sn",
+   "type"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SubscribeLocalDevices": {
+  "handlers": [
+   "sw_SubscribeLocalDevices"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SubscribeMachineState": {
+  "handlers": [
+   "sw_SubscribeMachineState"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SubscribePageStateChange": {
+  "handlers": [
+   "sw_SubscribePageStateChange"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SubscribeRecentFiles": {
+  "handlers": [
+   "handle_general_fail",
+   "sw_SubscribeRecentFiles"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SubscribeUserLoginState": {
+  "handlers": [
+   "sw_SubscribeUserLoginState"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SwitchModel": {
+  "handlers": [
+   "sw_SwitchModel"
+  ],
+  "params": [
+   "dev_id"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SwitchTab": {
+  "handlers": [
+   "sw_SwitchTab"
+  ],
+  "params": [
+   "target"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_SystemGetDeviceInfo": {
+  "handlers": [
+   "sw_SystemGetDeviceInfo"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_Test_connect": {
+  "handlers": [
+   "sw_test_connect"
+  ],
+  "params": [
+   "ip",
+   "port",
+   "protcol",
+   "protocol"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_UnsubscribeAll": {
+  "handlers": [
+   "sw_UnsubscribeAll"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_UnsubscribeCacheKeys": {
+  "handlers": [
+   "sw_UnsubscribeCacheKeys"
+  ],
+  "params": [
+   "keys"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_UnsubscribeDownloadState": {
+  "handlers": [
+   "sw_UnsubscribeDownloadState"
+  ],
+  "params": [
+   "event_id"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_UnsubscribePageStateChange": {
+  "handlers": [
+   "handle_general_fail",
+   "sw_UnsubscribePageStateChange"
+  ],
+  "params": [
+   "event_id"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_Unsubscribe_Filter": {
+  "handlers": [
+   "sw_Unsubscribe_Filter"
+  ],
+  "params": [
+   "cmd",
+   "event_id"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_UpdateMachineFilamentInfo": {
+  "handlers": [
+   "sw_UpdateMachineFilamentInfo"
+  ],
+  "params": [
+   "objects"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_UploadAsyncTimelapseInstance": {
+  "handlers": [
+   "sw_UploadAsyncTimelapseInstance"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_UploadCameraTimelapse": {
+  "handlers": [
+   "sw_UploadCameraTimelapse"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_UploadEvent": {
+  "handlers": [
+   "sw_UploadEvent"
+  ],
+  "params": [
+   "content",
+   "funcModule",
+   "level",
+   "tagKey",
+   "tagValue",
+   "traceId"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_UploadFiletoMachine": {
+  "handlers": [
+   "sw_UploadFiletoMachine"
+  ],
+  "params": [
+   "url"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_UserLogin": {
+  "handlers": [
+   "sw_UserLogin"
+  ],
+  "params": [
+   "show"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_UserLogout": {
+  "handlers": [
+   "sw_UserLogout"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_WakeupFind": {
+  "handlers": [
+   "handle_general_fail",
+   "sw_WakeupFind"
+  ],
+  "params": [],
+  "response": [
+   "result"
+  ],
+  "rpc": []
+ },
+ "sw_Webview_Unsubscribe": {
+  "handlers": [
+   "sw_Webview_Unsubscribe"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_create_mqtt_client": {
+  "handlers": [
+   "sw_create_mqtt_client"
+  ],
+  "params": [
+   "ca",
+   "cert",
+   "clean_session",
+   "clientId",
+   "key",
+   "password",
+   "server_address",
+   "username"
+  ],
+  "response": [
+   "id",
+   "type"
+  ],
+  "rpc": []
+ },
+ "sw_exception_query": {
+  "handlers": [
+   "sw_exception_query"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
+ "sw_mqtt_connect": {
+  "handlers": [
+   "sw_mqtt_connect"
+  ],
+  "params": [
+   "id"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_mqtt_disconnect": {
+  "handlers": [
+   "sw_mqtt_disconnect"
+  ],
+  "params": [
+   "id"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_mqtt_publish": {
+  "handlers": [
+   "sw_mqtt_publish"
+  ],
+  "params": [
+   "id",
+   "payload",
+   "qos",
+   "topic"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_mqtt_set_engine": {
+  "handlers": [
+   "handle_general_fail",
+   "sw_mqtt_set_engine"
+  ],
+  "params": [
+   "ca",
+   "cert",
+   "clientId",
+   "code",
+   "engine_id",
+   "id",
+   "ip",
+   "key",
+   "link_mode",
+   "need_reload",
+   "password",
+   "port",
+   "sn",
+   "user",
+   "userid"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_mqtt_subscribe": {
+  "handlers": [
+   "sw_mqtt_subscribe"
+  ],
+  "params": [
+   "id",
+   "qos",
+   "topic"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_mqtt_unsubscribe": {
+  "handlers": [
+   "sw_mqtt_unsubscribe"
+  ],
+  "params": [
+   "id",
+   "topic"
+  ],
+  "response": [],
+  "rpc": []
+ },
+ "sw_test_mqtt_moonraker": {
+  "handlers": [
+   "test_mqtt_request"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ }
+}
