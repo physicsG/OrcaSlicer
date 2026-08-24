@@ -104,7 +104,7 @@
         border:2px solid transparent;border-radius:7px;cursor:pointer;background:transparent}
   .tile .ic{width:19px;height:19px;opacity:.75}
   .tile b{font-size:12px;font-variant-numeric:tabular-nums}
-  .tile:hover{background:var(--panel)}
+  .tile:hover{background:var(--line)}
   .tilewrap > input:checked ~ .tile{border-color:var(--accent);
         background:color-mix(in srgb,var(--accent) 10%,transparent)}
   .tilewrap > input:checked ~ .tile .ic{opacity:1;color:var(--accent)}
@@ -135,7 +135,7 @@
              border-radius:50%;background:#fff}
 
   /* ---------------- the jog wheel ---------------- */
-  .wheel{width:232px;height:232px;display:block}
+  .wheel{width:244px;height:244px;display:block}
   .sect{fill:var(--wheel);stroke:var(--panel);stroke-width:2.5;cursor:pointer;
         transition:fill .12s ease}
   .sect.ring1{fill:var(--wheel-2)}
@@ -152,7 +152,7 @@
   .bedrow .btn{display:flex;align-items:center;gap:3px;padding:5px 6px;background:var(--panel);
                border:1px solid transparent;border-radius:6px;font-size:12px;cursor:pointer;
                font-variant-numeric:tabular-nums}
-  .bedrow .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .bedrow .btn:hover{background:var(--line)}
   .bedrow .lab{font-size:12px;color:var(--muted);padding:0 3px}
 
   .seg2{display:flex;width:100%;border:1px solid var(--line);border-radius:7px;overflow:hidden}
@@ -176,7 +176,7 @@
   .pbox{display:flex;align-items:center;justify-content:center;gap:5px;height:38px;
         border:2px solid transparent;border-radius:7px;cursor:pointer;background:transparent;
         position:relative}
-  .pbox:hover{background:var(--panel)}
+  .pbox:hover{background:var(--line)}
   .pbox.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
   .pbox.on .ic{opacity:1;color:var(--accent)}
   .pbox .ic{width:17px;height:17px;opacity:.7}
@@ -203,7 +203,6 @@
   .colPick{width:196px;flex:0 0 196px;display:flex;flex-direction:column;gap:7px}
   .pickrow{display:flex;gap:5px;background:var(--pill);padding:5px;border-radius:9px}
   .pickrow .pbox{flex:1;flex-direction:column;gap:3px;height:52px;justify-content:center}
-  .pickbtn{width:100%}
   .ejog{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);
         display:flex;flex-direction:column;align-items:center;gap:6px}
   .ejog .ebtn{width:74px}
@@ -263,6 +262,13 @@
   .fanhead .sw.sm::after{width:13px;height:13px}
   .fanrow .steprow{margin-top:8px;padding-top:0;border-top:0;gap:6px}
   .fannote{font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.4}
+
+  /* Pick and Park are a pair: one engages a head, the other leaves none engaged. */
+  .actrow{display:flex;gap:6px}
+  .actrow button{flex:1;padding:7px 4px;font:inherit;font-size:11px;line-height:1.25;
+                 cursor:pointer;border-radius:8px;font-weight:600}
+  .parkbtn{border:1px solid var(--line);background:var(--panel);color:var(--ink-2)}
+  .parkbtn:hover{background:var(--line)}
 </style>
 
 <div class="wrap">
@@ -378,7 +384,10 @@
 
           <div class="colPick">
             <div class="pickrow"><label class="pbox" title="Target jog and extrude at toolhead 1"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span><span class="pchip" style="background:#F44336"></span></label><label class="pbox" title="Target jog and extrude at toolhead 2"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">2</b></span><span class="pchip" style="background:#FFFFDC"></span></label><label class="pbox" title="Target jog and extrude at toolhead 3"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">3</b></span><span class="pchip empty"></span></label><label class="pbox on" title="Target jog and extrude at toolhead 4"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">4</b></span><span class="pchip" style="background:#632C2C"></span></label></div>
-            <button class="pickbtn" title="Change the live toolhead — blocks while the gantry moves">Pick extruder</button>
+            <div class="actrow">
+              <button class="pickbtn" title="Change the live toolhead — blocks while the gantry moves">Pick extruder</button>
+              <button class="parkbtn" title="Park the live toolhead — leaves no head engaged">Park extruder</button>
+            </div>
             <div class="ejog">
               <span class="ebtn">▲</span>
               <span class="ecap">Extrude</span>
@@ -387,7 +396,7 @@
           </div>
 
           <div class="colB">
-            <svg class="wheel" viewBox="0 0 232 232" role="group" aria-label="XY jog"><path class="sect ring10" d="M44.01 35.49A108.0 108.0 0 0 1 187.99 35.49L170.66 54.87A82.0 82.0 0 0 0 61.34 54.87Z"><title>Jog Y 10 mm</title></path><path class="sect ring1" d="M61.34 54.87A82.0 82.0 0 0 1 170.66 54.87L155.99 71.27A60.0 60.0 0 0 0 76.01 71.27Z"><title>Jog Y 1 mm</title></path><path class="sect ring01" d="M76.01 71.27A60.0 60.0 0 0 1 155.99 71.27L142.66 86.18A40.0 40.0 0 0 0 89.34 86.18Z"><title>Jog Y 0.1 mm</title></path><path class="sect ring10" d="M196.51 44.01A108.0 108.0 0 0 1 196.51 187.99L177.13 170.66A82.0 82.0 0 0 0 177.13 61.34Z"><title>Jog X 10 mm</title></path><path class="sect ring1" d="M177.13 61.34A82.0 82.0 0 0 1 177.13 170.66L160.73 155.99A60.0 60.0 0 0 0 160.73 76.01Z"><title>Jog X 1 mm</title></path><path class="sect ring01" d="M160.73 76.01A60.0 60.0 0 0 1 160.73 155.99L145.82 142.66A40.0 40.0 0 0 0 145.82 89.34Z"><title>Jog X 0.1 mm</title></path><path class="sect ring10" d="M187.99 196.51A108.0 108.0 0 0 1 44.01 196.51L61.34 177.13A82.0 82.0 0 0 0 170.66 177.13Z"><title>Jog −Y 10 mm</title></path><path class="sect ring1" d="M170.66 177.13A82.0 82.0 0 0 1 61.34 177.13L76.01 160.73A60.0 60.0 0 0 0 155.99 160.73Z"><title>Jog −Y 1 mm</title></path><path class="sect ring01" d="M155.99 160.73A60.0 60.0 0 0 1 76.01 160.73L89.34 145.82A40.0 40.0 0 0 0 142.66 145.82Z"><title>Jog −Y 0.1 mm</title></path><path class="sect ring10" d="M35.49 187.99A108.0 108.0 0 0 1 35.49 44.01L54.87 61.34A82.0 82.0 0 0 0 54.87 170.66Z"><title>Jog −X 10 mm</title></path><path class="sect ring1" d="M54.87 170.66A82.0 82.0 0 0 1 54.87 61.34L71.27 76.01A60.0 60.0 0 0 0 71.27 155.99Z"><title>Jog −X 1 mm</title></path><path class="sect ring01" d="M71.27 155.99A60.0 60.0 0 0 1 71.27 76.01L86.18 89.34A40.0 40.0 0 0 0 86.18 142.66Z"><title>Jog −X 0.1 mm</title></path><text class="axis" x="116" y="21">Y</text><text class="axis" x="211" y="116">X</text><text class="axis" x="116" y="211">−Y</text><text class="axis" x="21" y="116">−X</text><text class="step" x="183" y="49" transform="rotate(-45 183 49)">10</text><text class="step" x="166" y="66" transform="rotate(-45 166 66)">1</text><text class="step" x="151" y="81" transform="rotate(-45 151 81)">0.1</text><text class="step" x="49" y="183" transform="rotate(-45 49 183)">10</text><text class="step" x="66" y="166" transform="rotate(-45 66 166)">1</text><text class="step" x="81" y="151" transform="rotate(-45 81 151)">0.1</text><circle class="home" cx="116.0" cy="116.0" r="32.0"><title>Home all axes (G28)</title></circle><path class="homeicon" d="M116 103l-14 11.5v16h9v-10h10v10h9v-16z"/></svg>
+            <svg class="wheel" viewBox="0 0 244 244" role="group" aria-label="XY jog"><path class="sect ring10" d="M45.72 37.28A114.0 114.0 0 0 1 198.28 37.28L176.87 61.06A82.0 82.0 0 0 0 67.13 61.06Z"><title>Jog Y 10 mm</title></path><path class="sect ring1" d="M67.13 61.06A82.0 82.0 0 0 1 176.87 61.06L158.13 81.87A54.0 54.0 0 0 0 85.87 81.87Z"><title>Jog Y 1 mm</title></path><path class="sect ring01" d="M85.87 81.87A54.0 54.0 0 0 1 158.13 81.87L142.07 99.71A30.0 30.0 0 0 0 101.93 99.71Z"><title>Jog Y 0.1 mm</title></path><path class="sect ring10" d="M206.72 45.72A114.0 114.0 0 0 1 206.72 198.28L182.94 176.87A82.0 82.0 0 0 0 182.94 67.13Z"><title>Jog X 10 mm</title></path><path class="sect ring1" d="M182.94 67.13A82.0 82.0 0 0 1 182.94 176.87L162.13 158.13A54.0 54.0 0 0 0 162.13 85.87Z"><title>Jog X 1 mm</title></path><path class="sect ring01" d="M162.13 85.87A54.0 54.0 0 0 1 162.13 158.13L144.29 142.07A30.0 30.0 0 0 0 144.29 101.93Z"><title>Jog X 0.1 mm</title></path><path class="sect ring10" d="M198.28 206.72A114.0 114.0 0 0 1 45.72 206.72L67.13 182.94A82.0 82.0 0 0 0 176.87 182.94Z"><title>Jog −Y 10 mm</title></path><path class="sect ring1" d="M176.87 182.94A82.0 82.0 0 0 1 67.13 182.94L85.87 162.13A54.0 54.0 0 0 0 158.13 162.13Z"><title>Jog −Y 1 mm</title></path><path class="sect ring01" d="M158.13 162.13A54.0 54.0 0 0 1 85.87 162.13L101.93 144.29A30.0 30.0 0 0 0 142.07 144.29Z"><title>Jog −Y 0.1 mm</title></path><path class="sect ring10" d="M37.28 198.28A114.0 114.0 0 0 1 37.28 45.72L61.06 67.13A82.0 82.0 0 0 0 61.06 176.87Z"><title>Jog −X 10 mm</title></path><path class="sect ring1" d="M61.06 176.87A82.0 82.0 0 0 1 61.06 67.13L81.87 85.87A54.0 54.0 0 0 0 81.87 158.13Z"><title>Jog −X 1 mm</title></path><path class="sect ring01" d="M81.87 158.13A54.0 54.0 0 0 1 81.87 85.87L99.71 101.93A30.0 30.0 0 0 0 99.71 142.07Z"><title>Jog −X 0.1 mm</title></path><text class="axis" x="122" y="24">Y</text><text class="axis" x="220" y="122">X</text><text class="axis" x="122" y="220">−Y</text><text class="axis" x="24" y="122">−X</text><text class="step" x="191" y="53" transform="rotate(-45 191 53)">10</text><text class="step" x="170" y="74" transform="rotate(-45 170 74)">1</text><text class="step" x="152" y="92" transform="rotate(-45 152 92)">0.1</text><text class="step" x="53" y="191" transform="rotate(-45 53 191)">10</text><text class="step" x="74" y="170" transform="rotate(-45 74 170)">1</text><text class="step" x="92" y="152" transform="rotate(-45 92 152)">0.1</text><circle class="home" cx="122" cy="122" r="28"><title>Home all axes (G28)</title></circle><path class="homeicon" d="M122 109l-14 11.5v16h9v-10h10v10h9v-16z"/></svg>
             <div class="bedrow"><span class="btn">↑ 10</span><span class="btn">↑ 1</span><span class="btn">↑ 0.1</span><span class="lab">Bed</span><span class="btn">↓ 0.1</span><span class="btn">↓ 1</span><span class="btn">↓ 10</span></div>
           </div>
 
@@ -433,15 +442,21 @@
         says which object actually moves.</span></li>
     <li><b>Toolhead picking sits left of the wheel, and reuses the heating icon</b>
       <p>Four boxes carrying the same nozzle glyph and number badge as the temperature
-         rows, plus the filament colour. <b>Pick&nbsp;extruder</b> sits underneath them,
-         with the extrude ▲/▼ below that.</p>
+         rows, plus the filament colour. <b>Pick&nbsp;extruder</b> and
+         <b>Park&nbsp;extruder</b> sit side by side underneath, with the extrude ▲/▼
+         below that.</p>
       <span class="why">Why the same icon: a toolhead is one object, so it should look
         identical wherever it appears — reading its temperature on the left and selecting
         it here should not feel like two different things.
         Why two controls: the boxes choose which head jog and extrude <em>address</em>,
         which is instant and harmless. <b>Pick extruder</b> changes which head is
-        <em>live</em>, which parks one and grabs another — so it stays a separate button
-        that blocks while the gantry moves, not a side effect of selection.</span></li>
+        <em>live</em> — it parks one and grabs another — so it stays a separate button
+        that blocks while the gantry moves, not a side effect of selection.
+        <b>Park extruder</b> is its counterpart and not a duplicate of it: it ends with
+        <em>no</em> head engaged, which is the state you want before a lid comes off or
+        a nozzle is changed. The machine already reports this distinction —
+        <code>extruder.state</code> reads <code>PARKED</code> or <code>ACTIVATE</code> —
+        so the panel should be able to reach both.</span></li>
     <li><b>Quick settings became tiles</b>
       <p>Speed, fans, purifier and lamp sit as tiles under the readings, each opening its
          panel directly beneath. <b>One</b> fan button holds every fan.</p>
