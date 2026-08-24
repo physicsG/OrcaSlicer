@@ -589,19 +589,21 @@ export function renderControlMain(root, toolheads, handlers, th) {
   // Z moves the bed on this machine, so it is a row that says "Bed" rather than a
   // third axis on a wheel that would imply the toolhead travels.
   const bedRow = el('div', 'bed-row');
-  BED_STEPS.forEach((v) => {
-    const b = el('button', 'bed-btn', `\u2191 ${v}`);
-    b.title = `Move the bed up ${v} mm`;
-    b.onclick = () => handlers.jog('Z', +v, activeTool);
-    bedRow.appendChild(b);
-  });
+  // Klipper refuses a move on an unhomed axis and says nothing this page can see, so a
+  // button that looks live and does nothing is worse than one that is plainly disabled.
+  const blocked = head.allHomed === false;
+  const bedBtn = (v, sign) => {
+    const b = el('button', 'bed-btn', `${sign > 0 ? '\u2191' : '\u2193'} ${v}`);
+    b.disabled = blocked;
+    b.title = blocked
+      ? 'Home the axes first - the printer refuses a move until Z is homed'
+      : `Move the bed ${sign > 0 ? 'up' : 'down'} ${v} mm`;
+    if (!blocked) b.onclick = () => handlers.jog('Z', sign * v, activeTool);
+    return b;
+  };
+  BED_STEPS.forEach((v) => bedRow.appendChild(bedBtn(v, +1)));
   bedRow.appendChild(el('span', 'bed-lab', 'Bed'));
-  [...BED_STEPS].reverse().forEach((v) => {
-    const b = el('button', 'bed-btn', `\u2193 ${v}`);
-    b.title = `Move the bed down ${v} mm`;
-    b.onclick = () => handlers.jog('Z', -v, activeTool);
-    bedRow.appendChild(b);
-  });
+  [...BED_STEPS].reverse().forEach((v) => bedRow.appendChild(bedBtn(v, -1)));
   motion.appendChild(bedRow);
   root.appendChild(motion);
 }

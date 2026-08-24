@@ -114,6 +114,7 @@ export class MachineState {
     const mr = this.objects['motion_report'] || {};
     const pos = Array.isArray(mr.live_position) ? mr.live_position
               : (Array.isArray(o.position) ? o.position : []);
+    const hasHomed = Object.prototype.hasOwnProperty.call(o, 'homed_axes');
     const homed = String(o.homed_axes || '');
 
     // The SUBSCRIBED source wins. `extruder*.state` arrives on the live stream, while
@@ -136,9 +137,14 @@ export class MachineState {
       activeIndex: TOOLHEADS.indexOf(activeKey) >= 0 ? TOOLHEADS.indexOf(activeKey) : null,
       x: numOrNull(pos[0]), y: numOrNull(pos[1]), z: numOrNull(pos[2]), e: numOrNull(pos[3]),
       homedAxes: homed,
-      // unknown (no toolhead snapshot yet) is not the same as 'not homed'
-      isHomed: (a) => (homed ? homed.toLowerCase().includes(String(a).toLowerCase()) : true),
-      allHomed: homed ? ['x', 'y', 'z'].every((a) => homed.toLowerCase().includes(a)) : null,
+      // Unknown and "nothing is homed" look alike in the value and are not the same
+      // thing, so the distinction is drawn on whether the field is THERE. An absent
+      // toolhead snapshot is unknown; `homed_axes: ""` is the machine saying plainly
+      // that no axis is homed - which is what it reports from a cold boot. Reading the
+      // empty string as "unknown" let every Z and XY jog through to a printer that
+      // refuses them, so the buttons looked dead.
+      isHomed: (a) => (hasHomed ? homed.toLowerCase().includes(String(a).toLowerCase()) : true),
+      allHomed: hasHomed ? ['x', 'y', 'z'].every((a) => homed.toLowerCase().includes(a)) : null,
       present: Object.keys(o).length > 0,
     };
   }

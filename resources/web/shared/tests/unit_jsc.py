@@ -212,6 +212,55 @@ def main():
           active({"toolhead": {"extruder": "extruder2"}}) == "2",
           "cold start must not report 'nothing live' when something is")
 
+    # --- what the machine says it is doing --------------------------------
+    print("\n== activity, at both granularities ==")
+    ctx4 = new_ctx(os.path.join(SHARED, "js", "activity.js"))
+
+    def act(main_state, action_code):
+        return js(ctx4, f"String(machineActivity({{mainState:{main_state},"
+                        f"actionCode:{action_code}}}))").to_string()
+
+    def busy(main_state, action_code):
+        return js(ctx4, f"isBusy({{mainState:{main_state},"
+                        f"actionCode:{action_code}}})").to_boolean()
+
+    check("an idle machine reports nothing", act(0, 0) == "null" and not busy(0, 0))
+    # the case that mattered: a toolchange's calibration shows up in main_state only
+    check("an XY calibration is reported even though action_code is 0",
+          act(2, 0) == "XYZ calibrating" and busy(2, 0),
+          "reading only action_code left the wait silent for the very thing that "
+          "makes a toolchange take minutes")
+    check("a docking calibration is reported the same way",
+          act(12, 0) == "Docking Coordinate Calibrating" and busy(12, 0))
+    check("the finer action_code wins when both are set",
+          act(1, 770) == "Checking Extruder Pick...")
+    check("plain 'Working' is not shown to someone already waiting on an operation",
+          act(1, 0) == "null",
+          "it says nothing the caller did not know, and would mask nothing useful")
+    check("the two tables are not merged",
+          js(ctx4, "String(ACTION_LABELS[1])").to_string() == "undefined",
+          "1 is Working in one table and Homing in the other")
+
+    # --- homed, not homed, and not known ----------------------------------
+    print("\n== homing state ==")
+
+    def homed(objs):
+        js(ctx3, f"var h=new MachineState(); h.apply({json.dumps(objs)});")
+        return (js(ctx3, "String(h.toolhead().allHomed)").to_string(),
+                js(ctx3, "String(h.toolhead().isHomed('z'))").to_string())
+
+    check("a cold machine reports not homed, not unknown",
+          homed({"toolhead": {"homed_axes": ""}}) == ("false", "false"),
+          "an empty homed_axes is a plain answer; reading it as unknown let every Z "
+          "jog through to a printer that refuses it, so the bed buttons looked dead")
+    check("a homed machine reports homed", homed({"toolhead": {"homed_axes": "xyz"}})
+          == ("true", "true"))
+    check("a partly homed machine is not all homed",
+          homed({"toolhead": {"homed_axes": "xy"}}) == ("false", "false"))
+    check("with no snapshot at all the answer is unknown, and nothing is blocked",
+          homed({}) == ("null", "true"),
+          "before the first query, refusing everything would be worse than allowing it")
+
     print(f"\n{checks - len(fails)}/{checks} checks passed")
     return 1 if fails else 0
 

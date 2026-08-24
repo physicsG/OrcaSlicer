@@ -918,7 +918,10 @@ text.step {
   background: var(--pill); border: 1px solid var(--line); border-radius: 7px;
   cursor: pointer; font-variant-numeric: tabular-nums; color: var(--ink);
 }
-.bed-btn:hover { background: var(--line); }
+.bed-btn:hover:not(:disabled) { background: var(--line); }
+/* Disabled means the printer would refuse the move, not that the page is broken. */
+.bed-btn:disabled { opacity: .45; cursor: not-allowed; }
+.ejog .ebtn:disabled { opacity: .45; cursor: not-allowed; }
 .bed-lab { font-size: 12px; color: var(--ink-dim); padding: 0 4px; }
 
 /* ---- anchored popover ------------------------------------------------ */

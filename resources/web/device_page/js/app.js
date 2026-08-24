@@ -18,7 +18,7 @@ import { openMenu, openDialog, openBlockingDialog, toggleField, numberField }
 import { connect as connectDevice, disconnect as disconnectDevice } from './connection.js';
 import { Sswcp } from '../../shared/js/sswcp.js';
 import { MachineState } from '../../shared/js/state.js';
-import { activityLabel } from '../../shared/js/activity.js';
+import { machineActivity, isBusy } from '../../shared/js/activity.js';
 import { installMock } from './mock.js';
 import { mountBuildBadge } from '../../shared/js/buildinfo.js';
 import * as ui from './ui.js';
@@ -214,7 +214,7 @@ function stopCamPump() {
  */
 const TOOL_ACTION_HARD_CAP_MS = 10 * 60 * 1000;
 
-function runToolAction({ title, script, waiting, done, gaveUp }) {
+function runToolAction({ title, script, waiting, done, gaveUp, settle }) {
   const dlg = openBlockingDialog({ title, message: waiting });
   let refused = null;
   // deliberately not awaited - see (1)
@@ -227,18 +227,35 @@ function runToolAction({ title, script, waiting, done, gaveUp }) {
   let lastLabel = null;
 
   return (async () => {
+    let sawBusy = false;
     for (;;) {
-      if (done()) { dlg.close(); render(); return; }
+      if (done()) {
+        if (settle) await settle();
+        dlg.close(); render(); return;
+      }
       if (refused) { dlg.fail(`The printer refused the command: ${refused.message}`); return; }
 
-      const label = activityLabel(state.activity().actionCode);
+      // Both granularities, because a toolchange's calibration surfaces in main_state
+      // ("XYZ calibrating", "Docking Coordinate Calibrating") while action_code stays 0.
+      // Reading only action_code left the dialog silent for exactly the operations that
+      // take long enough to need explaining.
+      const act = state.activity();
+      const label = machineActivity(act);
       if (label) {
-        // busy, and saying so: keep waiting and show why
         if (label !== lastLabel) { dlg.update(label); lastLabel = label; }
-        quietDeadline = Date.now() + TOOL_CHANGE_TIMEOUT_MS;
       } else if (lastLabel) {
         dlg.update(waiting);
         lastLabel = null;
+      }
+      // keep waiting for as long as the machine says it is doing something
+      if (isBusy(act)) {
+        sawBusy = true;
+        quietDeadline = Date.now() + TOOL_CHANGE_TIMEOUT_MS;
+      } else if (sawBusy) {
+        // it was working and has stopped: for an operation with nothing on the stream
+        // to confirm it - homing - that transition is the completion signal.
+        if (settle) await settle();
+        dlg.close(); render(); return;
       }
 
       if (Date.now() > quietDeadline) { dlg.fail(gaveUp); return; }
@@ -282,12 +299,22 @@ const handlers = {
 
   // Motion has no dedicated bridge command - the shipped page sends G-code, so
   // this does too. G28 homes; G91/G0/G90 makes one relative step.
-  home: () => {
-    const p = send(CMD.SEND_GCODES, { script: 'G28' }, 'home');
-    // homing is exactly when homed_axes changes, and it is not on the stream
-    Promise.resolve(p).then(() => setTimeout(refreshToolhead, 1500)).catch(() => {});
-    return p;
-  },
+  /**
+   * Home, then re-read what got homed.
+   *
+   * `homed_axes` lives only on the `toolhead` object, which the shipped page does not
+   * subscribe - so nothing on the stream reports that homing finished. G28 also runs far
+   * longer than the bridge's 15s timeout, so this waits on the machine the same way a
+   * toolchange does, then refreshes the one field that cannot arrive on its own.
+   */
+  home: () => runToolAction({
+    title: 'Homing',
+    script: 'G28',
+    waiting: 'Homing all axes\u2026',
+    done: () => false,                 // nothing on the stream says homing finished
+    settle: refreshToolhead,
+    gaveUp: 'Homing did not finish in time.',
+  }),
 
   /**
    * Change the live toolhead, or park it. See runToolAction for why this does not

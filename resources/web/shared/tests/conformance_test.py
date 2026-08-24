@@ -584,12 +584,30 @@ check("a bridge timeout is not treated as a refusal",
       "/timed out/i.test" in app_src,
       "the printer is still moving; telling the user to retry is wrong")
 check("the wait shows, and follows, what the machine says it is doing",
-      "activityLabel" in app_src and "quietDeadline" in app_src,
-      "action_code reports the calibration that makes a toolchange slow")
+      "machineActivity" in app_src and "isBusy(act)" in app_src and "quietDeadline" in app_src,
+      "the calibration that makes a toolchange slow is reported in main_state, not "
+      "action_code - reading only the latter left the dialog silent for it")
+act_src = open(os.path.join(SHARED, "js", "activity.js"), encoding="utf-8").read()
+check("the two activity tables are kept apart",
+      "ACTION_LABELS" in act_src and "MAIN_STATE_LABELS" in act_src,
+      "their case spaces overlap: 1 is Working in one and Homing in the other")
 check("the activity table is generated, not transcribed",
       os.path.exists(os.path.join(WEB, "shared", "js", "activity.js"))
       and "GENERATED" in open(os.path.join(WEB, "shared", "js", "activity.js"),
                               encoding="utf-8").read())
+
+# `homed_axes: ""` is the machine saying no axis is homed, not that the answer is
+# unknown. Treating the empty string as unknown let every Z and XY jog through to a
+# printer that refuses them, so the bed buttons looked dead.
+check("an empty homed_axes counts as 'not homed', not 'unknown'",
+      "hasHomed" in state_src,
+      "unknown is the field being ABSENT; empty is a plain answer")
+check("bed buttons are disabled rather than silently refused",
+      "b.disabled = blocked" in ui_src,
+      "a button that looks live and does nothing is worse than one plainly disabled")
+check("homing re-reads homed_axes when it finishes",
+      "settle: refreshToolhead" in app_src,
+      "nothing on the subscribed stream reports that homing completed")
 
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)

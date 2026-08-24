@@ -36,5 +36,22 @@
   "769": "Checking Extruder Park...",
   "770": "Checking Extruder Pick...",
   "832": "Homing Calibration..."
+ },
+ "main_states": {
+  "0": "Idle",
+  "1": "Working",
+  "2": "XYZ calibrating",
+  "3": "Heated bed Calibrating",
+  "4": "Flow Calibrating",
+  "5": "Vibration Compensation Calibrating",
+  "6": "Updating",
+  "7": "Error",
+  "14": "Offline",
+  "8": "Manual Adjusting Spring Screw",
+  "9": "Auto Loading",
+  "10": "Unloading",
+  "11": "Manual Loading",
+  "12": "Docking Coordinate Calibrating",
+  "13": "Homing Calibration..."
  }
 }

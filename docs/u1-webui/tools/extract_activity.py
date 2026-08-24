@@ -25,24 +25,38 @@ from _common import DATA, read_bundle  # noqa: E402
 OUT = os.path.join(DATA, "activity-codes.json")
 
 
+def _switch_around(src, needle, before=3000, after=2600):
+    """The case list of the switch that owns `needle`."""
+    i = src.find(needle)
+    if i < 0:
+        sys.exit(f"not found in the bundle: {needle}")
+    start = src.rfind("switch(", 0, i - before)
+    seg = src[start:i + after]
+    return re.findall(r'case (\d+):return A\.D\("([^"]+)"', seg)
+
+
 def main():
     src = read_bundle()
-    anchor = src.find("Extruder Docking Calibrating")
-    if anchor < 0:
-        sys.exit("activity switch not found in the bundle")
-    start = src.rfind("switch(", 0, anchor - 3000)
-    seg = src[start:anchor + 600]
 
-    codes = {}
-    for code, text in re.findall(r'case (\d+):return A\.D\("([^"]+)"', seg):
+    # Two separate tables, and they must not be merged: their case spaces overlap, so
+    # 1 is "Working" in one and "Homing" in the other. Keyed apart, each is exact.
+    action = {}
+    for code, text in _switch_around(src, "Extruder Docking Calibrating"):
         n = int(code)
-        if n < 128:
-            continue          # a different enum's case space - see the module docstring
-        codes[str(n)] = text
+        if n >= 128:
+            action[str(n)] = text
+
+    main_state = {}
+    for code, text in _switch_around(src, "XYZ calibrating"):
+        n = int(code)
+        if n <= 14:
+            main_state.setdefault(str(n), text)   # first wins: later cases are the
+                                                  # homing enum bleeding into the window
 
     os.makedirs(DATA, exist_ok=True)
-    json.dump({"action_codes": codes}, open(OUT, "w", encoding="utf-8"), indent=1)
-    print(f"activity codes: {len(codes)} (>=128) -> {os.path.relpath(OUT, os.getcwd())}")
+    json.dump({"action_codes": action, "main_states": main_state},
+              open(OUT, "w", encoding="utf-8"), indent=1)
+    print(f"activity: {len(action)} action codes (>=128), {len(main_state)} main states")
 
 
 if __name__ == "__main__":
