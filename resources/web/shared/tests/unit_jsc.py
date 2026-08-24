@@ -208,9 +208,15 @@ def main():
     check("parking is seen: no extruder ACTIVATE means none live",
           active({**parked, "toolhead": {"extruder": "extruder3"}}) == "null",
           "parkTool waits for null, which a stale toolhead never produced")
-    check("before any state arrives, the one-shot query still answers",
-          active({"toolhead": {"extruder": "extruder2"}}) == "2",
-          "cold start must not report 'nothing live' when something is")
+    # This test previously asserted the opposite, and encoded the bug.
+    check("toolhead.extruder is not treated as evidence that a head is engaged",
+          active({**parked, "toolhead": {"extruder": "extruder"}}) == "null",
+          "measured: it reads 'extruder' while all four report PARKED - it names the "
+          "last head used, not the one docked. Trusting it made the panel offer to "
+          "park nothing, which no-ops instantly and then times out")
+    check("with no extruder states at all the answer is 'nothing engaged'",
+          active({"toolhead": {"extruder": "extruder2"}}) == "null",
+          "a wrong answer here is worse than none: it drives a park that cannot work")
 
     # --- what the machine says it is doing --------------------------------
     print("\n== activity, at both granularities ==")

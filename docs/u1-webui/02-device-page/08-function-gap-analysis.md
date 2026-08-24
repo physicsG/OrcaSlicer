@@ -487,3 +487,32 @@ has its own `done()` and a hard cap besides, so a lingering `Printing` costs not
 Measured durations, both verified live: **4 s** when the machine is already homed,
 **31 s** when it is not. The second is the case that outran the bridge's 15 s request
 timeout and made a working toolchange look like a failure.
+
+### `toolhead.extruder` does not mean "engaged"
+
+Park reported "did not report a parked toolhead" with nothing having moved. The command
+was fine; the panel was asking the wrong head to park.
+
+Measured on a fully parked U1:
+
+```
+toolhead.extruder : "extruder"     <- names a head
+extruder.state    : "PARKED"       <- ...that is not engaged
+extruder1..3      : all PARKED     <- nothing is engaged at all
+```
+
+`toolhead.extruder` is Klipper's *current extruder for G-code purposes*. It goes on
+naming the last head used after that head has been parked. It was being used as a
+fallback for "which head is live", so with no `ACTIVATE` anywhere the panel still
+believed head 1 was engaged: the button offered **Park**, sent `PARK_EXTRUDER`, and got
+an instant `ok` for a head that was not there. Nothing moved, and the wait then sat out
+its full timeout for an `activeIndex` that could never change.
+
+The instant `ok` is the trap. Measured against a head that *is* live, `PARK_EXTRUDER2`
+does not reply for over 20 s — it blocks while it works. Against one that is not, it
+returns immediately and successfully. **A G-code ack cannot distinguish those**, which is
+why the wait confirms against `extruder*.state` instead.
+
+Engagement is now read only from `extruder*.state === 'ACTIVATE'`. Nothing reporting it
+means nothing is engaged — an answer, not a gap to fill from elsewhere. Two unit tests
+that previously asserted the fallback have been inverted; they had encoded the bug.

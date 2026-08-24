@@ -193,5 +193,27 @@
       "display_status.message": null
     },
     "conclusion": "The progress signal is toolhead.homed_axes, bracketed by idle_timeout. machine_state_manager and calibration_step report nothing for a manual toolchange, so a UI that watches only those has nothing to show."
+  },
+  "toolhead_extruder_field": {
+    "_comment": [
+      "toolhead.extruder is Klipper's current-extruder pointer for G-code, NOT a",
+      "statement that the head is docked. Measured on a fully parked U1."
+    ],
+    "_captured": "2026-08-24",
+    "observed": {
+      "toolhead.extruder": "extruder",
+      "extruder.state": "PARKED",
+      "extruder1.state": "PARKED",
+      "extruder2.state": "PARKED",
+      "extruder3.state": "PARKED"
+    },
+    "conclusion": "Engagement is answered only by extruder*.state === 'ACTIVATE'. Using toolhead.extruder as a fallback made the panel believe a head was live when none was, so Park sent PARK_EXTRUDER<n> to a head that was not there - an instant no-op 'ok', nothing moving, then a full timeout."
+  },
+  "park_command": {
+    "_captured": "2026-08-24",
+    "PARK_EXTRUDER2_on_live_head": "no reply within 20s - it blocks while it works",
+    "PARK_EXTRUDER_on_non_live_head": "instant ok, nothing moves",
+    "measured_duration_s": 1.5,
+    "note": "An instant ok is indistinguishable from success, which is why the wait must confirm against extruder*.state rather than the G-code ack."
   }
 }

@@ -117,21 +117,21 @@ export class MachineState {
     const hasHomed = Object.prototype.hasOwnProperty.call(o, 'homed_axes');
     const homed = String(o.homed_axes || '');
 
-    // The SUBSCRIBED source wins. `extruder*.state` arrives on the live stream, while
-    // `toolhead.extruder` comes from the one-shot query at connect and after homing -
-    // so preferring the latter froze the active tool at whatever it was when the page
-    // loaded. A pick then waited forever for a change it could not see, and a park
-    // waited for a null that never arrived; both timed out having actually worked.
+    // Which head is ENGAGED is answered only by `extruder*.state === 'ACTIVATE'`.
     //
-    // `toolhead.extruder` is kept only as a cold-start fallback, for the window before
-    // the first state snapshot arrives.
-    let activeKey = null;
-    const reporting = TOOLHEADS.some((k) => (this.objects[k] || {}).state != null);
-    if (reporting) {
-      activeKey = TOOLHEADS.find((k) => (this.objects[k] || {}).state === 'ACTIVATE') || null;
-    } else {
-      activeKey = o.extruder || null;
-    }
+    // `toolhead.extruder` is NOT a second opinion on that and must not be used as one.
+    // It is Klipper's current-extruder pointer for G-code purposes, and it goes on
+    // naming the last head used after that head has been parked - measured on this
+    // machine reading "extruder" while all four reported PARKED. Trusting it let the
+    // panel believe a head was live when none was: the button offered to park it,
+    // PARK_EXTRUDER<n> returned an instant no-op "ok" with nothing moving, and the wait
+    // then sat out its full timeout for an activeIndex that could never change.
+    //
+    // Nothing reporting ACTIVATE means nothing is engaged. That is an answer, not a gap
+    // to be filled from elsewhere.
+    const activeKey = TOOLHEADS.find(
+      (k) => (this.objects[k] || {}).state === 'ACTIVATE') || null;
+
     return {
       activeKey,
       activeIndex: TOOLHEADS.indexOf(activeKey) >= 0 ? TOOLHEADS.indexOf(activeKey) : null,

@@ -571,11 +571,10 @@ for label, path in (("device_page/js/ui.js", os.path.join(WEB, "device_page", "j
 # once at connect and after homing, so reading it first froze the active tool and made
 # every pick and park time out despite having worked.
 state_src = open(os.path.join(SHARED, "js", "state.js"), encoding="utf-8").read()
-i_sub = state_src.find("'ACTIVATE'")
-i_one = state_src.find("o.extruder")
-check("the live toolhead is read from the subscribed stream, not the one-shot query",
-      i_sub != -1 and i_one != -1 and i_sub < i_one,
-      "toolhead.extruder is a cold-start fallback, not the source of truth")
+check("engagement is read only from extruder*.state",
+      "state === 'ACTIVATE'" in state_src and "o.extruder ||" not in state_src,
+      "toolhead.extruder names the last head used even after it is parked, so using "
+      "it as a fallback made the panel offer to park a head that was not there")
 check("a toolchange waits on the machine, not on the request",
       "runToolAction" in app_src and "// deliberately not awaited" in app_src,
       "sw_SendGCodes does not return until Klipper finishes, but the bridge gives up "
