@@ -392,3 +392,42 @@ while Park followed the *machine*, so with a head selected that was not the live
 pair disagreed about their subject and neither could name it without a tooltip. Collapsing
 to one button removes the asymmetry rather than explaining it — the target is always the
 head you have selected.
+
+### Waiting for a toolchange, and what the original does
+
+A pick or park sometimes triggers an XY calibration, and then it takes minutes rather
+than seconds. Three things about that are worth writing down.
+
+**The bridge gives up long before the machine does.** `sw_SendGCodes` does not return
+until Klipper has finished the move, but `TIMEOUT_MS` in `sswcp.js` is **15 s**. So the
+request rejects while the printer is still working, and an implementation that awaits it
+reports a failure for an operation that is going fine. That was the bug.
+
+**The machine says what it is doing.** `machine_state_manager.action_code` is on the
+subscribed stream, and the bundle carries the labels:
+
+| | |
+|---|---|
+| 768 | Extruder Docking Calibrating… |
+| 769 | Checking Extruder Park… |
+| 770 | Checking Extruder Pick… |
+| 832 | Homing Calibration… |
+
+36 codes in all, extracted by [`tools/extract_activity.py`](../tools/extract_activity.py)
+into `shared/js/activity.js`. Only codes ≥ 128 are taken: below that the bundle has two
+further switches over small integers whose cases collide with these — 1 is both "Working"
+and "Homing" — so a merged table would be wrong wherever it is ambiguous.
+
+**What the original does: the same thing, badly.** Its handler is
+`aDM(ctx, "Extruder N operating…", 60)` — a non-dismissable barrier that auto-dismisses
+after 60 s *whatever has happened* — then it fires the command and clears the barrier in
+a `finally`. It does not poll state and does not read `action_code`. When its own request
+times out, `oJ`'s error path says **"Request timeout, please try again later."** So the
+shipped page tells you to retry a toolchange that is still running, and its 60 s is a
+ceiling on the overlay rather than any kind of completion signal.
+
+This does not copy that. The command is fired and deliberately not awaited; a rejection
+mentioning a timeout is swallowed as "still working" while any other error is reported.
+The wait then watches the machine: it shows the current activity label, and every time
+the machine reports being busy the deadline is pushed out again. Silence for 60 s ends
+it, and a hard cap of ten minutes stops it waiting forever.

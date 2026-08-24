@@ -18,6 +18,7 @@ import { openMenu, openDialog, openBlockingDialog, toggleField, numberField }
 import { connect as connectDevice, disconnect as disconnectDevice } from './connection.js';
 import { Sswcp } from '../../shared/js/sswcp.js';
 import { MachineState } from '../../shared/js/state.js';
+import { activityLabel } from '../../shared/js/activity.js';
 import { installMock } from './mock.js';
 import { mountBuildBadge } from '../../shared/js/buildinfo.js';
 import * as ui from './ui.js';
@@ -190,6 +191,66 @@ function stopCamPump() {
   camPump = null;
 }
 
+/**
+ * Fire a toolhead command and wait for the machine, not for the request.
+ *
+ * Three things make the obvious `await bridge.request(...)` wrong here:
+ *
+ *  1. `sw_SendGCodes` does not return until Klipper has finished the move, but the
+ *     bridge gives up after 15s (TIMEOUT_MS in sswcp.js). A toolchange that triggers an
+ *     XY calibration runs far longer than that, so the request rejects while the printer
+ *     is still working. Treating that rejection as failure told the user to retry
+ *     something already in progress.
+ *  2. The G-code ack only says the command was queued. The machine's own state is the
+ *     only thing that says it worked.
+ *  3. The machine says what it is doing: `machine_state_manager.action_code` reports
+ *     "Extruder Docking Calibrating...", "Checking Extruder Pick..." and the rest. So
+ *     the wait can show the real reason it is taking a while, and - more usefully - can
+ *     keep waiting for as long as the machine claims to be busy.
+ *
+ * The shipped page does none of this. It raises an overlay with a flat 60s auto-dismiss
+ * and reports "Request timeout, please try again later" when its own request gives up,
+ * whether or not the printer is still moving.
+ */
+const TOOL_ACTION_HARD_CAP_MS = 10 * 60 * 1000;
+
+function runToolAction({ title, script, waiting, done, gaveUp }) {
+  const dlg = openBlockingDialog({ title, message: waiting });
+  let refused = null;
+  // deliberately not awaited - see (1)
+  bridge.request(CMD.SEND_GCODES, { script }).catch((e) => {
+    if (!/timed out/i.test(String(e && e.message))) refused = e;
+  });
+
+  const started = Date.now();
+  let quietDeadline = started + TOOL_CHANGE_TIMEOUT_MS;
+  let lastLabel = null;
+
+  return (async () => {
+    for (;;) {
+      if (done()) { dlg.close(); render(); return; }
+      if (refused) { dlg.fail(`The printer refused the command: ${refused.message}`); return; }
+
+      const label = activityLabel(state.activity().actionCode);
+      if (label) {
+        // busy, and saying so: keep waiting and show why
+        if (label !== lastLabel) { dlg.update(label); lastLabel = label; }
+        quietDeadline = Date.now() + TOOL_CHANGE_TIMEOUT_MS;
+      } else if (lastLabel) {
+        dlg.update(waiting);
+        lastLabel = null;
+      }
+
+      if (Date.now() > quietDeadline) { dlg.fail(gaveUp); return; }
+      if (Date.now() - started > TOOL_ACTION_HARD_CAP_MS) {
+        dlg.fail(`${gaveUp} Giving up after ten minutes.`);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  })();
+}
+
 const handlers = {
   pause:  () => send(CMD.PRINT_PAUSE, {}, 'pause'),
   resume: () => send(CMD.PRINT_RESUME, {}, 'resume'),
@@ -229,80 +290,40 @@ const handlers = {
   },
 
   /**
-   * Change the live toolhead, and hold the surface while it happens.
-   *
-   * `T<n> A0` is what the printer's own UI sends - recovered from the shipped bundle,
-   * where the same button dispatches PARK_EXTRUDER when the head reads ACTIVATE and
-   * `"T" + index + " A0"` when it does not. The A0 matters: the firmware's own
-   * SM_PRINT_CHECK_SWITCH_EXTRUDER macro passes it too, and a bare T<n> is not what
-   * either of them sends.
-   *
-   * Neither command appears in printer.gcode.help, because they register without help
-   * strings - the same is true of T0..T3 - so their absence there is not evidence.
-   *
-   * The machine is the only thing that says it worked: the target extruder reports
-   * state ACTIVATE on the subscribed stream. The G-code ack only says it was queued.
+   * Change the live toolhead, or park it. See runToolAction for why this does not
+   * simply await the command.
    */
-  pickTool: async (i) => {
+  pickTool: (i) => {
     const idx = Number(i) || 0;
-    const dlg = openBlockingDialog({
+    return runToolAction({
       title: `Switching to toolhead ${idx + 1}`,
-      message: 'Parking the current toolhead\u2026',
+      // `T<n> A0` is what the printer's own UI sends, recovered from the shipped bundle.
+      // The A0 is not decoration - the firmware's SM_PRINT_CHECK_SWITCH_EXTRUDER passes
+      // it too. Neither this nor PARK_EXTRUDER appears in printer.gcode.help, because
+      // both register without help strings, as T0..T3 do.
+      script: `T${idx} A0`,
+      waiting: `Waiting for toolhead ${idx + 1}\u2026`,
+      done: () => state.toolhead().activeIndex === idx,
+      gaveUp: `Toolhead ${idx + 1} did not report active. The printer may still be `
+            + 'working, or the change may have failed.',
     });
-    try {
-      await bridge.request(CMD.SEND_GCODES, { script: `T${idx} A0` });
-    } catch (e) {
-      dlg.fail(`The printer refused the change: ${e.message}`);
-      return;
-    }
-    dlg.update('Waiting for the printer to confirm\u2026');
-    const deadline = Date.now() + TOOL_CHANGE_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      if (state.toolhead().activeIndex === idx) { dlg.close(); render(); return; }
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    dlg.fail(`Toolhead ${idx + 1} did not report active within `
-             + `${Math.round(TOOL_CHANGE_TIMEOUT_MS / 1000)}s. `
-             + 'The printer may still be working, or the change may have failed.');
   },
 
-  /**
-   * Park the live toolhead, leaving none engaged.
-   *
-   * PARK_EXTRUDER for index 0 and PARK_EXTRUDER1..3 above it, mirroring Klipper's own
-   * `extruder` / `extruder1` naming. Taken from the shipped bundle rather than guessed:
-   * an earlier attempt sent `T-1`, which has nothing behind it and did nothing.
-   *
-   * Only the live head can be parked, so this ignores the panel's selection and acts on
-   * whatever the machine reports as ACTIVATE.
-   */
-  parkTool: async (i) => {
-    // The caller passes the head it means, but only a live head can be parked - so the
-    // machine still has the last word on whether there is anything to do.
+  parkTool: (i) => {
     const live = state.toolhead().activeIndex;
     const idx = i == null ? live : Number(i);
     if (live == null || idx !== live) {
       setStatus(live == null ? 'No toolhead is engaged'
                              : `Toolhead ${live + 1} is the one engaged`, 'warn');
-      return;
+      return Promise.resolve();
     }
-    const dlg = openBlockingDialog({
+    return runToolAction({
       title: `Parking toolhead ${idx + 1}`,
-      message: 'Waiting for the printer to park\u2026',
+      script: `PARK_EXTRUDER${idx === 0 ? '' : idx}`,
+      waiting: 'Waiting for the printer to park\u2026',
+      done: () => state.toolhead().activeIndex == null,
+      gaveUp: 'The printer did not report a parked toolhead.',
     });
-    try {
-      await bridge.request(CMD.SEND_GCODES,
-                           { script: `PARK_EXTRUDER${idx === 0 ? '' : idx}` });
-    } catch (e) {
-      dlg.fail(`The printer refused to park: ${e.message}`);
-      return;
-    }
-    const deadline = Date.now() + TOOL_CHANGE_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      if (state.toolhead().activeIndex == null) { dlg.close(); render(); return; }
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    dlg.fail('The printer did not report a parked toolhead in time.');
   },
 
   /** Jump to the file browser - the idle task panel's one useful action. */

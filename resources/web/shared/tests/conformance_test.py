@@ -576,9 +576,20 @@ i_one = state_src.find("o.extruder")
 check("the live toolhead is read from the subscribed stream, not the one-shot query",
       i_sub != -1 and i_one != -1 and i_sub < i_one,
       "toolhead.extruder is a cold-start fallback, not the source of truth")
-check("the toolchange timeout matches the printer's own UI",
-      "TOOL_CHANGE_TIMEOUT_MS = 60000" in app_src,
-      "the shipped handler allows 60s before giving up")
+check("a toolchange waits on the machine, not on the request",
+      "runToolAction" in app_src and "// deliberately not awaited" in app_src,
+      "sw_SendGCodes does not return until Klipper finishes, but the bridge gives up "
+      "at 15s - so a rejection there means still working, not refused")
+check("a bridge timeout is not treated as a refusal",
+      "/timed out/i.test" in app_src,
+      "the printer is still moving; telling the user to retry is wrong")
+check("the wait shows, and follows, what the machine says it is doing",
+      "activityLabel" in app_src and "quietDeadline" in app_src,
+      "action_code reports the calibration that makes a toolchange slow")
+check("the activity table is generated, not transcribed",
+      os.path.exists(os.path.join(WEB, "shared", "js", "activity.js"))
+      and "GENERATED" in open(os.path.join(WEB, "shared", "js", "activity.js"),
+                              encoding="utf-8").read())
 
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)

@@ -38,6 +38,8 @@ STEPS = [
     ("gen_command_reference.py", [REPO]),
     ("gen_legacy_error_doc.py", []),
     ("gen_jsonrpc_reference.py", []),
+    ("extract_activity.py", []),
+    ("gen_activity_module.py", []),
     ("gen_error_module.py", []),
     ("check_coverage.py", ["--quiet"]),
 ]
