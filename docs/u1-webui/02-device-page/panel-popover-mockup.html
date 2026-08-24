@@ -238,6 +238,45 @@
                  cursor:pointer;border-radius:8px;font-weight:600}
   .parkbtn{border:1px solid var(--line);background:var(--panel);color:var(--ink-2)}
   .parkbtn:hover{background:var(--line)}
+
+  /* ---- colour options ------------------------------------------------- */
+  .opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:14px}
+  .opt{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 15px}
+  .opt-head{display:flex;align-items:center;gap:8px;font-size:13px}
+  .sw-dot{width:14px;height:14px;border-radius:50%;flex:0 0 14px;
+          box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+  .sw-dot.sm{width:10px;height:10px;flex:0 0 10px;margin-left:2px}
+  .hexv{margin-left:auto;font-size:11px;color:var(--muted);background:var(--panel-2);
+        padding:1px 5px;border-radius:4px}
+  .opt-note{font-size:12px;color:var(--ink-2);line-height:1.5;margin:8px 0 12px}
+  .demo{border:1px solid var(--line);border-radius:9px;padding:8px}
+  /* the demo rows paint what :hover and :focus would, so both states are visible at once */
+  .demo .trow{border:2px solid var(--line);border-radius:8px;margin-bottom:5px;height:34px;
+              padding:0 7px;border-bottom:2px solid var(--line)}
+  .demo .trow.focus{border-color:var(--accent);
+                    background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .tgt-demo{width:34px;padding:2px 3px;font-size:13px;font-variant-numeric:tabular-nums;
+            border:1px solid var(--line);border-radius:5px;background:var(--panel-2);
+            text-align:center}
+  .tgt-demo.on{border-color:var(--accent);background:var(--panel);color:var(--accent)}
+  .demo .badge.live{background:var(--live);color:#fff;border-color:var(--live)}
+  .demo-tiles{display:flex;gap:6px;margin:7px 0}
+  .demo .tile{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+              padding:6px 4px;border:2px solid transparent;border-radius:8px;
+              background:var(--panel-2);font-size:12px}
+  .demo .tile.on{border-color:var(--accent);
+                 background:color-mix(in srgb,var(--accent) 10%,transparent)}
+  .demo .tile.on .ic{color:var(--accent);opacity:1}
+  .demo .tile.on b{color:var(--accent)}
+  .demo-bands{display:flex;gap:3px;margin:7px 0}
+  .band{flex:1;height:15px;border-radius:3px;background:var(--wheel)}
+  .band.b2{background:var(--wheel-2)} .band.b3{background:var(--wheel-3)}
+  .band.hot{background:color-mix(in srgb,var(--accent) 22%,var(--wheel-2))}
+  .demo-btn{display:block;text-align:center;margin-top:2px;padding:6px 4px;font-size:11px;
+            font-weight:600;border:1px solid var(--accent);border-radius:8px;
+            color:var(--accent);background:var(--panel)}
+  .opt:hover .demo .trow:first-child{border-color:var(--accent)}
+  .opt:hover .demo-btn{background:color-mix(in srgb,var(--accent) 10%,transparent)}
 </style>
 
 <div class="wrap">
@@ -447,4 +486,159 @@
     disabled until <code>G28</code> has run, with the centre inviting it — otherwise every
     press silently does nothing, which is the bug that started this thread.
   </div>
+
+  <h2><span class="n">06</span>Colour options</h2>
+  <p class="lede">The same components, changing only border, text and hover tint — the
+     backgrounds are untouched in every one. Hover a card to see its hover state.</p>
+  <div class="opts"><div class="opt" style="--accent:#0f6e7b;--live:var(--accent);">
+      <div class="opt-head">
+        <span class="sw-dot" style="background:#0f6e7b"></span>
+        <b>A · Current — teal</b>
+        <code class="hexv">#0f6e7b</code>
+        
+      </div>
+      <p class="opt-note">What the mockup carries today. Comes from <code>shared/css/base.css</code>, which is the reconstruction's own palette rather than anything measured off the product.</p>
+      <div class="demo">
+        <div class="trow" title="hover state">
+          <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span>
+          <span class="chip" style="background:#F44336"></span>
+          <span class="cur">27</span><span class="sl">/</span>
+          <span class="tgt-demo">0</span><span class="unit">°C</span>
+        </div>
+        <div class="trow focus" title="editing">
+          <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge live">4</b></span>
+          <span class="chip" style="background:#632C2C"></span>
+          <span class="cur">26</span><span class="sl">/</span>
+          <span class="tgt-demo on">245</span><span class="unit">°C</span>
+        </div>
+        <div class="demo-tiles">
+          <span class="tile on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.3"/></svg><b>100%</b></span>
+          <span class="tile"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.2"/><path d="M12 9.8C12 6 14 3 17 4c2 .7 1.6 4-1 5.2M14.2 12c3.8 0 6.8 2 5.8 5-.7 2-4 1.6-5.2-1M12 14.2c0 3.8-2 6.8-5 5.8-2-.7-1.6-4 1-5.2M9.8 12C6 12 3 10 4 7c.7-2 4-1.6 5.2 1"/></svg><b>0%</b></span>
+        </div>
+        <div class="demo-bands">
+          <span class="band b1"></span><span class="band b2 hot"></span><span class="band b3"></span>
+        </div>
+        <span class="pickbtn demo-btn">Pick extruder</span>
+      </div>
+    </div><div class="opt" style="--accent:#0C63E2;--live:var(--accent);">
+      <div class="opt-head">
+        <span class="sw-dot" style="background:#0C63E2"></span>
+        <b>B · Snapmaker blue</b>
+        <code class="hexv">#0C63E2</code>
+        
+      </div>
+      <p class="opt-note"><b>The evidenced one.</b> Four occurrences in the shipped U1 bundle — the only real accent in it — and already <code>--accent</code> in <code>device.css</code>. Choose this and the mockup and the implementation agree for free.</p>
+      <div class="demo">
+        <div class="trow" title="hover state">
+          <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span>
+          <span class="chip" style="background:#F44336"></span>
+          <span class="cur">27</span><span class="sl">/</span>
+          <span class="tgt-demo">0</span><span class="unit">°C</span>
+        </div>
+        <div class="trow focus" title="editing">
+          <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge live">4</b></span>
+          <span class="chip" style="background:#632C2C"></span>
+          <span class="cur">26</span><span class="sl">/</span>
+          <span class="tgt-demo on">245</span><span class="unit">°C</span>
+        </div>
+        <div class="demo-tiles">
+          <span class="tile on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.3"/></svg><b>100%</b></span>
+          <span class="tile"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.2"/><path d="M12 9.8C12 6 14 3 17 4c2 .7 1.6 4-1 5.2M14.2 12c3.8 0 6.8 2 5.8 5-.7 2-4 1.6-5.2-1M12 14.2c0 3.8-2 6.8-5 5.8-2-.7-1.6-4 1-5.2M9.8 12C6 12 3 10 4 7c.7-2 4-1.6 5.2 1"/></svg><b>0%</b></span>
+        </div>
+        <div class="demo-bands">
+          <span class="band b1"></span><span class="band b2 hot"></span><span class="band b3"></span>
+        </div>
+        <span class="pickbtn demo-btn">Pick extruder</span>
+      </div>
+    </div><div class="opt" style="--accent:#00AE42;--live:var(--accent);">
+      <div class="opt-head">
+        <span class="sw-dot" style="background:#00AE42"></span>
+        <b>C · Orca green</b>
+        <code class="hexv">#00AE42</code>
+        
+      </div>
+      <p class="opt-note"><code>0x00AE42</code> in Orca's C++, the StateColor the slicer chrome uses. Argues that the Device tab should match the app it lives in rather than the firmware it talks to.</p>
+      <div class="demo">
+        <div class="trow" title="hover state">
+          <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span>
+          <span class="chip" style="background:#F44336"></span>
+          <span class="cur">27</span><span class="sl">/</span>
+          <span class="tgt-demo">0</span><span class="unit">°C</span>
+        </div>
+        <div class="trow focus" title="editing">
+          <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge live">4</b></span>
+          <span class="chip" style="background:#632C2C"></span>
+          <span class="cur">26</span><span class="sl">/</span>
+          <span class="tgt-demo on">245</span><span class="unit">°C</span>
+        </div>
+        <div class="demo-tiles">
+          <span class="tile on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.3"/></svg><b>100%</b></span>
+          <span class="tile"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.2"/><path d="M12 9.8C12 6 14 3 17 4c2 .7 1.6 4-1 5.2M14.2 12c3.8 0 6.8 2 5.8 5-.7 2-4 1.6-5.2-1M12 14.2c0 3.8-2 6.8-5 5.8-2-.7-1.6-4 1-5.2M9.8 12C6 12 3 10 4 7c.7-2 4-1.6 5.2 1"/></svg><b>0%</b></span>
+        </div>
+        <div class="demo-bands">
+          <span class="band b1"></span><span class="band b2 hot"></span><span class="band b3"></span>
+        </div>
+        <span class="pickbtn demo-btn">Pick extruder</span>
+      </div>
+    </div><div class="opt" style="--accent:#3B4754;--live:var(--accent);">
+      <div class="opt-head">
+        <span class="sw-dot" style="background:#3B4754"></span>
+        <b>D · Graphite — no chroma</b>
+        <code class="hexv">#3B4754</code>
+        
+      </div>
+      <p class="opt-note">Selection carried by border weight and text colour alone. Leaves colour free to mean one thing only: machine state. Nothing is <em>tinted</em> unless the printer is doing something.</p>
+      <div class="demo">
+        <div class="trow" title="hover state">
+          <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span>
+          <span class="chip" style="background:#F44336"></span>
+          <span class="cur">27</span><span class="sl">/</span>
+          <span class="tgt-demo">0</span><span class="unit">°C</span>
+        </div>
+        <div class="trow focus" title="editing">
+          <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge live">4</b></span>
+          <span class="chip" style="background:#632C2C"></span>
+          <span class="cur">26</span><span class="sl">/</span>
+          <span class="tgt-demo on">245</span><span class="unit">°C</span>
+        </div>
+        <div class="demo-tiles">
+          <span class="tile on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.3"/></svg><b>100%</b></span>
+          <span class="tile"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.2"/><path d="M12 9.8C12 6 14 3 17 4c2 .7 1.6 4-1 5.2M14.2 12c3.8 0 6.8 2 5.8 5-.7 2-4 1.6-5.2-1M12 14.2c0 3.8-2 6.8-5 5.8-2-.7-1.6-4 1-5.2M9.8 12C6 12 3 10 4 7c.7-2 4-1.6 5.2 1"/></svg><b>0%</b></span>
+        </div>
+        <div class="demo-bands">
+          <span class="band b1"></span><span class="band b2 hot"></span><span class="band b3"></span>
+        </div>
+        <span class="pickbtn demo-btn">Pick extruder</span>
+      </div>
+    </div><div class="opt" style="--accent:#0C63E2;--live:#00AE42;">
+      <div class="opt-head">
+        <span class="sw-dot" style="background:#0C63E2"></span>
+        <b>E · Blue selection, green live</b>
+        <code class="hexv">#0C63E2</code>
+        <span class="sw-dot sm" style="background:#00AE42" title="live state"></span>
+      </div>
+      <p class="opt-note"><b>Two jobs, two colours.</b> Blue is what <em>you</em> chose; green is what the <em>machine</em> is doing. The live-toolhead badge and any running indicator take the green, so a glance separates intent from state.</p>
+      <div class="demo">
+        <div class="trow" title="hover state">
+          <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span>
+          <span class="chip" style="background:#F44336"></span>
+          <span class="cur">27</span><span class="sl">/</span>
+          <span class="tgt-demo">0</span><span class="unit">°C</span>
+        </div>
+        <div class="trow focus" title="editing">
+          <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge live">4</b></span>
+          <span class="chip" style="background:#632C2C"></span>
+          <span class="cur">26</span><span class="sl">/</span>
+          <span class="tgt-demo on">245</span><span class="unit">°C</span>
+        </div>
+        <div class="demo-tiles">
+          <span class="tile on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.3"/></svg><b>100%</b></span>
+          <span class="tile"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.2"/><path d="M12 9.8C12 6 14 3 17 4c2 .7 1.6 4-1 5.2M14.2 12c3.8 0 6.8 2 5.8 5-.7 2-4 1.6-5.2-1M12 14.2c0 3.8-2 6.8-5 5.8-2-.7-1.6-4 1-5.2M9.8 12C6 12 3 10 4 7c.7-2 4-1.6 5.2 1"/></svg><b>0%</b></span>
+        </div>
+        <div class="demo-bands">
+          <span class="band b1"></span><span class="band b2 hot"></span><span class="band b3"></span>
+        </div>
+        <span class="pickbtn demo-btn">Pick extruder</span>
+      </div>
+    </div></div>
 </div>
