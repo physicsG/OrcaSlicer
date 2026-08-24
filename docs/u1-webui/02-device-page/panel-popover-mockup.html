@@ -61,24 +61,24 @@
               font-weight:600;background:var(--panel-2);border-bottom:1px solid var(--line);
               border-radius:10px 10px 0 0}
   .cols{display:flex;gap:16px;padding:16px;align-items:flex-start}
-  .colA{width:168px;flex:0 0 168px}
+  .colA{width:126px;flex:0 0 126px}
   .colB{flex:1;display:flex;flex-direction:column;align-items:center;gap:12px}
 
   /* ---------------- icon-only status rows ---------------- */
-  .trow{display:flex;align-items:center;gap:6px;height:38px;padding:0 8px;
+  .trow{display:flex;align-items:center;gap:5px;height:37px;padding:0 7px;
         border:2px solid transparent;border-radius:8px;font-size:13px;}
   .trow .ic{width:17px;height:17px;opacity:.7}
   .nz{position:relative;display:inline-flex;flex:0 0 auto}
   .badge{position:absolute;right:-4px;bottom:-3px;font-size:9px;line-height:1;
          background:var(--panel-2);border:1px solid var(--line);border-radius:999px;
          padding:1px 3px;color:var(--ink-2);font-weight:600}
-  .cur{font-variant-numeric:tabular-nums;font-weight:600;margin-left:2px}
+  .cur{font-variant-numeric:tabular-nums;font-weight:600;margin-left:0}
   .sl{color:var(--muted)}
-  .unit{color:var(--muted);font-size:12px;margin-left:1px}
+  .unit{color:var(--muted);font-size:12px;margin-left:0}
   .trow.live .badge{background:var(--accent);color:var(--accent-in);border-color:var(--accent)}
 
   /* the editable target: an input that does not look like one until you touch it */
-  .tgt{width:34px;padding:2px 3px;font:inherit;font-size:13px;font-variant-numeric:tabular-nums;
+  .tgt{width:30px;padding:2px 3px;font:inherit;font-size:13px;font-variant-numeric:tabular-nums;
        color:var(--ink);background:transparent;border:1px solid transparent;border-radius:5px;
        cursor:text;                       /* the I-beam */
        -moz-appearance:textfield}
@@ -111,7 +111,7 @@
         background:color-mix(in srgb,var(--accent) 10%,transparent)}
   .tilewrap > input:checked ~ .tile .ic{opacity:1;color:var(--accent)}
   .tilewrap > input:checked ~ .tile b{color:var(--accent)}
-  .pop{display:none;position:absolute;z-index:30;top:calc(100% + 7px);left:0;width:328px;
+  .pop{display:none;position:absolute;z-index:30;top:calc(100% + 7px);left:0;width:318px;
        background:var(--panel);border:1px solid var(--line);border-radius:10px;
        box-shadow:var(--pop-shadow);padding:13px 15px 15px}
   .tilewrap > input:checked ~ .pop{display:block}
@@ -181,9 +181,6 @@
   .pbox.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
   .pbox.on .ic{opacity:1;color:var(--accent)}
   .pbox .ic{width:17px;height:17px;opacity:.7}
-  .pchip{width:7px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.20);flex:0 0 7px}
-  .pchip.empty{background:repeating-linear-gradient(45deg,var(--panel-2),var(--panel-2) 2px,
-               var(--line) 2px,var(--line) 4px)}
   .pickbtn{margin-top:3px;padding:7px 4px;font:inherit;font-size:11px;line-height:1.25;
            cursor:pointer;border:1px solid var(--accent);border-radius:8px;
            background:var(--panel);color:var(--accent);font-weight:600}
@@ -458,7 +455,7 @@
           </div>
 
           <div class="colPick">
-            <div class="pickrow"><label class="pbox" title="Target jog and extrude at toolhead 1"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span><span class="pchip" style="background:#F44336" title="Jayo PLA"></span></label><label class="pbox" title="Target jog and extrude at toolhead 2"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">2</b></span><span class="pchip" style="background:#FFFFDC" title="Forshape PLA"></span></label><label class="pbox" title="Target jog and extrude at toolhead 3"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">3</b></span><span class="pchip empty" title="No filament loaded"></span></label><label class="pbox on" title="Target jog and extrude at toolhead 4"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">4</b></span><span class="pchip" style="background:#632C2C" title="Generic PETG"></span></label></div>
+            <div class="pickrow"><label class="pbox" title="Target jog and extrude at toolhead 1"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span></label><label class="pbox" title="Target jog and extrude at toolhead 2"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">2</b></span></label><label class="pbox" title="Target jog and extrude at toolhead 3"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">3</b></span></label><label class="pbox on" title="Target jog and extrude at toolhead 4"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">4</b></span></label></div>
             <div class="actrow">
               <button class="pickbtn" title="Change the live toolhead — blocks while the gantry moves">Pick extruder</button>
               <button class="parkbtn" title="Park the live toolhead — leaves no head engaged">Park extruder</button>
@@ -548,13 +545,12 @@
     to hit, and it is also the least often wanted.
   </div>
   <div class="note">
-    <b>Filament colour is out of the temperature rows.</b> It was a circle there, which
-    read as a status light — the same vocabulary as the badge marking the live toolhead —
-    so one shape carried two unrelated meanings, and the row was already holding an icon,
-    a number, a target field and a unit. It survives only in the toolhead picker, where
-    four otherwise identical nozzle glyphs genuinely need telling apart, and as a rounded
-    swatch rather than a dot so it reads as material and not state. Empty bays keep the
-    hatch, because “no filament” and “white filament” must not look alike.
+    <b>No filament colour anywhere in the Control panel.</b> It was a circle beside each
+    toolhead, which read as a status light — the same vocabulary as the badge marking the
+    live one — so a single shape carried two unrelated meanings, and it had to be asked
+    about, which settled it. The number badge is enough to tell four nozzles apart in
+    both the readings and the picker. Colour belongs to the Filament panel, where a slot
+    is the subject rather than a decoration on something else.
   </div>
   <div class="note">
     <b>Absent hardware disables its own control.</b> The purifier is drawn as this
