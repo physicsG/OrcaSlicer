@@ -512,9 +512,16 @@ check("picking a toolhead sends T<n> A0, as the printer's own UI does",
 check("parking uses PARK_EXTRUDER, numbered like Klipper's extruders",
       "PARK_EXTRUDER" in app_src and "idx === 0 ? '' : idx" in app_src,
       "PARK_EXTRUDER for 0, PARK_EXTRUDER1..3 above it")
-check("park follows the machine, pick follows the selection",
-      "state.toolhead().activeIndex" in app_src and "handlers.pickTool(activeTool)" in ui_src,
-      "only the live head can be parked; the selection is what the user asked to pick")
+check("one button, and its meaning follows the selected toolhead's state",
+      "isLive ? 'Park extruder' : 'Pick extruder'" in ui_src
+      and "handlers.parkTool(activeTool)" in ui_src
+      and "handlers.pickTool(activeTool)" in ui_src
+      and "pickBtn" not in ui_src and "parkBtn" not in ui_src,
+      "the shipped page carries one button per toolhead, reading Park when that head "
+      "is ACTIVATE and Pick when it is not")
+check("park still checks the machine before acting",
+      "state.toolhead().activeIndex" in app_src,
+      "only a live head can be parked, whatever the caller passes")
 check("picking no longer opens a dialog to re-ask the same question",
       "pickExtruder(" not in ui_src,
       "the selection above is already a deliberate click")

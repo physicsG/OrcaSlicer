@@ -552,25 +552,22 @@ export function renderControlMain(root, toolheads, handlers, th) {
   }
   pick.appendChild(boxes);
 
+  // One button, and what it does depends on the toolhead selected above it - exactly
+  // what the shipped page does, where each toolhead carries a button reading "Park
+  // Extruder" when that head is ACTIVATE and "Pick Extruder" when it is not.
+  //
+  // Two buttons forced an asymmetry that had to be explained: Pick followed the
+  // selection while Park followed the machine, so neither could name its target without
+  // a tooltip. With one button the target is always the head you have selected.
   const acts = el('div', 'pick-acts');
-  // Acts on the toolhead selected above - no intermediate dialog, which is what the
-  // printer's own UI does. The selection is already a deliberate click, and asking
-  // twice for the same choice is not a safety measure, just a step.
-  const pickBtn = el('button', 'btn primary', 'Pick extruder');
-  pickBtn.disabled = activeTool === machineTool;
-  pickBtn.title = activeTool === machineTool
-    ? `Toolhead ${activeTool + 1} is already live`
+  const isLive = activeTool === machineTool;
+  const act = el('button', 'btn primary', isLive ? 'Park extruder' : 'Pick extruder');
+  act.title = isLive
+    ? `Park toolhead ${activeTool + 1}, leaving none engaged`
     : `Make toolhead ${activeTool + 1} live - blocks while the gantry moves`;
-  pickBtn.onclick = () => handlers.pickTool(activeTool);
-  // Only the live head can be parked, so this follows the machine, not the selection.
-  const parkBtn = el('button', 'btn', 'Park extruder');
-  parkBtn.disabled = machineTool == null;
-  parkBtn.title = machineTool == null
-    ? 'No toolhead is engaged'
-    : `Park toolhead ${machineTool + 1}, leaving none engaged`;
-  parkBtn.onclick = () => handlers.parkTool();
-  acts.appendChild(pickBtn);
-  acts.appendChild(parkBtn);
+  act.onclick = () => (isLive ? handlers.parkTool(activeTool)
+                              : handlers.pickTool(activeTool));
+  acts.appendChild(act);
   pick.appendChild(acts);
 
   const ej = el('div', 'ejog');

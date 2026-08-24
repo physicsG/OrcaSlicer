@@ -372,17 +372,23 @@ including the two stale-`toolhead` cases, negative-controlled by restoring the o
 
 ### The flow now
 
-| | Acts on | Sends | Disabled when |
-|---|---|---|---|
-| **Pick extruder** | the toolhead selected in the row above | `T<n> A0` | the selection is already live |
-| **Park extruder** | whatever the machine reports `ACTIVATE` | `PARK_EXTRUDER<n>` | nothing is engaged |
+One button, and what it does follows the toolhead selected above it — the same shape the
+shipped page uses, where each toolhead carries a button reading *Park Extruder* when that
+head is `ACTIVATE` and *Pick Extruder* when it is not.
 
-Selecting a toolhead sends nothing — it only points the jog and extrude controls. Both
-buttons block the surface while the gantry moves and confirm against the machine rather
-than the G-code ack, which only says the command was queued.
+| Selected toolhead | Button reads | Sends |
+|---|---|---|
+| not live | **Pick extruder** | `T<n> A0` |
+| live | **Park extruder** | `PARK_EXTRUDER<n>` |
 
-**One deliberate divergence.** The shipped UI has a single contextual button per
-toolhead that reads *Park* when that head is live and *Pick* when it is not. Two separate
-buttons were asked for here, and they are not the same shape: Pick follows the selection,
-Park follows the machine. That difference is why each names its target in its tooltip —
-with one button the target is never in doubt, with two it has to be stated.
+Selecting a toolhead sends nothing — it only points the jog and extrude controls, and
+now also decides what the button means. The button blocks the surface while the gantry
+moves and confirms against the machine rather than the G-code ack, which only says the
+command was queued. `parkTool` still checks the live head before acting, whatever it is
+passed: only a live head can be parked.
+
+Two buttons were tried first and were the wrong shape. Pick followed the *selection*
+while Park followed the *machine*, so with a head selected that was not the live one the
+pair disagreed about their subject and neither could name it without a tooltip. Collapsing
+to one button removes the asymmetry rather than explaining it — the target is always the
+head you have selected.

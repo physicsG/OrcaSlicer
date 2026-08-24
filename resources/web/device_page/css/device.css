@@ -870,8 +870,9 @@ body {
   content: ""; position: absolute; top: 4px; right: 4px;
   width: 6px; height: 6px; border-radius: 50%; background: var(--ok);
 }
-.pick-acts { display: flex; gap: 6px; }
-.pick-acts .btn { flex: 1; padding: 7px 4px; font-size: 11px; line-height: 1.25; }
+/* one button now, so it takes the row */
+.pick-acts { display: flex; }
+.pick-acts .btn { flex: 1; padding: 8px 4px; font-size: 12px; line-height: 1.25; }
 .ejog {
   margin-top: 6px; display: flex; flex-direction: column;
   align-items: center; gap: 6px;

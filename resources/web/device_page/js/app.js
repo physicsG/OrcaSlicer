@@ -276,10 +276,14 @@ const handlers = {
    * Only the live head can be parked, so this ignores the panel's selection and acts on
    * whatever the machine reports as ACTIVATE.
    */
-  parkTool: async () => {
-    const idx = state.toolhead().activeIndex;
-    if (idx == null) {
-      setStatus('No toolhead is engaged', 'warn');
+  parkTool: async (i) => {
+    // The caller passes the head it means, but only a live head can be parked - so the
+    // machine still has the last word on whether there is anything to do.
+    const live = state.toolhead().activeIndex;
+    const idx = i == null ? live : Number(i);
+    if (live == null || idx !== live) {
+      setStatus(live == null ? 'No toolhead is engaged'
+                             : `Toolhead ${live + 1} is the one engaged`, 'warn');
       return;
     }
     const dlg = openBlockingDialog({
