@@ -2,36 +2,38 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Device panel — direct-selection popovers</title>
 <style>
-  /* Tokens follow resources/web/shared/css/base.css so the mockup reads as the real
-     page, plus a doc layer for the commentary around it. */
+  /* No JavaScript anywhere on this page. The interaction is radio inputs plus sibling
+     selectors, so it survives any viewer that strips inline script - which is what
+     happened to the first draft of this mockup, leaving an empty box.
+
+     Tokens follow resources/web/shared/css/base.css so it reads as the real page. */
   :root{
     --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     --bg:#f4f6f8; --panel:#fff; --panel-2:#eef2f6;
     --ink:#16202b; --ink-2:#47566a; --muted:#7c8b9d;
     --line:#d8e0e8; --accent:#0f6e7b; --accent-in:#fff;
-    --ok:#1f7a4d; --warn:#9a5b12; --err:#a32b2b;
-    --radius:8px;
-    --doc-bg:#eceff2; --card:#fff; --shadow:0 1px 2px rgba(16,24,32,.06),0 14px 34px -22px rgba(16,24,32,.45);
-    --pop-shadow:0 2px 4px rgba(16,24,32,.06),0 12px 28px -12px rgba(16,24,32,.35);
+    --ok:#1f7a4d; --warn:#9a5b12;
+    --doc-bg:#eceff2; --card:#fff;
+    --shadow:0 1px 2px rgba(16,24,32,.06),0 14px 34px -22px rgba(16,24,32,.45);
+    --pop-shadow:0 2px 4px rgba(16,24,32,.07),0 14px 30px -12px rgba(16,24,32,.4);
   }
   @media (prefers-color-scheme:dark){
     :root:not([data-theme="light"]){
       --bg:#0e1319; --panel:#161d26; --panel-2:#1d2732;
       --ink:#e6ecf3; --ink-2:#b3c0cf; --muted:#7f8d9d;
       --line:#26313d; --accent:#4fbecd; --accent-in:#08181c;
-      --ok:#4cc38a; --warn:#d79a4f; --err:#e07070;
+      --ok:#4cc38a; --warn:#d79a4f;
       --doc-bg:#0a0e12; --card:#141a21;
       --shadow:0 1px 0 rgba(255,255,255,.03),0 14px 34px -18px rgba(0,0,0,.8);
-      --pop-shadow:0 2px 4px rgba(0,0,0,.3),0 14px 30px -10px rgba(0,0,0,.7);
+      --pop-shadow:0 2px 4px rgba(0,0,0,.35),0 16px 32px -10px rgba(0,0,0,.75);
     }
   }
   :root[data-theme="dark"]{
     --bg:#0e1319; --panel:#161d26; --panel-2:#1d2732;
     --ink:#e6ecf3; --ink-2:#b3c0cf; --muted:#7f8d9d;
     --line:#26313d; --accent:#4fbecd; --accent-in:#08181c;
-    --ok:#4cc38a; --warn:#d79a4f; --err:#e07070;
-    --doc-bg:#0a0e12; --card:#141a21;
+    --ok:#4cc38a; --warn:#d79a4f; --doc-bg:#0a0e12; --card:#141a21;
   }
 
   *{box-sizing:border-box}
@@ -39,10 +41,10 @@
        line-height:1.55;-webkit-font-smoothing:antialiased}
   .wrap{max-width:1000px;margin:0 auto;padding:38px 22px 90px}
   h1{font-size:26px;margin:0 0 6px;letter-spacing:-.01em}
-  .sub{color:var(--muted);margin:0 0 30px;font-size:14px}
-  h2{font-size:17px;margin:38px 0 4px;letter-spacing:-.005em}
+  .sub{color:var(--muted);margin:0 0 26px;font-size:14px}
+  h2{font-size:17px;margin:40px 0 4px}
   h2 .n{color:var(--muted);font-family:var(--mono);font-size:13px;margin-right:8px}
-  .lede{color:var(--ink-2);font-size:14px;margin:0 0 16px;max-width:70ch}
+  .lede{color:var(--ink-2);font-size:14px;margin:0 0 16px;max-width:72ch}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
         padding:22px;box-shadow:var(--shadow);margin:14px 0}
   code{font-family:var(--mono);font-size:.9em;background:var(--panel-2);
@@ -52,96 +54,104 @@
   th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
   .tag{font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);
        color:var(--muted);white-space:nowrap}
-  .tag.yes{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
-  .tag.no{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+  .tag.yes{color:var(--ok);border-color:var(--ok)}
+  .tag.no{color:var(--warn);border-color:var(--warn)}
+  .hint{background:var(--panel-2);border-radius:8px;padding:10px 14px;font-size:13px;
+        color:var(--ink-2);margin:0 0 16px}
 
-  /* ---------- the device panel, drawn as the page draws it ---------- */
+  /* ---------------- the panel, drawn as the page draws it ---------------- */
   .stage{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:22px}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:visible}
-  .panel-head{height:40px;display:flex;align-items:center;gap:10px;padding:0 14px;
-              background:var(--panel-2);border-bottom:1px solid var(--line);font-size:13px}
-  .panel-body{padding:16px;display:flex;gap:18px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px}
+  .panel-head{height:40px;display:flex;align-items:center;padding:0 14px;font-size:13px;
+              font-weight:600;background:var(--panel-2);border-bottom:1px solid var(--line);
+              border-radius:10px 10px 0 0}
+  .panel-body{padding:16px;display:flex;gap:18px;align-items:flex-start}
+  .status-card{width:176px;flex:0 0 176px;border:1px solid var(--line);
+               border-radius:10px;padding:5px 0}
+  .right{flex:1;border:1px dashed var(--line);border-radius:10px;display:grid;
+         place-items:center;color:var(--muted);font-size:12px;min-height:330px}
 
-  .status-card{width:172px;flex:0 0 172px;border:1px solid var(--line);
-               border-radius:10px;padding:6px 0;position:relative}
-  .status-row{height:52px;display:flex;align-items:center;gap:10px;padding:0 12px;
-              font-size:13px;color:var(--ink);position:relative;cursor:pointer;
-              border:2px solid transparent;border-radius:8px;margin:0 4px;
-              background:none;width:calc(100% - 8px);text-align:left;font-family:inherit}
-  .status-row .ic{width:20px;height:20px;flex:0 0 20px;opacity:.8;display:grid;place-items:center}
-  .status-row .val{font-variant-numeric:tabular-nums;white-space:nowrap}
-  .status-row .go{margin-left:auto;color:var(--muted);font-size:15px}
-  .status-row:hover{background:var(--panel-2)}
-  /* THE highlight: the trigger stays put and shows it owns the panel below */
-  .status-row[aria-expanded="true"]{
+  .rowwrap{position:relative}
+  .rowwrap > input{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
+
+  .row{display:flex;align-items:center;gap:10px;height:50px;padding:0 11px;margin:0 4px;
+       font-size:13px;color:var(--ink);cursor:pointer;border:2px solid transparent;
+       border-radius:8px}
+  .row:hover{background:var(--panel-2)}
+  .row .ic{width:20px;height:20px;flex:0 0 20px;opacity:.75;display:block}
+  .row .lab{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .val{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap;
+            color:var(--ink-2)}
+  .row .go{color:var(--muted);font-size:15px;line-height:1}
+
+  /* THE highlight - this is the part that makes the floating panel legible */
+  .rowwrap > input:checked ~ .row{
     border-color:var(--accent);
-    background:color-mix(in srgb,var(--accent) 8%,transparent);
+    background:color-mix(in srgb, var(--accent) 9%, transparent);
   }
-  .status-row[aria-expanded="true"] .ic{opacity:1}
-  .status-row[aria-expanded="true"] .val{color:var(--accent);font-weight:600}
+  .rowwrap > input:checked ~ .row .ic{opacity:1;color:var(--accent)}
+  .rowwrap > input:checked ~ .row .val{color:var(--accent);font-weight:600}
 
-  /* the popover: anchored under its own row, free to be wider than the column */
-  .pop{position:absolute;z-index:20;min-width:290px;
-       background:var(--panel);border:1px solid var(--line);border-radius:10px;
-       box-shadow:var(--pop-shadow);padding:14px 16px 16px}
-  .pop::before{content:"";position:absolute;top:-6px;left:22px;width:10px;height:10px;
+  /* the popover, anchored under its own row and free to be wider than the column */
+  .pop{display:none;position:absolute;z-index:30;top:calc(100% - 2px);left:4px;
+       width:308px;background:var(--panel);border:1px solid var(--line);
+       border-radius:10px;box-shadow:var(--pop-shadow);padding:13px 15px 15px}
+  .rowwrap > input:checked ~ .pop{display:block}
+  .pop::before{content:"";position:absolute;top:-6px;left:20px;width:10px;height:10px;
                background:var(--panel);border-left:1px solid var(--line);
                border-top:1px solid var(--line);transform:rotate(45deg)}
+  .pop-head{display:flex;align-items:baseline;gap:8px;margin-bottom:9px}
+  .pop-title{font-size:13px;font-weight:600}
+  .pop-x{margin-left:auto;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;
+         padding:0 2px}
+  .pop-x:hover{color:var(--ink)}
   .pop-note{font-size:12px;color:var(--muted);margin:0 0 12px;line-height:1.5}
-  .pop-title{font-size:13px;font-weight:600;margin:0 0 10px}
 
-  /* named discrete stops - the Bambu pattern: meaning, not magnitude */
-  .stops{position:relative;padding:6px 0 2px}
-  .stops-track{height:4px;background:var(--panel-2);border-radius:999px;position:relative;
-               margin:0 10px 10px}
-  .stops-fill{position:absolute;left:0;top:0;bottom:0;background:var(--accent);
-              border-radius:999px;transition:width .16s ease}
-  .stops-row{display:flex;justify-content:space-between;gap:4px}
-  .stop{flex:1;background:none;border:0;padding:4px 2px;cursor:pointer;
-        font-family:inherit;font-size:12px;color:var(--muted);text-align:center;
+  /* named discrete stops */
+  .stops{margin:2px 0 0}
+  .track{height:4px;background:var(--panel-2);border-radius:999px;margin:0 12px 9px;
+         position:relative}
+  .track > i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);
+             border-radius:999px}
+  .stoprow{display:flex}
+  .stop{flex:1;text-align:center;font-size:12px;color:var(--muted);padding:2px 1px;
         border-radius:6px}
-  .stop:hover{background:var(--panel-2);color:var(--ink-2)}
-  .stop .pct{display:block;font-size:11px;color:var(--muted);
-             font-variant-numeric:tabular-nums;margin-top:1px}
-  .stop[aria-checked="true"]{color:var(--accent);font-weight:600}
-  .stop[aria-checked="true"] .pct{color:var(--accent)}
-  .stop .dot{width:11px;height:11px;border-radius:50%;background:var(--panel-2);
-             border:2px solid var(--line);margin:0 auto 5px;display:block}
-  .stop[aria-checked="true"] .dot{background:var(--accent);border-color:var(--accent)}
+  .stop .dot{display:block;width:11px;height:11px;border-radius:50%;
+             background:var(--panel-2);border:2px solid var(--line);margin:0 auto 5px}
+  .stop .pct{display:block;font-size:11px;margin-top:1px;font-variant-numeric:tabular-nums}
+  .stop.on{color:var(--accent);font-weight:600}
+  .stop.on .dot{background:var(--accent);border-color:var(--accent)}
+  .stop.on .pct{color:var(--accent)}
 
-  .seg{display:flex;gap:6px;margin-top:2px}
-  .seg button{flex:1;padding:7px 0;font-size:12px;font-family:inherit;cursor:pointer;
-              background:var(--panel);color:var(--ink-2);
-              border:1px solid var(--line);border-radius:7px}
-  .seg button[aria-checked="true"]{border-color:var(--accent);color:var(--accent);
-              background:color-mix(in srgb,var(--accent) 8%,transparent);font-weight:600}
+  .seg{display:flex;gap:6px}
+  .seg span{flex:1;text-align:center;padding:7px 0;font-size:12px;color:var(--ink-2);
+            border:1px solid var(--line);border-radius:7px}
+  .seg span.on{border-color:var(--accent);color:var(--accent);font-weight:600;
+               background:color-mix(in srgb,var(--accent) 9%,transparent)}
 
-  .numrow{display:flex;align-items:center;gap:8px;margin-top:10px}
-  .numrow input{flex:1;min-width:0;padding:7px 9px;font-family:inherit;font-size:13px;
-                border:1px solid var(--line);border-radius:7px;background:var(--panel);
-                color:var(--ink)}
-  .numrow .unit{color:var(--muted);font-size:12px}
-  .numrow button{padding:7px 12px;font-size:12px;font-family:inherit;cursor:pointer;
-                 border:1px solid var(--accent);background:var(--accent);
-                 color:var(--accent-in);border-radius:7px}
-  .swrow{display:flex;align-items:center;justify-content:space-between;margin-top:8px;
-         font-size:12px;color:var(--ink-2)}
-  .sw{width:36px;height:20px;border-radius:999px;background:var(--line);border:0;
-      position:relative;cursor:pointer;flex:0 0 36px}
+  .numrow{display:flex;align-items:center;gap:7px;margin-top:11px;
+          padding-top:11px;border-top:1px solid var(--line)}
+  .numrow .fake{flex:1;padding:7px 9px;border:1px solid var(--line);border-radius:7px;
+                font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .numrow .set{padding:7px 13px;border-radius:7px;background:var(--accent);
+               color:var(--accent-in);font-size:12px;font-weight:600}
+
+  .sw{margin-left:auto;width:36px;height:20px;border-radius:999px;background:var(--line);
+      position:relative;flex:0 0 36px}
   .sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;
-             border-radius:50%;background:#fff;transition:left .14s ease}
-  .sw[aria-checked="true"]{background:var(--accent)}
-  .sw[aria-checked="true"]::after{left:18px}
+             border-radius:50%;background:#fff}
+  .sw.on{background:var(--accent)}
+  .sw.on::after{left:18px}
 
-  .right{flex:1;border:1px dashed var(--line);border-radius:10px;display:grid;
-         place-items:center;color:var(--muted);font-size:12px;min-height:270px}
+  .chip{display:inline-block;width:10px;height:10px;border-radius:50%;
+        border:1px solid rgba(0,0,0,.15);vertical-align:-1px;margin-right:5px}
 
   .note{border-left:3px solid var(--accent);padding:2px 0 2px 14px;margin:14px 0;
         color:var(--ink-2);font-size:13.5px}
-  .bad{border-left-color:var(--warn)}
+  .note.alt{border-left-color:var(--warn)}
   ol.pointers{padding-left:0;list-style:none;counter-reset:p;margin:0}
   ol.pointers li{counter-increment:p;position:relative;padding-left:38px;margin:0 0 18px}
-  ol.pointers li::before{content:counter(p);position:absolute;left:0;top:0;
+  ol.pointers li::before{content:counter(p);position:absolute;left:0;top:1px;
     width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-in);
     display:grid;place-items:center;font-size:12px;font-weight:600;font-family:var(--mono)}
   ol.pointers b{display:block;font-size:14px;margin-bottom:2px}
@@ -155,16 +165,20 @@
      modal sheets with panels that open beneath the thing you clicked.</p>
 
   <h2><span class="n">01</span>The pattern, live</h2>
-  <p class="lede">Click any row. The row keeps its place and takes a highlight; its options
-     open directly underneath. One panel at a time, Escape or a click outside closes it.</p>
+  <p class="hint"><b>Click any row.</b> Print speed is open to start with, since it is the
+     closest analogue to the Bambu control. Values are the real readings captured from
+     U1&nbsp;<code>811002511261022618B3</code> — an idle machine with two spools loaded,
+     one empty bay, and a hand-set PETG.</p>
 
   <div class="card">
     <div class="stage">
       <div class="panel">
-        <div class="panel-head"><b>Control</b></div>
+        <div class="panel-head">Control</div>
         <div class="panel-body">
-          <div class="status-card" id="col"></div>
-          <div class="right">jog pad, extrude, home — unchanged</div>
+          <div class="status-card">
+<div class="rowwrap"><input type="radio" name="row" id="x-t1"><label class="row" for="x-t1"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><span class="lab">Toolhead 1</span><span class="val">27 / 0 °C</span><span class="go">›</span></label><div class="pop"><div class="pop-head"><span class="pop-title">Toolhead 1</span><label class="pop-x" for="x-none" title="close">×</label></div><p class="pop-note"><span class="chip" style="background:#F44336"></span>Jayo PLA — the spool’s tag reports 190–260 °C.</p><div class="stops"><div class="track"><i style="width:0%"></i></div><div class="stoprow"><div class="stop on"><span class="dot"></span>Off<span class="pct">0°</span></div><div class="stop"><span class="dot"></span>PLA<span class="pct">220°</span></div><div class="stop"><span class="dot"></span>PETG<span class="pct">245°</span></div><div class="stop"><span class="dot"></span>Max<span class="pct">260°</span></div></div></div><div class="numrow"><span class="fake">0</span><span class="set">Set</span></div></div></div><div class="rowwrap"><input type="radio" name="row" id="x-t4"><label class="row" for="x-t4"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><span class="lab">Toolhead 4</span><span class="val">26 / 0 °C</span><span class="go">›</span></label><div class="pop"><div class="pop-head"><span class="pop-title">Toolhead 4</span><label class="pop-x" for="x-none" title="close">×</label></div><p class="pop-note"><span class="chip" style="background:#632C2C"></span>Generic PETG, hand-set — no RFID tag on this spool, so the range comes from the profile. <b>Live on the machine.</b></p><div class="stops"><div class="track"><i style="width:0%"></i></div><div class="stoprow"><div class="stop on"><span class="dot"></span>Off<span class="pct">0°</span></div><div class="stop"><span class="dot"></span>PLA<span class="pct">220°</span></div><div class="stop"><span class="dot"></span>PETG<span class="pct">245°</span></div><div class="stop"><span class="dot"></span>Max<span class="pct">260°</span></div></div></div><div class="numrow"><span class="fake">0</span><span class="set">Set</span></div></div></div><div class="rowwrap"><input type="radio" name="row" id="x-bed"><label class="row" for="x-bed"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15h18M5 15V9a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6M6 19v-2M18 19v-2"/></svg><span class="lab">Heated bed</span><span class="val">25 / 0 °C</span><span class="go">›</span></label><div class="pop"><div class="pop-head"><span class="pop-title">Heated bed</span><label class="pop-x" for="x-none" title="close">×</label></div><p class="pop-note">0–100 °C. The printer refuses anything outside that range, so the stops are the useful part of it.</p><div class="stops"><div class="track"><i style="width:0%"></i></div><div class="stoprow"><div class="stop on"><span class="dot"></span>Off<span class="pct">0°</span></div><div class="stop"><span class="dot"></span>PLA<span class="pct">45°</span></div><div class="stop"><span class="dot"></span>PETG<span class="pct">70°</span></div><div class="stop"><span class="dot"></span>Max<span class="pct">100°</span></div></div></div><div class="numrow"><span class="fake">0</span><span class="set">Set</span></div></div></div><div class="rowwrap"><label class="row" title="A binary needs no panel"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3 11v2h6v-2a6 6 0 0 0-3-11z"/></svg><span class="lab">Chamber light</span><span class="sw"></span></label></div><div class="rowwrap"><input type="radio" name="row" id="x-fan"><label class="row" for="x-fan"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.2"/><path d="M12 9.8C12 6 14 3 17 4c2 .7 1.6 4-1 5.2M14.2 12c3.8 0 6.8 2 5.8 5-.7 2-4 1.6-5.2-1M12 14.2c0 3.8-2 6.8-5 5.8-2-.7-1.6-4 1-5.2M9.8 12C6 12 3 10 4 7c.7-2 4-1.6 5.2 1"/></svg><span class="lab">Cooling</span><span class="val">0%</span><span class="go">›</span></label><div class="pop"><div class="pop-head"><span class="pop-title">Cooling</span><label class="pop-x" for="x-none" title="close">×</label></div><p class="pop-note">Main cooling fan. The assist fan keeps its own row — two sliders in one panel is where this pattern starts to strain.</p><div class="stops"><div class="track"><i style="width:0%"></i></div><div class="stoprow"><div class="stop on"><span class="dot"></span>Off<span class="pct">0%</span></div><div class="stop"><span class="dot"></span>Low<span class="pct">35%</span></div><div class="stop"><span class="dot"></span>Medium<span class="pct">70%</span></div><div class="stop"><span class="dot"></span>Full<span class="pct">100%</span></div></div></div><div class="numrow"><span class="fake">0</span><span class="set">Set</span></div></div></div><div class="rowwrap"><input type="radio" name="row" id="x-pur"><label class="row" for="x-pur"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span class="lab">Air purifier</span><span class="val">Off</span><span class="go">›</span></label><div class="pop"><div class="pop-head"><span class="pop-title">Air purifier</span><label class="pop-x" for="x-none" title="close">×</label></div><p class="pop-note">Not detected on this machine (<code>power_detected: false</code>). Mode is an integer on the wire, not a name.</p><div class="seg"><span class="on">Off</span><span>Recirculate</span><span>Exhaust</span></div></div></div><div class="rowwrap"><input type="radio" name="row" id="x-spd" checked><label class="row" for="x-spd"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.3"/></svg><span class="lab">Print speed</span><span class="val">100%</span><span class="go">›</span></label><div class="pop"><div class="pop-head"><span class="pop-title">Print speed</span><label class="pop-x" for="x-none" title="close">×</label></div><p class="pop-note">This only takes effect during printing.</p><div class="stops"><div class="track"><i style="width:50%"></i></div><div class="stoprow"><div class="stop"><span class="dot"></span>Silent<span class="pct">50%</span></div><div class="stop on"><span class="dot"></span>Standard<span class="pct">100%</span></div><div class="stop"><span class="dot"></span>Sport<span class="pct">150%</span></div></div></div></div></div><div class="rowwrap"><input type="radio" name="row" id="x-none"></div>
+          </div>
+          <div class="right">jog pad, extrude, home, pick&nbsp;extruder — unchanged</div>
         </div>
       </div>
     </div>
@@ -174,257 +188,89 @@
   <div class="note">
     A centred modal answers “what do you want to set?” by hiding the thing you were
     looking at. Every value in this column is a <em>glanceable reading</em> first and a
-    setting second — the bed is 25 °C, the fan is 85%. Covering the panel to change one
-    of them throws away the context that made you want to change it.
+    setting second — the bed is 25 °C, the active toolhead is 26 °C. Covering the panel
+    to change one of them throws away the context that made you want to change it.
   </div>
-  <div class="note bad">
-    It is not free. An anchored popover has to solve placement (it will overflow a
-    172 px column), focus, and dismissal. Those are handled once in
-    <code>overlay.js</code> and then every row gets them — which is the argument for
-    doing it properly rather than per-row.
+  <div class="note alt">
+    It is not free. An anchored popover has to solve placement (it overflows a 176 px
+    column by design), focus, and dismissal. Those get solved once in
+    <code>overlay.js</code> and every row inherits them — which is the argument for
+    building it as one primitive rather than per row.
   </div>
 
   <h2><span class="n">03</span>Design pointers</h2>
   <ol class="pointers">
-    <li>
-      <b>The trigger stays visible and owns the panel</b>
-      <p>The clicked row keeps its position and takes a 2 px accent border plus a tinted
+    <li><b>The trigger stays visible and owns the panel</b>
+      <p>The clicked row keeps its position and takes a 2 px accent border with a tinted
          fill. Nothing else moves.</p>
-      <span class="why">Why: the highlight is what makes the floating panel legible as
+      <span class="why">Why: the highlight is what makes a floating panel read as
         “belonging to this row” rather than to the page. Without it a popover is just a
-        box that appeared.</span>
-    </li>
-    <li>
-      <b>Name the stops, don’t just number them</b>
+        box that appeared.</span></li>
+    <li><b>Name the stops, don’t just number them</b>
       <p>Silent / Standard / Sport reads faster than 50 / 100 / 150, so the number becomes
-         the subtitle rather than the label.</p>
-      <span class="why">Why: it is what the Bambu control gets right. People choose an
-        intent, not a percentage — and the U1 accepts exactly three speeds, so a
-        continuous slider was always over-promising.</span>
-    </li>
-    <li>
-      <b>Keep the current value on the row face</b>
-      <p>Every row shows its reading without being opened, and the reading turns accent
-         when its panel is open.</p>
-      <span class="why">Why: the panel is for changing, not for finding out. If you have
-        to open it to read the value, the column has failed at its main job.</span>
-    </li>
-    <li>
-      <b>Anchor to the row, size to the content</b>
-      <p>The popover is left-aligned to its row and free to be wider than the 172 px
-         column, with a small caret pointing back at its origin.</p>
-      <span class="why">Why: constraining it to the column width would force two-line
-        labels and a scrollbar on a four-stop control.</span>
-    </li>
-    <li>
-      <b>Not everything earns a panel</b>
-      <p>A binary stays an inline switch. A mechanical, slow, interrupting action keeps
-         its blocking modal.</p>
+         the subtitle.</p>
+      <span class="why">Why: it is what your reference gets right — people choose an
+        intent, not a percentage. And the U1 accepts exactly three speeds, so the
+        continuous slider was over-promising all along.</span></li>
+    <li><b>Keep the reading on the row face</b>
+      <p>Every row shows its value closed, and that value turns accent when its panel
+         opens.</p>
+      <span class="why">Why: the panel is for changing, not for finding out. If you must
+        open it to read the value, the column has failed at its main job.</span></li>
+    <li><b>Anchor to the row, size to the content</b>
+      <p>Left-aligned to its row, wider than the column, with a caret pointing back at
+         its origin.</p>
+      <span class="why">Why: constraining it to 176 px would force two-line labels and a
+        scrollbar onto a four-stop control.</span></li>
+    <li><b>Not everything earns a panel</b>
+      <p>The chamber light stays an inline switch. Pick&nbsp;extruder keeps its blocking
+         modal.</p>
       <span class="why">Why: a popover for an on/off toggle adds a click and a dismissal
         to a decision that had neither. And a toolchange <em>should</em> take the screen —
-        the gantry is moving and a stray second command is a real hazard.</span>
-    </li>
-    <li>
-      <b>Say what a setting will and won’t do</b>
-      <p>One muted line at the top of the panel, as Bambu’s “This only takes effect
-         during printing”.</p>
-      <span class="why">Why: cheapest possible way to stop a support question. The speed
-         factor on an idle printer genuinely does nothing.</span>
-    </li>
-    <li>
-      <b>Apply on click, not on OK</b>
-      <p>Picking a stop sends it. There is no confirm button on a reversible setting.</p>
-      <span class="why">Why: a Cancel/OK pair implies risk. Fan speed has none — and the
-         row’s own value is the confirmation.</span>
-    </li>
+        the gantry is moving, and a stray second command is a real hazard.</span></li>
+    <li><b>Say what a setting will and won’t do</b>
+      <p>One muted line at the top, as with “This only takes effect during printing”.</p>
+      <span class="why">Why: the cheapest possible way to prevent a support question. The
+        speed factor on an idle printer genuinely does nothing.</span></li>
+    <li><b>Apply on click, not on OK</b>
+      <p>Picking a stop sends it. Only the free-text field keeps a Set button.</p>
+      <span class="why">Why: a Cancel/OK pair implies risk. Fan speed has none, and the
+        row’s own value is the confirmation. A typed number is different — it is not
+        chosen from a safe set.</span></li>
   </ol>
 
   <h2><span class="n">04</span>Where to apply it</h2>
-  <p class="lede">Not a blanket conversion — the third column is the judgement.</p>
+  <p class="lede">Deliberately not a blanket conversion — the last column is the judgement.</p>
   <table>
     <tr><th>Row</th><th>Today</th><th>Proposed</th><th>Panel?</th></tr>
     <tr><td>Toolhead 1–4</td><td>modal, number field</td>
-        <td>popover: material presets from the spool’s RFID tag (<code>HOTEND_MIN/MAX_TEMP</code>),
-            plus a custom field</td><td><span class="tag yes">yes</span></td></tr>
+        <td>stops from the spool’s RFID tag (<code>HOTEND_MIN/MAX_TEMP</code>) + custom</td>
+        <td><span class="tag yes">yes</span></td></tr>
     <tr><td>Heated bed</td><td>modal, number field</td>
-        <td>popover: Off / PLA 45 / PETG 70 stops + custom</td><td><span class="tag yes">yes</span></td></tr>
+        <td>Off / PLA / PETG / Max + custom</td><td><span class="tag yes">yes</span></td></tr>
     <tr><td>Chamber light</td><td>inline switch</td>
         <td><b>unchanged</b> — binary</td><td><span class="tag no">no</span></td></tr>
     <tr><td>Cooling fans</td><td>modal, two number fields</td>
-        <td>popover: two named stop-rows (Off / Low / Medium / Full)</td><td><span class="tag yes">yes</span></td></tr>
+        <td>named stops; assist fan gets its own row</td><td><span class="tag yes">yes</span></td></tr>
     <tr><td>Air purifier</td><td>modal, select</td>
-        <td>popover: mode segments, integer values on the wire</td><td><span class="tag yes">yes</span></td></tr>
+        <td>mode segments, integer on the wire</td><td><span class="tag yes">yes</span></td></tr>
     <tr><td>Print speed</td><td>sheet, 50 % steps</td>
-        <td>popover: <b>the exact Bambu analogue</b> — named stops + “only during printing”</td>
+        <td><b>the direct analogue</b> — named stops + the caveat line</td>
         <td><span class="tag yes">yes</span></td></tr>
-    <tr><td>Pick extruder</td><td>dialog → blocking modal</td>
+    <tr><td>Pick extruder</td><td>blocking modal</td>
         <td><b>unchanged</b> — mechanical and interrupting</td><td><span class="tag no">no</span></td></tr>
   </table>
 
   <h2><span class="n">05</span>Two layouts, and a recommendation</h2>
-  <p class="lede">The Bambu control is a horizontal strip of tiles. The U1’s column is
-     vertical, 172 px, and its geometry was measured against the shipped page.</p>
   <div class="note">
-    <b>Recommended: keep the vertical column</b>, add the highlight and the anchored
-    popover (what is drawn above). It changes interaction without touching a layout that
-    was matched panel-header-to-panel-header with the original.
+    <b>Recommended: keep the vertical column.</b> Add the highlight and the anchored
+    popover — what is drawn above. It changes the interaction without touching a layout
+    whose geometry was measured panel-header-to-panel-header against the shipped page.
   </div>
-  <div class="note bad">
-    <b>Rejected: a horizontal tile strip.</b> Closer to the screenshot, but it would
-    re-flow the Control panel and break the 2×2 grid breakpoint the reconstruction was
-    measured into. The interaction is the part worth copying; the axis is not.
+  <div class="note alt">
+    <b>Considered and rejected: a horizontal tile strip.</b> Closer to the screenshot,
+    but it would re-flow the Control panel and break the 2×2 grid breakpoint the
+    reconstruction was measured into. The interaction is the part worth copying; the
+    axis is not. Say the word and I will draw that variant too.
   </div>
 </div>
-
-<script>
-/* The mockup is interactive because the argument is about interaction: a static picture
-   of a popover cannot show that the highlight is what ties it to its row. */
-const ROWS = [
-  { id:'tool1', icon:'nozzle', label:'Toolhead 1', value:() => `${S.tool1} °C`,
-    kind:'stops', note:'From the spool tag: 190–260 °C for this filament.',
-    stops:[{n:'Off',v:0},{n:'PLA',v:220},{n:'PETG',v:245},{n:'Max',v:260}], key:'tool1', unit:'°C' },
-  { id:'bed', icon:'bed', label:'Heated bed', value:() => `${S.bed} °C`,
-    kind:'stops', note:'0–100 °C. The printer refuses anything outside that.',
-    stops:[{n:'Off',v:0},{n:'PLA',v:45},{n:'PETG',v:70},{n:'Max',v:100}], key:'bed', unit:'°C' },
-  { id:'led', icon:'lamp', label:'Chamber light', kind:'switch', key:'led' },
-  { id:'fan', icon:'fan', label:'Cooling', value:() => `${S.fan}%`,
-    kind:'stops', note:'Main cooling fan. Assist fan has its own row in the real panel.',
-    stops:[{n:'Off',v:0},{n:'Low',v:35},{n:'Medium',v:70},{n:'Full',v:100}], key:'fan', unit:'%' },
-  { id:'pur', icon:'pur', label:'Air purifier', value:() => ['Off','Recirculate','Exhaust'][S.pur],
-    kind:'seg', note:'Mode is an integer on the wire, not a name.',
-    stops:[{n:'Off',v:0},{n:'Recirculate',v:1},{n:'Exhaust',v:2}], key:'pur' },
-  { id:'speed', icon:'gauge', label:'Print speed', value:() => `${S.speed}%`,
-    kind:'stops', note:'This only takes effect during printing.',
-    stops:[{n:'Silent',v:50},{n:'Standard',v:100},{n:'Sport',v:150}], key:'speed', unit:'%' },
-];
-const S = { tool1:220, bed:45, led:true, fan:85, pur:1, speed:100 };
-
-const ICONS = {
-  nozzle:'<path d="M7 3h10l-1.5 7L12 21 8.5 10z"/>',
-  bed:'<path d="M3 15h18M5 15V9a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6M6 19v-2M18 19v-2"/>',
-  lamp:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3 11v2h6v-2a6 6 0 0 0-3-11z"/>',
-  fan:'<circle cx="12" cy="12" r="2.2"/><path d="M12 9.8C12 6 14 3 17 4c2 .7 1.6 4-1 5.2M14.2 12c3.8 0 6.8 2 5.8 5-.7 2-4 1.6-5.2-1M12 14.2c0 3.8-2 6.8-5 5.8-2-.7-1.6-4 1-5.2M9.8 12C6 12 3 10 4 7c.7-2 4-1.6 5.2 1"/>',
-  pur:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/>',
-  gauge:'<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.3"/>',
-};
-const svg = (n) => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none"
-  stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
-
-let open = null;
-const col = document.getElementById('col');
-
-function close(){ if(open){ open.pop.remove(); open.btn.setAttribute('aria-expanded','false'); open=null; } }
-document.addEventListener('keydown', e => { if(e.key==='Escape') close(); });
-document.addEventListener('click', e => {
-  if(open && !open.pop.contains(e.target) && !open.btn.contains(e.target)) close();
-});
-
-function stopsPanel(row){
-  const wrap = document.createElement('div');
-  const cur = S[row.key];
-  const idx = Math.max(0, row.stops.findIndex(s => s.v === cur));
-  const track = document.createElement('div');
-  track.className = 'stops-track';
-  const fill = document.createElement('div');
-  fill.className = 'stops-fill';
-  fill.style.width = `${(idx/(row.stops.length-1))*100}%`;
-  track.appendChild(fill);
-  wrap.appendChild(track);
-
-  const list = document.createElement('div');
-  list.className = 'stops-row';
-  row.stops.forEach((s,i) => {
-    const b = document.createElement('button');
-    b.className = 'stop';
-    b.setAttribute('role','radio');
-    b.setAttribute('aria-checked', s.v === cur ? 'true' : 'false');
-    b.innerHTML = `<span class="dot"></span>${s.n}<span class="pct">${s.v}${row.unit||''}</span>`;
-    b.onclick = () => { S[row.key] = s.v; render(); reopen(row.id); };   // apply on click
-    list.appendChild(b);
-  });
-  wrap.appendChild(list);
-
-  const nr = document.createElement('div');
-  nr.className = 'numrow';
-  nr.innerHTML = `<input type="number" value="${cur}" aria-label="custom">
-                  <span class="unit">${row.unit||''}</span><button>Set</button>`;
-  nr.querySelector('button').onclick = () => {
-    S[row.key] = Number(nr.querySelector('input').value)||0; render(); reopen(row.id);
-  };
-  wrap.appendChild(nr);
-  return wrap;
-}
-
-function segPanel(row){
-  const wrap = document.createElement('div');
-  const seg = document.createElement('div');
-  seg.className = 'seg';
-  row.stops.forEach(s => {
-    const b = document.createElement('button');
-    b.textContent = s.n;
-    b.setAttribute('aria-checked', S[row.key] === s.v ? 'true':'false');
-    b.onclick = () => { S[row.key] = s.v; render(); reopen(row.id); };
-    seg.appendChild(b);
-  });
-  wrap.appendChild(seg);
-  return wrap;
-}
-
-function openFor(row, btn){
-  close();
-  const pop = document.createElement('div');
-  pop.className = 'pop';
-  if (row.note) pop.innerHTML = `<p class="pop-note">${row.note}</p>`;
-  const t = document.createElement('div');
-  t.className = 'pop-title';
-  t.textContent = row.label;
-  pop.insertBefore(t, pop.firstChild);
-  pop.appendChild(row.kind === 'seg' ? segPanel(row) : stopsPanel(row));
-
-  // anchored to its own row, and allowed to be wider than the column
-  pop.style.top = `${btn.offsetTop + btn.offsetHeight + 8}px`;
-  pop.style.left = `4px`;
-  col.appendChild(pop);
-  btn.setAttribute('aria-expanded','true');
-  open = { pop, btn, id: row.id };
-}
-function reopen(id){
-  const row = ROWS.find(r => r.id === id);
-  const btn = document.querySelector(`[data-row="${id}"]`);
-  if (row && btn) openFor(row, btn);
-}
-
-function render(){
-  const keep = open && open.id;
-  close();
-  col.innerHTML = '';
-  ROWS.forEach(row => {
-    const b = document.createElement('button');
-    b.className = 'status-row';
-    b.dataset.row = row.id;
-    b.setAttribute('aria-expanded','false');
-    b.innerHTML = `<span class="ic">${svg(row.icon)}</span><span>${row.label}</span>`;
-    if (row.kind === 'switch') {
-      const sw = document.createElement('button');
-      sw.className = 'sw';
-      sw.style.marginLeft = 'auto';
-      sw.setAttribute('aria-checked', S.led ? 'true':'false');
-      sw.onclick = (e) => { e.stopPropagation(); S.led = !S.led; render(); };
-      b.appendChild(sw);
-      b.onclick = (e) => { e.stopPropagation(); S.led = !S.led; render(); };
-    } else {
-      const v = document.createElement('span');
-      v.className = 'val';
-      v.style.marginLeft = 'auto';
-      v.textContent = row.value();
-      b.appendChild(v);
-      b.appendChild(Object.assign(document.createElement('span'),
-                                  {className:'go', textContent:'›'}));
-      b.onclick = (e) => { e.stopPropagation(); openFor(row, b); };
-    }
-    col.appendChild(b);
-  });
-  if (keep) reopen(keep);
-}
-render();
-</script>
