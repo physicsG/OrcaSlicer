@@ -1,0 +1,146 @@
+{
+  "_comment": [
+    "Response shapes captured from a real Snapmaker U1, not derived from the bundle.",
+    "These are pass-throughs from the printer, so no static extraction can reach them.",
+    "Regenerate with docs/u1-webui/tools/u1_probe.py and u1_topics.py; see",
+    "docs/u1-webui/05-printer-protocol/06-mqtt-topics.md for the full write-up."
+  ],
+  "_captured": "2026-08-24",
+  "_device": {
+    "model": "Snapmaker U1",
+    "sn": "811002511261022618B3"
+  },
+  "camera": {
+    "method": "camera.start_monitor",
+    "domain_accepted": "lan",
+    "domain_rejected": {
+      "value": "",
+      "code": -32000,
+      "message": "Start monitor failed"
+    },
+    "result_fields": [
+      "state",
+      "url"
+    ],
+    "result_url": "/files/camera/monitor.jpg",
+    "frames_pushed_over_mqtt": false,
+    "frame_http": {
+      "verified_url": "http://<ip>:7125/server/files/timelapse/monitor.jpg",
+      "port": 7125,
+      "root": "timelapse",
+      "file": "monitor.jpg",
+      "bytes": 96001,
+      "content_type": "image/jpeg",
+      "jpeg_soi": true
+    },
+    "frame_refresh_signal": {
+      "topic": "<SN>/notification",
+      "method": "notify_filelist_changed",
+      "item_fields": [
+        "modified",
+        "size",
+        "permissions",
+        "path",
+        "root"
+      ]
+    }
+  },
+  "thumbnails": {
+    "server.files.thumbnails": {
+      "params": [
+        "filename"
+      ],
+      "returns": "array",
+      "item_fields": [
+        "width",
+        "height",
+        "size",
+        "thumbnail_path"
+      ],
+      "carries_image_bytes": false
+    },
+    "server.files.thumbnails_base64": {
+      "params": [
+        "path"
+      ],
+      "returns": "object",
+      "fields": [
+        "width",
+        "height",
+        "size",
+        "data",
+        "state",
+        "path"
+      ],
+      "carries_image_bytes": true,
+      "image_field": "data",
+      "sample_prefix": "iVBORw0KGgo"
+    },
+    "directory_listing_embeds": {
+      "field": "thumbnails",
+      "item_fields": [
+        "width",
+        "height",
+        "size",
+        "relative_path"
+      ],
+      "carries_image_bytes": false
+    }
+  },
+  "timelapse": {
+    "method": "camera.get_timelapse_instance",
+    "result_fields": [
+      "count",
+      "instances"
+    ],
+    "instance_fields": [
+      "date_index",
+      "gcode_name",
+      "gcode_path",
+      "generate_date",
+      "thumbnail_path",
+      "timelapse_dir",
+      "unix_timestamp_s",
+      "video_duration",
+      "video_file_size",
+      "video_local_url_suffix",
+      "video_path"
+    ],
+    "thumbnail_direct_adds": "thumbnail_base64",
+    "thumbnail_base64_is_data_uri": true
+  },
+  "topics": {
+    "plain_leg": {
+      "port": 1884,
+      "tls": false,
+      "visible": [
+        "12345678/config/response"
+      ]
+    },
+    "session_leg": {
+      "port": 8883,
+      "tls": true,
+      "visible": [
+        "<SN>/status",
+        "<SN>/response",
+        "<SN>/notification",
+        "moonraker/response",
+        "camera/response",
+        "mqtt_agent/notification",
+        "LAVA/notification"
+      ]
+    },
+    "reply_routing": {
+      "all_replies": "<SN>/response",
+      "camera_replies_also_on": "camera/response"
+    },
+    "cloud_state_during_healthy_lan_session": {
+      "mqtt_agent/notification": {
+        "state": "disconnected"
+      },
+      "LAVA/notification": {
+        "server": "offline"
+      }
+    }
+  }
+}

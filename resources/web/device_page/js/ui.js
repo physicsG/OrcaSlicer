@@ -8,7 +8,8 @@
  */
 'use strict';
 
-import { LIMITS, PRINT_STATE, TASK_CONFIG, DEVICE, deviceLabel }
+import { LIMITS, PRINT_STATE, TASK_CONFIG, DEVICE, deviceLabel,
+         MOONRAKER_HTTP_PORT, CAMERA_FRAME_ROOT, CAMERA_FRAME_FILE }
   from '../../shared/js/protocol.js';
 import { openDialog, numberField } from './overlay.js';
 import { lookupFault } from '../../shared/js/errors.js';
@@ -71,26 +72,36 @@ export function renderRail(device, connection, devices = [], reachable = false) 
 /* ---- camera --------------------------------------------------------- */
 
 /**
- * `cam` is { mode, streaming, frame, timelapses[], error }.
+ * `cam` is { mode, streaming, frameUrl, timelapses[], error }.
  *
- * A frame arrives as whatever the printer sends on camera.start_monitor. The
- * field name is not recoverable from the bundle, so several plausible ones are
- * tried and the raw payload is left in the WCP trace when none matches.
+ * Where a frame comes from, measured rather than guessed. `camera.start_monitor`
+ * replies `{ state, url }` and then sends nothing further - there is no frame push to
+ * wait for. The printer rewrites one file at the monitor interval and the image is
+ * fetched over HTTP; see CAMERA_* in protocol.js for the whole finding.
+ *
+ * The reply's own `url` is relative to the printer's :80 web UI, which answers that
+ * path with its SPA shell rather than an image, so it is used only when it is already
+ * absolute - which is how the simulator hands back a data: URI. Otherwise the frame is
+ * addressed on Moonraker's file server, keeping the filename the printer named.
  */
-export function pickFrame(payload) {
-  if (!payload) return null;
-  const d = payload.data !== undefined ? payload.data : payload;
-  if (typeof d === 'string' && d.length > 256) return d;
-  for (const k of ['image', 'frame', 'jpeg', 'jpg', 'base64', 'picture', 'img', 'data']) {
-    const v = d && d[k];
-    if (typeof v === 'string' && v.length > 256) return v;
-  }
-  return null;
+export function cameraFrameUrl(payload, device) {
+  const d = payload && payload.data !== undefined ? payload.data : payload;
+  const raw = d && (d.url || d.path || d.frame_url);
+  if (typeof raw === 'string' && /^(data:|blob:|https?:)/i.test(raw)) return raw;
+
+  const ip = device && device[DEVICE.IP];
+  if (!ip) return null;
+  const name = (typeof raw === 'string' && raw.split('/').filter(Boolean).pop())
+             || CAMERA_FRAME_FILE;
+  return `http://${ip}:${MOONRAKER_HTTP_PORT}`
+       + `/server/files/${CAMERA_FRAME_ROOT}/${encodeURIComponent(name)}`;
 }
 
 export function renderCamera(root, connected, cam, handlers) {
+  // deliberately not keyed on the frame: the <img> is reused and its src is
+  // re-pointed in place, so a new frame must not rebuild the panel under it.
   const key = `${connected ? 'on' : 'off'}:${cam.mode}:${cam.streaming ? 1 : 0}:`
-            + `${cam.frame ? cam.frame.length : 0}:${(cam.timelapses || []).length}`;
+            + `${cam.frameUrl || ''}:${(cam.timelapses || []).length}`;
   if (root.dataset.state === key) return;
   root.dataset.state = key;
   root.innerHTML = '';
@@ -108,13 +119,16 @@ export function renderCamera(root, connected, cam, handlers) {
     const grid = el('div', 'tl-grid');
     list.forEach((t) => {
       const card = el('button', 'tl-card');
-      const thumb = t.thumbnail || t.thumb || '';
+      // thumbnail_base64 is what the printer sends, and it arrives as a full data:
+      // URI already - but only when the request asked for thumbnail_direct.
+      const thumb = t.thumbnail_base64 || t.thumbnail || t.thumb || '';
       if (thumb) {
         const im = el('img');
         im.src = thumb.startsWith('data:') ? thumb : `data:image/jpeg;base64,${thumb}`;
         card.appendChild(im);
       }
-      card.appendChild(el('span', 'tl-name', t.name || t.filename || 'recording'));
+      card.appendChild(el('span', 'tl-name',
+                          t.gcode_name || t.name || t.filename || 'recording'));
       card.onclick = () => handlers.openTimelapse(t);
       grid.appendChild(card);
     });
@@ -122,11 +136,11 @@ export function renderCamera(root, connected, cam, handlers) {
     return;
   }
 
-  // live view
-  if (cam.streaming && cam.frame) {
+  // live view - one <img>, re-pointed by the frame pump in app.js
+  if (cam.streaming && cam.frameUrl) {
     const im = el('img', 'cam-frame');
-    im.src = cam.frame.startsWith('data:') ? cam.frame
-           : `data:image/jpeg;base64,${cam.frame}`;
+    im.id = 'cam-live';
+    im.src = cam.frameUrl;
     im.alt = 'Live view';
     root.appendChild(im);
     return;

@@ -60,7 +60,9 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
       log('mock-rx', msg);
 
       const ok = (data) => reply(header, OK_CODE, 'success', data === undefined ? {} : data);
-      const fail = (m) => reply(header, -1, m, {});
+      // an optional code, so a handler can reproduce the printer's own
+      // (camera.start_monitor answers -32000, not a generic failure)
+      const fail = (m, code = -1) => reply(header, code, m, {});
       const ctx = { printer, ok, fail, header, eventId, subs, push };
 
       // A surface's own handlers win, so it can also override a shared one.
@@ -218,10 +220,15 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
         /* ---- camera ----------------------------------------------------- */
         case 'sw_CameraStartMonitor': {
           if (!eventId) return fail('sw_CameraStartMonitor requires an event_id');
+          if (params.domain !== 'lan') {
+            // what the real firmware does with domain: '' - see 06-mqtt-topics.md
+            return fail('Start monitor failed', -32000);
+          }
           subs.set(eventId, true);
-          ok({ started: true });
-          // A 1x1 JPEG stands in for a frame; the real field name is unknown
-          // without hardware, so the client sniffs several.
+          // The monitor answers once with a URL and pushes nothing. A real printer
+          // names a file on its own HTTP server; a simulator has none, so it hands
+          // back a data: URI - which cameraFrameUrl() passes through unchanged
+          // precisely so this works without inventing a fake host.
           const FRAME = '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsL'
                       + 'DBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/'
                       + '2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIy'
@@ -232,21 +239,14 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
                       + 'dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXG'
                       + 'x8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APn+'
                       + 'iiigD//Z';
-          let n = 0;
-          const t = setInterval(() => {
-            if (!subs.has(eventId) || ++n > 30) { clearInterval(t); return; }
-            const packet = { header: { event_id: eventId },
-                             payload: { code: OK_CODE, message: 'success',
-                                        data: { image: FRAME, seq: n } } };
-            log('mock-push', packet);
-            window.postMessage(JSON.stringify(packet), '*');
-          }, 900);
-          return;
+          return ok({ state: 'success', url: `data:image/jpeg;base64,${FRAME}` });
         }
         case 'sw_CameraStopMonitor':
           return ok({ stopped: true });
         case 'sw_GetCameraTimelapseInstance':
-          return ok({ list: printer.timelapses });
+          // `instances` is the printer's own spelling, and thumbnail_base64 only
+          // appears when the request asked for thumbnail_direct.
+          return ok({ count: printer.timelapses.length, instances: printer.timelapses });
         case 'sw_DeleteCameraTimelapse':
           printer.timelapses = printer.timelapses.filter(
             (t) => t.name !== params.name && t.date_index !== params.date_index);

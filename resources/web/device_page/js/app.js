@@ -10,7 +10,8 @@
 'use strict';
 
 import { CMD, SUBSCRIBE_OBJECTS, NAMED, LIMITS, TASK_CONFIG, PRINT_PREFERENCES,
-         asDeviceList, deviceLabel, DEVICE, hasTlsMaterial }
+         asDeviceList, deviceLabel, DEVICE, hasTlsMaterial,
+         CAMERA_DOMAIN, CAMERA_INTERVAL }
   from '../../shared/js/protocol.js';
 import { openMenu, openDialog, toggleField, numberField } from './overlay.js';
 import { connect as connectDevice, disconnect as disconnectDevice } from './connection.js';
@@ -33,7 +34,8 @@ let trace = () => {};
 let engineId = null;    // the MQTT engine Orca created for us
 let connecting = false;
 let taskTab = 'info';
-let cam = { mode: 'live', streaming: false, frame: null, timelapses: [], error: '' };
+let cam = { mode: 'live', streaming: false, frameUrl: null, timelapses: [], error: '' };
+let camPump = null;     // re-points the live <img>; frames are polled, not pushed
 let camSub = null;
 let files = { loading: false, error: '', root: '', roots: [], items: [] };
 let exception = null;   // the active fault, from sw_exception_query
@@ -159,6 +161,29 @@ async function send(cmd, params, label) {
   }
 }
 
+/**
+ * Poll the live frame.
+ *
+ * The printer overwrites one file in place, so the URL never changes and the browser
+ * would serve its cache forever - hence the cache-buster. The <img> is re-pointed
+ * rather than re-created so the visible frame is only replaced once the next one has
+ * decoded, which is what keeps the panel from flickering.
+ */
+function startCamPump() {
+  stopCamPump();
+  const tick = () => {
+    if (!cam.streaming || !cam.frameUrl) return stopCamPump();
+    const im = ui.$('#cam-live');
+    if (im) im.src = `${cam.frameUrl}?t=${Date.now()}`;
+  };
+  camPump = setInterval(tick, CAMERA_INTERVAL * 1000);
+}
+
+function stopCamPump() {
+  if (camPump) clearInterval(camPump);
+  camPump = null;
+}
+
 const handlers = {
   pause:  () => send(CMD.PRINT_PAUSE, {}, 'pause'),
   resume: () => send(CMD.PRINT_RESUME, {}, 'resume'),
@@ -268,15 +293,30 @@ const handlers = {
   startCamera: async () => {
     cam.error = '';
     cam.streaming = true;
+    cam.frameUrl = null;
     render();
+
+    // Not a stream and not a frame push. The monitor answers once with a URL, then the
+    // printer rewrites that one file every `interval` seconds and the frames are ours
+    // to fetch. domain must be 'lan' - '' is refused -32000. See protocol.js CAMERA_*.
+    //
+    // That answer can arrive down either channel: SSWCP.cpp hands the printer's reply to
+    // on_mqtt_msg_arrived, which is the push path, but the bridge also acks the command.
+    // Only the MQTT leg has been watched directly, so take the URL from whichever
+    // channel produces it first and ignore the second.
+    const useUrl = (payload) => {
+      const url = ui.cameraFrameUrl(payload, device);
+      if (!url || url === cam.frameUrl) return;
+      cam.frameUrl = url;
+      render();
+      startCamPump();
+    };
+
     try {
-      // A monitor is a subscription: the printer pushes frames until stopped.
       camSub = await bridge.subscribe(CMD.CAMERA_START,
-        { domain: '', interval: 2, expect_pw: false },
-        (data, payload) => {
-          const f = ui.pickFrame(data !== undefined ? data : payload);
-          if (f) { cam.frame = f; render(); }
-        });
+        { domain: CAMERA_DOMAIN, interval: CAMERA_INTERVAL, expect_pw: false },
+        (data, payload) => useUrl(data !== undefined ? data : payload));
+      if (camSub && camSub.ack !== undefined && camSub.ack !== null) useUrl(camSub.ack);
     } catch (e) {
       cam.streaming = false;
       cam.error = `camera failed: ${e.message}`;
@@ -286,11 +326,14 @@ const handlers = {
 
   stopCamera: async () => {
     cam.streaming = false;
-    cam.frame = null;
+    cam.frameUrl = null;
+    stopCamPump();
     if (camSub && camSub.cancel) camSub.cancel();
     camSub = null;
     render();
-    try { await bridge.request(CMD.CAMERA_STOP, { domain: '' }); } catch { /* already off */ }
+    try {
+      await bridge.request(CMD.CAMERA_STOP, { domain: CAMERA_DOMAIN });
+    } catch { /* already off */ }
   },
 
   loadTimelapses: async () => {
@@ -485,10 +528,13 @@ const handlers = {
   fileDetails: async (path) => {
     const [meta, thumb] = await Promise.all([
       bridge.request(CMD.FILES_METADATA, { filename: path }).catch((e) => ({ error: e.message })),
-      // Two thumbnail commands ship and firmware builds differ on which answers;
-      // try the filename-keyed one, then the path-keyed one.
-      bridge.request(CMD.FILE_THUMBNAILS, { filename: path })
-        .catch(() => bridge.request(CMD.FILE_THUMBS_B64, { path }))
+      // Both thumbnail commands ship, and the order matters more than it looks.
+      // sw_MachineFilesThumbnails *succeeds* and returns {width,height,size,
+      // thumbnail_path} - paths, no image data - so asking it first meant the
+      // catch-fallback never fired and no thumbnail was ever shown. The base64
+      // command is the only one that returns bytes, so it goes first.
+      bridge.request(CMD.FILE_THUMBS_B64, { path })
+        .catch(() => bridge.request(CMD.FILE_THUMBNAILS, { filename: path }))
         .catch(() => null),
     ]);
     openDialog({
@@ -758,12 +804,21 @@ async function doDisconnect() {
 }
 
 /** Thumbnail responses vary by firmware; sniff the plausible shapes. */
+/**
+ * Pull image bytes out of a thumbnail reply, if it has any.
+ *
+ * `server.files.thumbnails_base64` puts them in `data`; `thumbnail_base64` is the
+ * timelapse listing's spelling. `server.files.thumbnails` and the directory listing
+ * carry only `thumbnail_path` / `relative_path`, which are paths on the printer and
+ * not bytes - this returns null for those rather than handing a filename to an <img>
+ * that would render it as a broken image.
+ */
 function pickThumb(r) {
   if (!r) return null;
   const d = r.data !== undefined ? r.data : r;
   if (typeof d === 'string' && d.length > 64) return d;
   if (Array.isArray(d) && d.length) return pickThumb(d[0]);
-  for (const k of ['thumbnail', 'thumb', 'image', 'base64', 'data']) {
+  for (const k of ['thumbnail_base64', 'thumbnail', 'thumb', 'image', 'base64', 'data']) {
     const v = d && d[k];
     if (typeof v === 'string' && v.length > 64) return v;
     if (Array.isArray(v) && v.length) return pickThumb(v[0]);

@@ -155,10 +155,14 @@ falls back to the simulator, which looks like real data and is not.
 
 In rough order of value:
 
-1. **Make the page act on the shapes now known.** The camera and thumbnail findings above
-   are recorded but the client is not yet fixed: `pickFrame()` still waits for an MQTT
-   push, `startCamera` still sends `domain: ""`, and `fileDetails` still prefers the
-   thumbnail command that returns paths. Discovery is the one shape still unmeasured.
+1. **Confirm the rebuilt camera and thumbnail paths on hardware.** The client now acts on
+   what the printer does — `cameraFrameUrl()` fetches the frame over HTTP, `startCamera`
+   sends `domain: "lan"`, and `fileDetails` asks the base64 command first — and eleven
+   conformance checks pin those to `data/hardware-shapes.json`. What has **not** been
+   done is watching it run in Orca: the MQTT leg was measured directly, so which bridge
+   channel delivers `{state, url}` (the ack or the push) is still assumption, and the
+   client deliberately accepts either. One session with the Device tab open settles it.
+   Discovery is the one shape still unmeasured.
 2. **Fault banner against a real fault.** The decoder and the 442-code catalogue are in
    place (`shared/js/errors.js`, generated); it has never seen a real `action_code`.
 3. **`sw_SetSubscribeFilter` fails at boot** and is fired best-effort. It succeeds once a

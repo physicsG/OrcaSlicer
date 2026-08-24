@@ -272,5 +272,56 @@ for code in sample:
 check("catalogue codes decode consistently with our scheme", ok,
       f"sampled {sample}")
 
+print("\n== hardware-measured shapes ==")
+# These come from a real printer (docs/u1-webui/tools/u1_probe.py), because they are
+# pass-throughs whose field names appear in no bundle and no C++ literal. The file is
+# the evidence; the point of these checks is that the client cannot drift away from it
+# without going red.
+HW = os.path.join(DATA, "hardware-shapes.json")
+hw = json.load(open(HW, encoding="utf-8"))
+app_js = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
+ui_js = open(os.path.join(WEB, "device_page", "js", "ui.js"), encoding="utf-8").read()
+
+def js_const(name, source=src):
+    m = re.search(r"export const " + re.escape(name) + r"\s*=\s*([^;]+);", source)
+    return m.group(1).strip().strip("'\"") if m else None
+
+cam = hw["camera"]
+check("CAMERA_DOMAIN is the value the printer accepted",
+      js_const("CAMERA_DOMAIN") == cam["domain_accepted"],
+      f"page={js_const('CAMERA_DOMAIN')!r} printer accepted={cam['domain_accepted']!r}")
+check("CAMERA_DOMAIN is not the value the printer refused",
+      js_const("CAMERA_DOMAIN") != cam["domain_rejected"]["value"])
+check("the frame is addressed on Moonraker's port, not the web UI's",
+      js_const("MOONRAKER_HTTP_PORT") == str(cam["frame_http"]["port"]),
+      f"page={js_const('MOONRAKER_HTTP_PORT')} verified={cam['frame_http']['port']}")
+check("frame root and filename match the verified URL",
+      js_const("CAMERA_FRAME_ROOT") == cam["frame_http"]["root"]
+      and js_const("CAMERA_FRAME_FILE") == cam["frame_http"]["file"])
+check("the client does not wait for an MQTT frame push",
+      not cam["frames_pushed_over_mqtt"] and "pickFrame" not in ui_js,
+      "pickFrame() sniffed base64 out of a push that never arrives")
+check("cameraFrameUrl builds the HTTP URL instead",
+      "cameraFrameUrl" in ui_js and "/server/files/" in ui_js)
+
+th = hw["thumbnails"]
+b64_cmd, path_cmd = "FILE_THUMBS_B64", "FILE_THUMBNAILS"
+i_b64, i_path = app_js.find("CMD." + b64_cmd), app_js.find("CMD." + path_cmd)
+check("the thumbnail command that returns bytes is asked first",
+      0 <= i_b64 < i_path,
+      "server.files.thumbnails succeeds while returning only paths, so asking it "
+      "first means the catch-fallback never fires and no image is ever shown")
+check("pickThumb looks for the field the printer actually fills",
+      th["server.files.thumbnails_base64"]["image_field"] in
+      re.search(r"for \(const k of \[([^\]]*)\]", app_js).group(1))
+check("pickThumb knows the timelapse spelling too",
+      hw["timelapse"]["thumbnail_direct_adds"] in app_js)
+check("the timelapse listing is read by its real field name",
+      "instances" in app_js and hw["timelapse"]["thumbnail_direct_adds"] in ui_js)
+
+check("the simulator refuses the domain the printer refuses",
+      str(cam["domain_rejected"]["code"]) in open(MOCK, encoding="utf-8").read(),
+      "the mock accepted anything, so it could not have caught this")
+
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)

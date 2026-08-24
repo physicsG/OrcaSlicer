@@ -82,7 +82,7 @@ export const CMD = {
 
   // camera + timelapse
   CAMERA_START: 'sw_CameraStartMonitor',           // { domain, interval, expect_pw }
-                                                   // a SUBSCRIPTION: frames are pushed
+                                                   // -> { state, url }; see CAMERA_* below
   CAMERA_STOP: 'sw_CameraStopMonitor',             // { domain }
   TIMELAPSE_LIST: 'sw_GetCameraTimelapseInstance', // { page_index, page_rows, thumbnail_direct }
   TIMELAPSE_DELETE: 'sw_DeleteCameraTimelapse',
@@ -227,6 +227,28 @@ export const LAN_AUTH_CODE = '12345678';
 
 /** The shipped page sends this on every create; keep parity. */
 export const MQTT_KEEPALIVE = 30;
+
+/**
+ * The camera does not stream, and it does not push frames.
+ *
+ * Measured against a U1 (2026-08-24), not inferred: `camera.start_monitor` answers
+ * `{ state: 'success', url: '/files/camera/monitor.jpg' }` and then nothing else
+ * arrives over MQTT. The printer rewrites that one file at `interval` seconds - which
+ * is what the flood of `notify_filelist_changed` for `monitor.jpg` is - and the frame
+ * is fetched over HTTP.
+ *
+ * The `url` it hands back is relative to the printer's own web UI on :80, which serves
+ * that path as its single-page shell (2,934 bytes of text/html, not an image). The bytes
+ * live on Moonraker's file server instead, under the `timelapse` root that
+ * `notify_filelist_changed` names. Verified by fetching it: 96,001 bytes, JPEG SOI.
+ *
+ * See 05-printer-protocol/06-mqtt-topics.md.
+ */
+export const CAMERA_DOMAIN = 'lan';        // '' is refused: -32000 "Start monitor failed"
+export const MOONRAKER_HTTP_PORT = 7125;
+export const CAMERA_FRAME_ROOT = 'timelapse';
+export const CAMERA_FRAME_FILE = 'monitor.jpg';
+export const CAMERA_INTERVAL = 2;         // seconds; what the shipped page asks for
 
 /** True when a saved device already carries the mTLS material to connect directly. */
 export function hasTlsMaterial(d) {
