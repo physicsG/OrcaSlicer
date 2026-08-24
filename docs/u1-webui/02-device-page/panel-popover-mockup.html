@@ -90,7 +90,16 @@
        cursor:text;                       /* the I-beam */
        -moz-appearance:textfield}
   .tgt::-webkit-outer-spin-button,.tgt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-  .tgt:hover{border-color:var(--line);background:var(--panel-2)}
+  /* Hovering ANYWHERE on the row reveals that its target is editable. Keying this to
+     the input alone meant the affordance only appeared once the pointer had already
+     found a 34 px number - which is precisely the thing the user had to discover. The
+     row is the component; the input is just where the typing lands. */
+  .trow:hover{border-color:var(--line)}
+  /* :not() guards rather than source order: a descendant selector like
+     `.trow:hover .tgt` outranks `.tgt:focus` and `.tgt:invalid`, so without these the
+     hover paint would mask both the editing outline and the out-of-range warning. */
+  .trow:hover .tgt:not(:focus):not(:invalid),
+  .tgt:hover:not(:focus):not(:invalid){border-color:var(--line);background:var(--panel-2)}
   .tgt:focus{outline:none;border-color:var(--accent);background:var(--panel)}
   .trow:focus-within{border-color:var(--accent);
         background:color-mix(in srgb,var(--accent) 7%,transparent)}
