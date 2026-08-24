@@ -261,6 +261,32 @@ def main():
           homed({}) == ("null", "true"),
           "before the first query, refusing everything would be worse than allowing it")
 
+    # --- why the machine is busy ------------------------------------------
+    print("\n== busy, from every source that answers ==")
+
+    def reason(objs):
+        js(ctx3, f"var b=new MachineState(); b.apply({json.dumps(objs)});")
+        return json.loads(js(ctx3, "JSON.stringify(b.busyReason())").to_string())
+
+    r = reason({"extruder_offset_calibration": {"calibration_step": "probe_xy_offset"}})
+    check("a running docking calibration is named and counts as busy",
+          r["busy"] and "probe xy offset" in r["label"],
+          "this is what makes a toolchange take minutes, and machine_state_manager "
+          "reports 0/0 throughout it on this firmware")
+    check("an idle calibration step is not busy",
+          not reason({"extruder_offset_calibration": {"calibration_step": "idle"}})["busy"])
+    check("a macro's own message is shown when there is one",
+          reason({"display_status": {"message": "Cleaning nozzle"}})["label"]
+          == "Cleaning nozzle")
+    check("physical motion counts as busy on its own",
+          reason({"motion_report": {"live_velocity": 42.0}})["busy"],
+          "whatever the firmware chooses to call it, a moving gantry is not finished")
+    check("idle_timeout is never treated as busy",
+          not reason({"idle_timeout": {"state": "Printing"},
+                      "motion_report": {"live_velocity": 0}})["busy"],
+          "it reads Printing on an idle U1, so it would keep a wait alive forever")
+    check("a quiet machine is quiet", not reason({})["busy"])
+
     print(f"\n{checks - len(fails)}/{checks} checks passed")
     return 1 if fails else 0
 

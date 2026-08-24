@@ -605,9 +605,27 @@ check("an empty homed_axes counts as 'not homed', not 'unknown'",
 check("bed buttons are disabled rather than silently refused",
       "b.disabled = blocked" in ui_src,
       "a button that looks live and does nothing is worse than one plainly disabled")
-check("homing re-reads homed_axes when it finishes",
-      "settle: refreshToolhead" in app_src,
-      "nothing on the subscribed stream reports that homing completed")
+check("homing observes homed_axes rather than assuming",
+      "refreshWaitState" in app_src and "allHomed === true" in app_src,
+      "homed_axes is not on the stream, so the wait has to fetch it to see the change")
+
+# machine_state_manager reads {main_state: 0, action_code: 0} straight through a manual
+# toolchange on this firmware, so a wait that trusted it alone saw silence and gave up on
+# work that was going fine - which is what reported a finished home as a timeout.
+check("a wait takes 'busy' from every source, not just machine_state_manager",
+      "busyReason" in state_src and "reason.busy" in app_src,
+      "the docking calibration, the macro's message and physical motion all answer "
+      "when machine_state_manager does not")
+check("the wait re-reads the objects the stream does not carry",
+      "refreshWaitState" in app_src and "lastPoll" in app_src,
+      "toolhead and extruder_offset_calibration are not subscribed")
+check("homing finishes on the machine reporting homed, not on a busy->idle edge",
+      "done: () => state.toolhead().allHomed === true" in app_src,
+      "the edge never came, because nothing ever reported busy")
+check("idle_timeout is not treated as a busy signal",
+      "idle_timeout.state` is deliberately NOT" in state_src
+      or "deliberately NOT treated as busy" in state_src,
+      "it reads Printing on an idle U1")
 
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)

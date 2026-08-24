@@ -228,6 +228,7 @@ function runToolAction({ title, script, waiting, done, gaveUp, settle }) {
 
   return (async () => {
     let sawBusy = false;
+    let lastPoll = 0;
     for (;;) {
       if (done()) {
         if (settle) await settle();
@@ -235,20 +236,22 @@ function runToolAction({ title, script, waiting, done, gaveUp, settle }) {
       }
       if (refused) { dlg.fail(`The printer refused the command: ${refused.message}`); return; }
 
-      // Both granularities, because a toolchange's calibration surfaces in main_state
-      // ("XYZ calibrating", "Docking Coordinate Calibrating") while action_code stays 0.
-      // Reading only action_code left the dialog silent for exactly the operations that
-      // take long enough to need explaining.
+      // Every source that answers, not just machine_state_manager - which reads
+      // {main_state: 0, action_code: 0} straight through a manual toolchange on this
+      // firmware, so a wait that trusted it alone saw silence and gave up on work that
+      // was going fine. busyReason() adds the calibration step, the macro's own message
+      // and physical motion.
       const act = state.activity();
-      const label = machineActivity(act);
+      const reason = state.busyReason();
+      const label = machineActivity(act) || reason.label;
       if (label) {
         if (label !== lastLabel) { dlg.update(label); lastLabel = label; }
       } else if (lastLabel) {
         dlg.update(waiting);
         lastLabel = null;
       }
-      // keep waiting for as long as the machine says it is doing something
-      if (isBusy(act)) {
+      // keep waiting for as long as anything says it is doing something
+      if (isBusy(act) || reason.busy) {
         sawBusy = true;
         quietDeadline = Date.now() + TOOL_CHANGE_TIMEOUT_MS;
       } else if (sawBusy) {
@@ -257,6 +260,9 @@ function runToolAction({ title, script, waiting, done, gaveUp, settle }) {
         if (settle) await settle();
         dlg.close(); render(); return;
       }
+
+      // re-read the unsubscribed objects roughly once a second
+      if (Date.now() - lastPoll > 1000) { lastPoll = Date.now(); await refreshWaitState(); }
 
       if (Date.now() > quietDeadline) { dlg.fail(gaveUp); return; }
       if (Date.now() - started > TOOL_ACTION_HARD_CAP_MS) {
@@ -311,8 +317,11 @@ const handlers = {
     title: 'Homing',
     script: 'G28',
     waiting: 'Homing all axes\u2026',
-    done: () => false,                 // nothing on the stream says homing finished
-    settle: refreshToolhead,
+    // The wait polls `toolhead`, so homing does have a completion signal after all:
+    // the machine reporting xyz homed. Relying on a busy->idle transition instead was
+    // wrong here, because machine_state_manager never reports busy on this firmware,
+    // so the transition never came and a finished home was called a timeout.
+    done: () => state.toolhead().allHomed === true,
     gaveUp: 'Homing did not finish in time.',
   }),
 
@@ -1062,12 +1071,28 @@ function startHeartbeat() {
  * byte-identical to the bundle's, which the conformance suite enforces.
  */
 async function refreshToolhead() {
+  return refreshWaitState();
+}
+
+/**
+ * Re-read the objects a wait depends on that the stream does not carry.
+ *
+ * `toolhead` holds `homed_axes`, and `extruder_offset_calibration` holds the docking
+ * calibration step that makes a toolchange slow. Neither is subscribed - the shipped
+ * page does not subscribe them and the object list is pinned to the bundle's - so they
+ * are fetched explicitly. One query for both, because a wait needs them together.
+ */
+async function refreshWaitState() {
   try {
-    const snap = await bridge.request(CMD.GET_MACHINE_STATE,
-                                      { objects: { toolhead: ['extruder', 'position', 'homed_axes'] } });
+    const snap = await bridge.request(CMD.GET_MACHINE_STATE, {
+      objects: {
+        toolhead: ['extruder', 'position', 'homed_axes'],
+        extruder_offset_calibration: null,
+      },
+    });
     state.applyPayload(snap);
   } catch (e) {
-    hostLog(`toolhead query skipped: ${e.message}`);
+    /* a wait must not fail because a status read did; it just learns nothing */
   }
 }
 

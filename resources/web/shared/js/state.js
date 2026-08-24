@@ -301,6 +301,57 @@ export class MachineState {
     };
   }
 
+  /**
+   * Why the machine is busy, from every source that actually answers.
+   *
+   * `machine_state_manager` is the obvious one and the one the shipped UI uses, but on
+   * this firmware it reads {main_state: 0, action_code: 0} through a manual toolchange -
+   * so a wait that consulted only it stayed silent for exactly the long operations that
+   * need explaining. These are the others, in order of how specific they are:
+   *
+   *   extruder_offset_calibration.calibration_step  the toolhead docking calibration
+   *                                                 that makes a toolchange take
+   *                                                 minutes. NOT subscribed - the
+   *                                                 shipped page does not subscribe it
+   *                                                 and the object list is pinned to
+   *                                                 the bundle's - so it arrives from a
+   *                                                 one-shot query while waiting.
+   *   display_status.message                        what a running macro says about
+   *                                                 itself
+   *   motion_report.live_velocity                   physically moving, whatever it
+   *                                                 chooses to call it
+   *
+   * `idle_timeout.state` is deliberately NOT treated as busy. It reads "Printing" on an
+   * idle machine here, so it would keep a wait alive forever; it is only ever a label.
+   *
+   * Returns { label, busy }. `busy` is what may extend a wait; `label` is what to show.
+   */
+  busyReason() {
+    const act = this.activity();
+    const cal = this.objects['extruder_offset_calibration'] || {};
+    const disp = this.objects['display_status'] || {};
+    const mr = this.objects['motion_report'] || {};
+    const idle = this.objects['idle_timeout'] || {};
+
+    const step = typeof cal.calibration_step === 'string' ? cal.calibration_step : '';
+    const calibrating = !!step && step !== 'idle';
+    const moving = Math.abs(num(mr.live_velocity)) > 0.001;
+    const msg = typeof disp.message === 'string' && disp.message.trim()
+      ? disp.message.trim() : null;
+
+    let label = null;
+    if (calibrating) label = `Calibrating \u2014 ${prettyStep(step)}`;
+    else if (msg) label = msg;
+    else if (moving) label = 'Moving\u2026';
+    else if (idle.state && idle.state !== 'Idle' && idle.state !== 'Ready') label = null;
+
+    return {
+      label,
+      busy: calibrating || moving,
+      calibrationStep: calibrating ? step : null,
+    };
+  }
+
   /** machine_state_manager drives the activity banner and the error code. */
   activity() {
     const m = this.objects['machine_state_manager'] || {};
@@ -315,6 +366,11 @@ export class MachineState {
   taskConfig() {
     return this.objects['print_task_config'] || {};
   }
+}
+
+/** `probe_xy_offset` -> `probe xy offset`: the machine's own word, made readable. */
+function prettyStep(s) {
+  return String(s).replace(/[_-]+/g, ' ').trim();
 }
 
 function numOrNull(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
