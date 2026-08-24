@@ -609,3 +609,116 @@ body {
 /* An axis that is not homed: Klipper will refuse the move, so say so quietly
    rather than letting the button look broken. */
 .jog .hub[data-warn="1"] { color: #C9531F; }
+
+/* ---- tool selection: requested vs live ------------------------------
+   A tool change is mechanical and takes seconds, so the button has to say
+   which of the two states it is in - otherwise a click that is working looks
+   like a click that did nothing. */
+.seg.tools button[data-live="1"]::after {
+  content: "";
+  width: 5px; height: 5px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: #16A34A;
+  display: inline-block;
+  vertical-align: middle;
+}
+.seg.tools button[data-pending="1"] {
+  font-style: italic;
+  opacity: .8;
+}
+.seg.tools button[data-pending="1"]::after {
+  content: "…";
+  margin-left: 3px;
+}
+
+/* Print speed, at the foot of the left column, in whole 50% steps. */
+.status-row.speed-row-inline { align-items: center; }
+.status-row.speed-row-inline .seg.speeds { margin-left: auto; }
+.seg.speeds button { padding: 2px 7px; font-size: 11px; }
+
+/* An RFID-identified spool, distinguished from a hand-typed one. */
+.slot .slot-tag {
+  display: block;
+  font-size: 9px;
+  letter-spacing: .04em;
+  color: #16A34A;
+  margin-top: 2px;
+}
+
+/* ---- Materials Setting dialog --------------------------------------- */
+.materials .ms-block {
+  border: 1px solid #E6E6E6;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.materials .ms-head {
+  margin: 4px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #262E30;
+}
+.materials .ms-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.materials .ms-key { color: #6B7280; flex: 0 0 auto; min-width: 130px; }
+.materials .ms-val { color: #262E30; margin-left: auto; text-align: right; }
+.materials .ms-row[data-severity="error"] .ms-val { color: #C9531F; }
+.materials .ms-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6B7280;
+  margin: -4px 0 12px;
+}
+.materials .ms-color { display: flex; align-items: center; gap: 8px; }
+.materials .ms-swatch {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 1px solid #D4D4D4;
+  flex: 0 0 auto;
+}
+.materials .ms-color input[type="color"] {
+  width: 44px; height: 26px;
+  padding: 0;
+  border: 1px solid #D4D4D4;
+  border-radius: 4px;
+  background: none;
+}
+
+/* ---- print history --------------------------------------------------- */
+.task-body .hist-list { display: flex; flex-direction: column; gap: 2px; }
+.task-body .hist-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+}
+.task-body .hist-row:nth-child(odd) { background: #FAFAFA; }
+.task-body .hist-row[data-status="ok"]   { border-left-color: #16A34A; }
+.task-body .hist-row[data-status="bad"]  { border-left-color: #C9531F; }
+.task-body .hist-row[data-status="busy"] { border-left-color: #0C63E2; }
+.task-body .hist-main { min-width: 0; flex: 1; }
+.task-body .hist-name {
+  font-size: 12px;
+  color: #262E30;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-body .hist-meta { font-size: 11px; color: #8B8B8B; margin-top: 2px; }
+.task-body .hist-status { font-size: 11px; color: #6B7280; flex: 0 0 auto; }
+.task-body .hist-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: #8B8B8B;
+}

@@ -8,9 +8,19 @@ therefore drops those commands from the map and makes them look unimplemented.
 
 Usage: map_sswcp.py <repo-root> <out.json>
 """
-import re, json, sys, collections
+import re, json, os, sys, collections
 
-ROOT = sys.argv[1] if len(sys.argv) > 2 else "."
+# Both arguments are required. Defaulting the output to sys.argv[-1] means a bare
+# `python3 map_sswcp.py` writes the JSON over THIS FILE - which is exactly what
+# happened once. Fail loudly instead.
+if len(sys.argv) != 3:
+    sys.exit(f"usage: {sys.argv[0]} <repo-root> <output.json>\n"
+             f"       (run via tools/run_all.py, which passes both)")
+
+ROOT = sys.argv[1]
+OUT = sys.argv[2]
+if os.path.abspath(OUT) == os.path.abspath(__file__):
+    sys.exit("refusing to write output over the script itself")
 SRC = f"{ROOT}/src/slic3r/GUI/SSWCP.cpp"
 lines = open(SRC, encoding='utf-8', errors='replace').read().split('\n')
 text = '\n'.join(lines)
@@ -80,7 +90,7 @@ for cmd, calls in sorted(disp.items()):
                 "response": sorted(entry["response"]),
                 "rpc": sorted(entry["rpc"])}
 
-json.dump(out, open(sys.argv[-1], 'w'), indent=1)
+json.dump(out, open(OUT, 'w'), indent=1)
 n_h = sum(1 for v in out.values() if v["handlers"])
 print(f"commands in dispatch: {len(out)}; with resolved handler: {n_h}")
 print(f"with rpc method: {sum(1 for v in out.values() if v['rpc'])}")

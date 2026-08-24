@@ -166,7 +166,14 @@ The dominant cause was a single line: Orca hands a printer's reply to the page s
 wrapped in its JSON-RPC envelope, and the simulator unwrapped it — so every field read
 worked in the browser suite and returned `undefined` on a printer.
 
-Six of the seven are fixed; print history needs a new bridge command in `SSWCP.cpp`.
+All seven are now addressed. Print history needed a genuine addition to Orca —
+`sw_GetPrintHistory` over `server.history.list`, through `PrintHost.hpp`,
+`MoonRaker.{hpp,cpp}` and `SSWCP.{hpp,cpp}` — so **that one needs a rebuild**; everything
+else is page-side and live on reload.
+
+A second pass found one more of my own: tool selection stored the *request* in the
+variable that mirrors the *machine*, so the click's own re-render put it straight back.
+It is now a pending-until-confirmed model.
 
 ## What to pick up next
 

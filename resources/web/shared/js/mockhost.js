@@ -263,6 +263,16 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
           // `instances` is the printer's own spelling, and thumbnail_base64 only
           // appears when the request asked for thumbnail_direct.
           return ok({ count: printer.timelapses.length, instances: printer.timelapses });
+        case 'sw_GetPrintHistory': {
+          // server.history.list's own shape: newest first, `jobs`, with the job's
+          // metadata nested. status is Klipper's, not a PRINT_STATE.
+          const jobs = printer.history || [];
+          const start = Number(params.start) || 0;
+          const limit = Number(params.limit) || 20;
+          const page = jobs.slice(start, start + limit);
+          // `count` is the size of THIS page, as the printer reports it - not the total
+          return ok({ count: page.length, jobs: page });
+        }
         case 'sw_DeleteCameraTimelapse':
           printer.timelapses = printer.timelapses.filter(
             (t) => t.name !== params.name && t.date_index !== params.date_index);
@@ -435,7 +445,22 @@ export function makePrinter() {
       { path: 'calibration_cube.gcode', size: 2841100, modified: 1787200000 },
       { path: 'bracket_v3.gcode', size: 7733001, modified: 1787100000 },
     ],
-    timelapses: [{ name: 'benchy_4colour.mp4', date_index: '20260813', thumbnail: '' }],
+    // shaped like camera.get_timelapse_instance's own reply
+    timelapses: [{ gcode_name: 'benchy_4colour', date_index: '20260813182603',
+                   generate_date: '2026-08-13', video_duration: '00:13',
+                   video_file_size: 23227748, thumbnail_base64: '' }],
+    // shaped like server.history.list's own reply
+    history: [
+      { job_id: '0000F9', filename: 'XYZ Test Cube_PLA_3h58m.gcode', status: 'completed',
+        start_time: 1786615464.9, end_time: 1786629800.1, print_duration: 14180.2,
+        total_duration: 14335.2, filament_used: 12043.5, user: 'No User' },
+      { job_id: '0000F8', filename: 'bracket_v3.gcode', status: 'cancelled',
+        start_time: 1786515464.9, end_time: 1786516477.3, print_duration: 900.4,
+        total_duration: 1012.4, filament_used: 812.0, user: 'No User' },
+      { job_id: '0000F7', filename: 'benchy_4colour.gcode', status: 'klippy_shutdown',
+        start_time: 1786415464.9, end_time: 1786415477.3, print_duration: 0.0,
+        total_duration: 12.7, filament_used: 0.0, user: 'No User' },
+    ],
     defect: { enable: true, sensitivity: 1 },
     // A real 16-hex fault so the banner can be exercised: toolhead subsystem
     // 0523, unit 1 -> "Toolhead 2".

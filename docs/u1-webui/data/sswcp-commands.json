@@ -456,6 +456,14 @@
    "server.client_manager.request_pin_code"
   ]
  },
+ "sw_GetPrintHistory": {
+  "handlers": [
+   "sw_GetPrintHistory"
+  ],
+  "params": [],
+  "response": [],
+  "rpc": []
+ },
  "sw_GetPrintLegal": {
   "handlers": [
    "sw_GetPrintLegal"

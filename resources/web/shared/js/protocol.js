@@ -87,6 +87,9 @@ export const CMD = {
   TIMELAPSE_LIST: 'sw_GetCameraTimelapseInstance', // { page_index, page_rows, thumbnail_direct }
   TIMELAPSE_DELETE: 'sw_DeleteCameraTimelapse',
 
+  // completed jobs, from Moonraker's history store
+  PRINT_HISTORY: 'sw_GetPrintHistory',            // { limit, start, order }
+
   // saved-device management
   RENAME_DEVICE: 'sw_RenameDevice',                // { dev_id, dev_name }
   DELETE_DEVICES: 'sw_DeleteDevices',              // { dev_ids }
@@ -347,7 +350,7 @@ export const PRINTER_BACKED = new Set([
   'sw_ControlPurifier', 'sw_DefectDetactionConfig', 'sw_DeleteCameraTimelapse',
   'sw_DeleteMachineFile', 'sw_FileGetStatus', 'sw_FilesThumbnailsBase64',
   'sw_GetCameraTimelapseInstance', 'sw_GetDeviceDataStorageSpace', 'sw_GetFileListPage',
-  'sw_GetFileStream', 'sw_GetMachineObjects', 'sw_GetMachineState', 'sw_GetPrintInfo',
+  'sw_GetFileStream', 'sw_GetMachineObjects', 'sw_GetMachineState', 'sw_GetPrintHistory', 'sw_GetPrintInfo',
   'sw_GetSystemInfo', 'sw_MachineFilesGetDirectory', 'sw_MachineFilesMetadata',
   'sw_MachineFilesRoots', 'sw_MachineFilesThumbnails', 'sw_MachineHeartbeat',
   'sw_MachinePrintCancel', 'sw_MachinePrintPause', 'sw_MachinePrintResume',

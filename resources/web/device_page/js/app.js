@@ -11,7 +11,7 @@
 
 import { CMD, SUBSCRIBE_OBJECTS, NAMED, LIMITS, TASK_CONFIG, PRINT_PREFERENCES,
          asDeviceList, deviceLabel, DEVICE, hasTlsMaterial,
-         CAMERA_DOMAIN, CAMERA_INTERVAL }
+         CAMERA_DOMAIN, CAMERA_INTERVAL, cssColor }
   from '../../shared/js/protocol.js';
 import { openMenu, openDialog, toggleField, numberField } from './overlay.js';
 import { connect as connectDevice, disconnect as disconnectDevice } from './connection.js';
@@ -42,6 +42,8 @@ let exception = null;   // the active fault, from sw_exception_query
 let heartbeat = null;   // interval handle
 let findSub = null;     // discovery subscription
 let found = [];         // machines discovery has turned up
+const HISTORY_PAGE = 20;
+let history = { loading: false, error: '', items: [], hasMore: false };
 
 function setStatus(text, kind = '') {
   const n = ui.$('#status');
@@ -359,6 +361,34 @@ const handlers = {
     } catch { /* already off */ }
   },
 
+  /**
+   * Completed jobs from Moonraker's history store.
+   *
+   * `start` pages rather than replacing, so "load more" appends.
+   *
+   * Measured: the reply's `count` is the number of jobs IN THIS PAGE, not the total -
+   * asking for 7 returns count 7 on a machine with 240 jobs. The real total only comes
+   * from server.history.totals, which has no bridge command, so paging stops when a
+   * short page comes back rather than counting up to a known end.
+   */
+  loadHistory: async (start = 0) => {
+    history.loading = start === 0;
+    history.error = '';
+    render();
+    try {
+      const r = await bridge.request(CMD.PRINT_HISTORY,
+                                     { start, limit: HISTORY_PAGE, order: 'desc' });
+      const jobs = (r && (r.jobs || r.items)) || (Array.isArray(r) ? r : []);
+      history.items = start === 0 ? jobs : history.items.concat(jobs);
+      history.hasMore = jobs.length >= HISTORY_PAGE;
+    } catch (e) {
+      history.error = `could not read print history: ${e.message}`;
+      if (start === 0) history.items = [];
+    }
+    history.loading = false;
+    render();
+  },
+
   loadTimelapses: async () => {
     try {
       const r = await bridge.request(CMD.TIMELAPSE_LIST,
@@ -640,15 +670,27 @@ const handlers = {
     },
   }),
 
-  setFilament: (index, type, color) => {
-    // print_task_config carries these as parallel per-slot arrays.
+  setFilament: (index, type, color, vendor) => {
+    // print_task_config carries these as parallel per-slot arrays. Colour goes back in
+    // the form the printer sends: RRGGBBAA, no '#'. Writing CSS here would put a value
+    // on the machine that nothing else on it can read.
     const tc = state.taskConfig();
     const types = (tc[TASK_CONFIG.TYPE] || []).slice();
-    const colors = (tc[TASK_CONFIG.COLOR] || []).slice();
+    const vendors = (tc[TASK_CONFIG.VENDOR] || []).slice();
+    const rgba = (tc[TASK_CONFIG.COLOR_RGBA] || []).slice();
+    const argb = (tc[TASK_CONFIG.COLOR] || []).slice();
+
+    const hex = (cssColor(color) || '#CCCCCC').slice(1).toUpperCase();
     types[index] = type;
-    colors[index] = color;
-    send(CMD.UPDATE_MACHINE_FILAMENT_INFO,
-         { [TASK_CONFIG.TYPE]: types, [TASK_CONFIG.COLOR]: colors }, 'set filament');
+    if (vendor !== undefined) vendors[index] = vendor;
+    rgba[index] = `${hex}FF`;
+    argb[index] = (0xFF000000 | parseInt(hex, 16)) >>> 0;
+
+    const patch = { [TASK_CONFIG.TYPE]: types,
+                    [TASK_CONFIG.COLOR]: argb,
+                    [TASK_CONFIG.COLOR_RGBA]: rgba };
+    if (vendor !== undefined) patch[TASK_CONFIG.VENDOR] = vendors;
+    send(CMD.UPDATE_MACHINE_FILAMENT_INFO, patch, 'set filament');
   },
 
   jog: (axis, deltaMm, toolIndex) => {
@@ -689,14 +731,13 @@ function render() {
     // machine is unreachable, rather than hiding it. Match that.
     ui.$('#control-grid').dataset.enabled = reachable ? '1' : '0';
     ui.renderStatusCard(ui.$('#status-card'), state.toolheads(), state.bed(),
-                        state.led(), state.fans(), state.purifier(), handlers);
+                        state.led(), state.fans(), state.purifier(),
+                        state.speed(), handlers);
     ui.renderControlMain(ui.$('#control-main'), state.toolheads(), handlers,
                          state.toolhead());
-    ui.renderTask(ui.$('#task'), state.job(), taskTab, files, handlers);
-    ui.renderFilament(ui.$('#filament'), state.taskConfig(), handlers);
+    ui.renderTask(ui.$('#task'), state.job(), taskTab, files, handlers, history);
+    ui.renderFilament(ui.$('#filament'), state.filaments(), handlers);
     ui.renderFault(ui.$('#fault'), state.activity(), exception, handlers);
-    const speedRow = ui.$('#speed-row');
-    if (speedRow) ui.renderSpeed(speedRow, state.speed(), handlers);
   });
 }
 
@@ -1047,9 +1088,10 @@ function wireChrome() {
   document.querySelectorAll('.panel')[2].querySelectorAll('.tab').forEach((t, i) => {
     t.onclick = () => {
       selectTab(t);
-      taskTab = i === 0 ? 'info' : 'files';
+      taskTab = ['info', 'files', 'history'][i] || 'info';
       render();
       if (taskTab === 'files' && !files.items.length) handlers.openRoot(files.root);
+      if (taskTab === 'history' && !history.items.length) handlers.loadHistory();
     };
   });
 

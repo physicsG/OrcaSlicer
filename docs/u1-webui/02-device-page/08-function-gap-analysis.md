@@ -239,3 +239,76 @@ either fix turns seven of them red.
    against a real U1 in the app. That is one session with the Device tab open.
 3. **The purifier mode names for 1 and 2 are inferred**, not measured — confirming them
    means changing the mode on a real machine.
+
+## Round two — what a second pass on hardware found
+
+Reported after the first rebuild, with the fixes above in place.
+
+### Tool selection did not stick, and that was a fresh bug of mine
+
+The pending-vs-confirmed distinction was missing. The click did:
+
+```js
+activeTool = i;                                 // set
+handlers.selectTool(i);
+renderControlMain(root, toolheads, handlers);   // re-enter...
+```
+
+and `renderControlMain` opens with `if (head.activeIndex != null) activeTool = head.activeIndex;`
+— so the click's own re-render put it straight back, and the next state push a second
+later would have anyway. Storing a *request* in the variable that mirrors the *machine*
+cannot work.
+
+`pendingTool` now holds the request until the machine agrees (its extruder reports
+`ACTIVATE`) or it ages out after 45 s, which is the timescale a mechanical toolchange
+actually takes. The button distinguishes the two: a green dot for the live tool, an
+italic ellipsis for one being switched to.
+
+### Print speed
+
+Moved to the foot of the left column and made discrete — whole 50% steps across
+`LIMITS.printSpeed` (50 / 100 / 150), replacing the continuous slider under the jog pad.
+
+### Filament dialog
+
+Rebuilt as "Materials Setting", after Bambu Studio's. It has real data behind it now:
+`filament_detect.info` is one entry per slot carrying the spool's RFID tag —
+`HOTEND_MIN_TEMP` / `HOTEND_MAX_TEMP` (190–260 and 205–235 on two of this machine's
+spools), `BED_TEMP`, drying figures, vendor and sub-type.
+
+The lower half is deliberately read-only: those numbers come off the spool and from
+Klipper's own calibration, so presenting them as editable would be a lie. **Klipper's
+`pressure_advance` is this machine's Factor K** — the same role, already in
+`EXTRUDER_FIELDS`.
+
+One thing the capture settled: slot 4 reports `VENDOR: "NONE"` in the tag while
+`print_task_config` says PETG. A hand-set filament has no tag, so the two sources are
+kept separate and the dialog says which it is rather than showing a grid of zeros.
+
+`setFilament` now writes colour back in the wire form (`RRGGBBAA` and the ARGB integer),
+not CSS — writing `#RRGGBB` would put a value on the machine nothing else on it reads.
+
+### Print history — built, and it needed the C++
+
+`server.history.list` had no bridge command, so this is a real addition to Orca:
+
+| Layer | |
+|---|---|
+| `PrintHost.hpp` / `MoonRaker.hpp` | `async_get_print_history` |
+| `MoonRaker.cpp` | `server.history.list`, params passed through |
+| `SSWCP.hpp` / `SSWCP.cpp` | `sw_GetPrintHistory` — handler, dispatch, registration |
+
+**It needs a rebuild**, unlike everything else on this page.
+
+Measured, and it changed the design: the reply's `count` is **the size of the page, not
+the total** — asking for 7 returns `count: 7` on a machine with 240 jobs. The only true
+total is `server.history.totals` (`job_totals.total_jobs`), which has no bridge command.
+So paging stops when a short page comes back rather than counting toward a known end, and
+the footer says "N shown" rather than inventing "N of M".
+
+### A tool that destroyed itself
+
+`map_sswcp.py` ended with `json.dump(out, open(sys.argv[-1], 'w'))`. Run with no
+arguments — the obvious way — `sys.argv[-1]` is the script's own path, so it overwrote
+itself with its output. It did that here, and was restored from git. It now requires both
+arguments and refuses to write over itself.

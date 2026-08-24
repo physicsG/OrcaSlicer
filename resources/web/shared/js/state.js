@@ -142,18 +142,78 @@ export class MachineState {
     const c = this.objects['print_task_config'] || {};
     const arr = (k) => (Array.isArray(c[k]) ? c[k] : []);
     const types = arr('filament_type'), vendors = arr('filament_vendor');
+    const subs = arr('filament_sub_type');
     const rgba = arr('filament_color_rgba'), argb = arr('filament_color');
     const exists = arr('filament_exist');
-    return TOOLHEADS.map((_, i) => {
+
+    // The RFID tag, when there is one. `filament_detect.info` is one entry per slot in
+    // slot order - TRAY is 0 on every entry, so it is the position that identifies the
+    // slot, not that field. A manually-set filament has no tag and reads NONE here even
+    // though print_task_config has a type for it, so the two sources are kept separate
+    // rather than one overwriting the other.
+    const det = this.objects['filament_detect'] || {};
+    const tags = Array.isArray(det.info) ? det.info : [];
+    const feed = this.feedChannels();
+
+    return TOOLHEADS.map((key, i) => {
       const type = types[i];
+      const tag = tags[i] || {};
+      const tagged = tag.MAIN_TYPE && tag.MAIN_TYPE !== 'NONE';
+      const ext = this.objects[key] || {};
       return {
         index: i,
         type: (type && type !== 'NONE') ? type : null,
+        subType: (subs[i] && subs[i] !== 'NONE') ? subs[i] : null,
         vendor: (vendors[i] && vendors[i] !== 'NONE') ? vendors[i] : null,
         color: rgba[i] != null ? rgba[i] : argb[i],
         loaded: exists[i] !== false && !!type && type !== 'NONE',
+        // from the tag - null when the spool carries none
+        tag: tagged ? {
+          vendor: tag.VENDOR !== 'NONE' ? tag.VENDOR : null,
+          type: tag.MAIN_TYPE,
+          subType: tag.SUB_TYPE !== 'NONE' ? tag.SUB_TYPE : null,
+          color: tag.ARGB_COLOR,
+          nozzleMin: numOrNull(tag.HOTEND_MIN_TEMP),
+          nozzleMax: numOrNull(tag.HOTEND_MAX_TEMP),
+          bedTemp: numOrNull(tag.BED_TEMP),
+          dryingTemp: numOrNull(tag.DRYING_TEMP),
+          dryingTime: numOrNull(tag.DRYING_TIME),
+          sku: tag.SKU || null,
+        } : null,
+        // Klipper's pressure advance is this machine's flow-dynamics factor - the
+        // same role Bambu's "Factor K" plays.
+        pressureAdvance: numOrNull(ext.pressure_advance),
+        smoothTime: numOrNull(ext.smooth_time),
+        feed: feed[i] || null,
       };
     });
+  }
+
+  /**
+   * Per-extruder ACE feed state, from `filament_feed left` / `filament_feed right`.
+   *
+   * Each object is keyed by extruder name - and the keys are `extruder0`..`extruder3`,
+   * which is NOT how Klipper names the first one anywhere else (`extruder`, no zero).
+   */
+  feedChannels() {
+    const out = [];
+    for (const side of ['filament_feed left', 'filament_feed right']) {
+      const o = this.objects[side];
+      if (!o || typeof o !== 'object') continue;
+      for (const [k, v] of Object.entries(o)) {
+        const m = /^extruder(\d+)$/.exec(k);
+        if (!m || !v || typeof v !== 'object') continue;
+        out[Number(m[1])] = {
+          detected: !!v.filament_detected,
+          inAce: !!v.filament_in_ace,
+          inToolhead: !!v.filament_in_toolhead,
+          atExtruder: !!v.filament_at_extruder,
+          channelState: v.channel_state || null,
+          error: v.channel_error && v.channel_error !== 'ok' ? v.channel_error : null,
+        };
+      }
+    }
+    return out;
   }
 
   bed() {

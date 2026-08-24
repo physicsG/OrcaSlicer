@@ -2294,6 +2294,33 @@ void Moonraker_Mqtt::async_get_timelapse_instance(const nlohmann::json& targets,
     }
 }
 
+// completed print jobs, newest first - Moonraker's own history store
+void Moonraker_Mqtt::async_get_print_history(const nlohmann::json& targets, std::function<void(const nlohmann::json& response)> callback)
+{
+    auto& wcp_loger = GUI::WCP_Logger::getInstance();
+    BOOST_LOG_TRIVIAL(info) << "[Moonraker_Mqtt] Starting request print history";
+    wcp_loger.add_log("Starting request print history", false, "", "Moonraker_Mqtt", "info");
+    std::string method = "server.history.list";
+
+    json params = json::object();
+
+    params = targets;
+
+    if (!send_to_request(method, params, true, callback,
+                         [callback, &wcp_loger]() {
+                             BOOST_LOG_TRIVIAL(warning) << "[Moonraker_Mqtt] request print history timed out";
+                             wcp_loger.add_log("request print history timed out", false, "", "Moonraker_Mqtt", "warning");
+                             json res;
+                             res["error"] = "timeout";
+                             callback(res);
+                         }) &&
+        callback) {
+        BOOST_LOG_TRIVIAL(error) << "[Moonraker_Mqtt] failed to send request print history";
+        wcp_loger.add_log("failed to send request print history", false, "", "Moonraker_Mqtt", "error");
+        callback(json::value_t::null);
+    }
+}
+
 //get the mechine local storage space
 void Moonraker_Mqtt::async_get_userdata_space(const nlohmann::json& targets, std::function<void(const nlohmann::json& response)> callback)
 {

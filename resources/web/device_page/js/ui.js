@@ -175,6 +175,9 @@ export function renderCamera(root, connected, cam, handlers) {
 
 /* ---- control: left status card -------------------------------------- */
 
+// Print speed moves in whole 50% steps: 50 / 100 / 150 across LIMITS.printSpeed.
+const SPEED_STEP = 50;
+
 /** Edit a temperature target through a modal, with the shipped page's limits. */
 function editTemp(title, limit, current, hint, apply) {
   let input;
@@ -199,7 +202,8 @@ function editTemp(title, limit, current, hint, apply) {
   });
 }
 
-export function renderStatusCard(root, toolheads, bed, led, fans, purifier, handlers) {
+export function renderStatusCard(root, toolheads, bed, led, fans, purifier,
+                                 speed, handlers) {
   root.innerHTML = '';
 
   toolheads.forEach((t, i) => {
@@ -290,6 +294,24 @@ export function renderStatusCard(root, toolheads, bed, led, fans, purifier, hand
     });
   };
   root.appendChild(purRow);
+
+  // Print speed lives at the foot of the left column, and moves in whole 50% steps -
+  // the shipped page offers a small set of discrete rates, not a continuous slider.
+  // It is here rather than under the jog pad because it belongs with the other
+  // machine-wide settings, not with motion.
+  const spRow = el('div', 'status-row speed-row-inline');
+  spRow.appendChild(icon('iconSpeed'));
+  const cur = speed && speed.factorPct != null ? speed.factorPct : 100;
+  const seg = el('div', 'seg speeds');
+  for (let v = LIMITS.printSpeed.min; v <= LIMITS.printSpeed.max; v += SPEED_STEP) {
+    const b = el('button', v === cur ? 'is-active' : null, `${v}%`);
+    b.title = `Set print speed to ${v}%`;
+    b.onclick = (e) => { e.stopPropagation(); handlers.setSpeed(v); };
+    seg.appendChild(b);
+  }
+  spRow.appendChild(seg);
+  spRow.title = 'Print speed';
+  root.appendChild(spRow);
 }
 
 /* ---- control: right cluster ----------------------------------------- */
@@ -298,13 +320,31 @@ let activeTool = 0;
 let activeStep = 0;
 let head = {};          // last `toolhead` snapshot, for the readouts and homing state
 
+/*
+ * A tool change is a request, not a setting.
+ *
+ * The machine owns which tool is live; the click only asks. Storing the click in the
+ * same variable that mirrors the machine meant the very next render - the click's own,
+ * and then every state push a second later - overwrote it, so the selection visibly
+ * sprang back. `pendingTool` holds the request until the machine agrees (its extruder
+ * reports ACTIVATE) or the request ages out, and the button says which of the two it is.
+ */
+let pendingTool = null;
+let pendingSince = 0;
+const TOOL_CHANGE_TIMEOUT_MS = 45000;   // a toolchange is mechanical; give it room
+
 export function renderControlMain(root, toolheads, handlers, th) {
   root.innerHTML = '';
   if (th) head = th;
 
-  // The machine is the authority on which tool is live: `toolhead.extruder` names it.
-  // Selection used to be a local variable that reflected nothing and sent nothing.
-  if (head.activeIndex != null) activeTool = head.activeIndex;
+  const machineTool = head.activeIndex != null ? head.activeIndex : null;
+  if (pendingTool != null
+      && (machineTool === pendingTool || Date.now() - pendingSince > TOOL_CHANGE_TIMEOUT_MS)) {
+    pendingTool = null;                 // confirmed, or given up on
+  }
+  // what the panel acts on: the request while it is outstanding, else the machine
+  activeTool = pendingTool != null ? pendingTool
+             : (machineTool != null ? machineTool : activeTool);
 
   const top = el('div', 'control-top');
 
@@ -314,11 +354,16 @@ export function renderControlMain(root, toolheads, handlers, th) {
   const tools = el('div', 'seg tools');
   for (let i = 0; i < count; i++) {
     const b = el('button', i === activeTool ? 'is-active' : null, `Tool${i + 1}`);
-    b.title = i === head.activeIndex ? `Toolhead ${i + 1} (active on the machine)`
-                                     : `Switch to toolhead ${i + 1}`;
+    if (i === machineTool) b.dataset.live = '1';
+    if (i === pendingTool && i !== machineTool) b.dataset.pending = '1';
+    b.title = i === machineTool ? `Toolhead ${i + 1} — active on the machine`
+            : i === pendingTool ? `Switching to toolhead ${i + 1}…`
+            : `Switch to toolhead ${i + 1}`;
     b.onclick = () => {
-      activeTool = i;
-      handlers.selectTool(i);          // actually change tool, not just repaint
+      if (i === machineTool) { pendingTool = null; renderControlMain(root, toolheads, handlers); return; }
+      pendingTool = i;
+      pendingSince = Date.now();
+      handlers.selectTool(i);
       renderControlMain(root, toolheads, handlers);
     };
     tools.appendChild(b);
@@ -349,11 +394,6 @@ export function renderControlMain(root, toolheads, handlers, th) {
   root.appendChild(jog);
 
   root.appendChild(el('div', 'extrude-bar', '--------'));
-
-  // Print speed override - the command was wired long before it had a control.
-  const speedRow = el('div', 'speed-row');
-  speedRow.id = 'speed-row';
-  root.appendChild(speedRow);
 }
 
 function stepMm() { return parseFloat(STEPS[activeStep]); }
@@ -425,9 +465,10 @@ function clock(sec) {
   return `${h}h ${String(m).padStart(2, '0')}m`;
 }
 
-export function renderTask(root, job, tab, files, handlers) {
+export function renderTask(root, job, tab, files, handlers, history) {
   root.innerHTML = '';
   if (tab === 'files') return renderFiles(root, files, handlers);
+  if (tab === 'history') return renderHistory(root, history, handlers);
 
   const active = job.state === PRINT_STATE.PRINTING || job.state === PRINT_STATE.PAUSED;
   if (!active) {
@@ -481,6 +522,73 @@ export function renderTask(root, job, tab, files, handlers) {
   wrap.appendChild(btns);
 
   root.appendChild(wrap);
+}
+
+/* ---- print history --------------------------------------------------- */
+
+/** Klipper's own job outcomes; anything else is shown verbatim. */
+const JOB_STATUS = {
+  completed: 'Completed', cancelled: 'Cancelled', error: 'Error',
+  klippy_shutdown: 'Interrupted', klippy_disconnect: 'Interrupted',
+  in_progress: 'In progress', server_exit: 'Interrupted',
+};
+
+/** `history` is { loading, error, items[], count }. */
+export function renderHistory(root, history, handlers) {
+  const h = history || {};
+  if (h.loading) { root.appendChild(el('div', 'cam-msg', 'Loading…')); return; }
+  if (h.error) {
+    const wrap = el('div');
+    wrap.style.textAlign = 'center';
+    wrap.appendChild(el('div', 'cam-msg', h.error));
+    const again = el('button', 'btn', 'Try again');
+    again.onclick = () => handlers.loadHistory();
+    wrap.appendChild(again);
+    root.appendChild(wrap);
+    return;
+  }
+  const items = h.items || [];
+  if (!items.length) {
+    const wrap = el('div');
+    wrap.style.textAlign = 'center';
+    illustration(wrap);
+    wrap.appendChild(el('div', 'cam-msg', 'No completed prints on this printer'));
+    root.appendChild(wrap);
+    return;
+  }
+
+  const list = el('div', 'hist-list');
+  items.forEach((j) => {
+    const rowEl = el('div', 'hist-row');
+    const status = String(j.status || '');
+    rowEl.dataset.status = status === 'completed' ? 'ok'
+                         : (status === 'in_progress' ? 'busy' : 'bad');
+
+    const main = el('div', 'hist-main');
+    main.appendChild(el('div', 'hist-name', j.filename || '(unnamed)'));
+    const when = j.end_time || j.start_time;
+    const bits = [];
+    if (when) bits.push(new Date(when * 1000).toLocaleString());
+    if (j.print_duration) bits.push(clock(j.print_duration));
+    if (j.filament_used) bits.push(`${(j.filament_used / 1000).toFixed(2)} m`);
+    main.appendChild(el('div', 'hist-meta', bits.join(' · ')));
+    rowEl.appendChild(main);
+
+    rowEl.appendChild(el('span', 'hist-status', JOB_STATUS[status] || status || '—'));
+    list.appendChild(rowEl);
+  });
+  root.appendChild(list);
+
+  // The reply carries no total, so the footer counts what is loaded and offers more
+  // only while the last page came back full.
+  const foot = el('div', 'hist-foot');
+  foot.appendChild(el('span', null, `${items.length} shown`));
+  if (h.hasMore) {
+    const more = el('button', 'btn', 'Load more');
+    more.onclick = () => handlers.loadHistory(items.length);
+    foot.appendChild(more);
+  }
+  root.appendChild(foot);
 }
 
 /* ---- machine file browser -------------------------------------------- */
@@ -577,73 +685,150 @@ export function makeTrace(pane) {
  * Values come from `print_task_config` - the same object the print-processing
  * popup edits. See docs/u1-webui/00-shared/01-shared-models.md
  */
-export function renderFilament(root, taskConfig, handlers) {
+export function renderFilament(root, slots, handlers) {
   root.innerHTML = '';
-  const types = taskConfig[TASK_CONFIG.TYPE] || [];
-  // rgba first: it is the unambiguous one. filament_color is an ARGB integer, and
-  // both need normalising before they are CSS - see cssColor().
-  const rawColors = taskConfig[TASK_CONFIG.COLOR_RGBA]
-                 || taskConfig[TASK_CONFIG.COLOR] || [];
-  const colors = Array.from(rawColors, cssColor);
-  const exists = taskConfig[TASK_CONFIG.EXISTS] || [];
-  const vendors = taskConfig[TASK_CONFIG.VENDOR] || [];
-
-  for (let i = 0; i < 4; i++) {
-    const loaded = exists[i] !== false && !!types[i];
+  slots.forEach((f, i) => {
+    const css = cssColor(f.color);
     const slot = el('button', 'slot');
-    slot.title = loaded
-      ? `Slot ${i + 1}: ${vendors[i] ? vendors[i] + ' ' : ''}${types[i]}`
+    slot.title = f.loaded
+      ? `Slot ${i + 1}: ${[f.vendor, f.type, f.subType].filter(Boolean).join(' ')}`
       : `Slot ${i + 1}: empty`;
 
     const dot = el('div', 'dot', String(i + 1));
-    if (loaded) {
+    if (f.loaded) {
       dot.dataset.loaded = '1';
-      dot.style.background = colors[i] || '#C4C4C4';
+      dot.style.background = css || '#C4C4C4';
       // keep the number legible on dark filament
-      dot.style.color = isDarkColor(colors[i]) ? '#fff' : '#333';
+      dot.style.color = isDarkColor(f.color) ? '#fff' : '#333';
     }
     slot.appendChild(dot);
-
-    slot.appendChild(el('div', 'bar', loaded ? types[i] : '/'));
-
-    const pen = icon('iconFilamentEdit', 'pencil');
-    slot.appendChild(pen);
-
-    slot.onclick = () => editSlot(i, { loaded, type: types[i], color: colors[i],
-                                       vendor: vendors[i] }, handlers);
+    slot.appendChild(el('div', 'bar', f.loaded ? f.type : '/'));
+    // a spool that identified itself is worth distinguishing from one typed in by hand
+    if (f.tag) slot.appendChild(el('span', 'slot-tag', 'RFID'));
+    slot.appendChild(icon('iconFilamentEdit', 'pencil'));
+    slot.onclick = () => editSlot(i, f, handlers);
     root.appendChild(slot);
-  }
+  });
 }
 
-function editSlot(index, cur, handlers) {
-  let type, color;
-  openDialog({
-    title: `Filament slot ${index + 1}`,
-    build: (b) => {
-      const t = el('label', 'field');
-      t.appendChild(el('span', 'field-label', 'Type'));
-      const row = el('div', 'field-row');
-      type = document.createElement('input');
-      type.value = cur.type || '';
-      type.placeholder = 'PLA';
-      row.appendChild(type);
-      t.appendChild(row);
-      b.appendChild(t);
+/**
+ * Filament slot editor.
+ *
+ * Laid out after Bambu Studio's "Materials Setting": what the filament IS at the top,
+ * then what the machine knows about how to run it. The lower half is read-only on
+ * purpose - nozzle limits come off the spool's RFID tag and pressure advance is
+ * Klipper's own calibration, so presenting them as editable would be a lie. Slots
+ * without a tag simply omit that block rather than showing a grid of zeros.
+ */
+function editSlot(index, f, handlers) {
+  let type, vendor, color;
+  const tag = f.tag;
 
-      const c = el('label', 'field');
-      c.appendChild(el('span', 'field-label', 'Colour'));
-      const crow = el('div', 'field-row');
+  const row = (parent, label, value, hint) => {
+    const r = el('div', 'ms-row');
+    r.appendChild(el('span', 'ms-key', label));
+    const v = el('span', 'ms-val', value);
+    if (hint) v.title = hint;
+    r.appendChild(v);
+    parent.appendChild(r);
+    return r;
+  };
+
+  openDialog({
+    title: 'Materials Setting',
+    build: (b) => {
+      b.classList.add('materials');
+
+      // --- identity ---
+      const id = el('div', 'ms-block');
+      const tRow = el('label', 'field');
+      tRow.appendChild(el('span', 'field-label', 'Filament'));
+      const tWrap = el('div', 'field-row');
+      type = document.createElement('input');
+      type.value = f.type || '';
+      type.placeholder = 'PLA';
+      type.setAttribute('list', 'ms-types');
+      tWrap.appendChild(type);
+      const dl = document.createElement('datalist');
+      dl.id = 'ms-types';
+      ['PLA', 'PETG', 'ABS', 'ASA', 'TPU', 'PA', 'PC', 'PVA', 'HIPS']
+        .forEach((v) => { const o = document.createElement('option'); o.value = v; dl.appendChild(o); });
+      tWrap.appendChild(dl);
+      tRow.appendChild(tWrap);
+      id.appendChild(tRow);
+
+      const vRow = el('label', 'field');
+      vRow.appendChild(el('span', 'field-label', 'Vendor'));
+      const vWrap = el('div', 'field-row');
+      vendor = document.createElement('input');
+      vendor.value = f.vendor || '';
+      vendor.placeholder = 'Generic';
+      vWrap.appendChild(vendor);
+      vRow.appendChild(vWrap);
+      id.appendChild(vRow);
+
+      const cRow = el('label', 'field');
+      cRow.appendChild(el('span', 'field-label', 'Color'));
+      const cWrap = el('div', 'field-row ms-color');
       color = document.createElement('input');
       color.type = 'color';
-      color.value = (cssColor(cur.color) || '#CCCCCC').slice(0, 7);
-      crow.appendChild(color);
-      c.appendChild(crow);
-      c.appendChild(el('span', 'field-hint',
-        'Written back to print_task_config, which the print-processing popup also reads.'));
-      b.appendChild(c);
+      color.value = cssColor(f.color) || '#CCCCCC';
+      const swatch = el('span', 'ms-swatch');
+      swatch.style.background = color.value;
+      color.oninput = () => { swatch.style.background = color.value; };
+      cWrap.appendChild(swatch);
+      cWrap.appendChild(color);
+      cRow.appendChild(cWrap);
+      id.appendChild(cRow);
+      b.appendChild(id);
+
+      // --- what the spool says about itself ---
+      if (tag) {
+        b.appendChild(el('h4', 'ms-head', 'From the spool tag'));
+        const g = el('div', 'ms-block');
+        if (tag.subType) row(g, 'Series', tag.subType);
+        row(g, 'Nozzle Temperature',
+            (tag.nozzleMin != null && tag.nozzleMax != null)
+              ? `${tag.nozzleMin} – ${tag.nozzleMax} °C` : '—',
+            'min and max reported by the spool');
+        if (tag.bedTemp) row(g, 'Bed Temperature', `${tag.bedTemp} °C`);
+        if (tag.dryingTemp) {
+          row(g, 'Drying', `${tag.dryingTemp} °C`
+            + (tag.dryingTime ? ` · ${tag.dryingTime} h` : ''));
+        }
+        b.appendChild(g);
+      } else if (f.loaded) {
+        b.appendChild(el('div', 'ms-note',
+          'This spool carries no RFID tag, so temperatures come from the profile.'));
+      }
+
+      // --- flow dynamics: Klipper's pressure advance is the K-factor analogue ---
+      b.appendChild(el('h4', 'ms-head', 'Flow dynamics'));
+      const fd = el('div', 'ms-block');
+      row(fd, 'Pressure Advance',
+          f.pressureAdvance != null ? f.pressureAdvance.toFixed(4) : '—',
+          'Klipper\u2019s pressure_advance for this toolhead - the same role Bambu\u2019s Factor K plays');
+      row(fd, 'Smooth Time',
+          f.smoothTime != null ? `${f.smoothTime.toFixed(3)} s` : '—');
+      b.appendChild(fd);
+
+      // --- ACE feed path ---
+      if (f.feed) {
+        b.appendChild(el('h4', 'ms-head', 'Feed path'));
+        const fp = el('div', 'ms-block');
+        row(fp, 'Channel', f.feed.channelState || '—');
+        row(fp, 'Detected', f.feed.detected ? 'yes' : 'no');
+        row(fp, 'At extruder', f.feed.atExtruder ? 'yes' : 'no');
+        if (f.feed.error) {
+          const e = row(fp, 'Error', f.feed.error);
+          e.dataset.severity = 'error';
+        }
+        b.appendChild(fp);
+      }
     },
-    confirmLabel: 'Save',
-    onConfirm: () => handlers.setFilament(index, type.value.trim(), color.value),
+    confirmLabel: 'Confirm',
+    onConfirm: () => handlers.setFilament(index, type.value.trim(), color.value,
+                                          vendor.value.trim()),
   });
 }
 
@@ -683,23 +868,4 @@ export function renderFault(root, activity, exception, handlers) {
   const again = el('button', 'btn', 'Re-check');
   again.onclick = () => handlers.queryException();
   root.appendChild(again);
-}
-
-/* ---- print speed ----------------------------------------------------- */
-export function renderSpeed(root, speed, handlers) {
-  const cur = speed.factorPct == null ? 100 : speed.factorPct;
-  if (root.dataset.pct === String(cur)) return;
-  root.dataset.pct = String(cur);
-  root.innerHTML = '';
-  root.appendChild(el('span', null, 'Print Speed'));
-  const range = document.createElement('input');
-  range.type = 'range';
-  range.min = String(LIMITS.printSpeed.min);
-  range.max = String(LIMITS.printSpeed.max);
-  range.value = String(cur);
-  const val = el('span', 'val', `${cur}%`);
-  range.oninput = () => { val.textContent = `${range.value}%`; };
-  range.onchange = () => handlers.setSpeed(Number(range.value));
-  root.appendChild(range);
-  root.appendChild(val);
 }
