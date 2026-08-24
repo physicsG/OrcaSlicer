@@ -203,28 +203,48 @@ Neither pick nor park appears in `printer.gcode.help`: they register without hel
 strings, as `T0`–`T3` do. **Absence there is not evidence** — reading it as evidence cost
 an afternoon.
 
-**The bug class that dominated this session,** worth stating because it will recur: the
-page kept trusting one source that was silent or stale.
+**The bug class that dominated this session,** worth stating because it will recur:
+*the page kept trusting a field that answers a different question than the one asked.*
+Four instances, all found by measuring rather than reasoning:
 
-- `toolhead` is **not subscribed** — it arrives only from an explicit query — so reading
-  the active tool from `toolhead.extruder` froze it at connect, and every pick and park
-  timed out *having actually worked*.
-- `machine_state_manager` reads `{main_state: 0, action_code: 0}` straight through a
-  manual toolchange and home on this firmware, so a wait watching only it saw silence and
-  called a finished home a timeout.
-- `homed_axes: ""` is the machine saying *nothing is homed*, not *unknown*; treating it
-  as unknown let every Z jog through to a printer that refuses them, so the bed buttons
-  looked dead.
+- **`toolhead.extruder` does not mean "engaged".** It is Klipper's current-extruder
+  pointer for G-code, and it goes on naming the last head used after that head is
+  parked — measured reading `"extruder"` while all four reported `PARKED`. Using it as a
+  fallback made the panel offer to park a head that was not there: `PARK_EXTRUDER`
+  returned an instant `ok`, nothing moved, and the wait timed out. Engagement is now
+  read **only** from `extruder*.state === 'ACTIVATE'`.
+- **`toolhead` is not subscribed at all**, so anything read from it is as old as the last
+  explicit query. `homed_axes` is fetched once a second during a wait for exactly this
+  reason.
+- **`machine_state_manager` is silent for manual work.** It reads
+  `{main_state: 0, action_code: 0}` straight through a 31-second toolchange and through
+  homing. So is `extruder_offset_calibration.calibration_step`, which stays `"idle"`.
+  Both were trusted, and both had nothing to say.
+- **`homed_axes: ""` is an answer, not an absence** — the machine saying nothing is
+  homed. Reading it as *unknown* let every Z jog through to a printer that refuses them,
+  so the bed buttons looked dead.
 
-`state.busyReason()` is the answer to the second: it reads
-`extruder_offset_calibration.calibration_step`, `display_status.message` and
-`motion_report.live_velocity` as well. `idle_timeout` is deliberately excluded — it reads
-`"Printing"` on an idle U1 and would keep a wait alive forever.
+**What a toolchange actually reports** (driven and logged end to end, 2026-08-24):
 
-**Also this session:** the whole MQTT topic map (seven topics, four undocumented), the
-camera proven to be HTTP-fetched rather than pushed, `sw_GetPrintHistory` added to the
-C++, and the JSON-RPC envelope unwrapped centrally — the simulator had been agreeing with
-the client rather than with the printer, which is how all of it survived so long.
+```
+ 0.7s  toolhead.homed_axes "z"      idle_timeout "Printing"
+ 4.7s  toolhead.homed_axes "y"
+14.7s  toolhead.homed_axes "xy"        <- the "XY calibration" a user sees
+28.7s  extruder.activating_move true
+30.7s  extruder.state "ACTIVATE"       <- done
+32.7s  idle_timeout "Ready"
+```
+
+`state.busyReason()` is built on those: `homed_axes` drives the label and names the axes
+already done, `activating_move` names the grab, `idle_timeout` brackets the whole thing
+and **is** treated as busy. Measured durations: **4 s** already homed, **31 s** from cold.
+The 31 s case is what outran the bridge's 15 s request timeout and made a working
+toolchange look like a failure — which is why a wait never awaits its own request, and
+confirms against machine state instead.
+
+One trap worth carrying forward: **an instant `ok` is indistinguishable from success.**
+`PARK_EXTRUDER2` against a live head blocks for over 20 s; against a head that is not
+there it returns immediately and successfully. No G-code ack can tell those apart.
 
 ### Tooling worth knowing about
 
@@ -249,12 +269,12 @@ half-hour available.
 
 In rough order of value:
 
-1. **Drive the rebuilt Control panel on hardware, watching the WCP trace.** Everything
-   below the UI is measured; the UI itself has only been reasoned about. Specifically
-   unverified: whether the bridge delivers a camera `{state, url}` as the subscribe ack
-   or as a push (the client accepts either), and what `calibration_step` actually reads
-   during a toolchange — the step name is shown raw because no label table exists
-   anywhere for it.
+1. **Drive the rebuilt Control panel from inside Orca.** Pick, park, home, jog and the
+   wait dialog have all been exercised against the printer — but over MQTT, running
+   `state.js` directly, not through the app. What that cannot check is the bridge leg:
+   whether a camera `{state, url}` arrives as the subscribe ack or as a push (the client
+   accepts either), and whether `sw_SetSubscribeFilter` narrowing `EXTRUDER_FIELDS`
+   changes what the wait can see. One session with the Device tab open settles both.
 2. **Confirm the camera and thumbnail paths.** `cameraFrameUrl()` fetches the frame over
    HTTP, `startCamera` sends `domain: "lan"`, `fileDetails` asks the base64 command
    first. Pinned to `data/hardware-shapes.json`, never watched end to end in Orca.
