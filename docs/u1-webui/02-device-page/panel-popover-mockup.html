@@ -211,8 +211,12 @@
   .tilewrap{flex:1 1 0;min-width:0}
   .tile{padding:6px 2px}
   .tile b{font-size:11px}
-  .tile .sw{width:28px;height:16px;flex:0 0 28px;margin:1px 0 0}
-  .tile .sw::after{width:12px;height:12px}
+  /* flex:none, NOT flex:0 0 28px - the tile is a COLUMN flex container, so a
+     flex-basis applies to the height. That made the track 28x28, and a 999px radius
+     turned the square into a circle. */
+  .tile .sw{width:28px;height:16px;flex:none;margin:2px 0 0}
+  .tile .sw::after{width:12px;height:12px;top:2px;left:2px}
+  .tile .sw[aria-checked="true"]::after{left:14px}
 
   /* picker: four across, the action spanning them */
   .colPick{width:196px;flex:0 0 196px;display:flex;flex-direction:column;gap:7px}
