@@ -3658,8 +3658,7 @@ void Sidebar::update_all_preset_comboboxes(bool reload_printer_view)
                 if(hasOnlineMachine)
                     p->combo_printer->set_show_machine_connecting_button(true);
     
-                wxString url = wxString::FromUTF8(LOCALHOST_URL + std::to_string(wxGetApp().get_page_http_port()) +
-                                                  "/web/flutter_web/index.html?path=2");
+                wxString url = wxGetApp().get_u1_surface_url(GUI_App::U1Surface::DeviceTab);
                 auto real_url = wxGetApp().get_international_url(url);
                 
                 if (!is_sm_page && reload_printer_view) {

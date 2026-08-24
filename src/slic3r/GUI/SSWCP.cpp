@@ -6931,14 +6931,12 @@ void SSWCP_MqttAgent_Instance::sw_mqtt_set_engine()
                                     wxGetApp().mainframe->update_slice_print_status(MainFrame::eEventPlateUpdate);
 
                                     if (!wxGetApp().mainframe->m_printer_view->isSnapmakerPage()) {
-                                        wxString url      = wxString::FromUTF8(LOCALHOST_URL + std::to_string(wxGetApp().get_page_http_port()) +
-                                                                               "/web/flutter_web/index.html?path=2");
+                                        wxString url      = wxGetApp().get_u1_surface_url(GUI_App::U1Surface::DeviceTab);
                                         auto     real_url = wxGetApp().get_international_url(url);
                                         wxGetApp().mainframe->load_printer_url(real_url); 
                                     } else {
                                         if (reload_device_view) {
-                                            wxString url      = wxString::FromUTF8(LOCALHOST_URL + std::to_string(wxGetApp().get_page_http_port()) +
-                                                                                   "/web/flutter_web/index.html?path=2");
+                                            wxString url      = wxGetApp().get_u1_surface_url(GUI_App::U1Surface::DeviceTab);
                                             auto     real_url = wxGetApp().get_international_url(url);
 
                                             wxGetApp().mainframe->load_printer_url(real_url);

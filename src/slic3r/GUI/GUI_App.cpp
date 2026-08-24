@@ -3924,7 +3924,7 @@ void GUI_App::recreate_GUI(const wxString &msg_name)
 
     if (!preset_bundle->is_bbl_vendor()) {
         if (is_snapmaker_u1) {
-            wxString url      = wxString::FromUTF8(LOCALHOST_URL + std::to_string(get_page_http_port()) + "/web/flutter_web/index.html?path=2");
+            wxString url      = get_u1_surface_url(U1Surface::DeviceTab);
             auto     real_url = wxGetApp().get_international_url(url);
             mainframe->load_printer_url(real_url);
         } else {
@@ -4368,6 +4368,52 @@ wxString GUI_App::get_international_url(const wxString& origin_url) {
                wxString::FromUTF8("&dark_mode=" + dark_mode);
     }
 
+}
+
+// ---- Snapmaker U1 embedded web surfaces ------------------------------------
+//
+// One place decides whether the Device tab and the print-processing popup are
+// served by the shipped Flutter bundle or by the reconstructions in
+// resources/web/. See docs/u1-webui/ for what the reconstructions cover, and
+// note they are deliberately narrower than the bundle - flipping
+// "u1_reconstructed_ui" back to false restores the shipped pages.
+wxString GUI_App::get_u1_surface_url(U1Surface surface) const
+{
+    const std::string port = std::to_string(get_page_http_port());
+    const bool reconstructed = app_config->get_bool("u1_reconstructed_ui");
+
+    std::string path;
+    if (reconstructed) {
+        switch (surface) {
+        case U1Surface::DeviceTab:      path = "/web/device_page/index.html"; break;
+        case U1Surface::PrintAndUpload: path = "/web/print_processing/index.html?mode=print"; break;
+        case U1Surface::UploadOnly:     path = "/web/print_processing/index.html?mode=upload"; break;
+        }
+    } else {
+        switch (surface) {
+        case U1Surface::DeviceTab:      path = "/web/flutter_web/index.html?path=2"; break;
+        case U1Surface::PrintAndUpload: path = "/web/flutter_web/index.html?path=4"; break;
+        case U1Surface::UploadOnly:     path = "/web/flutter_web/index.html?path=5"; break;
+        }
+    }
+    return wxString::FromUTF8(LOCALHOST_URL + port + path);
+}
+
+bool GUI_App::is_u1_device_tab_url(const wxString& url)
+{
+    // The Flutter bundle distinguishes its surfaces by ?path=; the reconstruction
+    // uses a directory per surface. Accept either, so callers do not have to know
+    // which implementation is active.
+    if (url.find("device_page/index.html") != wxString::npos)
+        return true;
+    return url.find("flutter_web") != wxString::npos && url.find("path=2") != wxString::npos;
+}
+
+bool GUI_App::is_u1_surface_url(const wxString& url)
+{
+    return url.find("flutter_web") != wxString::npos
+        || url.find("device_page/index.html") != wxString::npos
+        || url.find("print_processing/index.html") != wxString::npos;
 }
 
 bool GUI_App::is_user_login()
