@@ -289,6 +289,57 @@
   .opt:hover .demo-btn{background:color-mix(in srgb,var(--accent) 10%,transparent)}
   .applied{font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;
            color:var(--accent-in);background:var(--accent);padding:1px 6px;border-radius:999px}
+
+  /* ---- slider variants, after the shipped fan control ------------------ */
+  .svars{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+  .svar{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .svar-head{font-size:14px;margin-bottom:2px}
+  .svar-body{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+             padding:14px 16px;max-width:400px}
+  .sctl{padding:6px 0 2px}
+  .sctl + .sctl{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+  .shead{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+  .sbadge{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;
+          display:grid;place-items:center;flex:none}
+  .sbadge svg{width:13px;height:13px}
+  .stitle{font-size:13px;color:var(--ink)}
+  .snum{margin-left:auto;font-size:13px;font-variant-numeric:tabular-nums;color:var(--ink)}
+
+  .sl-wrap{position:relative;height:22px}
+  .sl-ticks{position:absolute;left:9px;right:9px;top:9px;height:4px;display:flex;
+            justify-content:space-between;pointer-events:none}
+  .sl-ticks i{width:1px;height:4px;background:var(--line);display:block}
+  .sl-ticks i:first-child,.sl-ticks i:last-child{background:transparent}
+
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;background:none;
+                    margin:0;height:22px;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:999px;
+    background:var(--panel-2);border:1px solid var(--line)}
+  input[type=range]::-moz-range-track{height:4px;border-radius:999px;
+    background:var(--panel-2);border:1px solid var(--line)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:18px;height:18px;border-radius:50%;background:#fff;border:1px solid var(--line);
+    box-shadow:0 1px 3px rgba(16,24,32,.22);margin-top:-8px}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;
+    background:#fff;border:1px solid var(--line);box-shadow:0 1px 3px rgba(16,24,32,.22)}
+  input[type=range]:hover::-webkit-slider-thumb{border-color:var(--accent)}
+  input[type=range]:hover::-moz-range-thumb{border-color:var(--accent)}
+  input[type=range]:focus{outline:none}
+  input[type=range]:focus::-webkit-slider-thumb{border-color:var(--accent);
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+  input[type=range]:focus::-moz-range-thumb{border-color:var(--accent);
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+
+  .sl-labels{display:flex;justify-content:space-between;margin-top:5px}
+  .sl-labels span{font-size:11px;color:var(--muted);text-align:center;flex:1}
+  .sl-labels span:first-child{text-align:left}
+  .sl-labels span:last-child{text-align:right}
+  .sl-labels em{display:block;font-style:normal;font-size:10px;opacity:.75;margin-top:1px}
+  .sstep{display:flex;align-items:center;gap:8px;margin-top:12px}
+  .sbtn{width:30px;height:28px;display:grid;place-items:center;border:1px solid var(--line);
+        border-radius:7px;background:var(--panel-2);cursor:pointer;font-size:14px}
+  .sbtn:hover{background:var(--line)}
+  .sval{flex:1;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}
 </style>
 
 <div class="wrap">
@@ -653,4 +704,81 @@
         <span class="pickbtn demo-btn">Pick extruder</span>
       </div>
     </div></div>
+
+  <h2><span class="n">07</span>Slider styling — pick one</h2>
+  <p class="lede">After the shipped Snapmaker fan control. All three are live — drag a
+     knob. The difference that matters is what happens between the ticks.</p>
+  <div class="svars"><div class="svar"><div class="svar-head"><b>Version 1 · Faithful</b></div><p class="opt-note">Exactly the shipped control: a free slider, ticks every 25%, plain percentages underneath. Print speed borrows the same language but has only three positions, because 50/100/150 is all the U1 accepts — so its track shows three ticks, not five.</p><div class="svar-body"><div class="sctl">
+        <div class="shead"><span class="sbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.2"/><path d="M12 9.8C12 6 14 3 17 4c2 .7 1.6 4-1 5.2M14.2 12c3.8 0 6.8 2 5.8 5-.7 2-4 1.6-5.2-1M12 14.2c0 3.8-2 6.8-5 5.8-2-.7-1.6-4 1-5.2M9.8 12C6 12 3 10 4 7c.7-2 4-1.6 5.2 1"/></svg></span><span class="stitle">Main Cooling Fan Speed</span>
+          <b class="snum">0%</b></div>
+        <div class="sl-wrap">
+          <div class="sl-ticks"><i></i><i></i><i></i><i></i><i></i></div>
+          <input type="range" id="v1a" min="0" max="100" step="1" value="0"
+                 aria-label="Main Cooling Fan Speed">
+        </div>
+        <div class="sl-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+      </div><div class="sctl">
+        <div class="shead"><span class="sbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.8"/><path d="M12 10.2V4M13.8 12H20M12 13.8V20M10.2 12H4M15.5 8.5l3-3M15.5 15.5l3 3M8.5 15.5l-3 3M8.5 8.5l-3-3"/></svg></span><span class="stitle">Assist Cooling Fan Speed</span>
+          <b class="snum">0%</b></div>
+        <div class="sl-wrap">
+          <div class="sl-ticks"><i></i><i></i><i></i><i></i><i></i></div>
+          <input type="range" id="v1b" min="0" max="100" step="1" value="0"
+                 aria-label="Assist Cooling Fan Speed">
+        </div>
+        <div class="sl-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+      </div><div class="sctl">
+        <div class="shead"><span class="sbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.3"/></svg></span><span class="stitle">Print Speed</span>
+          <b class="snum">100%</b></div>
+        <div class="sl-wrap">
+          <div class="sl-ticks"><i></i><i></i><i></i></div>
+          <input type="range" id="v1c" min="50" max="150" step="50" value="100"
+                 aria-label="Print Speed">
+        </div>
+        <div class="sl-labels"><span>50%</span><span>100%</span><span>150%</span></div>
+      </div></div></div><div class="svar"><div class="svar-head"><b>Version 2 · Named stops</b></div><p class="opt-note">The same slider, snapped to its ticks, with the name above and the number below. <code>step</code> does the snapping, so the knob cannot land somewhere the label does not describe.</p><div class="svar-body"><div class="sctl">
+        <div class="shead"><span class="sbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.2"/><path d="M12 9.8C12 6 14 3 17 4c2 .7 1.6 4-1 5.2M14.2 12c3.8 0 6.8 2 5.8 5-.7 2-4 1.6-5.2-1M12 14.2c0 3.8-2 6.8-5 5.8-2-.7-1.6-4 1-5.2M9.8 12C6 12 3 10 4 7c.7-2 4-1.6 5.2 1"/></svg></span><span class="stitle">Main Cooling Fan Speed</span>
+          <b class="snum">0%</b></div>
+        <div class="sl-wrap">
+          <div class="sl-ticks"><i></i><i></i><i></i><i></i><i></i></div>
+          <input type="range" id="v2a" min="0" max="100" step="25" value="0"
+                 aria-label="Main Cooling Fan Speed">
+        </div>
+        <div class="sl-labels"><span>Off<em>0%</em></span><span>Low<em>25%</em></span><span>Med<em>50%</em></span><span>High<em>75%</em></span><span>Full<em>100%</em></span></div>
+      </div><div class="sctl">
+        <div class="shead"><span class="sbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.8"/><path d="M12 10.2V4M13.8 12H20M12 13.8V20M10.2 12H4M15.5 8.5l3-3M15.5 15.5l3 3M8.5 15.5l-3 3M8.5 8.5l-3-3"/></svg></span><span class="stitle">Assist Cooling Fan Speed</span>
+          <b class="snum">0%</b></div>
+        <div class="sl-wrap">
+          <div class="sl-ticks"><i></i><i></i><i></i><i></i><i></i></div>
+          <input type="range" id="v2b" min="0" max="100" step="25" value="0"
+                 aria-label="Assist Cooling Fan Speed">
+        </div>
+        <div class="sl-labels"><span>Off<em>0%</em></span><span>Low<em>25%</em></span><span>Med<em>50%</em></span><span>High<em>75%</em></span><span>Full<em>100%</em></span></div>
+      </div><div class="sctl">
+        <div class="shead"><span class="sbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.3"/></svg></span><span class="stitle">Print Speed</span>
+          <b class="snum">100%</b></div>
+        <div class="sl-wrap">
+          <div class="sl-ticks"><i></i><i></i><i></i></div>
+          <input type="range" id="v2c" min="50" max="150" step="50" value="100"
+                 aria-label="Print Speed">
+        </div>
+        <div class="sl-labels"><span>Silent<em>50%</em></span><span>Standard<em>100%</em></span><span>Sport<em>150%</em></span></div>
+      </div></div></div><div class="svar"><div class="svar-head"><b>Version 3 · Slider + stepper</b></div><p class="opt-note">The slider for reach, a −/+ field for precision. Worth it where a value is genuinely continuous and someone may want 62%; redundant where there are three legal values.</p><div class="svar-body"><div class="sctl">
+        <div class="shead"><span class="sbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.2"/><path d="M12 9.8C12 6 14 3 17 4c2 .7 1.6 4-1 5.2M14.2 12c3.8 0 6.8 2 5.8 5-.7 2-4 1.6-5.2-1M12 14.2c0 3.8-2 6.8-5 5.8-2-.7-1.6-4 1-5.2M9.8 12C6 12 3 10 4 7c.7-2 4-1.6 5.2 1"/></svg></span><span class="stitle">Main Cooling Fan Speed</span>
+          <b class="snum">0%</b></div>
+        <div class="sl-wrap">
+          <div class="sl-ticks"><i></i><i></i><i></i><i></i><i></i></div>
+          <input type="range" id="v3a" min="0" max="100" step="1" value="0"
+                 aria-label="Main Cooling Fan Speed">
+        </div>
+        <div class="sl-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div><div class="sstep"><span class="sbtn">−</span><span class="sval">0%</span><span class="sbtn">+</span></div>
+      </div><div class="sctl">
+        <div class="shead"><span class="sbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.3"/></svg></span><span class="stitle">Print Speed</span>
+          <b class="snum">100%</b></div>
+        <div class="sl-wrap">
+          <div class="sl-ticks"><i></i><i></i><i></i></div>
+          <input type="range" id="v3c" min="50" max="150" step="50" value="100"
+                 aria-label="Print Speed">
+        </div>
+        <div class="sl-labels"><span>50%</span><span>100%</span><span>150%</span></div><div class="sstep"><span class="sbtn">−</span><span class="sval">100%</span><span class="sbtn">+</span></div>
+      </div></div></div></div>
 </div>
