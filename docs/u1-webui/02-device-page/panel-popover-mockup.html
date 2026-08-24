@@ -118,7 +118,7 @@
         background:color-mix(in srgb,var(--accent) 10%,transparent)}
   .tilewrap > input:checked ~ .tile .ic{opacity:1;color:var(--accent)}
   .tilewrap > input:checked ~ .tile b{color:var(--accent)}
-  .pop{display:none;position:absolute;z-index:30;top:calc(100% + 7px);left:0;width:300px;
+  .pop{display:none;position:absolute;z-index:30;top:calc(100% + 7px);left:0;width:328px;
        background:var(--panel);border:1px solid var(--line);border-radius:10px;
        box-shadow:var(--pop-shadow);padding:13px 15px 15px}
   .tilewrap > input:checked ~ .pop{display:block}
@@ -230,17 +230,14 @@
 
 
   /* one fan button, every fan inside it */
-  .pop.wide{width:326px}
-  .fanrow{border:1px solid var(--line);border-radius:8px;padding:9px 11px 7px;margin-bottom:8px}
-  .fanrow:last-of-type{margin-bottom:0}
-  .fanhead{display:flex;align-items:center;gap:7px}
+  .pop.wide{width:340px}
+      .fanhead{display:flex;align-items:center;gap:7px}
   .fanname{font-size:12px;font-weight:600}
   .fanwire{font-size:10px;color:var(--muted);background:var(--panel-2);padding:1px 5px;
            border-radius:4px}
   .fanhead .sw.sm{margin-left:auto;width:30px;height:17px;flex:0 0 30px}
   .fanhead .sw.sm::after{width:13px;height:13px}
-  .fanrow .steprow{margin-top:8px;padding-top:0;border-top:0;gap:6px}
-  .fannote{font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.4}
+    .fannote{font-size:11px;color:var(--muted);margin:6px 0 0;line-height:1.4}
 
   /* Pick and Park are a pair: one engages a head, the other leaves none engaged. */
   .actrow{display:flex;gap:6px}
@@ -389,11 +386,15 @@
                   <div class="pop-head"><span class="pop-title">Print speed</span>
                     <label class="pop-x" for="t-none">×</label></div>
                   <p class="pop-note">This only takes effect during printing.</p>
-                  <div class="track"><i style="width:50%"></i></div>
-                  <div class="stoprow">
-                    <div class="stop"><span class="dot"></span>Silent<span class="pct">50%</span></div>
-                    <div class="stop on"><span class="dot"></span>Standard<span class="pct">100%</span></div>
-                    <div class="stop"><span class="dot"></span>Sport<span class="pct">150%</span></div>
+                  <div class="sctl">
+                    <div class="shead"><span class="sbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.3"/></svg></span>
+                      <span class="stitle">Print Speed</span><b class="snum">100%</b></div>
+                    <div class="sl-wrap">
+                      <div class="sl-ticks"><i></i><i></i><i></i></div>
+                      <input type="range" id="pop-spd" min="50" max="150" step="50"
+                             value="100" aria-label="Print Speed">
+                    </div>
+                    <div class="sl-labels"><span>50%</span><span>100%</span><span>150%</span></div><p class="fannote">The U1 accepts 50, 100 and 150 only, so the knob snaps — three ticks, not five.</p>
                   </div>
                 </div>
               </div>
@@ -403,29 +404,27 @@
                 <div class="pop wide">
                   <div class="pop-head"><span class="pop-title">Fan control</span>
                     <label class="pop-x" for="t-none">×</label></div>
-                  <p class="pop-note">Every fan the machine exposes, in one place. They are
-                     separate objects on the wire and are set independently.</p>
-                  <div class="fanrow">
-                    <div class="fanhead"><span class="fanname">Main cooling</span>
-                      <code class="fanwire">fan</code>
-                      <span class="sw sm"></span></div>
-                    <div class="steprow">
-                      <span class="stepbtn">−</span>
-                      <span class="stepval">0%</span>
-                      <span class="stepbtn">+</span>
+                  <p class="pop-note">Every fan the machine exposes, in one place. They are separate
+                     objects on the wire and are set independently.</p>
+                  <div class="sctl">
+                    <div class="shead"><span class="sbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.2"/><path d="M12 9.8C12 6 14 3 17 4c2 .7 1.6 4-1 5.2M14.2 12c3.8 0 6.8 2 5.8 5-.7 2-4 1.6-5.2-1M12 14.2c0 3.8-2 6.8-5 5.8-2-.7-1.6-4 1-5.2M9.8 12C6 12 3 10 4 7c.7-2 4-1.6 5.2 1"/></svg></span>
+                      <span class="stitle">Main Cooling Fan Speed</span><b class="snum">0%</b></div>
+                    <div class="sl-wrap">
+                      <div class="sl-ticks"><i></i><i></i><i></i><i></i><i></i></div>
+                      <input type="range" id="pop-fan" min="0" max="100" step="1"
+                             value="0" aria-label="Main Cooling Fan Speed">
                     </div>
-                    <p class="fannote">Part cooling, aimed at the print.</p>
+                    <div class="sl-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div><p class="fannote">Part cooling, aimed at the print. <code>fan.speed</code>.</p>
                   </div>
-                  <div class="fanrow">
-                    <div class="fanhead"><span class="fanname">Assist cooling</span>
-                      <code class="fanwire">fan_generic cavity_fan</code>
-                      <span class="sw sm"></span></div>
-                    <div class="steprow">
-                      <span class="stepbtn">−</span>
-                      <span class="stepval">0%</span>
-                      <span class="stepbtn">+</span>
+                  <div class="sctl">
+                    <div class="shead"><span class="sbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.8"/><path d="M12 10.2V4M13.8 12H20M12 13.8V20M10.2 12H4M15.5 8.5l3-3M15.5 15.5l3 3M8.5 15.5l-3 3M8.5 8.5l-3-3"/></svg></span>
+                      <span class="stitle">Assist Cooling Fan Speed</span><b class="snum">0%</b></div>
+                    <div class="sl-wrap">
+                      <div class="sl-ticks"><i></i><i></i><i></i><i></i><i></i></div>
+                      <input type="range" id="pop-aux" min="0" max="100" step="1"
+                             value="0" aria-label="Assist Cooling Fan Speed">
                     </div>
-                    <p class="fannote">Chamber / auxiliary flow.</p>
+                    <div class="sl-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div><p class="fannote">Chamber / auxiliary flow. <code>fan_generic cavity_fan</code>.</p>
                   </div>
                 </div>
               </div>
