@@ -61,16 +61,35 @@ written from the same reading of the C++ as the client. That proves the two agre
 does **not** prove the printer agrees. The connect path above is exactly where that
 distinction turned out to matter.
 
-Specifically unproven, because the response shapes are pass-throughs from the printer and
-their field names are not literals in the bundle:
+Two of the three response shapes below have since been **settled against the printer**
+(2026-08-24) with [`tools/u1_probe.py`](tools/u1_probe.py) and
+[`tools/u1_topics.py`](tools/u1_topics.py), which speak MQTT directly and do not need Orca
+running. Both guesses were wrong, and in the camera's case wrong about the transport, not
+just the field name:
 
-- **camera frames** — `pickFrame()` in `device_page/js/ui.js` sniffs several plausible
-  field names
-- **file thumbnails** — `pickThumb()` in `device_page/js/app.js`, same approach
-- **discovery results** — the shape of what `sw_StartMachineFind` pushes
+- **camera frames** — *not base64 over MQTT at all*. `camera.start_monitor` needs
+  `domain: "lan"` (`""` is rejected `-32000`) and returns
+  `{state, url: "/files/camera/monitor.jpg"}`. The printer then rewrites that one file at
+  the monitor interval — the flood of `notify_filelist_changed` for `monitor.jpg` — and
+  the frame is fetched over HTTP from Moonraker's file server at
+  `http://<ip>:7125/server/files/timelapse/monitor.jpg`. Verified: 96,001 bytes, JPEG SOI
+  marker. `pickFrame()` in `device_page/js/ui.js` waits for a push that never comes.
+- **file thumbnails** — `server.files.thumbnails` returns
+  `[{width, height, size, thumbnail_path}]`: **paths, no image data**. The base64 lives
+  behind `server.files.thumbnails_base64`, as `{width, height, size, data, state, path}`.
+  `pickThumb()` in `device_page/js/app.js` matches neither `thumbnail_path` nor the
+  directory listing's `relative_path`, so it returns null — and because the first command
+  *succeeds*, the page's `.catch()` fallback to the base64 one never fires. A real printer
+  therefore shows no thumbnail at all.
+- **discovery results** — still open. `sw_StartMachineFind` is Orca's own LAN discovery
+  (Bonjour, `SSWCP.cpp:1789`), not an MQTT pass-through, so these probes cannot reach it;
+  it needs the running app.
 
-Each leaves the raw payload in the WCP trace when no field matches, so one look at real
-data closes them.
+The full topic map is [05-printer-protocol/06-mqtt-topics.md](05-printer-protocol/06-mqtt-topics.md).
+Subscribing the `#` wildcard found **seven** topics on the session leg where reading the
+C++ had found four — `moonraker/response`, `camera/response`, `mqtt_agent/notification`
+and `LAVA/notification` are shared, carry no serial number, and Orca never subscribes to
+any of them.
 
 ## How to work on this
 
@@ -97,7 +116,21 @@ python3 -m http.server 8099 --directory resources/web
 
 ### Debugging against real hardware
 
-This is the loop that found the connect bugs, and it is worth reusing.
+Two ways in. The **direct** one needs no GUI at all and is usually what you want:
+
+```bash
+python3 docs/u1-webui/tools/u1_probe.py  --out /tmp/shapes.json   # response shapes
+python3 docs/u1-webui/tools/u1_topics.py --md /tmp/topics.md      # every topic
+```
+
+They read the device from Orca's config, run the documented connect path over a
+200-line standard-library MQTT client, and are read-only. Orca must **not** be running:
+they authenticate with the saved `clientId`, and a broker evicts the older holder of a
+duplicate id.
+
+The **in-app** loop below is still the only way to reach anything Orca itself provides —
+discovery, the native dialogs, the bridge envelope. It is the loop that found the connect
+bugs, and it is worth reusing.
 
 1. Add `?diag=1` to the page URL, or set `DIAG` in `device_page/js/app.js`, to turn on
    per-command tracing.
@@ -122,8 +155,10 @@ falls back to the simulator, which looks like real data and is not.
 
 In rough order of value:
 
-1. **Confirm the three pass-through shapes** above against the printer. Cheap: open the
-   Device tab with a camera running and read the trace.
+1. **Make the page act on the shapes now known.** The camera and thumbnail findings above
+   are recorded but the client is not yet fixed: `pickFrame()` still waits for an MQTT
+   push, `startCamera` still sends `domain: ""`, and `fileDetails` still prefers the
+   thumbnail command that returns paths. Discovery is the one shape still unmeasured.
 2. **Fault banner against a real fault.** The decoder and the 442-code catalogue are in
    place (`shared/js/errors.js`, generated); it has never seen a real `action_code`.
 3. **`sw_SetSubscribeFilter` fails at boot** and is fired best-effort. It succeeds once a
