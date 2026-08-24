@@ -416,20 +416,48 @@ check("the fault banner honours [hidden]",
       re.search(r"\.fault\[hidden\]\s*\{[^}]*display:\s*none", css) is not None,
       "display:flex on .fault overrides the UA [hidden] rule")
 
-# three rows, three glyphs: sharing one made the purifier look like the fan
-icons = dict(re.findall(r"(\w+Row)\.appendChild\(icon\('([A-Za-z0-9]+)'\)\)", ui_src))
-row_icons = [v for k, v in icons.items() if k in ("fanRow", "purRow", "spRow")]
-check("fan, purifier and print speed each have their own icon",
-      len(row_icons) == 3 and len(set(row_icons)) == 3,
-      f"got {icons}")
-for name in set(row_icons):
+# The quick settings must not share a glyph - sharing one made the purifier read as a
+# second fan. The shipped bundle has a distinct icon for each, so use them.
+# any icon name the module names, however it is passed - tile(), icon(), sliderRow()
+icons = set(re.findall(r"'(icon[A-Z]\w*)'", ui_src))
+wanted = {"iconSpeed", "iconMainCooling", "iconAuxiliaryCooling", "iconPurifier", "iconLed"}
+check("each quick setting uses its own shipped icon",
+      wanted <= icons,
+      f"missing {sorted(wanted - icons)}")
+for name in sorted(wanted | {f"iconExtruder{i}" for i in range(1, 5)} | {"iconHotBedTemperature"}):
     check(f"icon asset exists: {name}.svg",
           os.path.exists(os.path.join(WEB, "device_page", "icons", f"{name}.svg")))
 
-# every value row in the left column opens a sheet rather than editing in place
-check("print speed opens a sheet, like the fan and purifier rows",
-      "spRow.onclick" in ui_src and "title: 'Print speed'" in ui_src,
-      "an inline row of buttons changes the setting by brushing past it")
+check("quick settings open an anchored popover, not a centred sheet",
+      "openPopover" in ui_src and ui_src.count("openPopover(anchor") >= 3,
+      "a modal hides the readings the user is acting on")
+
+# temperature targets edit in place, and the row is the hover target
+check("temperature targets are real number inputs with the machine's limits",
+      "tgt.type = 'number'" in ui_src and "tgt.min" in ui_src and "tgt.max" in ui_src,
+      "an input brings the I-beam, keyboard and validation; a styled span brings none")
+check("the whole row reveals the editable target, not just the input",
+      ".status-row:hover .tgt" in css,
+      "a 30px number is not a target you find by accident")
+check("hover paint cannot mask the editing or invalid state",
+      ":not(:focus):not(:invalid)" in css,
+      "a descendant selector outranks .tgt:focus and .tgt:invalid")
+
+# the wheel: the ring is the step, so there is no separate step selector
+check("the jog wheel carries three step bands",
+      re.search(r"JOG_STEPS\s*=\s*\[10,\s*1,\s*0\.1\]", ui_src) is not None,
+      "the ring is the step size; a separate selector would reintroduce hidden state")
+check("a sector is a real annular path, not a box",
+      "A${r2" in ui_src or "sector(" in ui_src,
+      "rectangles would put the corners in the wrong quadrant")
+check("an unhomed axis blocks the jog and says so",
+      "data-blocked" in ui_src and "allHomed === false" in app_src,
+      "Klipper refuses the move silently, which looks like a dead button")
+
+# absent hardware
+check("an absent purifier disables its own modes",
+      "purAbsent" in ui_src and 'aria-disabled' in ui_src,
+      "a control for hardware that is not attached is a claim the machine would refuse")
 
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)

@@ -266,6 +266,32 @@ const handlers = {
              + 'The printer may still be working, or the change may have failed.');
   },
 
+  /**
+   * Park the live toolhead, leaving none engaged.
+   *
+   * Not a duplicate of pickTool: that ends with a *different* head engaged, this ends
+   * with none, which is the state wanted before a lid comes off or a nozzle is changed.
+   * The machine draws the same distinction - extruder.state reads PARKED or ACTIVATE.
+   */
+  parkTool: async () => {
+    const dlg = openBlockingDialog({
+      title: 'Parking the toolhead',
+      message: 'Waiting for the printer to park\u2026',
+    });
+    try {
+      await bridge.request(CMD.SEND_GCODES, { script: 'T-1' });
+    } catch (e) {
+      dlg.fail(`The printer refused to park: ${e.message}`);
+      return;
+    }
+    const deadline = Date.now() + TOOL_CHANGE_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      if (state.toolhead().activeIndex == null) { dlg.close(); render(); return; }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    dlg.fail('The printer did not report a parked toolhead in time.');
+  },
+
   /** Jump to the file browser - the idle task panel's one useful action. */
   showFiles: () => {
     const tabs = document.querySelectorAll('.panel')[2].querySelectorAll('.tab');
@@ -733,8 +759,15 @@ const handlers = {
       return send(CMD.SEND_GCODES,
                   { script: `T${t}\nG91\nG0 E${d} F300\nG90` }, 'extrude');
     }
+    // Klipper refuses a move on an unhomed axis and the failure is silent from here,
+    // so say so rather than letting the press look like a dead button.
+    if (state.toolhead().allHomed === false) {
+      setStatus('Home the axes before jogging', 'warn');
+      return;
+    }
+    const feed = axis === 'Z' ? 600 : 3000;
     return send(CMD.SEND_GCODES,
-                { script: `G91\nG0 ${axis}${d} F3000\nG90` }, `jog ${axis}`);
+                { script: `G91\nG0 ${axis}${d} F${feed}\nG90` }, `jog ${axis}`);
   },
 };
 

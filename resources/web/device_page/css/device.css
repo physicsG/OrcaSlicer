@@ -761,3 +761,242 @@ body {
 
 /* The pick button sits beside Home and reads as an action, not a mode. */
 .pick-btn { margin-right: 6px; }
+
+
+/* =====================================================================
+   Control panel, rebuilt: readings | toolhead picker | motion.
+   Follows docs/u1-webui/02-device-page/panel-popover-mockup.html
+   ===================================================================== */
+
+.control-grid {
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+/* The motion column sizes to its content. As flex:1 it swallowed the surplus and
+   centred the wheel inside itself, which made an equal `gap` render unequally. */
+.control-main { flex: 0 0 auto; display: flex; gap: 40px; align-items: flex-start; }
+.status-card  { width: 126px; flex: 0 0 126px; border: 0; padding: 0; }
+
+/* ---- readings: icon and value, no label ---------------------------- */
+.status-row {
+  display: flex; align-items: center; gap: 5px;
+  height: 37px; padding: 0 7px;
+  border: 2px solid transparent; border-radius: 8px;
+  font-size: 13px; color: var(--ink);
+}
+.status-row img { width: 17px; height: 17px; flex: 0 0 17px; opacity: .8; }
+.status-row .cur { font-variant-numeric: tabular-nums; font-weight: 600; }
+.status-row .sl { color: var(--ink-dim); }
+.status-row .unit { color: var(--ink-dim); font-size: 12px; }
+
+/* The target looks like text until the row is hovered. Keyed to the ROW, not the
+   input: a 30px number is not a target you find by accident. */
+.status-row .tgt {
+  width: 30px; padding: 2px 3px;
+  font: inherit; font-size: 13px; font-variant-numeric: tabular-nums;
+  color: var(--ink); background: transparent;
+  border: 1px solid transparent; border-radius: 5px;
+  cursor: text; -moz-appearance: textfield;
+}
+.status-row .tgt::-webkit-outer-spin-button,
+.status-row .tgt::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+/* :not() guards, not source order - `.status-row:hover .tgt` outranks `.tgt:focus`
+   and would mask both the editing outline and the out-of-range warning. */
+.status-row:hover { border-color: var(--line); }
+.status-row:hover .tgt:not(:focus):not(:invalid) {
+  border-color: var(--line); background: var(--pill);
+}
+.status-row .tgt:focus {
+  outline: none; border-color: var(--accent); background: var(--panel);
+}
+.status-row:focus-within { border-color: var(--accent); background: var(--accent-soft); }
+.status-row .tgt:invalid { border-color: var(--warn); color: var(--warn); }
+
+/* ---- quick settings ------------------------------------------------- */
+.qtiles { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.qtile {
+  flex: 1 1 calc(50% - 3px); min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 4px;
+  border: 2px solid transparent; border-radius: 8px;
+  background: var(--pill); cursor: pointer; font: inherit;
+}
+.qtile img { width: 19px; height: 19px; }
+.qtile b { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink); }
+.qtile:hover { background: var(--line); }
+.qtile[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.qtile[aria-expanded="true"] b { color: var(--accent); }
+.qtile[data-absent="1"] { opacity: .55; }
+.qtile[data-absent="1"] b { color: var(--ink-dim); }
+.qtile .switch { margin: 1px 0 0; }
+
+/* ---- toolhead picker ------------------------------------------------ */
+.pick-col { width: 196px; flex: 0 0 196px; display: flex; flex-direction: column; gap: 7px; }
+.pick-row { display: flex; gap: 6px; }
+.pick-box {
+  flex: 1; height: 44px;
+  display: grid; place-items: center;
+  border: 2px solid var(--line); border-radius: 8px;
+  background: var(--panel); cursor: pointer; position: relative;
+}
+.pick-box img { width: 20px; height: 20px; opacity: .8; }
+.pick-box:hover { background: var(--pill); }
+.pick-box.is-active { border-color: var(--accent); background: var(--accent-soft); }
+.pick-box.is-active img { opacity: 1; }
+/* the machine's own state, distinct from what the panel is pointed at */
+.pick-box[data-live="1"]::after {
+  content: ""; position: absolute; top: 4px; right: 4px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--ok);
+}
+.pick-acts { display: flex; gap: 6px; }
+.pick-acts .btn { flex: 1; padding: 7px 4px; font-size: 11px; line-height: 1.25; }
+.ejog {
+  margin-top: 6px; display: flex; flex-direction: column;
+  align-items: center; gap: 6px;
+}
+.ejog .ebtn {
+  width: 74px; height: 32px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--pill); cursor: pointer; font-size: 12px; color: var(--ink);
+}
+.ejog .ebtn:hover { background: var(--line); }
+.ejog .ecap { font-size: 12px; color: var(--ink); font-weight: 600; }
+
+/* ---- the jog wheel --------------------------------------------------- */
+.motion-col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.wheel { width: 272px; height: 272px; display: block; }
+.sect {
+  fill: var(--line-face); stroke: var(--panel); stroke-width: 2.5;
+  cursor: pointer; transition: fill .12s ease;
+}
+.sect.ring1 { fill: #E9EDF2; }
+.sect.ring2 { fill: #E1E7ED; }
+.sect:hover { fill: #DCE8FA; }
+.sect[data-blocked="1"] { cursor: not-allowed; opacity: .5; }
+.sect[data-blocked="1"]:hover { fill: var(--line-face); }
+.home { fill: var(--pill); stroke: var(--line); stroke-width: 1.5; cursor: pointer; }
+.home:hover { fill: var(--accent-soft); }
+.home[data-invite="1"] { stroke: var(--accent); stroke-width: 2; }
+.homeicon { fill: var(--accent); pointer-events: none; }
+text.axis {
+  fill: var(--ink); font: 600 12px var(--sans);
+  text-anchor: middle; dominant-baseline: middle; pointer-events: none;
+}
+text.step {
+  fill: var(--ink-dim); font: 11px var(--mono);
+  text-anchor: middle; dominant-baseline: middle; pointer-events: none;
+}
+
+/* Z moves the bed, so the row says so rather than joining the wheel. */
+.bed-row { display: flex; align-items: center; gap: 4px; font-size: 11px; }
+.bed-btn {
+  display: flex; align-items: center; gap: 3px; padding: 5px 6px;
+  background: var(--pill); border: 1px solid var(--line); border-radius: 7px;
+  cursor: pointer; font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.bed-btn:hover { background: var(--line); }
+.bed-lab { font-size: 12px; color: var(--ink-dim); padding: 0 4px; }
+
+/* ---- anchored popover ------------------------------------------------ */
+.popover {
+  position: fixed; z-index: 60;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: 0 2px 4px rgba(16,24,32,.07), 0 14px 30px -12px rgba(16,24,32,.4);
+  padding: 12px 15px 15px;
+}
+.popover::before {
+  content: ""; position: absolute; top: -6px; left: var(--caret, 22px);
+  width: 10px; height: 10px; background: var(--panel);
+  border-left: 1px solid var(--line); border-top: 1px solid var(--line);
+  transform: rotate(45deg);
+}
+.popover-head { display: flex; align-items: baseline; margin-bottom: 10px; }
+.popover-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+.popover-x {
+  margin-left: auto; border: 0; background: none; cursor: pointer;
+  color: var(--ink-dim); font-size: 16px; line-height: 1; padding: 0 3px;
+}
+.popover-x:hover { color: var(--ink); }
+.pop-empty {
+  display: flex; align-items: center; gap: 9px; padding: 2px 0 12px;
+  font-size: 12.5px; color: var(--ink);
+}
+.pop-empty img { width: 22px; height: 22px; opacity: .65; }
+
+/* ---- slider, after the shipped fan control --------------------------- */
+.sctl + .sctl { margin-top: 18px; }
+.sctl-head { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+.sctl-head img { width: 20px; height: 20px; flex: none; }
+.sctl-title { font-size: 13px; color: var(--ink); }
+.sctl-num { margin-left: auto; font-size: 13px; font-variant-numeric: tabular-nums; }
+.sl-wrap { position: relative; height: 22px; }
+.sl-ticks {
+  position: absolute; left: 9px; right: 9px; top: 9px; height: 4px;
+  display: flex; justify-content: space-between; pointer-events: none;
+}
+.sl-ticks i { width: 1px; height: 4px; background: var(--line); display: block; }
+.sl-ticks i:first-child, .sl-ticks i:last-child { background: transparent; }
+.sl-wrap input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 22px; margin: 0; background: none; cursor: pointer;
+}
+.sl-wrap input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 999px; background: var(--pill); border: 1px solid var(--line);
+}
+.sl-wrap input[type="range"]::-moz-range-track {
+  height: 4px; border-radius: 999px; background: var(--pill); border: 1px solid var(--line);
+}
+.sl-wrap input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; margin-top: -8px; border-radius: 50%;
+  background: #fff; border: 1px solid var(--line);
+  box-shadow: 0 1px 3px rgba(16,24,32,.22);
+}
+.sl-wrap input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; border: 1px solid var(--line);
+  box-shadow: 0 1px 3px rgba(16,24,32,.22);
+}
+.sl-wrap input[type="range"]:focus { outline: none; }
+.sl-wrap input[type="range"]:focus::-webkit-slider-thumb { border-color: var(--accent); }
+.sl-wrap input[type="range"]:focus::-moz-range-thumb { border-color: var(--accent); }
+.sl-labels { display: flex; justify-content: space-between; margin-top: 5px; }
+.sl-labels span { font-size: 11px; color: var(--ink-dim); flex: 1; text-align: center; }
+.sl-labels span:first-child { text-align: left; }
+.sl-labels span:last-child { text-align: right; }
+
+/* ---- purifier modes -------------------------------------------------- */
+.mode-seg { display: flex; gap: 6px; }
+.mode-seg .mode {
+  flex: 1; padding: 7px 0; font: inherit; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 7px;
+  background: var(--panel); color: var(--ink);
+}
+.mode-seg .mode.is-active {
+  border-color: var(--accent); color: var(--accent);
+  background: var(--accent-soft); font-weight: 600;
+}
+.mode-seg[aria-disabled="true"] { opacity: .45; }
+.mode-seg[aria-disabled="true"] .mode { cursor: not-allowed; }
+
+/* ---- pick-extruder dialog -------------------------------------------- */
+.dlg-note { margin: 2px 0 12px; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+.pick-list { display: flex; flex-direction: column; gap: 6px; }
+.pick-opt {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 12px; text-align: left;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); cursor: pointer;
+}
+.pick-opt img { width: 20px; height: 20px; opacity: .8; flex: none; }
+.pick-opt[data-chosen="1"] { border-color: var(--accent); background: var(--accent-soft); }
+.pick-opt-txt { display: flex; flex-direction: column; }
+.pick-opt-name { font-size: 13px; color: var(--ink); }
+.pick-opt-meta { font-size: 11px; color: var(--ink-dim); margin-top: 1px; }
+.pick-opt[data-live="1"] .pick-opt-name::after {
+  content: ""; display: inline-block; width: 6px; height: 6px;
+  margin-left: 6px; border-radius: 50%; background: var(--ok); vertical-align: middle;
+}

@@ -12,7 +12,7 @@ import { LIMITS, PRINT_STATE, TASK_CONFIG, DEVICE, deviceLabel,
          MOONRAKER_HTTP_PORT, CAMERA_FRAME_ROOT, CAMERA_FRAME_FILE,
          cssColor, isDarkColor, PURIFIER_MODES }
   from '../../shared/js/protocol.js';
-import { openDialog, numberField } from './overlay.js';
+import { openDialog, numberField, openPopover, closePopover } from './overlay.js';
 import { lookupFault } from '../../shared/js/errors.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
@@ -178,28 +178,67 @@ export function renderCamera(root, connected, cam, handlers) {
 // Print speed moves in whole 50% steps: 50 / 100 / 150 across LIMITS.printSpeed.
 const SPEED_STEP = 50;
 
-/** Edit a temperature target through a modal, with the shipped page's limits. */
-function editTemp(title, limit, current, hint, apply) {
-  let input;
-  openDialog({
-    title,
-    build: (b) => {
-      input = numberField(b, {
-        label: 'Target temperature', value: Math.round(current || 0),
-        min: limit.min, max: limit.max, unit: limit.unit, hint,
-      });
-    },
-    confirmLabel: 'Set',
-    onConfirm: () => {
-      const v = Number(input.value);
-      if (!Number.isFinite(v) || v < limit.min || v > limit.max) {
-        input.focus();
-        return false;   // out of range: keep the dialog open
-      }
-      apply(v);
-      return true;
-    },
-  });
+/**
+ * A row is an icon and a reading. No label: the shipped icons carry the identity -
+ * iconExtruder1..4 are numbered - and the label was costing the width the numbers need.
+ *
+ * The target edits in place. It is a real <input type="number"> so it brings the I-beam,
+ * keyboard, selection and min/max validation with it, styled to look like text until the
+ * row is hovered. Committing on Enter or blur rather than on every keystroke, because
+ * each commit is a G-code round trip to the machine.
+ */
+function tempRow(iconName, cur, target, limit, title, apply) {
+  const row = el('div', 'trow');
+  row.title = title;
+  row.appendChild(icon(iconName));
+
+  row.appendChild(el('span', 'cur', fmtTemp(cur)));
+  row.appendChild(el('span', 'sl', '/'));
+
+  const tgt = document.createElement('input');
+  tgt.className = 'tgt';
+  tgt.type = 'number';
+  tgt.value = String(Math.round(target || 0));
+  tgt.min = String(limit.min);
+  tgt.max = String(limit.max);
+  tgt.setAttribute('aria-label', title);
+  const commit = () => {
+    const v = Number(tgt.value);
+    if (!Number.isFinite(v) || v < limit.min || v > limit.max) {
+      tgt.value = String(Math.round(target || 0));   // refuse rather than clamp silently
+      return;
+    }
+    if (v !== Math.round(target || 0)) apply(v);
+  };
+  tgt.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); tgt.blur(); }
+    if (e.key === 'Escape') { tgt.value = String(Math.round(target || 0)); tgt.blur(); }
+  };
+  tgt.onblur = commit;
+  row.appendChild(tgt);
+
+  row.appendChild(el('span', 'unit', '\u00B0C'));
+  return row;
+}
+
+function fmtTemp(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? String(Math.round(n)) : '_';
+}
+
+/** One quick-setting tile: icon over a value, opening its own panel underneath. */
+function tile(iconName, value, title, onOpen, opts = {}) {
+  const b = el('button', 'qtile');
+  b.title = title;
+  b.appendChild(icon(iconName));
+  if (opts.absent) b.dataset.absent = '1';
+  if (opts.control) {
+    b.appendChild(opts.control);
+  } else {
+    b.appendChild(el('b', null, value));
+  }
+  if (onOpen) b.onclick = () => onOpen(b);
+  return b;
 }
 
 export function renderStatusCard(root, toolheads, bed, led, fans, purifier,
@@ -207,210 +246,296 @@ export function renderStatusCard(root, toolheads, bed, led, fans, purifier,
   root.innerHTML = '';
 
   toolheads.forEach((t, i) => {
-    const row = el('div', 'status-row');
-    row.appendChild(icon(`iconExtruder${i + 1}`));
-    row.appendChild(el('span', 'val', temps(t.temperature, t.target)));
-    row.title = `Toolhead ${i + 1} — click to set target`;
-    row.onclick = () => editTemp(
-      `Toolhead ${i + 1} temperature`, LIMITS.nozzleTemp, t.target,
-      `Between ${LIMITS.nozzleTemp.min}°C and ${LIMITS.nozzleTemp.max}°C`,
-      (v) => handlers.setExtruderTemp(i, v));
-    root.appendChild(row);
+    root.appendChild(tempRow(`iconExtruder${i + 1}`, t.temperature, t.target,
+                             LIMITS.nozzleTemp, `Toolhead ${i + 1} temperature`,
+                             (v) => handlers.setExtruderTemp(i, v)));
   });
+  root.appendChild(tempRow('iconHotBedTemperature', bed.temperature, bed.target,
+                           LIMITS.bedTemp, 'Heated bed temperature',
+                           (v) => handlers.setBedTemp(v)));
 
-  const bedRow = el('div', 'status-row');
-  bedRow.appendChild(icon('iconHotBedTemperature'));
-  bedRow.appendChild(el('span', 'val', temps(bed.temperature, bed.target)));
-  bedRow.title = 'Heated bed — click to set target';
-  bedRow.onclick = () => editTemp(
-    'Heated bed temperature', LIMITS.bedTemp, bed.target,
-    // verbatim from the bundle's own validation string
-    `Heated bed temperature must be set between ${LIMITS.bedTemp.min}°C `
-    + `and ${LIMITS.bedTemp.max}°C`,
-    (v) => handlers.setBedTemp(v));
-  root.appendChild(bedRow);
+  const tiles = el('div', 'qtiles');
 
-  const ledRow = el('div', 'status-row');
-  ledRow.appendChild(icon('iconLed'));
-  const sw = el('button', 'switch');
-  sw.setAttribute('aria-checked', led.on ? 'true' : 'false');
-  sw.setAttribute('role', 'switch');
-  sw.title = 'Chamber light';
-  sw.onclick = (e) => { e.stopPropagation(); handlers.setLed(!led.on); };
-  ledRow.appendChild(sw);
-  root.appendChild(ledRow);
-
-  const fanRow = el('div', 'status-row');
-  fanRow.appendChild(icon('iconFan'));
-  fanRow.appendChild(el('span', 'val', `${fans.main}%`));
-  fanRow.appendChild(el('span', 'go', '›'));
-  fanRow.title = 'Cooling fans';
-  fanRow.onclick = () => {
-    let main, cavity;
-    openDialog({
-      title: 'Cooling',
-      build: (b) => {
-        main = numberField(b, { label: 'Main cooling fan', value: fans.main,
-                                min: 0, max: 100, unit: '%' });
-        cavity = numberField(b, { label: 'Assist cooling fan', value: fans.cavity,
-                                  min: 0, max: 100, unit: '%' });
-      },
-      confirmLabel: 'Apply',
-      onConfirm: () => {
-        handlers.setMainFan(Number(main.value));
-        handlers.setCavityFan(Number(cavity.value));
-      },
-    });
-  };
-  root.appendChild(fanRow);
-
-  const purRow = el('div', 'status-row');
-  purRow.appendChild(icon('iconPurifier'));
-  purRow.appendChild(el('span', 'val',
-    purifier.present ? (purifier.modeName || String(purifier.mode ?? '_')) : '_'));
-  purRow.appendChild(el('span', 'go', '›'));
-  purRow.title = 'Air purifier';
-  purRow.onclick = () => {
-    let sel;
-    openDialog({
-      title: 'Air purifier',
-      build: (b) => {
-        const wrap = el('label', 'field');
-        wrap.appendChild(el('span', 'field-label', 'Mode'));
-        sel = document.createElement('select');
-        sel.className = 'field-row';
-        // Integers, not names: the wire value is a number (see PURIFIER_MODES).
-        Object.entries(PURIFIER_MODES).forEach(([v, t]) => {
-          const o = document.createElement('option');
-          o.value = v; o.textContent = t;
-          if (String(purifier.mode) === String(v)) o.selected = true;
-          sel.appendChild(o);
-        });
-        wrap.appendChild(sel);
-        b.appendChild(wrap);
-      },
-      confirmLabel: 'Apply',
-      onConfirm: () => handlers.setPurifierMode(sel.value),
-    });
-  };
-  root.appendChild(purRow);
-
-  // Print speed lives at the foot of the left column and opens a sheet, the same way
-  // the fan and purifier rows do - a row of buttons inline made it the one setting you
-  // could change by brushing past it.
-  const cur = speed && speed.factorPct != null ? speed.factorPct : 100;
-  const spRow = el('div', 'status-row');
-  spRow.appendChild(icon('iconSpeed'));
-  spRow.appendChild(el('span', 'val', `${cur}%`));
-  spRow.appendChild(el('span', 'go', '\u203A'));
-  spRow.title = 'Print speed';
-  spRow.onclick = () => {
-    let chosen = cur;
-    openDialog({
+  tiles.appendChild(tile('iconSpeed', `${speed.factorPct == null ? 100 : speed.factorPct}%`,
+    'Print speed', (anchor) => openPopover(anchor, {
       title: 'Print speed',
+      width: 300,
       build: (b) => {
-        b.appendChild(el('p', 'ms-note',
-          `Whole ${SPEED_STEP}% steps, between ${LIMITS.printSpeed.min}% and `
-          + `${LIMITS.printSpeed.max}% \u2014 the rates the printer accepts.`));
-        const seg = el('div', 'seg speeds wide');
-        for (let v = LIMITS.printSpeed.min; v <= LIMITS.printSpeed.max; v += SPEED_STEP) {
-          const btn = el('button', v === chosen ? 'is-active' : null, `${v}%`);
-          btn.onclick = () => {
-            chosen = v;
-            seg.querySelectorAll('button').forEach((x) => x.classList.remove('is-active'));
-            btn.classList.add('is-active');
-          };
-          seg.appendChild(btn);
+        // 50/100/150 is the whole of what the machine accepts, so the track snaps
+        b.appendChild(sliderRow('iconSpeed', 'Print Speed',
+          speed.factorPct == null ? 100 : speed.factorPct,
+          LIMITS.printSpeed.min, LIMITS.printSpeed.max, SPEED_STEP,
+          (v) => handlers.setSpeed(v)));
+      },
+    })));
+
+  tiles.appendChild(tile('iconMainCooling', `${fans.main}%`,
+    'Fan control', (anchor) => openPopover(anchor, {
+      title: 'Fan control',
+      width: 330,
+      build: (b) => {
+        b.appendChild(sliderRow('iconMainCooling', 'Main Cooling Fan Speed',
+          fans.main, 0, 100, 1, (v) => handlers.setMainFan(v)));
+        b.appendChild(sliderRow('iconAuxiliaryCooling', 'Assist Cooling Fan Speed',
+          fans.cavity, 0, 100, 1, (v) => handlers.setCavityFan(v)));
+      },
+    })));
+
+  // A purifier that is not plugged in cannot be set. The modes stay visible so the
+  // panel keeps its shape, but they are plainly out of reach and the panel says why.
+  const purAbsent = !purifier.present || !purifier.powerDetected;
+  tiles.appendChild(tile('iconPurifier', purAbsent ? '\u2014' : (purifier.modeName || '_'),
+    purAbsent ? 'Air purifier - not connected' : 'Air purifier',
+    (anchor) => openPopover(anchor, {
+      title: 'Air purifier',
+      width: 290,
+      build: (b) => {
+        if (purAbsent) {
+          const e = el('div', 'pop-empty');
+          e.appendChild(icon('iconPurifier'));
+          e.appendChild(el('span', null, 'No air purifier connected'));
+          b.appendChild(e);
         }
+        const seg = el('div', 'mode-seg');
+        if (purAbsent) seg.setAttribute('aria-disabled', 'true');
+        Object.entries(PURIFIER_MODES).forEach(([v, label]) => {
+          const m = el('button', 'mode', label);
+          if (String(purifier.mode) === String(v)) m.classList.add('is-active');
+          if (purAbsent) m.disabled = true;
+          else m.onclick = () => { handlers.setPurifierMode(Number(v)); closePopover(); };
+          seg.appendChild(m);
+        });
         b.appendChild(seg);
       },
-      confirmLabel: 'Apply',
-      onConfirm: () => handlers.setSpeed(chosen),
-    });
-  };
-  root.appendChild(spRow);
-}
+    }), { absent: purAbsent }));
 
-/* ---- control: right cluster ----------------------------------------- */
-const STEPS = ['10mm', '1mm', '0.1mm'];
-let activeTool = 0;
-let activeStep = 0;
-let head = {};          // last `toolhead` snapshot, for the readouts and homing state
+  // A binary needs no panel - the switch is the whole control
+  const sw = el('button', 'switch');
+  sw.setAttribute('role', 'switch');
+  sw.setAttribute('aria-checked', led.on ? 'true' : 'false');
+  sw.onclick = (e) => { e.stopPropagation(); handlers.setLed(!led.on); };
+  tiles.appendChild(tile('iconLed', null, 'Chamber light', null, { control: sw }));
 
-/*
- * Two different things, kept apart.
- *
- * `activeTool` is which toolhead the jog and extrude controls address - a UI choice,
- * local, instant, and harmless. Picking it must NOT move the machine: that was wrong,
- * and it made an idle click into a mechanical operation.
- *
- * Actually changing the live toolhead is a separate, deliberate action behind its own
- * button, and it blocks the surface while it runs - the gantry is moving and a second
- * command sent into that window is not what anyone meant. `machineTool` is what the
- * machine reports, and it is never inferred from a click.
- */
-export function renderControlMain(root, toolheads, handlers, th) {
-  root.innerHTML = '';
-  if (th) head = th;
-
-  const machineTool = head.activeIndex != null ? head.activeIndex : null;
-
-  const top = el('div', 'control-top');
-
-  // Four buttons regardless: a toolhead that has not reported yet is still a toolhead,
-  // and building this from a possibly-empty state array left the row blank.
-  const count = Math.max(toolheads.length, 4);
-  const tools = el('div', 'seg tools');
-  for (let i = 0; i < count; i++) {
-    const b = el('button', i === activeTool ? 'is-active' : null, `Tool${i + 1}`);
-    if (i === machineTool) b.dataset.live = '1';
-    b.title = i === machineTool
-      ? `Toolhead ${i + 1} — target for jog and extrude, and live on the machine`
-      : `Target jog and extrude at toolhead ${i + 1} (does not change the tool)`;
-    b.onclick = () => { activeTool = i; renderControlMain(root, toolheads, handlers); };
-    tools.appendChild(b);
-  }
-  top.appendChild(tools);
-
-  const steps = el('div', 'seg steps');
-  STEPS.forEach((s, i) => {
-    const b = el('button', i === activeStep ? 'is-active' : null, s);
-    b.onclick = () => { activeStep = i; renderControlMain(root, toolheads, handlers); };
-    steps.appendChild(b);
-  });
-  top.appendChild(steps);
-
-  // Changing the live toolhead is its own action, not a side effect of selection.
-  const pick = el('button', 'home-btn pick-btn');
-  pick.title = machineTool != null
-    ? `Change the live toolhead (currently ${machineTool + 1})`
-    : 'Change the live toolhead';
-  pick.appendChild(icon('iconExtruderHead'));
-  pick.onclick = () => pickExtruder(toolheads, machineTool, handlers);
-  top.appendChild(pick);
-
-  const home = el('button', 'home-btn');
-  home.title = 'Home all axes';
-  home.appendChild(icon('deviceActionHome'));
-  home.onclick = () => handlers.home();
-  top.appendChild(home);
-
-  root.appendChild(top);
-
-  // jog: an extruder column, the XY rosette, and the Z column
-  const jog = el('div', 'jog');
-  jog.appendChild(axisColumn('E', handlers));
-  jog.appendChild(rosette(handlers));
-  jog.appendChild(axisColumn('Z', handlers));
-  root.appendChild(jog);
-
-  root.appendChild(el('div', 'extrude-bar', '--------'));
+  root.appendChild(tiles);
 }
 
 /**
- * Choose the live toolhead.
+ * The shipped fan control's own shape: a titled slider with ticks and the value on the
+ * right. `step` is what keeps a knob from landing where the machine cannot go.
+ */
+function sliderRow(iconName, label, value, min, max, step, apply) {
+  const wrap = el('div', 'sctl');
+
+  const head = el('div', 'sctl-head');
+  head.appendChild(icon(iconName));
+  head.appendChild(el('span', 'sctl-title', label));
+  const num = el('b', 'sctl-num', `${Math.round(value)}%`);
+  head.appendChild(num);
+  wrap.appendChild(head);
+
+  const marks = [];
+  for (let v = min; v <= max; v += step) marks.push(v);
+  const ticks = el('div', 'sl-ticks');
+  marks.forEach(() => ticks.appendChild(el('i')));
+
+  const slot = el('div', 'sl-wrap');
+  slot.appendChild(ticks);
+  const range = document.createElement('input');
+  range.type = 'range';
+  range.min = String(min); range.max = String(max); range.step = String(step);
+  range.value = String(value);
+  range.setAttribute('aria-label', label);
+  // repaint while dragging, commit once on release: each commit is a round trip
+  range.oninput = () => { num.textContent = `${range.value}%`; };
+  range.onchange = () => apply(Number(range.value));
+  slot.appendChild(range);
+  wrap.appendChild(slot);
+
+  const labels = el('div', 'sl-labels');
+  marks.forEach((v) => labels.appendChild(el('span', null, `${v}%`)));
+  wrap.appendChild(labels);
+  return wrap;
+}
+
+/* ---- control: motion ------------------------------------------------ */
+
+// The jog wheel's three bands, outermost first. The ring IS the step size, so there is
+// no separate selector and no hidden state: the target you click is the distance.
+const JOG_STEPS = [10, 1, 0.1];
+const BED_STEPS = [10, 1, 0.1];
+
+let activeTool = 0;
+let head = {};          // last `toolhead` snapshot: active tool, position, homing
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs) {
+  const n = document.createElementNS(SVG_NS, tag);
+  Object.entries(attrs || {}).forEach(([k, v]) => n.setAttribute(k, String(v)));
+  return n;
+}
+
+/**
+ * The XY pad: four quadrants by three concentric bands.
  *
- * Deliberately a two-step: pick, then confirm. A toolchange parks one head and grabs
+ * Geometry is computed rather than drawn so the bands keep their taper at any size.
+ * Sectors are real annular paths, so each has its own hit area - a CSS approximation
+ * with rectangles would put the corners in the wrong quadrant.
+ */
+function jogWheel(handlers) {
+  const R_OUT = 128, SZ = (R_OUT + 8) * 2, C = SZ / 2;
+  const home = Math.round(R_OUT * 0.246);
+  const span = R_OUT - home;
+  const w = [span * 8 / 21, span * 7 / 21, span * 6 / 21];
+  const radii = [R_OUT, R_OUT - w[0], R_OUT - w[0] - w[1], R_OUT - w[0] - w[1] - w[2]];
+
+  const pt = (r, deg) => {
+    const a = (deg * Math.PI) / 180;
+    return [C + r * Math.cos(a), C + r * Math.sin(a)];
+  };
+  const sector = (a1, a2, r1, r2) => {
+    const [x1, y1] = pt(r2, a1), [x2, y2] = pt(r2, a2);
+    const [x3, y3] = pt(r1, a2), [x4, y4] = pt(r1, a1);
+    return `M${x1.toFixed(1)} ${y1.toFixed(1)}A${r2.toFixed(1)} ${r2.toFixed(1)} 0 0 1 `
+         + `${x2.toFixed(1)} ${y2.toFixed(1)}L${x3.toFixed(1)} ${y3.toFixed(1)}`
+         + `A${r1.toFixed(1)} ${r1.toFixed(1)} 0 0 0 ${x4.toFixed(1)} ${y4.toFixed(1)}Z`;
+  };
+
+  const GAP = 3;
+  const DIRS = [
+    { a1: -135, a2: -45, axis: 'Y', sign: +1, label: 'Y' },
+    { a1: -45, a2: 45, axis: 'X', sign: +1, label: 'X' },
+    { a1: 45, a2: 135, axis: 'Y', sign: -1, label: '\u2212Y' },
+    { a1: 135, a2: 225, axis: 'X', sign: -1, label: '\u2212X' },
+  ];
+
+  const svg = svgEl('svg', { class: 'wheel', viewBox: `0 0 ${SZ} ${SZ}`,
+                             role: 'group', 'aria-label': 'XY jog' });
+  const homed = head.allHomed;
+
+  DIRS.forEach((d) => {
+    JOG_STEPS.forEach((step, band) => {
+      const path = svgEl('path', {
+        class: `sect ring${band}`,
+        d: sector(d.a1 + GAP, d.a2 - GAP, radii[band + 1], radii[band]),
+      });
+      const t = svgEl('title', {});
+      t.textContent = homed === false
+        ? `Home the axes before jogging (${d.label} ${step} mm)`
+        : `Jog ${d.label} ${step} mm`;
+      path.appendChild(t);
+      if (homed === false) path.setAttribute('data-blocked', '1');
+      else path.addEventListener('click', () => handlers.jog(d.axis, d.sign * step, activeTool));
+      svg.appendChild(path);
+    });
+  });
+
+  // the axis letter belongs inside the band it labels, not floating outside the wheel
+  DIRS.forEach((d) => {
+    const [x, y] = pt((radii[0] + radii[1]) / 2, (d.a1 + d.a2) / 2);
+    const t = svgEl('text', { class: 'axis', x: x.toFixed(0), y: y.toFixed(0) });
+    t.textContent = d.label;
+    svg.appendChild(t);
+  });
+  [-45, 135].forEach((ang) => {
+    JOG_STEPS.forEach((step, band) => {
+      const [x, y] = pt((radii[band] + radii[band + 1]) / 2, ang);
+      const t = svgEl('text', { class: 'step', x: x.toFixed(0), y: y.toFixed(0),
+                                transform: `rotate(-45 ${x.toFixed(0)} ${y.toFixed(0)})` });
+      t.textContent = String(step);
+      svg.appendChild(t);
+    });
+  });
+
+  const hc = svgEl('circle', { class: 'home', cx: C, cy: C, r: home });
+  const ht = svgEl('title', {});
+  ht.textContent = homed === false ? 'Home all axes (G28) - required before jogging'
+                                   : 'Home all axes (G28)';
+  hc.appendChild(ht);
+  hc.addEventListener('click', () => handlers.home());
+  if (homed === false) hc.setAttribute('data-invite', '1');
+  svg.appendChild(hc);
+
+  const hs = home * 0.46;
+  svg.appendChild(svgEl('path', {
+    class: 'homeicon',
+    d: `M${C} ${C - hs * 0.82}l-${hs} ${hs * 0.82}v${hs * 1.14}h${hs * 0.64}`
+     + `v-${hs * 0.71}h${hs * 0.71}v${hs * 0.71}h${hs * 0.64}v-${hs * 1.14}z`,
+  }));
+  return svg;
+}
+
+export function renderControlMain(root, toolheads, handlers, th) {
+  root.innerHTML = '';
+  if (th) head = th;
+  const machineTool = head.activeIndex != null ? head.activeIndex : null;
+
+  /* --- toolhead picker, left of the wheel --- */
+  const pick = el('div', 'pick-col');
+  const boxes = el('div', 'pick-row');
+  const count = Math.max(toolheads.length, 4);
+  for (let i = 0; i < count; i++) {
+    const b = el('button', 'pick-box');
+    if (i === activeTool) b.classList.add('is-active');
+    if (i === machineTool) b.dataset.live = '1';
+    b.title = i === machineTool
+      ? `Toolhead ${i + 1} - target for jog and extrude, and live on the machine`
+      : `Target jog and extrude at toolhead ${i + 1} (does not change the tool)`;
+    b.appendChild(icon(`iconExtruder${i + 1}`));
+    // selection only: changing the live tool is a separate, deliberate action
+    b.onclick = () => { activeTool = i; renderControlMain(root, toolheads, handlers); };
+    boxes.appendChild(b);
+  }
+  pick.appendChild(boxes);
+
+  const acts = el('div', 'pick-acts');
+  const pickBtn = el('button', 'btn primary', 'Pick extruder');
+  pickBtn.title = 'Change the live toolhead - blocks while the gantry moves';
+  pickBtn.onclick = () => pickExtruder(toolheads, machineTool, handlers);
+  const parkBtn = el('button', 'btn', 'Park extruder');
+  parkBtn.title = 'Park the live toolhead, leaving none engaged';
+  parkBtn.onclick = () => handlers.parkTool();
+  acts.appendChild(pickBtn);
+  acts.appendChild(parkBtn);
+  pick.appendChild(acts);
+
+  const ej = el('div', 'ejog');
+  const up = el('button', 'ebtn', '\u25B2');
+  up.title = `Extrude on toolhead ${activeTool + 1}`;
+  up.onclick = () => handlers.jog('E', +1, activeTool);
+  const cap = el('span', 'ecap', 'Extrude');
+  const dn = el('button', 'ebtn', '\u25BC');
+  dn.title = `Retract on toolhead ${activeTool + 1}`;
+  dn.onclick = () => handlers.jog('E', -1, activeTool);
+  ej.appendChild(up); ej.appendChild(cap); ej.appendChild(dn);
+  pick.appendChild(ej);
+  root.appendChild(pick);
+
+  /* --- the wheel, and Z under it --- */
+  const motion = el('div', 'motion-col');
+  motion.appendChild(jogWheel(handlers));
+
+  // Z moves the bed on this machine, so it is a row that says "Bed" rather than a
+  // third axis on a wheel that would imply the toolhead travels.
+  const bedRow = el('div', 'bed-row');
+  BED_STEPS.forEach((v) => {
+    const b = el('button', 'bed-btn', `\u2191 ${v}`);
+    b.title = `Move the bed up ${v} mm`;
+    b.onclick = () => handlers.jog('Z', +v, activeTool);
+    bedRow.appendChild(b);
+  });
+  bedRow.appendChild(el('span', 'bed-lab', 'Bed'));
+  [...BED_STEPS].reverse().forEach((v) => {
+    const b = el('button', 'bed-btn', `\u2193 ${v}`);
+    b.title = `Move the bed down ${v} mm`;
+    b.onclick = () => handlers.jog('Z', -v, activeTool);
+    bedRow.appendChild(b);
+  });
+  motion.appendChild(bedRow);
+  root.appendChild(motion);
+}
+
+/**
+ * Choose the live toolhead: pick, then confirm. A toolchange parks one head and grabs
  * another, so it is not something to trigger by brushing a segmented control.
  */
 function pickExtruder(toolheads, machineTool, handlers) {
@@ -418,26 +543,30 @@ function pickExtruder(toolheads, machineTool, handlers) {
   openDialog({
     title: 'Pick extruder',
     build: (b) => {
-      b.appendChild(el('p', 'ms-note',
-        'The printer will park the current toolhead and pick up the one you choose. '
-        + 'The controls stay locked until it reports the change.'));
+      const p = document.createElement('p');
+      p.className = 'dlg-note';
+      p.textContent = 'The printer will park the current toolhead and pick up the one you '
+                    + 'choose. The controls stay locked until it reports the change.';
+      b.appendChild(p);
       const list = el('div', 'pick-list');
       const count = Math.max(toolheads.length, 4);
       for (let i = 0; i < count; i++) {
         const t = toolheads[i] || {};
-        const row = el('button', 'pick-row');
+        const row = el('button', 'pick-opt');
         if (i === chosen) row.dataset.chosen = '1';
         if (i === machineTool) row.dataset.live = '1';
-        const name = el('div', 'pick-name', `Toolhead ${i + 1}`);
-        row.appendChild(name);
+        row.appendChild(icon(`iconExtruder${i + 1}`));
         const meta = [];
         if (t.nozzleDiameter) meta.push(`${t.nozzleDiameter} mm`);
-        if (t.temperature != null) meta.push(`${Math.round(t.temperature)} °C`);
+        if (t.temperature != null) meta.push(`${Math.round(t.temperature)} \u00B0C`);
         if (i === machineTool) meta.push('live');
-        row.appendChild(el('div', 'pick-meta', meta.join(' · ')));
+        const txt = el('span', 'pick-opt-txt');
+        txt.appendChild(el('span', 'pick-opt-name', `Toolhead ${i + 1}`));
+        txt.appendChild(el('span', 'pick-opt-meta', meta.join(' \u00B7 ')));
+        row.appendChild(txt);
         row.onclick = () => {
           chosen = i;
-          list.querySelectorAll('.pick-row').forEach((r, k) => {
+          list.querySelectorAll('.pick-opt').forEach((r, k) => {
             if (k === i) r.dataset.chosen = '1'; else delete r.dataset.chosen;
           });
         };
@@ -447,60 +576,10 @@ function pickExtruder(toolheads, machineTool, handlers) {
     },
     confirmLabel: 'Change toolhead',
     onConfirm: () => {
-      if (chosen === machineTool) return true;   // nothing to do
-      handlers.pickTool(chosen);
+      if (chosen !== machineTool) handlers.pickTool(chosen);
       return true;
     },
   });
-}
-
-function stepMm() { return parseFloat(STEPS[activeStep]); }
-
-function axisReadout(axis) {
-  // '------' is the shipped page's placeholder and stays correct when nothing is known.
-  if (axis === 'E') return '------';
-  const v = head[String(axis).toLowerCase()];
-  if (v == null) return '------';
-  const homed = head.isHomed ? head.isHomed(axis) : false;
-  return `${axis} ${v.toFixed(1)}${homed ? '' : '*'}`;
-}
-
-function axisColumn(axis, handlers) {
-  const col = el('div', 'axis-col');
-  const up = el('button', 'round-btn');
-  up.appendChild(el('span', 'tri', '▲'));
-  up.onclick = () => handlers.jog(axis, +stepMm(), activeTool);
-  const down = el('button', 'round-btn');
-  down.appendChild(el('span', 'tri', '▼'));
-  down.onclick = () => handlers.jog(axis, -stepMm(), activeTool);
-  col.appendChild(up);
-  const label = el('div', 'axis-label', axisReadout(axis));
-  if (axis !== 'E' && head.isHomed && !head.isHomed(axis)) {
-    label.title = `${axis} is not homed - Klipper refuses a move until it is`;
-  }
-  col.appendChild(label);
-  col.appendChild(down);
-  return col;
-}
-
-function rosette(handlers) {
-  const r = el('div', 'rosette');
-  const mk = (cls, glyph, ax, sign) => {
-    const b = el('button', cls, glyph);
-    b.onclick = () => handlers.jog(ax, sign * stepMm(), activeTool);
-    return b;
-  };
-  r.appendChild(mk('up', '▲', 'Y', +1));
-  r.appendChild(mk('down', '▼', 'Y', -1));
-  r.appendChild(mk('left', '◀', 'X', -1));
-  r.appendChild(mk('right', '▶', 'X', +1));
-  const hub = el('div', 'hub', 'XY');
-  if (head.allHomed === false) {
-    hub.title = 'Not homed - home the axes before jogging';
-    hub.dataset.warn = '1';
-  }
-  r.appendChild(hub);
-  return r;
 }
 
 /* ---- printing task -------------------------------------------------- */

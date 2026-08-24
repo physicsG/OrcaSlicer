@@ -27,7 +27,7 @@ document.addEventListener('click', (e) => {
   }
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeMenu(); if (!blocking) closeDialog(); }
+  if (e.key === 'Escape') { closeMenu(); closePopover(); if (!blocking) closeDialog(); }
 });
 
 /**
@@ -184,3 +184,82 @@ export function openBlockingDialog({ title, message }) {
     close() { blocking = false; closeDialog(); },
   };
 }
+
+/* ---- anchored popover ------------------------------------------------ */
+
+let openPopEl = null;
+let openPopAnchor = null;
+
+export function closePopover() {
+  if (openPopAnchor) openPopAnchor.removeAttribute('aria-expanded');
+  if (openPopEl) openPopEl.remove();
+  openPopEl = null;
+  openPopAnchor = null;
+}
+
+/**
+ * A panel anchored under the control that opened it.
+ *
+ * The anchor keeps its place and takes `aria-expanded`, which is what the highlight
+ * hangs off: without it a floating box reads as belonging to the page rather than to
+ * the thing that was clicked. One at a time, because two open panels have no way to
+ * say which control each came from.
+ *
+ * Placement is measured against the viewport rather than assumed: the panel is wider
+ * than the 126px column it usually hangs from, so it is clamped to stay on screen, and
+ * it flips above the anchor when there is no room below.
+ */
+export function openPopover(anchor, { title, build, width = 320 }) {
+  const reopening = openPopAnchor === anchor;
+  closePopover();
+  closeMenu();
+  if (reopening) return null;          // clicking the open control closes it
+
+  const pop = el('div', 'popover');
+  pop.style.width = `${width}px`;
+
+  const head = el('div', 'popover-head');
+  head.appendChild(el('span', 'popover-title', title));
+  const x = el('button', 'popover-x', '\u00D7');
+  x.setAttribute('aria-label', 'Close');
+  x.onclick = closePopover;
+  head.appendChild(x);
+  pop.appendChild(head);
+
+  const body = el('div', 'popover-body');
+  build(body);
+  pop.appendChild(body);
+
+  document.body.appendChild(pop);
+
+  const a = anchor.getBoundingClientRect();
+  const p = pop.getBoundingClientRect();
+  const margin = 8;
+  let left = a.left;
+  left = Math.min(left, window.innerWidth - p.width - margin);
+  left = Math.max(margin, left);
+  let top = a.bottom + 6;
+  if (top + p.height > window.innerHeight - margin) {
+    const above = a.top - p.height - 6;
+    if (above > margin) top = above;
+    else top = Math.max(margin, window.innerHeight - p.height - margin);
+  }
+  pop.style.left = `${Math.round(left)}px`;
+  pop.style.top = `${Math.round(top)}px`;
+  // the caret points back at the anchor, so it has to track the clamped position
+  pop.style.setProperty('--caret', `${Math.round(a.left - left + Math.min(22, a.width / 2))}px`);
+
+  anchor.setAttribute('aria-expanded', 'true');
+  openPopEl = pop;
+  openPopAnchor = anchor;
+  return pop;
+}
+
+document.addEventListener('click', (e) => {
+  if (!openPopEl) return;
+  if (openPopEl.contains(e.target)) return;
+  if (openPopAnchor && openPopAnchor.contains(e.target)) return;
+  closePopover();
+}, true);
+
+window.addEventListener('resize', closePopover);
