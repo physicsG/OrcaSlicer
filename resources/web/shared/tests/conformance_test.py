@@ -560,5 +560,18 @@ for label, path in (("device_page/js/ui.js", os.path.join(WEB, "device_page", "j
     check(f"{label}: every constant it uses is declared or imported",
           not undefined, f"undefined: {undefined}")
 
+# Which toolhead is live must come from the subscribed stream. `toolhead` is fetched
+# once at connect and after homing, so reading it first froze the active tool and made
+# every pick and park time out despite having worked.
+state_src = open(os.path.join(SHARED, "js", "state.js"), encoding="utf-8").read()
+i_sub = state_src.find("'ACTIVATE'")
+i_one = state_src.find("o.extruder")
+check("the live toolhead is read from the subscribed stream, not the one-shot query",
+      i_sub != -1 and i_one != -1 and i_sub < i_one,
+      "toolhead.extruder is a cold-start fallback, not the source of truth")
+check("the toolchange timeout matches the printer's own UI",
+      "TOOL_CHANGE_TIMEOUT_MS = 60000" in app_src,
+      "the shipped handler allows 60s before giving up")
+
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)

@@ -115,10 +115,21 @@ export class MachineState {
     const pos = Array.isArray(mr.live_position) ? mr.live_position
               : (Array.isArray(o.position) ? o.position : []);
     const homed = String(o.homed_axes || '');
-    let activeKey = o.extruder || null;
-    if (!activeKey) {
-      const hit = TOOLHEADS.find((k) => (this.objects[k] || {}).state === 'ACTIVATE');
-      activeKey = hit || null;
+
+    // The SUBSCRIBED source wins. `extruder*.state` arrives on the live stream, while
+    // `toolhead.extruder` comes from the one-shot query at connect and after homing -
+    // so preferring the latter froze the active tool at whatever it was when the page
+    // loaded. A pick then waited forever for a change it could not see, and a park
+    // waited for a null that never arrived; both timed out having actually worked.
+    //
+    // `toolhead.extruder` is kept only as a cold-start fallback, for the window before
+    // the first state snapshot arrives.
+    let activeKey = null;
+    const reporting = TOOLHEADS.some((k) => (this.objects[k] || {}).state != null);
+    if (reporting) {
+      activeKey = TOOLHEADS.find((k) => (this.objects[k] || {}).state === 'ACTIVATE') || null;
+    } else {
+      activeKey = o.extruder || null;
     }
     return {
       activeKey,

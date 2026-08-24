@@ -44,8 +44,9 @@ let heartbeat = null;   // interval handle
 let findSub = null;     // discovery subscription
 let found = [];         // machines discovery has turned up
 const HISTORY_PAGE = 20;
-// a toolchange is mechanical; this is how long to wait for the machine to say so
-const TOOL_CHANGE_TIMEOUT_MS = 45000;
+// A toolchange is mechanical. 60s is what the printer's own UI allows: its handler
+// raises an "Extruder N operating..." overlay with a 60 timeout before dispatching.
+const TOOL_CHANGE_TIMEOUT_MS = 60000;
 let history = { loading: false, error: '', items: [], hasMore: false };
 
 function setStatus(text, kind = '') {

@@ -312,3 +312,77 @@ the footer says "N shown" rather than inventing "N of M".
 arguments — the obvious way — `sys.argv[-1]` is the script's own path, so it overwrote
 itself with its output. It did that here, and was restored from git. It now requires both
 arguments and refuses to write over itself.
+
+## Picking and parking: the flow, and what was wrong with it
+
+### What the printer's own UI does
+
+Recovered from the shipped bundle, which is the authority here — neither command appears
+in `printer.gcode.help`, because both register without a help string, as `T0`–`T3` also
+do. Reading that absence as evidence is what sent an earlier attempt hunting for a park
+macro that does not exist.
+
+```js
+r = a.w === "ACTIVATE" ? "Park Extruder" : "Pick Extruder"   // one button, per toolhead
+…
+A.aDM(h, "Extruder " + (j.a+1) + " operating...", 60)        // overlay, 60s
+case 5:  l = h === 0 ? "PARK_EXTRUDER" : "PARK_EXTRUDER" + h // park
+case 7:  k = "T" + j.a + " A0"                               // pick
+```
+
+Three things fall out of that:
+
+| | |
+|---|---|
+| Park | `PARK_EXTRUDER`, `PARK_EXTRUDER1`…`3` — numbered like Klipper's own `extruder`/`extruder1` |
+| Pick | `T<n> A0` — the `A0` is not optional decoration; the firmware's own `SM_PRINT_CHECK_SWITCH_EXTRUDER` passes it too |
+| Wait | 60 s, with the surface blocked, and no confirmation step |
+
+### What was wrong
+
+Two faults, and the second is the one that made both operations *look* broken.
+
+**1. `T-1` for park.** A guess with nothing behind it. There is no such command; it did
+nothing, silently.
+
+**2. The active toolhead was read from the wrong object.** `state.toolhead()` took
+`activeKey` from `toolhead.extruder` and only fell back to the subscribed
+`extruder*.state`. But `toolhead` is **not subscribed** — the shipped page does not
+subscribe it, and the conformance suite holds the list to the bundle's — so it arrives
+only from the one-shot query at connect and after `G28`.
+
+The consequence is worse than a stale badge:
+
+```
+pick 1   →  T1 A0 dispatched, machine obeys, extruder1.state → ACTIVATE
+         →  toolhead.extruder still says extruder3 (fetched at connect)
+         →  activeIndex still 3  →  poll for ===1 never true  →  "did not report active"
+
+park     →  PARK_EXTRUDER3 dispatched, machine obeys, all extruders → PARKED
+         →  activeIndex still 3  →  poll for ==null never true  →  "did not park in time"
+```
+
+Both operations **succeeded on the machine and were reported as failures**, which is the
+worst shape a bug can take: the user is told to retry something that already worked.
+
+**Fix:** the subscribed source wins. `extruder*.state === 'ACTIVATE'` is authoritative
+whenever any extruder is reporting state at all; `toolhead.extruder` survives only as a
+cold-start fallback for the window before the first snapshot. Four unit tests cover it,
+including the two stale-`toolhead` cases, negative-controlled by restoring the old order.
+
+### The flow now
+
+| | Acts on | Sends | Disabled when |
+|---|---|---|---|
+| **Pick extruder** | the toolhead selected in the row above | `T<n> A0` | the selection is already live |
+| **Park extruder** | whatever the machine reports `ACTIVATE` | `PARK_EXTRUDER<n>` | nothing is engaged |
+
+Selecting a toolhead sends nothing — it only points the jog and extrude controls. Both
+buttons block the surface while the gantry moves and confirm against the machine rather
+than the G-code ack, which only says the command was queued.
+
+**One deliberate divergence.** The shipped UI has a single contextual button per
+toolhead that reads *Park* when that head is live and *Pick* when it is not. Two separate
+buttons were asked for here, and they are not the same shape: Pick follows the selection,
+Park follows the machine. That difference is why each names its target in its tooltip —
+with one button the target is never in doubt, with two it has to be stated.

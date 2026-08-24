@@ -187,6 +187,31 @@ def main():
           js(ctx3, "JSON.stringify(st.filaments().map(f=>cssColor(f.color)))").to_string()
           == '["#F44336","#FFFFDC","#FFFFFF","#632C2C"]')
 
+    # --- which toolhead is live -------------------------------------------
+    print("\n== the active toolhead follows the live stream ==")
+    parked = {("extruder" if i == 0 else f"extruder{i}"): {"state": "PARKED"}
+              for i in range(4)}
+
+    def active(objs):
+        js(ctx3, f"var t=new MachineState(); t.apply({json.dumps(objs)});")
+        return js(ctx3, "String(t.toolhead().activeIndex)").to_string()
+
+    check("a live ACTIVATE is reported",
+          active({**parked, "extruder3": {"state": "ACTIVATE"},
+                  "toolhead": {"extruder": "extruder3"}}) == "3")
+    # the bug: `toolhead` is fetched once at connect, so it goes stale on every change
+    check("a tool change is seen even though `toolhead` is stale",
+          active({**parked, "extruder1": {"state": "ACTIVATE"},
+                  "toolhead": {"extruder": "extruder3"}}) == "1",
+          "preferring toolhead.extruder froze the active tool at connect, so pickTool "
+          "waited for a change it could not see and timed out having actually worked")
+    check("parking is seen: no extruder ACTIVATE means none live",
+          active({**parked, "toolhead": {"extruder": "extruder3"}}) == "null",
+          "parkTool waits for null, which a stale toolhead never produced")
+    check("before any state arrives, the one-shot query still answers",
+          active({"toolhead": {"extruder": "extruder2"}}) == "2",
+          "cold start must not report 'nothing live' when something is")
+
     print(f"\n{checks - len(fails)}/{checks} checks passed")
     return 1 if fails else 0
 
