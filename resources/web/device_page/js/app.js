@@ -209,12 +209,35 @@ const handlers = {
   setLed: (on) =>
     send(CMD.CONTROL_LED, { name: NAMED.cavityLed, white: on ? 1 : 0 }, 'set led'),
 
+  // mode is an integer on the wire; the page used to send 'inner'/'exhaust' strings.
   setPurifierMode: (mode) =>
-    send(CMD.CONTROL_PURIFIER, { mode }, 'set purifier mode'),
+    send(CMD.CONTROL_PURIFIER, { mode: Number(mode) }, 'set purifier mode'),
 
   // Motion has no dedicated bridge command - the shipped page sends G-code, so
   // this does too. G28 homes; G91/G0/G90 makes one relative step.
-  home: () => send(CMD.SEND_GCODES, { script: 'G28' }, 'home'),
+  home: () => {
+    const p = send(CMD.SEND_GCODES, { script: 'G28' }, 'home');
+    // homing is exactly when homed_axes changes, and it is not on the stream
+    Promise.resolve(p).then(() => setTimeout(refreshToolhead, 1500)).catch(() => {});
+    return p;
+  },
+
+  /**
+   * Change the live toolhead.
+   *
+   * The buttons used to set a local variable only, so the panel could disagree with the
+   * machine indefinitely. `T<n>` is what actually switches, and `toolhead.extruder`
+   * reports the result back, so the button state follows the printer rather than the
+   * click.
+   */
+  selectTool: (i) => send(CMD.SEND_GCODES, { script: `T${Number(i) || 0}` },
+                          `select toolhead ${Number(i) + 1}`),
+
+  /** Jump to the file browser - the idle task panel's one useful action. */
+  showFiles: () => {
+    const tabs = document.querySelectorAll('.panel')[2].querySelectorAll('.tab');
+    if (tabs[1]) tabs[1].click();
+  },
 
   /* ---- print job ---- */
   confirmCancel: () => openDialog({
@@ -340,7 +363,10 @@ const handlers = {
     try {
       const r = await bridge.request(CMD.TIMELAPSE_LIST,
         { page_index: 0, page_rows: 24, thumbnail_direct: true });
-      cam.timelapses = (r && (r.list || r.items || r.instances)) || (Array.isArray(r) ? r : []);
+      // `instances` is the printer's own name for the list, and the reply is now
+      // unwrapped from its JSON-RPC envelope before it gets here (see unwrapRpc).
+      cam.timelapses = (r && (r.instances || r.list || r.items))
+                    || (Array.isArray(r) ? r : []);
       cam.error = '';
     } catch (e) {
       cam.timelapses = [];
@@ -664,7 +690,8 @@ function render() {
     ui.$('#control-grid').dataset.enabled = reachable ? '1' : '0';
     ui.renderStatusCard(ui.$('#status-card'), state.toolheads(), state.bed(),
                         state.led(), state.fans(), state.purifier(), handlers);
-    ui.renderControlMain(ui.$('#control-main'), state.toolheads(), handlers);
+    ui.renderControlMain(ui.$('#control-main'), state.toolheads(), handlers,
+                         state.toolhead());
     ui.renderTask(ui.$('#task'), state.job(), taskTab, files, handlers);
     ui.renderFilament(ui.$('#filament'), state.taskConfig(), handlers);
     ui.renderFault(ui.$('#fault'), state.activity(), exception, handlers);
@@ -860,6 +887,24 @@ function startHeartbeat() {
  * only a snapshot after connecting is not enough either: the UI would show one
  * frozen frame and never update.
  */
+/**
+ * Fetch `toolhead` once, outside the subscription.
+ *
+ * `homed_axes` lives only on that object and the shipped page does not subscribe it, so
+ * the stream never carries it. It only changes when the machine homes, which makes a
+ * one-shot query at connect and after G28 sufficient - and keeps the subscription list
+ * byte-identical to the bundle's, which the conformance suite enforces.
+ */
+async function refreshToolhead() {
+  try {
+    const snap = await bridge.request(CMD.GET_MACHINE_STATE,
+                                      { objects: { toolhead: ['extruder', 'position', 'homed_axes'] } });
+    state.applyPayload(snap);
+  } catch (e) {
+    hostLog(`toolhead query skipped: ${e.message}`);
+  }
+}
+
 async function startStateStream(reason) {
   // The three calls are independent and must not be chained. sw_SetSubscribeFilter
   // forwards `printer.objects.setSubscribeFilter` to the printer and waits for a
@@ -876,6 +921,7 @@ async function startStateStream(reason) {
     state.applyPayload(snap);
     hostLog(`snapshot ok (${reason}): ${Object.keys(state.objects).length} objects`);
     ok = Object.keys(state.objects).length > 0;
+    refreshToolhead();          // homed_axes is not in the subscribed set
   } catch (e) {
     hostLog(`snapshot failed (${reason}): ${e.message}`, 'error');
   }

@@ -9,7 +9,8 @@
 'use strict';
 
 import { LIMITS, PRINT_STATE, TASK_CONFIG, DEVICE, deviceLabel,
-         MOONRAKER_HTTP_PORT, CAMERA_FRAME_ROOT, CAMERA_FRAME_FILE }
+         MOONRAKER_HTTP_PORT, CAMERA_FRAME_ROOT, CAMERA_FRAME_FILE,
+         cssColor, isDarkColor, PURIFIER_MODES }
   from '../../shared/js/protocol.js';
 import { openDialog, numberField } from './overlay.js';
 import { lookupFault } from '../../shared/js/errors.js';
@@ -136,13 +137,25 @@ export function renderCamera(root, connected, cam, handlers) {
     return;
   }
 
-  // live view - one <img>, re-pointed by the frame pump in app.js
+  // live view - one <img>, re-pointed by the frame pump in app.js.
+  // The controls have to be rendered on THIS branch too: returning early here is
+  // what left a running camera with no way to stop it.
   if (cam.streaming && cam.frameUrl) {
     const im = el('img', 'cam-frame');
     im.id = 'cam-live';
     im.src = cam.frameUrl;
     im.alt = 'Live view';
+    im.onerror = () => { im.dataset.failed = '1'; };
     root.appendChild(im);
+
+    const bar = el('div', 'cam-controls');
+    const stop = el('button', 'btn', 'Stop');
+    stop.onclick = () => handlers.stopCamera();
+    bar.appendChild(stop);
+    const snap = el('button', 'btn', 'Refresh');
+    snap.onclick = () => { const t = $('#cam-live'); if (t) t.src = `${cam.frameUrl}?t=${Date.now()}`; };
+    bar.appendChild(snap);
+    root.appendChild(bar);
     return;
   }
 
@@ -249,7 +262,8 @@ export function renderStatusCard(root, toolheads, bed, led, fans, purifier, hand
 
   const purRow = el('div', 'status-row');
   purRow.appendChild(icon('iconSpeed'));
-  purRow.appendChild(el('span', 'val', purifier.present ? String(purifier.mode ?? '_') : '_'));
+  purRow.appendChild(el('span', 'val',
+    purifier.present ? (purifier.modeName || String(purifier.mode ?? '_')) : '_'));
   purRow.appendChild(el('span', 'go', '›'));
   purRow.title = 'Air purifier';
   purRow.onclick = () => {
@@ -261,11 +275,11 @@ export function renderStatusCard(root, toolheads, bed, led, fans, purifier, hand
         wrap.appendChild(el('span', 'field-label', 'Mode'));
         sel = document.createElement('select');
         sel.className = 'field-row';
-        // the two modes the shipped page offers
-        [['inner', 'Recirculation Mode'], ['exhaust', 'Exhaust Mode']].forEach(([v, t]) => {
+        // Integers, not names: the wire value is a number (see PURIFIER_MODES).
+        Object.entries(PURIFIER_MODES).forEach(([v, t]) => {
           const o = document.createElement('option');
           o.value = v; o.textContent = t;
-          if (purifier.mode === v) o.selected = true;
+          if (String(purifier.mode) === String(v)) o.selected = true;
           sel.appendChild(o);
         });
         wrap.appendChild(sel);
@@ -282,18 +296,33 @@ export function renderStatusCard(root, toolheads, bed, led, fans, purifier, hand
 const STEPS = ['10mm', '1mm', '0.1mm'];
 let activeTool = 0;
 let activeStep = 0;
+let head = {};          // last `toolhead` snapshot, for the readouts and homing state
 
-export function renderControlMain(root, toolheads, handlers) {
+export function renderControlMain(root, toolheads, handlers, th) {
   root.innerHTML = '';
+  if (th) head = th;
+
+  // The machine is the authority on which tool is live: `toolhead.extruder` names it.
+  // Selection used to be a local variable that reflected nothing and sent nothing.
+  if (head.activeIndex != null) activeTool = head.activeIndex;
 
   const top = el('div', 'control-top');
 
+  // Four buttons regardless: a toolhead that has not reported yet is still a toolhead,
+  // and building this from a possibly-empty state array left the row blank.
+  const count = Math.max(toolheads.length, 4);
   const tools = el('div', 'seg tools');
-  toolheads.forEach((t, i) => {
+  for (let i = 0; i < count; i++) {
     const b = el('button', i === activeTool ? 'is-active' : null, `Tool${i + 1}`);
-    b.onclick = () => { activeTool = i; renderControlMain(root, toolheads, handlers); };
+    b.title = i === head.activeIndex ? `Toolhead ${i + 1} (active on the machine)`
+                                     : `Switch to toolhead ${i + 1}`;
+    b.onclick = () => {
+      activeTool = i;
+      handlers.selectTool(i);          // actually change tool, not just repaint
+      renderControlMain(root, toolheads, handlers);
+    };
     tools.appendChild(b);
-  });
+  }
   top.appendChild(tools);
 
   const steps = el('div', 'seg steps');
@@ -329,6 +358,15 @@ export function renderControlMain(root, toolheads, handlers) {
 
 function stepMm() { return parseFloat(STEPS[activeStep]); }
 
+function axisReadout(axis) {
+  // '------' is the shipped page's placeholder and stays correct when nothing is known.
+  if (axis === 'E') return '------';
+  const v = head[String(axis).toLowerCase()];
+  if (v == null) return '------';
+  const homed = head.isHomed ? head.isHomed(axis) : false;
+  return `${axis} ${v.toFixed(1)}${homed ? '' : '*'}`;
+}
+
 function axisColumn(axis, handlers) {
   const col = el('div', 'axis-col');
   const up = el('button', 'round-btn');
@@ -338,7 +376,11 @@ function axisColumn(axis, handlers) {
   down.appendChild(el('span', 'tri', '▼'));
   down.onclick = () => handlers.jog(axis, -stepMm(), activeTool);
   col.appendChild(up);
-  col.appendChild(el('div', 'axis-label', '------'));
+  const label = el('div', 'axis-label', axisReadout(axis));
+  if (axis !== 'E' && head.isHomed && !head.isHomed(axis)) {
+    label.title = `${axis} is not homed - Klipper refuses a move until it is`;
+  }
+  col.appendChild(label);
   col.appendChild(down);
   return col;
 }
@@ -354,7 +396,12 @@ function rosette(handlers) {
   r.appendChild(mk('down', '▼', 'Y', -1));
   r.appendChild(mk('left', '◀', 'X', -1));
   r.appendChild(mk('right', '▶', 'X', +1));
-  r.appendChild(el('div', 'hub', 'XY'));
+  const hub = el('div', 'hub', 'XY');
+  if (head.allHomed === false) {
+    hub.title = 'Not homed - home the axes before jogging';
+    hub.dataset.warn = '1';
+  }
+  r.appendChild(hub);
   return r;
 }
 
@@ -383,7 +430,27 @@ export function renderTask(root, job, tab, files, handlers) {
   if (tab === 'files') return renderFiles(root, files, handlers);
 
   const active = job.state === PRINT_STATE.PRINTING || job.state === PRINT_STATE.PAUSED;
-  if (!active) { illustration(root); return; }
+  if (!active) {
+    // An illustration on its own says nothing and offers nothing. Name the state and
+    // give the one action that makes sense from here.
+    const wrap = el('div');
+    wrap.style.textAlign = 'center';
+    illustration(wrap);
+    const label = job.state && job.state !== PRINT_STATE.STANDBY
+      ? `No active print · ${job.state}` : 'No active print';
+    wrap.appendChild(el('div', 'cam-msg', label));
+    if (job.filename) {
+      wrap.appendChild(el('div', 'job-last', `Last file: ${job.filename}`));
+    }
+    const btns = el('div', 'job-btns');
+    btns.style.justifyContent = 'center';
+    const browse = el('button', 'btn primary', 'Browse printer files');
+    browse.onclick = () => handlers.showFiles();
+    btns.appendChild(browse);
+    wrap.appendChild(btns);
+    root.appendChild(wrap);
+    return;
+  }
 
   const wrap = el('div', 'job');
   wrap.appendChild(el('div', 'job-name', job.filename));
@@ -513,7 +580,11 @@ export function makeTrace(pane) {
 export function renderFilament(root, taskConfig, handlers) {
   root.innerHTML = '';
   const types = taskConfig[TASK_CONFIG.TYPE] || [];
-  const colors = taskConfig[TASK_CONFIG.COLOR] || [];
+  // rgba first: it is the unambiguous one. filament_color is an ARGB integer, and
+  // both need normalising before they are CSS - see cssColor().
+  const rawColors = taskConfig[TASK_CONFIG.COLOR_RGBA]
+                 || taskConfig[TASK_CONFIG.COLOR] || [];
+  const colors = Array.from(rawColors, cssColor);
   const exists = taskConfig[TASK_CONFIG.EXISTS] || [];
   const vendors = taskConfig[TASK_CONFIG.VENDOR] || [];
 
@@ -529,7 +600,7 @@ export function renderFilament(root, taskConfig, handlers) {
       dot.dataset.loaded = '1';
       dot.style.background = colors[i] || '#C4C4C4';
       // keep the number legible on dark filament
-      dot.style.color = isDark(colors[i]) ? '#fff' : '#333';
+      dot.style.color = isDarkColor(colors[i]) ? '#fff' : '#333';
     }
     slot.appendChild(dot);
 
@@ -542,15 +613,6 @@ export function renderFilament(root, taskConfig, handlers) {
                                        vendor: vendors[i] }, handlers);
     root.appendChild(slot);
   }
-}
-
-/** #RRGGBB(AA) -> is it dark enough to need light text? */
-function isDark(hex) {
-  const m = /^#?([0-9a-f]{6})/i.exec(String(hex || ''));
-  if (!m) return false;
-  const n = parseInt(m[1], 16);
-  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  return (0.299 * r + 0.587 * g + 0.114 * b) < 140;
 }
 
 function editSlot(index, cur, handlers) {
@@ -573,7 +635,7 @@ function editSlot(index, cur, handlers) {
       const crow = el('div', 'field-row');
       color = document.createElement('input');
       color.type = 'color';
-      color.value = (cur.color || '#cccccc').slice(0, 7);
+      color.value = (cssColor(cur.color) || '#CCCCCC').slice(0, 7);
       crow.appendChild(color);
       c.appendChild(crow);
       c.appendChild(el('span', 'field-hint',

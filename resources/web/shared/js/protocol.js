@@ -284,6 +284,80 @@ export const TOOLHEADS = ['extruder', 'extruder1', 'extruder2', 'extruder3'];
  * The print popup WRITES it - the filament mapping and the three preference
  * toggles are edits to these same fields. Same object, different verb.
  */
+/**
+ * Filament colour -> a CSS colour, from any of the three forms that reach us.
+ *
+ * Measured on a U1: `filament_color` is an **ARGB integer** (4294198070 = 0xFFF44336)
+ * and `filament_color_rgba` is hex **without a leading #** ("F44336FF", RRGGBBAA). The
+ * simulator used to send '#E03131FF', which is why assigning the value straight to
+ * `style.background` worked in tests and silently did nothing on hardware - an invalid
+ * CSS colour is dropped, not reported.
+ *
+ * Returns null when there is no usable colour, so callers can fall back deliberately
+ * rather than painting an empty string.
+ */
+export function cssColor(v) {
+  if (v == null) return null;
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    // ARGB: the alpha rides in the top byte and the rest is plain RGB
+    return '#' + ((v >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0').toUpperCase();
+  }
+  const t = String(v).trim().replace(/^#/, '');
+  if (/^[0-9a-f]{8}$/i.test(t) || /^[0-9a-f]{6}$/i.test(t)) return '#' + t.slice(0, 6).toUpperCase();
+  if (/^[0-9a-f]{3}$/i.test(t)) return '#' + t.replace(/./g, (c) => c + c).toUpperCase();
+  return null;
+}
+
+/** Is a CSS colour dark enough to need light text on top? */
+export function isDarkColor(v) {
+  const c = cssColor(v);
+  if (!c) return false;
+  const n = parseInt(c.slice(1), 16);
+  return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) < 140;
+}
+
+/**
+ * purifier.mode is an INTEGER on the wire, not the 'inner'/'exhaust' strings the page
+ * used to send - which is why the status row showed a bare "0".
+ *
+ * Only `0` is measured (an idle U1 with no purifier attached: power_detected false).
+ * The names for 1 and 2 are inferred from the two modes the shipped page offers and are
+ * NOT verified - confirming them means changing the mode on a real machine, which is a
+ * physical action rather than a read. Treat the labels as provisional; the integer is
+ * what goes on the wire either way.
+ */
+export const PURIFIER_MODES = { 0: 'Off', 1: 'Recirculation Mode', 2: 'Exhaust Mode' };
+
+/**
+ * The commands the PRINTER answers, as opposed to the ones Orca answers itself.
+ *
+ * It matters because their replies arrive shaped differently. A printer-backed handler
+ * routes the reply through `on_mqtt_msg_arrived`, which assigns the JSON-RPC envelope
+ * verbatim (`m_res_data = response`, SSWCP.cpp:1194) into `payload.data` (:946) - so the
+ * caller receives `{jsonrpc, result, id}` and the payload it wants is one level down.
+ * Everything else answers with its payload directly.
+ *
+ * Derived from SSWCP.cpp by finding every handler whose body reaches
+ * `on_mqtt_msg_arrived`, and re-derived by the conformance suite so it cannot drift.
+ */
+export const PRINTER_BACKED = new Set([
+  'sw_BedMesh_AbortProbeMesh', 'sw_CameraStartMonitor', 'sw_CameraStopMonitor',
+  'sw_CancelPullCloudFile', 'sw_ControlBedTemp', 'sw_ControlExtruderTemp',
+  'sw_ControlGenericFan', 'sw_ControlLed', 'sw_ControlMainFan', 'sw_ControlPrintSpeed',
+  'sw_ControlPurifier', 'sw_DefectDetactionConfig', 'sw_DeleteCameraTimelapse',
+  'sw_DeleteMachineFile', 'sw_FileGetStatus', 'sw_FilesThumbnailsBase64',
+  'sw_GetCameraTimelapseInstance', 'sw_GetDeviceDataStorageSpace', 'sw_GetFileListPage',
+  'sw_GetFileStream', 'sw_GetMachineObjects', 'sw_GetMachineState', 'sw_GetPrintInfo',
+  'sw_GetSystemInfo', 'sw_MachineFilesGetDirectory', 'sw_MachineFilesMetadata',
+  'sw_MachineFilesRoots', 'sw_MachineFilesThumbnails', 'sw_MachineHeartbeat',
+  'sw_MachinePrintCancel', 'sw_MachinePrintPause', 'sw_MachinePrintResume',
+  'sw_MachinePrintStart', 'sw_PrinterDefectDetection', 'sw_PullCloudFile', 'sw_SendGCodes',
+  'sw_ServerClientManagerSetUserinfo', 'sw_SetDeviceName', 'sw_SetMachineSubscribeFilter',
+  'sw_StartCloudPrint', 'sw_StartLocalPrint', 'sw_SystemGetDeviceInfo',
+  'sw_UnSubscribeMachineState', 'sw_UnsubscribeCacheKeys',
+  'sw_UploadAsyncTimelapseInstance', 'sw_UploadCameraTimelapse', 'sw_exception_query'
+]);
+
 export const TASK_CONFIG = {
   // filament, per toolhead slot (parallel arrays)
   VENDOR: 'filament_vendor',

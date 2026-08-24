@@ -1,5 +1,15 @@
 # Report — reverse engineering and reimplementation
 
+> **The screenshots on this page are stale (flagged 2026-08-24).** Every image under
+> `screenshots/01-` … `08-` shows an early dark-theme iteration of the reconstruction,
+> before the panel layout was matched to the shipped page. They do not represent what the
+> Device tab looks like now, and should not be used to judge parity — use
+> [`05-visual-reference.md`](05-visual-reference.md) and the `original-*` /
+> `reconstruction-*` captures for that. They are kept only because the prose below refers
+> to them; regenerating needs a working browser, which the current environment does not
+> have (chromium will not start without libnspr4/libnss3).
+
+
 ## What was done
 
 The Snapmaker U1 Device tab in Orca is a compiled Flutter web app

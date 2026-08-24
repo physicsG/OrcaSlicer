@@ -15,7 +15,7 @@
  */
 'use strict';
 
-import { SUBSCRIBE_OBJECTS, TOOLHEADS } from './protocol.js';
+import { SUBSCRIBE_OBJECTS, TOOLHEADS, PRINTER_BACKED } from './protocol.js';
 import { OK_CODE } from './sswcp.js';
 
 const TICK_MS = 1000;
@@ -41,8 +41,23 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
   const subs = new Map();      // event_id -> true
   let filter = null;
 
-  function reply(header, code, message, data) {
-    const packet = { header, payload: { code, message, data } };
+  /**
+   * Commands the PRINTER answers come back wrapped in their JSON-RPC envelope, because
+   * Orca passes the reply through verbatim (SSWCP.cpp:1194 -> :946). Commands Orca
+   * answers itself do not. The simulator used to unwrap everything, which is precisely
+   * why a page that read fields off the envelope passed every browser test and showed
+   * nothing on hardware.
+   */
+  let rpcId = 0;
+
+  function reply(header, code, message, data, cmd) {
+    let out = data;
+    if (cmd && PRINTER_BACKED.has(cmd) && data && typeof data === 'object'
+        && !Array.isArray(data) && !('jsonrpc' in data)) {
+      out = { jsonrpc: '2.0', result: data, id: ++rpcId,
+              cli_time: Math.floor(Date.now() / 1000), dev_time: -1 };
+    }
+    const packet = { header, payload: { code, message, data: out } };
     log('mock-tx', packet);
     setTimeout(() => window.postMessage(JSON.stringify(packet), '*'), 0);
   }
@@ -59,10 +74,11 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
       const { cmd, params = {}, event_id: eventId } = p;
       log('mock-rx', msg);
 
-      const ok = (data) => reply(header, OK_CODE, 'success', data === undefined ? {} : data);
+      const ok = (data) => reply(header, OK_CODE, 'success',
+                                 data === undefined ? {} : data, cmd);
       // an optional code, so a handler can reproduce the printer's own
       // (camera.start_monitor answers -32000, not a generic failure)
-      const fail = (m, code = -1) => reply(header, code, m, {});
+      const fail = (m, code = -1) => reply(header, code, m, {}, cmd);
       const ctx = { printer, ok, fail, header, eventId, subs, push };
 
       // A surface's own handlers win, so it can also override a shared one.
@@ -517,8 +533,10 @@ export function makePrinter() {
       print_task_config: {
         filament_vendor: ['Snapmaker', 'Snapmaker', 'Snapmaker', 'Generic'],
         filament_type: ['PLA', 'PLA', 'PETG', 'ABS'],
-        filament_color: ['#E03131FF', '#1971C2FF', '#2F9E44FF', '#F08C00FF'],
-        filament_color_rgba: ['#E03131FF', '#1971C2FF', '#2F9E44FF', '#F08C00FF'],
+        // As the wire carries them: filament_color is an ARGB integer and
+        // filament_color_rgba is hex with NO leading '#'. Measured on a U1.
+        filament_color: [0xFFE03131, 0xFF1971C2, 0xFF2F9E44, 0xFFF08C00],
+        filament_color_rgba: ['E03131FF', '1971C2FF', '2F9E44FF', 'F08C00FF'],
         filament_exist: [true, true, true, true],
         extruders_used: [0, 1, 2, 3],
         extruder_map_table: { 0: 0, 1: 1, 2: 2, 3: 3 },

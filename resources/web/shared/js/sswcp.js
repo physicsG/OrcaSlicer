@@ -34,6 +34,30 @@ export function isOk(code) {
   return code === OK_CODE || code === 0 || code === undefined || code === null;
 }
 
+/**
+ * Strip the printer's JSON-RPC envelope, if there is one.
+ *
+ * Orca hands a printer reply to the page verbatim: `on_mqtt_msg_arrived` sets
+ * `m_res_data = response` (SSWCP.cpp:1194) and `send_to_js` puts that straight into
+ * `payload.data` (SSWCP.cpp:946). So a command answered by the printer resolves to
+ * `{jsonrpc, result, id, cli_time, dev_time}` and the payload the caller wants is one
+ * level down - while a command answered inside Orca resolves to the payload itself.
+ *
+ * Callers were reading fields off the envelope and getting `undefined` on hardware; the
+ * simulator hid it by replying with the unwrapped result. Unwrapping once here is the
+ * only place that knows about the transport, so every caller can read its own fields.
+ *
+ * Guarded on `jsonrpc` so a C++-answered payload that merely happens to carry a `result`
+ * key is left alone. An `error` envelope is passed through untouched: the bridge has
+ * already decided the command succeeded, and the caller is owed the detail.
+ */
+export function unwrapRpc(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  if (typeof data.jsonrpc !== 'string') return data;
+  if ('result' in data) return data.result;
+  return data;
+}
+
 export class SswcpError extends Error {
   constructor(code, message, cmd) {
     super(`${cmd} failed (code ${code})${message ? ': ' + message : ''}`);
@@ -156,7 +180,7 @@ export class Sswcp {
     if (header.event_id != null && !header.seqid) {
       const sub = this._subs.get(header.event_id);
       if (sub) {
-        try { sub.onPush(payload.data, payload); }
+        try { sub.onPush(unwrapRpc(payload.data), payload); }
         catch (e) { console.error('[sswcp] push handler threw', e); }
       }
       return;
@@ -171,7 +195,7 @@ export class Sswcp {
     this._pending.delete(seqid);
 
     const code = payload.code;
-    if (isOk(code)) p.resolve(payload.data);
+    if (isOk(code)) p.resolve(unwrapRpc(payload.data));
     else p.reject(new SswcpError(code, payload.message, p.cmd));
   }
 }

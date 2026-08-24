@@ -116,7 +116,12 @@ check("all four toolheads carry the extruder field list",
 
 print("\n== bridge commands ==")
 cmds = json.load(open(os.path.join(DATA, "sswcp-commands.json"), encoding='utf-8'))
-used = set(re.findall(r"'(sw_[A-Za-z0-9_]+)'", src))
+# PRINTER_BACKED classifies REPLY SHAPES; it is not a list of commands we send, and it
+# is derived from handler definitions in SSWCP.cpp - which include the ~15 dispatched
+# through header macros that map_sswcp.py cannot see. Scanning it here would report
+# those as "unknown commands" when the client never sends them.
+src_cmds = re.sub(r"export const PRINTER_BACKED = new Set\(\[.*?\]\);", "", src, flags=re.S)
+used = set(re.findall(r"'(sw_[A-Za-z0-9_]+)'", src_cmds))
 unknown = sorted(c for c in used if c not in cmds)
 check("every command we send exists in Orca's dispatch",
       not unknown, f"unknown={unknown}")
@@ -322,6 +327,74 @@ check("the timelapse listing is read by its real field name",
 check("the simulator refuses the domain the printer refuses",
       str(cam["domain_rejected"]["code"]) in open(MOCK, encoding="utf-8").read(),
       "the mock accepted anything, so it could not have caught this")
+
+print("\n== response shapes vs the wire ==")
+# The class of bug this section exists for: the simulator used to answer with what the
+# CLIENT expected instead of what the PRINTER sends, so every mismatch passed the browser
+# suite and failed on hardware. These re-derive the wire contract from SSWCP.cpp and from
+# the captured payloads, so a client that drifts back goes red.
+SRC_CPP = os.path.join(ROOT, "src", "slic3r", "GUI", "SSWCP.cpp")
+cpp = open(SRC_CPP, encoding="utf-8", errors="replace").read()
+
+starts = [(m.group(1), m.end()) for m in
+          re.finditer(r"void\s+SSWCP_\w+::(sw_\w+)\s*\([^)]*\)\s*\{", cpp)]
+derived = set()
+for i, (name, pos) in enumerate(starts):
+    end = starts[i + 1][1] if i + 1 < len(starts) else len(cpp)
+    if "on_mqtt_msg_arrived" in cpp[pos:end]:
+        derived.add(name)
+
+listed = set(re.findall(r"'(sw_\w+)'",
+             re.search(r"export const PRINTER_BACKED = new Set\(\[(.*?)\]\);",
+                       src, re.S).group(1)))
+check("PRINTER_BACKED matches the handlers that pass a printer reply through",
+      listed == derived,
+      f"only in page={sorted(listed - derived)}\n          only in C++={sorted(derived - listed)}")
+
+check("the client unwraps the JSON-RPC envelope",
+      "unwrapRpc" in open(SSWCP, encoding="utf-8").read(),
+      "payload.data is the whole {jsonrpc,result,id} for a printer-backed command")
+
+mock_src = open(MOCK, encoding="utf-8").read()
+check("the simulator wraps printer replies the way Orca does",
+      "PRINTER_BACKED.has(cmd)" in mock_src and "jsonrpc: '2.0'" in mock_src,
+      "an unwrapping simulator turns a hardware bug into a passing test")
+
+# colours: the two real forms, cross-checked against each other in the capture
+hw_colors = hw.get("_filament_colors") or {}
+check("the simulator sends filament colour in the printer's forms, not CSS",
+      "filament_color_rgba: ['E03131FF'" in mock_src
+      and "filament_color: [0xFFE03131" in mock_src,
+      "'#RRGGBBAA' is not what the wire carries")
+check("a colour normaliser exists and is used",
+      "export function cssColor" in src
+      and "cssColor" in open(os.path.join(WEB, "device_page", "js", "ui.js"),
+                             encoding="utf-8").read(),
+      "assigning an ARGB int to style.background is silently dropped")
+
+# the control panel needs `toolhead`, which was never subscribed
+sub_block = js_block(src, "SUBSCRIBE_OBJECTS") or ""
+state_src = open(os.path.join(SHARED, "js", "state.js"), encoding="utf-8").read()
+check("the subscription list is still the bundle's - `toolhead` is NOT added",
+      "'toolhead'" not in sub_block,
+      "the shipped page does not subscribe it; adding it drifts from the original")
+check("the active tool is derived from the extruder that reports ACTIVATE",
+      "'ACTIVATE'" in state_src,
+      "the Tool buttons must follow the machine, and this is the subscribed source")
+check("the axis readout uses motion_report.live_position",
+      "live_position" in state_src,
+      "positions are available without subscribing `toolhead`")
+
+ui_src = open(os.path.join(WEB, "device_page", "js", "ui.js"), encoding="utf-8").read()
+check("a running camera can be stopped",
+      ui_src.count("handlers.stopCamera()") >= 2,
+      "the live-view branch returned before the control block was reached")
+check("the idle task panel offers something besides an illustration",
+      "showFiles" in ui_src,
+      "an image with no text and no buttons is not a state")
+check("selecting a toolhead reaches the machine",
+      "handlers.selectTool" in ui_src,
+      "the buttons used to set a local variable and send nothing")
 
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)

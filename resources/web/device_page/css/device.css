@@ -586,3 +586,26 @@ body {
 }
 .speed-row input[type="range"] { flex: 1; max-width: 260px; accent-color: var(--accent); }
 .speed-row .val { font-variant-numeric: tabular-nums; color: var(--ink); min-width: 44px; }
+
+/* ---- live camera controls -------------------------------------------
+   The live-view branch used to render only the frame, which left a running
+   camera with no way to stop it. The bar sits under the image rather than over
+   it so it never covers what the user turned the camera on to see. */
+.camera-body .cam-controls {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 10px;
+}
+.cam-frame[data-failed="1"] { opacity: .25; }
+
+/* Last-file line under the idle Printing Task placeholder. */
+.task-body .job-last {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #8B8B8B;
+}
+
+/* An axis that is not homed: Klipper will refuse the move, so say so quietly
+   rather than letting the button look broken. */
+.jog .hub[data-warn="1"] { color: #C9531F; }

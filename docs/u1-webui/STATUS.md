@@ -151,6 +151,23 @@ traffic is a live feedback loop), and clean up orphaned `WebKitWebProcess` after
 `kill -9` — otherwise the next run's webview has no `window.wx` and the page silently
 falls back to the simulator, which looks like real data and is not.
 
+## The parity claim was wrong, and why
+
+`07-parity.md` reported "nothing on the command surface" as missing. That was command
+coverage presented as functional coverage, and the two are not the same: `check_coverage`
+counts a command as implemented when `CMD.NAME` appears in client source, which proves it
+is *mentioned* — not that a control exists, that the call site is reachable, or that the
+response renders. A panel with no button still counted every command it would have called.
+
+Seven user-visible faults were found on real hardware against that "complete" page. The
+full write-up, root cause by root cause, is
+[02-device-page/08-function-gap-analysis.md](02-device-page/08-function-gap-analysis.md).
+The dominant cause was a single line: Orca hands a printer's reply to the page still
+wrapped in its JSON-RPC envelope, and the simulator unwrapped it — so every field read
+worked in the browser suite and returned `undefined` on a printer.
+
+Six of the seven are fixed; print history needs a new bridge command in `SSWCP.cpp`.
+
 ## What to pick up next
 
 In rough order of value:

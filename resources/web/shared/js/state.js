@@ -12,7 +12,7 @@
  */
 'use strict';
 
-import { TOOLHEADS, PRINT_STATE } from './protocol.js';
+import { TOOLHEADS, PRINT_STATE, PURIFIER_MODES } from './protocol.js';
 
 /** Pull the object map out of whatever shape the transport handed us. */
 export function unwrapStatus(data) {
@@ -95,6 +95,67 @@ export class MachineState {
     });
   }
 
+  /**
+   * The `toolhead` object: which tool is live, where the gantry is, what is homed.
+   *
+   * Measured on a U1 - `{extruder:"extruder3", position:[x,y,z,e], homed_axes:""}`.
+   * Without it the Tool buttons were a local variable with nothing behind them and the
+   * axis readouts could only ever show their placeholder. `homed_axes` matters just as
+   * much: Klipper refuses a G0 on an unhomed axis, so a jog looks like it did nothing.
+   */
+  toolhead() {
+    // Deliberately NOT from a `toolhead` subscription: the shipped page does not
+    // subscribe that object, and the conformance suite holds the list to the bundle's.
+    // Everything needed is already in the subscribed set - the active tool is the
+    // extruder reporting state ACTIVATE, and the live position is on motion_report.
+    // `homed_axes` exists only on `toolhead`, so it arrives from an explicit one-shot
+    // query (see refreshToolhead in app.js) rather than from the stream.
+    const o = this.objects['toolhead'] || {};
+    const mr = this.objects['motion_report'] || {};
+    const pos = Array.isArray(mr.live_position) ? mr.live_position
+              : (Array.isArray(o.position) ? o.position : []);
+    const homed = String(o.homed_axes || '');
+    let activeKey = o.extruder || null;
+    if (!activeKey) {
+      const hit = TOOLHEADS.find((k) => (this.objects[k] || {}).state === 'ACTIVATE');
+      activeKey = hit || null;
+    }
+    return {
+      activeKey,
+      activeIndex: TOOLHEADS.indexOf(activeKey) >= 0 ? TOOLHEADS.indexOf(activeKey) : null,
+      x: numOrNull(pos[0]), y: numOrNull(pos[1]), z: numOrNull(pos[2]), e: numOrNull(pos[3]),
+      homedAxes: homed,
+      // unknown (no toolhead snapshot yet) is not the same as 'not homed'
+      isHomed: (a) => (homed ? homed.toLowerCase().includes(String(a).toLowerCase()) : true),
+      allHomed: homed ? ['x', 'y', 'z'].every((a) => homed.toLowerCase().includes(a)) : null,
+      present: Object.keys(o).length > 0,
+    };
+  }
+
+  /**
+   * Filament slots, normalised.
+   *
+   * `filament_exist` is the authority on whether a slot is loaded - a slot can carry a
+   * type of "NONE" and still be reported present, so both are checked.
+   */
+  filaments() {
+    const c = this.objects['print_task_config'] || {};
+    const arr = (k) => (Array.isArray(c[k]) ? c[k] : []);
+    const types = arr('filament_type'), vendors = arr('filament_vendor');
+    const rgba = arr('filament_color_rgba'), argb = arr('filament_color');
+    const exists = arr('filament_exist');
+    return TOOLHEADS.map((_, i) => {
+      const type = types[i];
+      return {
+        index: i,
+        type: (type && type !== 'NONE') ? type : null,
+        vendor: (vendors[i] && vendors[i] !== 'NONE') ? vendors[i] : null,
+        color: rgba[i] != null ? rgba[i] : argb[i],
+        loaded: exists[i] !== false && !!type && type !== 'NONE',
+      };
+    });
+  }
+
   bed() {
     const o = this.objects['heater_bed'] || {};
     return { temperature: num(o.temperature), target: num(o.target) };
@@ -148,12 +209,17 @@ export class MachineState {
 
   purifier() {
     const o = this.objects['purifier'] || {};
+    // Measured: mode is an INTEGER (0), and exhaust_fan / inner_fan are objects
+    // ({speed, delay, speed_threshold}) rather than scalars. The page used to print
+    // the raw mode, which showed a bare "0", and treat the fans as numbers.
+    const fanSpeed = (f) => (f && typeof f === 'object' ? pct(f.speed) : pct(f));
     return {
       powerDetected: !!o.power_detected,
       powerDetValue: num(o.power_det_value),
       mode: o.mode ?? null,
-      exhaustFan: o.exhaust_fan ?? null,
-      innerFan: o.inner_fan ?? null,
+      modeName: PURIFIER_MODES[o.mode] ?? (o.mode == null ? null : String(o.mode)),
+      exhaustFan: fanSpeed(o.exhaust_fan),
+      innerFan: fanSpeed(o.inner_fan),
       present: Object.keys(o).length > 0,
     };
   }
@@ -174,6 +240,7 @@ export class MachineState {
   }
 }
 
+function numOrNull(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
 function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 function pct(v) { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) : 0; }
 function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
