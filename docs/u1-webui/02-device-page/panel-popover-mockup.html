@@ -66,16 +66,14 @@
 
   /* ---------------- icon-only status rows ---------------- */
   .trow{display:flex;align-items:center;gap:6px;height:38px;padding:0 8px;
-        border:2px solid transparent;border-radius:8px;font-size:13px;
-        border-bottom:1px solid var(--line)}
-  .trow:last-of-type{border-bottom:2px solid transparent}
+        border:2px solid transparent;border-radius:8px;font-size:13px;}
   .trow .ic{width:17px;height:17px;opacity:.7}
   .nz{position:relative;display:inline-flex;flex:0 0 auto}
   .badge{position:absolute;right:-4px;bottom:-3px;font-size:9px;line-height:1;
          background:var(--panel-2);border:1px solid var(--line);border-radius:999px;
          padding:1px 3px;color:var(--ink-2);font-weight:600}
-  .chip{width:9px;height:9px;border-radius:50%;border:1px solid rgba(0,0,0,.18);
-        flex:0 0 9px;margin-left:2px}
+  .chip{width:7px;height:13px;border-radius:3px;border:1px solid rgba(0,0,0,.20);
+        flex:0 0 7px;margin-left:3px}
   .chip.empty{background:repeating-linear-gradient(45deg,var(--panel-2),var(--panel-2) 2px,
               var(--line) 2px,var(--line) 4px)}
   .chip.ghost{visibility:hidden}
@@ -188,7 +186,7 @@
   .pbox.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
   .pbox.on .ic{opacity:1;color:var(--accent)}
   .pbox .ic{width:17px;height:17px;opacity:.7}
-  .pchip{width:8px;height:8px;border-radius:50%;border:1px solid rgba(0,0,0,.18);flex:0 0 8px}
+  .pchip{width:7px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.20);flex:0 0 7px}
   .pchip.empty{background:repeating-linear-gradient(45deg,var(--panel-2),var(--panel-2) 2px,
                var(--line) 2px,var(--line) 4px)}
   .pickbtn{margin-top:3px;padding:7px 4px;font:inherit;font-size:11px;line-height:1.25;
@@ -196,10 +194,9 @@
            background:var(--panel);color:var(--accent);font-weight:600}
   .pickbtn:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
   .ejog{margin-top:10px;display:flex;flex-direction:column;align-items:center;gap:5px;
-        padding-top:10px;border-top:1px solid var(--line)}
+        }
 
-  .steprow{display:flex;align-items:center;gap:8px;margin-top:11px;padding-top:11px;
-           border-top:1px solid var(--line)}
+  .steprow{display:flex;align-items:center;gap:8px;margin-top:11px;}
   .stepbtn{width:30px;height:28px;display:grid;place-items:center;border:1px solid var(--line);
            border-radius:7px;cursor:pointer;font-size:14px;background:var(--panel-2)}
   .stepbtn:hover{background:var(--line)}
@@ -221,7 +218,7 @@
   .colPick{width:196px;flex:0 0 196px;display:flex;flex-direction:column;gap:7px}
   .pickrow{display:flex;gap:6px}
   .pickrow .pbox{flex:1;flex-direction:column;gap:3px;height:52px;justify-content:center}
-  .ejog{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);
+  .ejog{margin-top:12px;
         display:flex;flex-direction:column;align-items:center;gap:6px}
   .ejog .ebtn{width:74px}
   .ecap{font-size:12px;color:var(--ink-2);font-weight:600}
@@ -257,7 +254,7 @@
   .demo{border:1px solid var(--line);border-radius:9px;padding:8px}
   /* the demo rows paint what :hover and :focus would, so both states are visible at once */
   .demo .trow{border:2px solid var(--line);border-radius:8px;margin-bottom:5px;height:34px;
-              padding:0 7px;border-bottom:2px solid var(--line)}
+              padding:0 7px}
   .demo .trow.focus{border-color:var(--accent);
                     background:color-mix(in srgb,var(--accent) 7%,transparent)}
   .tgt-demo{width:34px;padding:2px 3px;font-size:13px;font-variant-numeric:tabular-nums;
@@ -292,7 +289,7 @@
   .svar-body{background:var(--panel);border:1px solid var(--line);border-radius:10px;
              padding:14px 16px;max-width:400px}
   .sctl{padding:6px 0 2px}
-  .sctl + .sctl{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+  .sctl + .sctl{margin-top:18px}
   .shead{display:flex;align-items:center;gap:9px;margin-bottom:12px}
   .sbadge{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;
           display:grid;place-items:center;flex:none}
@@ -335,6 +332,23 @@
         border-radius:7px;background:var(--panel-2);cursor:pointer;font-size:14px}
   .sbtn:hover{background:var(--line)}
   .sval{flex:1;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}
+
+  /* A control for hardware that is not attached is not a setting - it is a claim the
+     machine would refuse. The modes stay visible so the panel keeps its shape, but they
+     are plainly out of reach, and the panel says why rather than leaving the user to
+     click and get nothing. Driven by purifier.power_detected. */
+  .tile[data-absent="1"]{opacity:.55}
+  .tile[data-absent="1"] b{color:var(--muted)}
+  .empty{display:flex;align-items:center;gap:9px;padding:2px 0 12px}
+  .empty-ic{width:26px;height:26px;border-radius:50%;background:var(--panel-2);
+            display:grid;place-items:center;flex:none;color:var(--muted)}
+  .empty-ic .ic{width:15px;height:15px;opacity:.8}
+  .empty-msg{font-size:12.5px;color:var(--ink-2)}
+  .stoprow[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
+  .stoprow[aria-disabled="true"] .stop{color:var(--muted)}
+  .stoprow[aria-disabled="true"] .stop .dot{background:var(--panel-2);
+                                            border-color:var(--line)}
+  .stoprow[aria-disabled="true"] .stop.on{color:var(--muted);font-weight:400}
 </style>
 
 <div class="wrap">
@@ -357,19 +371,19 @@
           <div class="colA">
             <div class="trow" title="Toolhead 1 — Jayo PLA · tag 190–260 °C">
       <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span>
-      <span class="chip" style="background:#F44336"></span><span class="cur">27</span><span class="sl">/</span>
+      <span class="chip" style="background:#F44336" title="Filament: Jayo PLA · #F44336"></span><span class="cur">27</span><span class="sl">/</span>
       <input class="tgt" type="number" min="0" max="300" value="0" aria-label="Toolhead 1 target">
       <span class="unit">°C</span></div><div class="trow" title="Toolhead 2 — Forshape PLA · tag 205–235 °C">
       <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">2</b></span>
-      <span class="chip" style="background:#FFFFDC"></span><span class="cur">26</span><span class="sl">/</span>
+      <span class="chip" style="background:#FFFFDC" title="Filament: Forshape PLA · #FFFFDC"></span><span class="cur">26</span><span class="sl">/</span>
       <input class="tgt" type="number" min="0" max="300" value="0" aria-label="Toolhead 2 target">
       <span class="unit">°C</span></div><div class="trow" title="Toolhead 3 — empty bay">
       <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">3</b></span>
-      <span class="chip empty"></span><span class="cur">26</span><span class="sl">/</span>
+      <span class="chip empty" title="No filament loaded"></span><span class="cur">26</span><span class="sl">/</span>
       <input class="tgt" type="number" min="0" max="300" value="0" aria-label="Toolhead 3 target">
       <span class="unit">°C</span></div><div class="trow live" title="Toolhead 4 — Generic PETG · hand-set, no tag">
       <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">4</b></span>
-      <span class="chip" style="background:#632C2C"></span><span class="cur">26</span><span class="sl">/</span>
+      <span class="chip" style="background:#632C2C" title="Filament: Generic PETG · #632C2C"></span><span class="cur">26</span><span class="sl">/</span>
       <input class="tgt" type="number" min="0" max="300" value="0" aria-label="Toolhead 4 target">
       <span class="unit">°C</span></div><div class="trow" title="Heated bed">
       <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15h18M5 15V9a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6M6 19v-2M18 19v-2"/></svg></span><span class="chip ghost"></span>
@@ -425,14 +439,19 @@
               </div>
               <div class="tilewrap">
                 <input type="radio" name="tile" id="t-pur">
-                <label class="tile" for="t-pur" title="Air purifier"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><b>Off</b></label>
+                <label class="tile" for="t-pur" data-absent="1"
+                       title="Air purifier — not connected"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.6c.9-1 1.8.9 2.7 0s1.8.9 2.7 0 1.8.9 2.7 0"/><rect x="5" y="8.4" width="14" height="12.6" rx="2.4"/><circle cx="12" cy="14.7" r="3.1"/><path d="M12 14.7l2.1-1.5"/><path d="M8.4 20.2h7.2"/></svg><b>—</b></label>
                 <div class="pop">
                   <div class="pop-head"><span class="pop-title">Air purifier</span>
                     <label class="pop-x" for="t-none">×</label></div>
-                  <div class="stoprow">
-                    <div class="stop on"><span class="dot"></span>Off<span class="pct">0</span></div>
-                    <div class="stop"><span class="dot"></span>Recirc<span class="pct">1</span></div>
-                    <div class="stop"><span class="dot"></span>Exhaust<span class="pct">2</span></div>
+                  <div class="empty">
+                    <span class="empty-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.6c.9-1 1.8.9 2.7 0s1.8.9 2.7 0 1.8.9 2.7 0"/><rect x="5" y="8.4" width="14" height="12.6" rx="2.4"/><circle cx="12" cy="14.7" r="3.1"/><path d="M12 14.7l2.1-1.5"/><path d="M8.4 20.2h7.2"/></svg></span>
+                    <span class="empty-msg">No air purifier connected</span>
+                  </div>
+                  <div class="stoprow" aria-disabled="true">
+                    <div class="stop off"><span class="dot"></span>Off<span class="pct">0</span></div>
+                    <div class="stop off"><span class="dot"></span>Recirc<span class="pct">1</span></div>
+                    <div class="stop off"><span class="dot"></span>Exhaust<span class="pct">2</span></div>
                   </div>
                 </div>
               </div>
@@ -446,7 +465,7 @@
           </div>
 
           <div class="colPick">
-            <div class="pickrow"><label class="pbox" title="Target jog and extrude at toolhead 1"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span><span class="pchip" style="background:#F44336"></span></label><label class="pbox" title="Target jog and extrude at toolhead 2"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">2</b></span><span class="pchip" style="background:#FFFFDC"></span></label><label class="pbox" title="Target jog and extrude at toolhead 3"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">3</b></span><span class="pchip empty"></span></label><label class="pbox on" title="Target jog and extrude at toolhead 4"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">4</b></span><span class="pchip" style="background:#632C2C"></span></label></div>
+            <div class="pickrow"><label class="pbox" title="Target jog and extrude at toolhead 1"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span><span class="pchip" style="background:#F44336" title="Jayo PLA"></span></label><label class="pbox" title="Target jog and extrude at toolhead 2"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">2</b></span><span class="pchip" style="background:#FFFFDC" title="Forshape PLA"></span></label><label class="pbox" title="Target jog and extrude at toolhead 3"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">3</b></span><span class="pchip empty" title="No filament loaded"></span></label><label class="pbox on" title="Target jog and extrude at toolhead 4"><span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">4</b></span><span class="pchip" style="background:#632C2C" title="Generic PETG"></span></label></div>
             <div class="actrow">
               <button class="pickbtn" title="Change the live toolhead — blocks while the gantry moves">Pick extruder</button>
               <button class="parkbtn" title="Park the live toolhead — leaves no head engaged">Park extruder</button>
@@ -536,6 +555,26 @@
     to hit, and it is also the least often wanted.
   </div>
   <div class="note">
+    <b>The swatch beside each toolhead is its filament colour.</b> It was a circle, and a
+    circle reads as a status light — the same vocabulary as the green dot marking the
+    live toolhead, so the panel was using one shape for two unrelated meanings. It is
+    now a tall rounded rect, the shape of a filament strand, which reads as a material
+    sample rather than a state. Empty bays keep the hatch, because “no filament” and
+    “white filament” must not look alike. Colour is still carrying this alone, so it
+    stays a hover title as well; if that proves too quiet the fallback is the material
+    name on the row, at the cost of the icons-only rule.
+  </div>
+  <div class="note">
+    <b>Absent hardware disables its own control.</b> The purifier is drawn as this
+    machine reports it — <code>power_detected: false</code> — so its tile is dimmed to
+    an em dash, the panel says no purifier is connected, and the three modes are
+    visible but out of reach. The modes stay on screen rather than vanishing so the
+    panel does not change shape when one is plugged in. Note this is a state message,
+    not the explanatory copy removed above: it tells the user something about their
+    machine that they cannot see anywhere else on the page. The same rule wants
+    applying to the jog wheel while the axes are unhomed.
+  </div>
+  <div class="note">
     <b>The panels carry no explanatory copy.</b> Earlier drafts put a caveat line at the
     top of each one, after the reference. It is gone deliberately: most of what those
     lines said described the reconstruction rather than the machine — which wire object a
@@ -564,13 +603,13 @@
       <div class="demo">
         <div class="trow" title="hover state">
           <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span>
-          <span class="chip" style="background:#F44336"></span>
+          <span class="chip" style="background:#F44336" title="Filament: Jayo PLA · #F44336"></span>
           <span class="cur">27</span><span class="sl">/</span>
           <span class="tgt-demo">0</span><span class="unit">°C</span>
         </div>
         <div class="trow focus" title="editing">
           <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge live">4</b></span>
-          <span class="chip" style="background:#632C2C"></span>
+          <span class="chip" style="background:#632C2C" title="Filament: Generic PETG · #632C2C"></span>
           <span class="cur">26</span><span class="sl">/</span>
           <span class="tgt-demo on">245</span><span class="unit">°C</span>
         </div>
@@ -594,13 +633,13 @@
       <div class="demo">
         <div class="trow" title="hover state">
           <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span>
-          <span class="chip" style="background:#F44336"></span>
+          <span class="chip" style="background:#F44336" title="Filament: Jayo PLA · #F44336"></span>
           <span class="cur">27</span><span class="sl">/</span>
           <span class="tgt-demo">0</span><span class="unit">°C</span>
         </div>
         <div class="trow focus" title="editing">
           <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge live">4</b></span>
-          <span class="chip" style="background:#632C2C"></span>
+          <span class="chip" style="background:#632C2C" title="Filament: Generic PETG · #632C2C"></span>
           <span class="cur">26</span><span class="sl">/</span>
           <span class="tgt-demo on">245</span><span class="unit">°C</span>
         </div>
@@ -624,13 +663,13 @@
       <div class="demo">
         <div class="trow" title="hover state">
           <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span>
-          <span class="chip" style="background:#F44336"></span>
+          <span class="chip" style="background:#F44336" title="Filament: Jayo PLA · #F44336"></span>
           <span class="cur">27</span><span class="sl">/</span>
           <span class="tgt-demo">0</span><span class="unit">°C</span>
         </div>
         <div class="trow focus" title="editing">
           <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge live">4</b></span>
-          <span class="chip" style="background:#632C2C"></span>
+          <span class="chip" style="background:#632C2C" title="Filament: Generic PETG · #632C2C"></span>
           <span class="cur">26</span><span class="sl">/</span>
           <span class="tgt-demo on">245</span><span class="unit">°C</span>
         </div>
@@ -654,13 +693,13 @@
       <div class="demo">
         <div class="trow" title="hover state">
           <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span>
-          <span class="chip" style="background:#F44336"></span>
+          <span class="chip" style="background:#F44336" title="Filament: Jayo PLA · #F44336"></span>
           <span class="cur">27</span><span class="sl">/</span>
           <span class="tgt-demo">0</span><span class="unit">°C</span>
         </div>
         <div class="trow focus" title="editing">
           <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge live">4</b></span>
-          <span class="chip" style="background:#632C2C"></span>
+          <span class="chip" style="background:#632C2C" title="Filament: Generic PETG · #632C2C"></span>
           <span class="cur">26</span><span class="sl">/</span>
           <span class="tgt-demo on">245</span><span class="unit">°C</span>
         </div>
@@ -684,13 +723,13 @@
       <div class="demo">
         <div class="trow" title="hover state">
           <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge">1</b></span>
-          <span class="chip" style="background:#F44336"></span>
+          <span class="chip" style="background:#F44336" title="Filament: Jayo PLA · #F44336"></span>
           <span class="cur">27</span><span class="sl">/</span>
           <span class="tgt-demo">0</span><span class="unit">°C</span>
         </div>
         <div class="trow focus" title="editing">
           <span class="nz"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1.5 7L12 21 8.5 10z"/></svg><b class="badge live">4</b></span>
-          <span class="chip" style="background:#632C2C"></span>
+          <span class="chip" style="background:#632C2C" title="Filament: Generic PETG · #632C2C"></span>
           <span class="cur">26</span><span class="sl">/</span>
           <span class="tgt-demo on">245</span><span class="unit">°C</span>
         </div>
