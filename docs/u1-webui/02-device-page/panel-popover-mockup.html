@@ -61,7 +61,7 @@
               font-weight:600;background:var(--panel-2);border-bottom:1px solid var(--line);
               border-radius:10px 10px 0 0}
   .cols{display:flex;gap:16px;padding:16px;align-items:flex-start}
-  .colA{width:186px;flex:0 0 186px}
+  .colA{width:202px;flex:0 0 202px}
   .colB{flex:1;display:flex;flex-direction:column;align-items:center;gap:12px}
 
   /* ---------------- icon-only status rows ---------------- */
@@ -205,8 +205,14 @@
            border-radius:7px;cursor:pointer;font-size:14px;background:var(--panel-2)}
   .stepbtn:hover{background:var(--line)}
   .stepval{flex:1;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}
-  .tiles{flex-wrap:wrap}
-  .tilewrap{flex:1 1 30%;min-width:52px}
+  /* All four quick settings on one row: equal shares, no wrapping. The lamp was
+     dropping to a second row purely because a 30% flex-basis cannot fit four across. */
+  .tiles{flex-wrap:nowrap;gap:5px}
+  .tilewrap{flex:1 1 0;min-width:0}
+  .tile{padding:6px 2px}
+  .tile b{font-size:11px}
+  .tile .sw{width:28px;height:16px;flex:0 0 28px;margin:1px 0 0}
+  .tile .sw::after{width:12px;height:12px}
 
   /* picker: four across, the action spanning them */
   .colPick{width:196px;flex:0 0 196px;display:flex;flex-direction:column;gap:7px}
