@@ -9,7 +9,7 @@
     --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     --bg:#f4f6f8; --panel:#fff; --panel-2:#eef2f6;
     --ink:#16202b; --ink-2:#47566a; --muted:#7c8b9d;
-    --line:#d8e0e8; --accent:#0C63E2; --accent-in:#fff; --ok:#1f7a4d; --warn:#9a5b12;
+    --line:#d8e0e8; --accent:#0f6e7b; --accent-in:#fff; --ok:#1f7a4d; --warn:#9a5b12;
     --doc-bg:#eceff2; --card:#fff;
     --shadow:0 1px 2px rgba(16,24,32,.06),0 14px 34px -22px rgba(16,24,32,.45);
     --pop-shadow:0 2px 4px rgba(16,24,32,.07),0 14px 30px -12px rgba(16,24,32,.4);
@@ -19,7 +19,7 @@
     :root:not([data-theme="light"]){
       --bg:#0e1319; --panel:#161d26; --panel-2:#1d2732;
       --ink:#e6ecf3; --ink-2:#b3c0cf; --muted:#7f8d9d;
-      --line:#26313d; --accent:#5B9CF8; --accent-in:#0a1420; --ok:#4cc38a; --warn:#d79a4f;
+      --line:#26313d; --accent:#4fbecd; --accent-in:#08181c; --ok:#4cc38a; --warn:#d79a4f;
       --doc-bg:#0a0e12; --card:#141a21;
       --shadow:0 1px 0 rgba(255,255,255,.03),0 14px 34px -18px rgba(0,0,0,.8);
       --pop-shadow:0 2px 4px rgba(0,0,0,.35),0 16px 32px -10px rgba(0,0,0,.75);
@@ -28,7 +28,7 @@
   }
   :root[data-theme="dark"]{
     --bg:#0e1319; --panel:#161d26; --panel-2:#1d2732; --ink:#e6ecf3; --ink-2:#b3c0cf;
-    --muted:#7f8d9d; --line:#26313d; --accent:#5B9CF8; --accent-in:#0a1420;
+    --muted:#7f8d9d; --line:#26313d; --accent:#4fbecd; --accent-in:#08181c;
     --ok:#4cc38a; --warn:#d79a4f; --doc-bg:#0a0e12; --card:#141a21;
     --wheel:#1c242d; --wheel-2:#222c36; --wheel-3:#28333d; --wheel-hit:#25414a;
   }
@@ -101,7 +101,7 @@
   .tilewrap{position:relative;flex:1}
   .tilewrap > input{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
   .tile{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 4px;
-        border:2px solid transparent;border-radius:7px;cursor:pointer;background:transparent}
+        border:2px solid transparent;border-radius:8px;cursor:pointer;background:var(--panel-2)}
   .tile .ic{width:19px;height:19px;opacity:.75}
   .tile b{font-size:12px;font-variant-numeric:tabular-nums}
   .tile:hover{background:var(--line)}
@@ -148,9 +148,9 @@
   text.step{fill:var(--muted);font:11px var(--mono);text-anchor:middle;
             dominant-baseline:middle;pointer-events:none}
 
-  .bedrow{display:flex;align-items:center;gap:4px;font-size:11px;background:var(--pill);padding:5px 7px;border-radius:9px}
-  .bedrow .btn{display:flex;align-items:center;gap:3px;padding:5px 6px;background:var(--panel);
-               border:1px solid transparent;border-radius:6px;font-size:12px;cursor:pointer;
+  .bedrow{display:flex;align-items:center;gap:4px;font-size:11px}
+  .bedrow .btn{display:flex;align-items:center;gap:3px;padding:5px 6px;background:var(--panel-2);
+               border:1px solid var(--line);border-radius:7px;font-size:12px;cursor:pointer;
                font-variant-numeric:tabular-nums}
   .bedrow .btn:hover{background:var(--line)}
   .bedrow .lab{font-size:12px;color:var(--muted);padding:0 3px}
@@ -174,9 +174,9 @@
   /* toolhead picker, to the left of the wheel */
   .colPick{width:74px;flex:0 0 74px;display:flex;flex-direction:column;align-items:stretch;gap:5px}
   .pbox{display:flex;align-items:center;justify-content:center;gap:5px;height:38px;
-        border:2px solid transparent;border-radius:7px;cursor:pointer;background:transparent;
+        border:2px solid var(--line);border-radius:8px;cursor:pointer;background:var(--panel);
         position:relative}
-  .pbox:hover{background:var(--line)}
+  .pbox:hover{background:var(--panel-2)}
   .pbox.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
   .pbox.on .ic{opacity:1;color:var(--accent)}
   .pbox .ic{width:17px;height:17px;opacity:.7}
@@ -196,12 +196,12 @@
            border-radius:7px;cursor:pointer;font-size:14px;background:var(--panel-2)}
   .stepbtn:hover{background:var(--line)}
   .stepval{flex:1;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}
-  .tiles{flex-wrap:wrap;background:var(--pill);padding:5px;border-radius:9px;gap:5px}
+  .tiles{flex-wrap:wrap}
   .tilewrap{flex:1 1 30%;min-width:52px}
 
   /* picker: four across, the action spanning them */
   .colPick{width:196px;flex:0 0 196px;display:flex;flex-direction:column;gap:7px}
-  .pickrow{display:flex;gap:5px;background:var(--pill);padding:5px;border-radius:9px}
+  .pickrow{display:flex;gap:6px}
   .pickrow .pbox{flex:1;flex-direction:column;gap:3px;height:52px;justify-content:center}
   .ejog{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);
         display:flex;flex-direction:column;align-items:center;gap:6px}
@@ -209,46 +209,6 @@
   .ecap{font-size:12px;color:var(--ink-2);font-weight:600}
   .sect.ring01{fill:var(--wheel-3)}
 
-  /* ---- the panel is drawn as the app draws it -------------------------
-     These are device.css's own tokens, verbatim, scoped to .stage. The real
-     Device tab is light-only, so the panel stays light in either theme while
-     the commentary around it follows the reader's. #0C63E2 is the Snapmaker
-     blue - four occurrences in the shipped Flutter bundle. */
-  .stage{
-    --page:#F5F6FA; --panel:#FFFFFF; --panel-head:#E8E8E8; --pill:#F5F6FA;
-    --accent:#0C63E2; --accent-soft:rgba(12,99,226,.10); --accent-in:#FFFFFF;
-    --ink:#333333; --ink-nav:#242424; --ink-dim:#666666;
-    --line:#E6E6E6; --line-face:#EDEFF2; --line-soft:#F0F0F0;
-    --panel-2:var(--pill); --ink-2:var(--ink); --muted:var(--ink-dim);
-    --ok:#1F7A4D; --warn:#9A5B12; --err:#E03131;
-    --wheel:#F5F6FA; --wheel-2:#EDEFF2; --wheel-3:#E6E6E6; --wheel-hit:#DCE8FA;
-    --pop-shadow:0 2px 4px rgba(16,24,32,.07),0 14px 30px -12px rgba(16,24,32,.34);
-    background:var(--page); color:var(--ink);
-  }
-
-  /* The selected state, taken from Snapmaker's own segmented control: a WHITE
-     chip with a blue border and blue label, sitting on the light grey group -
-     not a tinted fill. The tint belongs to the container, the chip stays clean. */
-  .pickrow, .tiles, .seg2, .bedrow{--group:var(--pill)}
-  .pbox.on,
-  .tilewrap > input:checked ~ .tile{
-    background:var(--panel); border-color:var(--accent);
-    box-shadow:0 1px 2px rgba(12,99,226,.10);
-  }
-  .pbox.on .ic, .tilewrap > input:checked ~ .tile .ic{opacity:1;color:var(--accent)}
-  .pbox.on .badge{background:var(--accent);color:var(--accent-in);border-color:var(--accent)}
-  .tilewrap > input:checked ~ .tile b{color:var(--accent);font-weight:600}
-  .trow:focus-within{border-color:var(--accent);background:var(--panel)}
-  .trow.live .badge{background:var(--accent);color:var(--accent-in);border-color:var(--accent)}
-  .stop.on{color:var(--accent)}
-  .stop.on .dot{background:var(--accent);border-color:var(--accent)}
-  .sect:hover{fill:var(--wheel-hit)}
-  .home:hover{fill:var(--accent-soft)}
-  .homeicon{fill:var(--accent)}
-  .pickbtn{border-color:var(--accent);color:var(--accent);background:var(--panel)}
-  .pickbtn:hover{background:var(--accent-soft)}
-  .tgt:focus{border-color:var(--accent)}
-  .seg2 span.on{background:var(--accent);color:var(--accent-in)}
 
   /* one fan button, every fan inside it */
   .pop.wide{width:326px}
@@ -256,7 +216,7 @@
   .fanrow:last-of-type{margin-bottom:0}
   .fanhead{display:flex;align-items:center;gap:7px}
   .fanname{font-size:12px;font-weight:600}
-  .fanwire{font-size:10px;color:var(--muted);background:var(--pill);padding:1px 5px;
+  .fanwire{font-size:10px;color:var(--muted);background:var(--panel-2);padding:1px 5px;
            border-radius:4px}
   .fanhead .sw.sm{margin-left:auto;width:30px;height:17px;flex:0 0 30px}
   .fanhead .sw.sm::after{width:13px;height:13px}
