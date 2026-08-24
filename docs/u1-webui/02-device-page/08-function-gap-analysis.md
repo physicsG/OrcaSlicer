@@ -431,3 +431,24 @@ mentioning a timeout is swallowed as "still working" while any other error is re
 The wait then watches the machine: it shows the current activity label, and every time
 the machine reports being busy the deadline is pushed out again. Silence for 60 s ends
 it, and a hard cap of ten minutes stops it waiting forever.
+
+### Z is the bed, and up is negative
+
+The bed row's arrows were inverted: pressing **↑** lowered the bed.
+
+On this machine the bed is the Z axis, and Klipper's Z measures the nozzle-to-bed gap —
+so a larger Z is a *wider* gap, which on a moving bed means the bed is further *down*.
+Raising the bed is therefore a **negative** Z move. The printer's own config settles that
+without appealing to convention:
+
+```
+stepper_z   position_endstop 275.0, homing_positive_dir true   → Z homes to its maximum
+PRINT_END   G0 Z200 F2000                                      → drives UP for clearance
+```
+
+Both only make sense if larger Z means more room between nozzle and bed.
+
+The arrows now send `Z−` for up and `Z+` for down, and each button's tooltip names both
+the physical direction and the G-code it will send — *"Move the bed up, toward the nozzle
+by 1 mm (Z−1)"*. An arrow on its own is ambiguous the moment the moving part is the bed
+rather than the head, and that ambiguity is what the bug was made of.

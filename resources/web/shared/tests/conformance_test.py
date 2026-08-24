@@ -627,5 +627,16 @@ check("idle_timeout is not treated as a busy signal",
       or "deliberately NOT treated as busy" in state_src,
       "it reads Printing on an idle U1")
 
+# The bed is the Z axis and Z measures the nozzle-to-bed gap, so raising the bed is a
+# NEGATIVE Z move. The machine's own config settles it: stepper_z homes positive to
+# position_endstop 275, and PRINT_END drives to Z200 for clearance - both only make
+# sense if a larger Z is a wider gap. An up arrow sending Z+ moved the bed away.
+check("the bed's up arrow sends a negative Z",
+      "const dz = -dir * v;" in ui_src,
+      "Z+ widens the gap, which lowers the bed on this machine")
+check("the bed buttons say which way the bed goes and what Z is sent",
+      "toward the nozzle" in ui_src and "away from the nozzle" in ui_src,
+      "an arrow alone is ambiguous when the moving part is the bed, not the head")
+
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)

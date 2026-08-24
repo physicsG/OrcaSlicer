@@ -590,15 +590,25 @@ export function renderControlMain(root, toolheads, handlers, th) {
   // third axis on a wheel that would imply the toolhead travels.
   const bedRow = el('div', 'bed-row');
   // Klipper refuses a move on an unhomed axis and says nothing this page can see, so a
-  // button that looks live and does nothing is worse than one that is plainly disabled.
+  // button that looks live and does nothing is worse than one plainly disabled.
   const blocked = head.allHomed === false;
-  const bedBtn = (v, sign) => {
-    const b = el('button', 'bed-btn', `${sign > 0 ? '\u2191' : '\u2193'} ${v}`);
+
+  // On this machine the bed IS the Z axis, and Z measures the nozzle-to-bed gap - so
+  // raising the BED is a NEGATIVE Z move. The printer's own config settles it rather
+  // than convention: stepper_z homes positive to position_endstop 275, and PRINT_END
+  // drives to Z200 to get clearance, both of which only make sense if larger Z means a
+  // wider gap. Sending Z+ for an up arrow moved the bed away from the nozzle.
+  //
+  // dir: +1 raises the bed toward the nozzle, -1 lowers it away.
+  const bedBtn = (v, dir) => {
+    const b = el('button', 'bed-btn', `${dir > 0 ? '\u2191' : '\u2193'} ${v}`);
+    const dz = -dir * v;
     b.disabled = blocked;
     b.title = blocked
       ? 'Home the axes first - the printer refuses a move until Z is homed'
-      : `Move the bed ${sign > 0 ? 'up' : 'down'} ${v} mm`;
-    if (!blocked) b.onclick = () => handlers.jog('Z', sign * v, activeTool);
+      : `Move the bed ${dir > 0 ? 'up, toward the nozzle' : 'down, away from the nozzle'}`
+        + ` by ${v} mm (Z${dz > 0 ? '+' : ''}${dz})`;
+    if (!blocked) b.onclick = () => handlers.jog('Z', dz, activeTool);
     return b;
   };
   BED_STEPS.forEach((v) => bedRow.appendChild(bedBtn(v, +1)));
