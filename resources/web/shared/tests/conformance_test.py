@@ -386,6 +386,13 @@ check("the axis readout uses motion_report.live_position",
       "positions are available without subscribing `toolhead`")
 
 ui_src = open(os.path.join(WEB, "device_page", "js", "ui.js"), encoding="utf-8").read()
+shell_src = open(os.path.join(WEB, "device_page", "js", "shell.js"), encoding="utf-8").read()
+PANELS = os.path.join(WEB, "device_page", "js", "panels")
+panel_src = {f[:-3]: open(os.path.join(PANELS, f), encoding="utf-8").read()
+             for f in sorted(os.listdir(PANELS)) if f.endswith(".js")}
+# Every panel's declaration, concatenated: several checks below ask "does any control
+# on the page do X", and a panel module is where that is now written down.
+panels_all = "\n".join(panel_src.values())
 app_src = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
 proto_src = open(PROTO, encoding="utf-8").read()
 check("choosing which toolhead to jog does NOT move the machine",
@@ -446,7 +453,8 @@ check("a print whose file is gone cannot be reprinted",
       "history keeps the record after the file is deleted; Reprint would send a "
       "filename the machine cannot open")
 check("storage is its own destination, not a panel inside device control",
-      "view-storage" in ui_src or "view-storage" in app_src,
+      "view: 'storage'" in panel_src["storage"] and "view-${v.id}" in shell_src
+      and "#view-control[hidden]" in css,
       "and #view-control must opt back into [hidden] explicitly: display:contents "
       "beats the UA rule, so the panels went on rendering underneath")
 check("history thumbnails come over HTTP, because the metadata carries paths",
@@ -458,8 +466,7 @@ check("machine files can be viewed and printed, not deleted",
       "handlers.deleteFile" not in ui_src and "deleteFile:" not in app_src,
       "Delete sat a few pixels from a one-click Print and only one of them is reversible")
 check("the storage refresh is an action, not another picker",
-      "icon-btn" in open(os.path.join(WEB, "device_page", "index.html"),
-                          encoding="utf-8").read() and ".icon-btn" in css,
+      "'icon-btn'" in panel_src["storage"] and ".icon-btn" in css,
       "sitting in the row of kind buttons it read as another one of them")
 
 check("the job card is one card at every state, not two",

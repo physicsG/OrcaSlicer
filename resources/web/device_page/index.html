@@ -9,9 +9,13 @@
 </head>
 <body>
 
+<!--
+  The shell, and only the shell. Everything inside .content and the rail's nav is built
+  from js/panels/registry.js - which is where to look for what this page is made of, what
+  each panel reads and what each panel can send.
+-->
 <div class="app">
 
-  <!-- left rail: device selector above a nav list -->
   <aside class="rail">
     <button class="device-select" id="device-select">
       <span class="dev-icon">S</span>
@@ -19,116 +23,11 @@
       <span class="dev-state" id="dev-state" data-state="none"></span>
       <img class="chev" src="icons/keyboardArrowDropDown.svg" alt="">
     </button>
-    <nav>
-      <div class="nav-item is-active" id="nav-control" data-view="control">
-        <img src="icons/deviceControl.svg" alt="">
-        <span>Device control</span>
-      </div>
-      <div class="nav-item" id="nav-storage" data-view="storage">
-        <img src="icons/iconModelFileFolder.svg" alt="">
-        <span>Storage</span>
-      </div>
-    </nav>
+    <nav></nav>
   </aside>
 
-  <main class="content">
+  <main class="content"></main>
 
-    <div id="fault" class="fault" hidden></div>
-
-    <div class="view" id="view-control">
-
-
-    <section class="panel">
-      <header class="panel-head">
-        <span class="panel-title">Camera</span>
-      </header>
-      <div class="panel-body camera-body" id="camera"></div>
-    </section>
-
-    <section class="panel">
-      <header class="panel-head">
-        <span class="panel-title">Control</span>
-        <span class="gap-36"></span>
-        <button class="tab wide is-active" id="refresh" title="Refresh">
-          <img src="icons/refresh.svg" alt="Refresh">
-        </button>
-        <span class="spacer"></span>
-        <button class="pref-pill" id="print-prefs">
-          Print Preferences <img class="chev" src="icons/printPreferenceArrow.svg" alt="">
-        </button>
-      </header>
-      <div class="panel-body control-body">
-        <div class="control-grid" id="control-grid" data-enabled="0">
-          <div class="status-card" id="status-card"></div>
-          <div class="control-main" id="control-main"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <header class="panel-head">
-        <span class="panel-title">Printing Task</span>
-      </header>
-      <div class="panel-body task-body" id="task"></div>
-    </section>
-
-    <section class="panel">
-      <header class="panel-head">
-        <span class="panel-title">Filament</span>
-        <span class="gap-36"></span>
-        <button class="tab wide is-active" id="filament-refresh" title="Refresh">
-          <img src="icons/refresh.svg" alt="Refresh">
-        </button>
-        <span class="spacer"></span>
-        <button class="icon-only" id="filament-help" title="About filament slots">
-          <img src="icons/help.svg" alt="Help">
-        </button>
-      </header>
-      <div class="panel-body filament-body" id="filament"></div>
-    </section>
-
-    <!--
-      Development aids, not part of the shipped page: a one-line host status and
-      the live WCP trace. Collapsed by default so they stay out of the way.
-    -->
-    <div class="status-line">
-      <span id="status">starting…</span>
-      <span id="mode" class="mode">—</span>
-    </div>
-    <details class="trace-panel">
-      <summary>WCP trace</summary>
-      <div id="trace" data-paused="0"></div>
-    </details>
-
-    </div>
-
-    <div class="view" id="view-storage" hidden>
-      <section class="panel storage" id="storage">
-        <header class="panel-head">
-          <span class="panel-title">Storage</span>
-          <span class="sep">|</span>
-          <button class="tab is-active" data-kind="timelapses" title="Time-lapses">
-            <img src="icons/videoCall.svg" alt="Time-lapses">
-        </button>
-          <button class="tab" data-kind="prints" title="Prints">
-            <img src="icons/printHistory.svg" alt="Prints">
-        </button>
-          <button class="tab" data-kind="gcodes" title="Print files">
-            <img src="icons/iconFile.svg" alt="Print files">
-        </button>
-          <button class="tab" data-kind="logs" title="Logs and other files">
-            <img src="icons/iconModelFileFolder.svg" alt="Logs and other files">
-        </button>
-          <span class="spacer"></span>
-          <button class="icon-btn" id="storage-refresh" title="Re-read this folder">
-            <img src="icons/refresh.svg" alt="Refresh">
-        </button>
-        </header>
-        <div class="panel-body storage-body" id="storage-body"></div>
-      </section>
-    </div>
-
-  </main>
 </div>
 
 <div id="build-badge"></div>

@@ -22,6 +22,7 @@ import { machineActivity, isBusy } from '../../shared/js/activity.js';
 import { installMock } from './mock.js';
 import { mountBuildBadge } from '../../shared/js/buildinfo.js';
 import * as ui from './ui.js';
+import { buildShell, paint } from './shell.js';
 
 const qs = new URLSearchParams(location.search);
 const wantMock = qs.get('mock') === '1';
@@ -54,6 +55,9 @@ let jobThumb = { file: null, data: null };
 // Which destination the rail is on, and what Storage is showing.
 let view = 'control';
 let storageKind = 'timelapses';
+// Whether we are talking to a printer right now. Computed once per frame and read by
+// every panel, so it is module state rather than a local passed down five signatures.
+let reachable = false;
 
 function setStatus(text, kind = '') {
   const n = ui.$('#status');
@@ -393,6 +397,44 @@ const handlers = {
     });
   },
 
+  // chrome, from the registry's header declarations
+  refreshAll: () => refreshAll(),
+  showView: (v) => showView(v),
+  openStorage: (kind) => openStorage(kind),
+  refreshJobThumb: (f) => refreshJobThumb(f),
+
+  /** The print-task options the header pill edits, straight onto print_task_config. */
+  printPrefs: () => {
+    const tc = state.taskConfig();
+    const boxes = [];
+    openDialog({
+      title: 'Print Preferences',
+      build: (b) => PRINT_PREFERENCES.forEach(({ key, label }) => {
+        boxes.push([key, toggleField(b, { label, checked: !!tc[key] })]);
+      }),
+      confirmLabel: 'Apply',
+      onConfirm: () => {
+        const patch = {};
+        boxes.forEach(([k, input]) => { patch[k] = input.checked; });
+        send(CMD.UPDATE_MACHINE_FILAMENT_INFO, patch, 'set print preferences');
+      },
+    });
+  },
+
+  filamentHelp: () => openDialog({
+    title: 'Filament slots',
+    build: (b) => {
+      const p = document.createElement('p');
+      p.style.cssText = 'margin:6px 0 2px;font-size:13px;line-height:1.55;color:#39434F';
+      p.textContent = 'Each slot maps to one of the U1\u2019s four toolheads. '
+        + 'Type and colour come from print_task_config \u2014 the same object the '
+        + 'print-processing popup edits when you assign filaments to a job.';
+      b.appendChild(p);
+    },
+    confirmLabel: 'Close',
+    onConfirm: () => true,
+  }),
+
   reloadStorage: () => openStorage(storageKind),
   loadMoreStorage: (n) => (storageKind === 'prints' ? handlers.loadHistory(n) : null),
 
@@ -663,8 +705,6 @@ const handlers = {
     }
     render();
   },
-
-  abortBedMesh: () => send(CMD.BEDMESH_ABORT, {}, 'abort bed mesh'),
 
   /** Everything the printer will tell us about itself, in one sheet. */
   showSystemInfo: async () => {
@@ -945,6 +985,31 @@ const handlers = {
   },
 };
 
+/**
+ * What a panel is handed, and the only thing it may read.
+ *
+ * Live getters rather than a snapshot object: panels hold this from the moment they
+ * mount, and a frame's worth of values copied into a fresh object every repaint is how
+ * a stale `device` reaches a renderer that has been alive longer than the copy.
+ *
+ * The `cam`/`jobThumb`/`exception`/`storage*` members are page state that has no home
+ * yet - they are the sixteen module-level `let`s this file still carries, exposed
+ * through one door so that moving them into a store later is a change to this object
+ * and nothing else.
+ */
+const ctx = {
+  state,
+  handlers,
+  get device() { return device; },
+  get devices() { return devices; },
+  get reachable() { return reachable; },
+  get cam() { return cam; },
+  get jobThumb() { return jobThumb.data; },
+  get exception() { return exception; },
+  get storageKind() { return storageKind; },
+  storageData,
+};
+
 /* ---- render ------------------------------------------------------- */
 
 /**
@@ -1116,32 +1181,10 @@ function render() {
     // so it is false on disk by construction and only meaningful within a run.
     // Live machine state is the real evidence — if objects are arriving, we are
     // talking to a printer.
-    const reachable = isLive() && (!conn.state || conn.state === 'ready');
+    reachable = isLive() && (!conn.state || conn.state === 'ready');
 
     ui.renderRail(device, conn, devices, reachable);
-    document.querySelectorAll('.nav-item').forEach(
-      (n) => n.classList.toggle('is-active', n.dataset.view === view));
-    ui.$('#view-control').hidden = view !== 'control';
-    ui.$('#view-storage').hidden = view !== 'storage';
-    if (view === 'storage') {
-      ui.renderStorage(ui.$('#storage-body'), storageKind, storageData(),
-                       handlers, device);
-      return;
-    }
-    ui.renderCamera(ui.$('#camera'), reachable, cam, handlers);
-
-    // The shipped page renders the whole control surface and fades it while the
-    // machine is unreachable, rather than hiding it. Match that.
-    ui.$('#control-grid').dataset.enabled = reachable ? '1' : '0';
-    ui.renderStatusCard(ui.$('#status-card'), state.toolheads(), state.bed(),
-                        state.led(), state.fans(), state.purifier(),
-                        state.speed(), handlers);
-    ui.renderControlMain(ui.$('#control-main'), state.toolheads(), handlers,
-                         state.toolhead());
-    refreshJobThumb(state.job().filename);
-    ui.renderTask(ui.$('#task'), state.job(), handlers, device, jobThumb.data);
-    ui.renderFilament(ui.$('#filament'), state.filaments(), handlers);
-    ui.renderFault(ui.$('#fault'), state.activity(), exception, handlers);
+    paint(ctx, view);
   });
 }
 
@@ -1456,15 +1499,16 @@ async function refresh() {
   render();
 }
 
-/** Only one tab in a header group can be active. */
-function selectTab(btn) {
-  const group = btn.parentElement;
-  group.querySelectorAll('.tab').forEach((t) => t.classList.remove('is-active'));
-  btn.classList.add('is-active');
-}
 
-function wireChrome() {
-  // device selector -> the menu the shipped page opens
+/**
+ * The device selector's menu.
+ *
+ * The only chrome left in this file: it is about the *page's* relationship to Orca -
+ * which machines are saved, connect, pair, rename, forget, discover - rather than about
+ * any one panel, so it has no panel to belong to. Panel headers are declared in
+ * js/panels/registry.js and built by js/shell.js.
+ */
+function wireDeviceMenu() {
   const sel = ui.$('#device-select');
   sel.setAttribute('data-menu-anchor', '');
   sel.onclick = () => {
@@ -1517,56 +1561,11 @@ function wireChrome() {
                  onClick: () => handlers.connectOther() });
     openMenu(sel, items);
   };
-
-  // control + filament refresh
-  document.querySelectorAll('.nav-item').forEach((n) => {
-    n.onclick = () => showView(n.dataset.view || 'control');
-  });
-  document.querySelectorAll('#storage .tab').forEach((t) => {
-    t.onclick = () => {
-      selectTab(t);
-      openStorage(t.dataset.kind);
-    };
-  });
-  ui.$('#storage-refresh').onclick = () => openStorage(storageKind);
-  ui.$('#refresh').onclick = () => refreshAll();
-  ui.$('#filament-refresh').onclick = () => refreshAll();
-
-  // print preferences
-  ui.$('#print-prefs').onclick = () => {
-    const tc = state.taskConfig();
-    const boxes = [];
-    openDialog({
-      title: 'Print Preferences',
-      build: (b) => PRINT_PREFERENCES.forEach(({ key, label }) => {
-        boxes.push([key, toggleField(b, { label, checked: !!tc[key] })]);
-      }),
-      confirmLabel: 'Apply',
-      onConfirm: () => {
-        const patch = {};
-        boxes.forEach(([k, input]) => { patch[k] = input.checked; });
-        send(CMD.UPDATE_MACHINE_FILAMENT_INFO, patch, 'set print preferences');
-      },
-    });
-  };
-
-  ui.$('#filament-help').onclick = () => openDialog({
-    title: 'Filament slots',
-    build: (b) => {
-      const p = document.createElement('p');
-      p.style.cssText = 'margin:6px 0 2px;font-size:13px;line-height:1.55;color:#39434F';
-      p.textContent = 'Each slot maps to one of the U1\u2019s four toolheads. '
-        + 'Type and colour come from print_task_config \u2014 the same object the '
-        + 'print-processing popup edits when you assign filaments to a job.';
-      b.appendChild(p);
-    },
-    confirmLabel: 'Close',
-    onConfirm: () => true,
-  });
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  wireChrome();
+  buildShell(ctx);
+  wireDeviceMenu();
   boot().catch((e) => {
     console.error(e);
     setStatus(`startup failed: ${e.message}`, 'err');

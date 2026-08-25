@@ -553,3 +553,96 @@ It also flags exclusions that have since been implemented. Do not silence it —
 something is not built, say so in `EXCLUDED` and it stays visible.
 
 The parity position is [02-device-page/07-parity.md](02-device-page/07-parity.md).
+
+### Structure, pass one: the page has an overview now (2026-08-25)
+
+The page had grown a panel at a time and each addition landed in five places — markup in
+`index.html`, classes in `device.css`, a renderer in `ui.js`, a render call plus a slice
+of module state in `app.js`, and a click handler in `wireChrome()`. Nothing tied the five
+together and nothing listed them, so "what is on this page, what does each part read,
+what can each part send" had no answer short of reading all of it.
+
+**Flutter was weighed and rejected.** The shipped bundle is 36 MB of CanvasKit — WASM and
+WebGL painting to a `<canvas>`. Adopting it would mean a Dart/Flutter SDK build step in a
+tree that has neither, an end to *edit → reload → measure on hardware* (which is where
+every finding above came from), and the loss of the whole test rig: `run_webkit.py`'s
+checks are DOM assertions and `unit_jsc.py` executes the modules directly. Orca renders in
+three different engines, and plain DOM is the common denominator, not the fragile one.
+The three things Flutter would genuinely buy — composable widgets, a state-management
+story, keyed reconciliation — are all reachable without leaving the DOM.
+
+[`device_page/js/panels/registry.js`](../../resources/web/device_page/js/panels/registry.js)
+is now that answer. Every panel declares `id`, `title`, `view`, its header controls, what
+it `reads` and what it `sends`, plus `mount`/`update`. `shell.js` builds the page from it;
+`index.html` is down to 42 lines of shell and `wireChrome()` to the device menu alone.
+Adding a panel is one file plus one line in `PANELS`.
+
+**`reads` and `sends` are the point.** `07-parity.md` called the command surface complete
+on the strength of `CMD.NAME` appearing in source, which proves a command is *mentioned* —
+not that a control exists to issue it. `check_coverage.py` now asks both questions, and
+the second one immediately found what the first could not:
+
+- **`sw_BedMesh_AbortProbeMesh` was reachable by nothing.** `handlers.abortBedMesh` had
+  existed since the panel was built, with no call site. It cannot be wired either:
+  `bed_mesh` is not in `SUBSCRIBE_OBJECTS` and no activity label mentions probing, so an
+  abort button has no state to appear with. The handler is gone and the command is in
+  `EXCLUDED` with that reason.
+- **`handlers.showFiles` is dead too** — the comment calls it "the one useful action from
+  an idle job card" and nothing calls it. It sends no command, so coverage cannot see it;
+  it is the next pass's job.
+- Seven more were reachable but undeclared, and writing the declaration is what surfaced
+  them: the Control header's Refresh re-reads four objects that are not the Control panel's,
+  and the storage card's details dialog reaches `GetFileListPage`, `MachineFilesThumbnails`
+  and `DownloadMachineFile`.
+- Declaring `sends` also caught a claim that was simply false: storage listed
+  `DELETE_MACHINE_FILE`, which no code issues.
+
+**Verified behaviour-preserving, not asserted.** A drive script dumps every element's tag,
+id, classes and `data-*` across both destinations and the trip back; run against a
+worktree at the previous commit and against this one, the two dumps are 949 lines each and
+differ only by the `id` the shell puts on the Control panel's body so `paint()` can address
+it. All three suites still pass: 140/140 conformance, 93/93 `unit_jsc`, 17/17 `run_webkit`.
+
+**Worth knowing:** `run_webkit.py --shots` has been writing **blank PNGs** all along in
+this environment — EGL finds no driver under WSL, so the snapshot surface paints nothing.
+The two files compare byte-identical at 8,515 bytes before and after this change. The DOM
+assertions are what confirm anything; the images never did.
+
+**What is still ad hoc, and what pass two is for.** Three things, all of them the same
+shape — state with no single home:
+
+- **State lives in four places.** `MachineState` (correct), sixteen module-level `let`s in
+  `app.js`, two *in the renderer* (`ui.js` holds `activeTool` and `head`, and
+  `renderControlMain` reassigns `head` then re-calls itself), and the DOM itself
+  (`root.__state`, `dataset.built`, `dataset.sig`, `dataset.pend*`). `ctx` in `app.js` is
+  the seam: it exposes the page's state through one door with live getters, so moving it
+  into a store is a change to that object and nothing else.
+- **Four update disciplines answer one question.** The status card builds once and patches;
+  storage guards on a signature and rebuilds; control, task, filament, camera and fault
+  clear `innerHTML` on every frame, about once a second. Every focus, scroll and
+  popover-anchor bug is downstream of that, and each was fixed by inventing a new guard on
+  the spot.
+- **The pending-until-confirmed model exists twice and is missing once — measured.** *The
+  request was stored in the thing that mirrors the machine* is written up above for tool
+  selection and for temperature, solved two unrelated ways: a poll-until-confirmed dialog
+  in `app.js`, DOM datasets and timers in `ui.js`. The LED switch has neither. `ui.js`
+  reads `root.__state.led.on` for the click and the render loop rewrites `aria-checked`
+  from `led.on` on every frame, so the mirror wins until the printer echoes.
+
+  Driven against the machine three times (`--real --drive`), toggling the chamber light
+  and putting it back:
+
+  | run | printer echoed after | switch reverted while waiting |
+  |---|---|---|
+  | 1 | 236 ms | no |
+  | 2 | **2029 ms** | **yes** |
+  | 3 | 620 ms | **yes** |
+
+  So it is the temperature bug again, with a wider window than temperature's measured
+  552–1516 ms: click the light and for up to two seconds the switch sits on its old value,
+  which is indistinguishable from a click that did nothing. Run 1 is why one measurement
+  is not evidence — it happened to echo before a repaint landed and looked clean.
+
+  The fix is not a fourth ad-hoc guard. It is the shared `pending` primitive, and the LED
+  is its first customer.
+

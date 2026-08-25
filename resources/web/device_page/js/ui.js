@@ -14,22 +14,11 @@ import { LIMITS, PRINT_STATE, TASK_CONFIG, DEVICE, deviceLabel,
   from '../../shared/js/protocol.js';
 import { openDialog, numberField, openPopover, closePopover } from './overlay.js';
 import { lookupFault } from '../../shared/js/errors.js';
+import { $, el, icon } from './dom.js';
 
-export const $ = (sel, root = document) => root.querySelector(sel);
+// app.js still reaches the page through ui.$; re-exported so that stays one name.
+export { $ };
 
-function el(tag, cls, text) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text != null) n.textContent = text;
-  return n;
-}
-
-function icon(name, cls) {
-  const i = el('img', cls);
-  i.src = `icons/${name}.svg`;
-  i.alt = '';
-  return i;
-}
 
 /** "_ /_ °C" is what the shipped page shows before any reading arrives. */
 function temps(cur, target) {

@@ -41,28 +41,56 @@ wxString url = wxString::FromUTF8(LOCALHOST_URL
 
 ## Files
 
+**Start at [`js/panels/registry.js`](js/panels/registry.js)** — it lists what is on this
+page, what each panel reads, and which bridge commands each panel can send. Everything
+inside `.content` is built from it.
+
 | File | Role |
 |---|---|
-| `index.html` | Page shell |
-| `js/protocol.js` | **Every constant recovered by RE** — commands, state model, limits, error scheme |
-| `js/sswcp.js` | Bridge client: envelope, seqid correlation, ack-then-push subscriptions |
-| `js/state.js` | State store with the partial-merge semantics the transport requires |
-| `js/ui.js` | Rendering (plain DOM) |
-| `js/app.js` | Startup sequence and control handlers |
-| `js/mock.js` | Simulated Orca host + U1, so the page runs with no hardware |
+| `index.html` | The shell, and only the shell: the rail and an empty `.content` |
+| `js/panels/registry.js` | **What this page is made of.** Panel order, headers, `reads`, `sends` |
+| `js/panels/*.js` | One module per panel |
+| `js/shell.js` | Builds the page from the registry; the header-control vocabulary |
+| `js/dom.js` | `$`, `el`, `icon` — the three primitives panels build with |
+| `js/app.js` | Startup, the session, and the control handlers |
+| `js/ui.js` | Rendering (plain DOM). Being emptied into `js/panels/` a panel at a time |
+| `js/connection.js` | The connect path: pairing, mTLS, the MQTT engine |
+| `js/overlay.js` | Menus, dialogs and popovers |
+| `js/mock.js` | Installs the shared simulator, so the page runs with no hardware |
 | `css/device.css` | Styling |
+
+The bridge client, protocol constants, state store, activity table, fault catalogue and
+simulated host are shared with the print-processing popup and live in
+[`../shared/js/`](../shared/js/).
+
+### Adding a panel
+
+Write `js/panels/<id>.js` with `mount`/`update` and its `reads`/`sends`, then add it to
+`PANELS` in the registry. That is the whole change — the `<section>`, the 40px header,
+the title, the header buttons and the paint loop all come from the declaration. It used
+to mean editing five files with nothing to check you had done all five.
+
+`sends` is not decoration. `check_coverage.py` reads it and fails on any implemented
+command no panel claims, which is how a handler nothing calls gets found.
 
 ## Tests
 
 ```bash
-# 1. constants match the RE evidence (no browser needed)
+# 1. constants match the RE evidence, and the page's decisions match the write-up
 python3 resources/web/shared/tests/conformance_test.py
 
-# 2. end-to-end behaviour in a real browser
-python3 resources/web/device_page/tests/run_selftest.py      # needs playwright
+# 2. the page itself, in WebKitGTK - the engine Orca renders with
+python3 resources/web/shared/tests/run_webkit.py
+
+# 3. the pure logic, in JavaScriptCore, against captured hardware payloads
+python3 resources/web/shared/tests/unit_jsc.py
+
+# 4. every command implemented, and reachable from a control
+python3 docs/u1-webui/tools/check_coverage.py
 ```
 
-Or open `tests/selftest.html` in any browser.
+`run_webkit.py --shots DIR` also writes PNGs, but on a machine with no working EGL
+driver they come out blank — the DOM assertions are the evidence, not the images.
 
 `conformance_test.py` re-derives the constant tables from `docs/u1-webui/data/`
 and fails if `protocol.js` has drifted — it is the regression guard tying this code to
