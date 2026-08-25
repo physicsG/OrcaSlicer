@@ -178,18 +178,6 @@ function speedTicks() {
  */
 const TEMP_TOL  = 2;    // within this of the target counts as arrived
 const TEMP_WARM = 40;   // above this the hardware is still hot to the touch
-/**
- * How long a sent target may go unechoed before the row stops claiming it.
- *
- * A command that fails marks the row the moment it fails, so this only covers the other
- * shape: the bridge accepted the command and the machine never reported the new target.
- * That is what a silently-ignored setpoint looks like, and it deserves to be said rather
- * than to sit there looking applied.
- */
-const TEMP_CONFIRM_MS = 10000;
-/** How long the row keeps saying a target was not taken. */
-const TEMP_LOST_MS = 8000;
-
 function heatState(cur, target) {
   if (!Number.isFinite(cur)) return '';
   if (target > 0 && cur < target - TEMP_TOL) return 'heating';
@@ -221,7 +209,7 @@ function rampProgress(start, cur, target) {
  * it had to be deleted before a number could be typed. Focus selects whatever is there
  * for the same reason: this field is replaced far more often than it is edited.
  */
-function tempRow(key, iconName, limit, title, apply) {
+function tempRow(key, iconName, limit, title, apply, pending) {
   const row = el('div', 'status-row');
   row.dataset.k = key;
   row.dataset.name = title;
@@ -255,16 +243,14 @@ function tempRow(key, iconName, limit, title, apply) {
     // machine's target straight back in is what made a set temperature vanish: the next
     // state push lands about a second later, before the printer has reported the change,
     // so the field went back to what it said before - usually 0.
-    pend(row, v);
-    const sent = apply(v);
-    if (sent && typeof sent.then === 'function') {
-      // Only this value's failure, and only while it is still the one being waited on:
-      // a refusal that arrives after the user has moved on must not overwrite what
-      // they moved on to. The bridge gives a command 15s, the row gives it 10.
-      sent.then((ok) => {
-        if (ok === false && row.dataset.pendVal === String(v)) unpend(row, 'lost');
-      });
-    }
+    //
+    // `track` wires the command's own failure in too, which is the one thing the row
+    // cannot see for itself: a command that never left has nothing coming to confirm it.
+    pending.track(key, v, apply(v));
+    // Reflected here and not left to the next repaint: the pulse is feedback for the
+    // keystroke that caused it, and a frame away is the wrong distance from a keypress.
+    setPend(row, 'sent');
+    row.dataset.pendVal = String(v);
   };
   tgt.onkeydown = (e) => {
     if (e.key === 'Enter') { e.preventDefault(); tgt.blur(); }
@@ -293,25 +279,6 @@ function showTarget(tgt, t) {
   tgt.value = Number.isFinite(n) && n > 0 ? String(n) : '';
 }
 
-/** Remember what was asked for, and when, so the machine can be held to it. */
-function pend(row, v) {
-  row.dataset.pend = '1';
-  row.dataset.pendVal = String(v);
-  row.dataset.pendAt = String(Date.now());
-}
-
-function unpend(row, how) {
-  delete row.dataset.pendAt;
-  if (how === 'lost') {
-    // Keep pendVal: the row is about to say which value it was that did not take.
-    row.dataset.pend = 'lost';
-    row.dataset.lostUntil = String(Date.now() + TEMP_LOST_MS);
-    return;
-  }
-  delete row.dataset.pend;
-  delete row.dataset.pendVal;
-}
-
 /**
  * Push new readings into a row without touching its DOM.
  *
@@ -322,7 +289,7 @@ function unpend(row, how) {
  * alone entirely while it has focus, and a target that has been sent but not yet echoed
  * back is left alone as well.
  */
-function updateTempRow(row, cur, target) {
+function updateTempRow(row, cur, target, pending) {
   const t = Math.round(Number(target) || 0);
   const c = Number(cur);
   const tgt = row.querySelector('.tgt');
@@ -336,17 +303,15 @@ function updateTempRow(row, cur, target) {
     row.dataset.start = String(Number.isFinite(c) ? c : t);
   }
 
-  const now = Date.now();
-  if (row.dataset.pend === '1') {
-    if (Number(row.dataset.pendVal) === t) unpend(row);
-    else if (now - Number(row.dataset.pendAt) > TEMP_CONFIRM_MS) unpend(row, 'lost');
-  } else if (row.dataset.pend === 'lost' && now > Number(row.dataset.lostUntil)) {
-    delete row.dataset.pend;
-    delete row.dataset.pendVal;
-    delete row.dataset.lostUntil;
-  }
+  // Confirm, expire, or go on holding - the same three ends every control has, decided
+  // in pending.js rather than in four datasets here.
+  const p = pending.resolve(row.dataset.k, t);
+  setPend(row, p.state);
+  if (p.asked !== undefined) row.dataset.pendVal = String(p.asked);
+  else delete row.dataset.pendVal;
 
-  if (document.activeElement !== tgt && row.dataset.pend !== '1') showTarget(tgt, t);
+  // A focused field is the user's, and a sent value is theirs until the machine answers.
+  if (document.activeElement !== tgt && p.state !== 'sent') showTarget(tgt, t);
 
   const st = heatState(c, t);
   // A ramp restarts when the direction does, not only when the target does. Measured
@@ -395,29 +360,44 @@ function tile(key, iconName, title, onOpen, control) {
   return b;
 }
 
-export function renderStatusCard(root, toolheads, bed, led, fans, purifier,
-                                 speed, handlers) {
+/**
+ * Readings and quick settings.
+ *
+ * Takes the context rather than seven unpacked values: everything here came from
+ * `state` anyway, and the popovers have to read it *live* - they are built once when
+ * the tile is wired and opened much later, so a value captured at build time would be
+ * whatever the machine said at boot. That used to be paid for with `root.__state`, a
+ * snapshot written onto the DOM on every frame for the closures to find. The context
+ * is the same idea with one copy instead of one per frame.
+ */
+export function renderStatusCard(root, ctx) {
+  const st = ctx.state;
+  const toolheads = st.toolheads();
+
   // Rebuild only when the shape changes; otherwise write the new numbers into the DOM
   // that is already there. Beyond keeping focus, this also keeps a tile alive while its
   // popover is anchored to it - replacing the anchor would orphan the panel.
   const sig = `${toolheads.length}`;
   if (root.dataset.built !== sig) {
     root.dataset.built = sig;
-    buildStatusCard(root, toolheads, handlers);
+    buildStatusCard(root, toolheads, ctx);
   }
 
   const rows = root.querySelectorAll('.status-row');
   toolheads.forEach((t, i) => {
-    if (rows[i]) updateTempRow(rows[i], t.temperature, t.target);
+    if (rows[i]) updateTempRow(rows[i], t.temperature, t.target, ctx.pending);
   });
   const bedRow = root.querySelector('.status-row[data-k="bed"]');
-  if (bedRow) updateTempRow(bedRow, bed.temperature, bed.target);
+  const bed = st.bed();
+  if (bedRow) updateTempRow(bedRow, bed.temperature, bed.target, ctx.pending);
 
   const q = (k) => root.querySelector(`.qtile[data-k="${k}"]`);
   const setVal = (k, v) => { const n = q(k); if (n) n.querySelector('b').textContent = v; };
+  const speed = st.speed();
   setVal('speed', `${speed.factorPct == null ? 100 : speed.factorPct}%`);
-  setVal('fan', `${fans.main}%`);
+  setVal('fan', `${st.fans().main}%`);
 
+  const purifier = st.purifier();
   const purAbsent = !purifier.present || !purifier.powerDetected;
   const pur = q('pur');
   if (pur) {
@@ -425,29 +405,55 @@ export function renderStatusCard(root, toolheads, bed, led, fans, purifier,
     if (purAbsent) pur.dataset.absent = '1'; else delete pur.dataset.absent;
     pur.title = purAbsent ? 'Air purifier - not connected' : 'Air purifier';
   }
-  const sw = root.querySelector('.qtile[data-k="led"] .switch');
-  if (sw) sw.setAttribute('aria-checked', led.on ? 'true' : 'false');
 
-  // the panels read live state when they open, so they are wired once at build time
-  root.__state = { toolheads, bed, led, fans, purifier, speed, purAbsent };
+  // The light shows what was asked for until the printer echoes it. Measured over three
+  // runs against the machine, the echo took 236ms, 2029ms and 620ms - and with the
+  // mirror driving the switch directly it reverted to its old position in two of the
+  // three, which is indistinguishable from a click that did nothing.
+  const ledTile = q('led');
+  if (ledTile) {
+    const led = ctx.pending.resolve('led', st.led().on);
+    ledTile.querySelector('.switch')
+           .setAttribute('aria-checked', led.value ? 'true' : 'false');
+    setPend(ledTile, led.state);
+    ledTile.title = led.state === 'sent'
+      ? 'Chamber light \u2014 sent, waiting for the printer'
+      : led.state === 'lost'
+        ? `Chamber light \u2014 the printer did not take ${led.asked ? 'on' : 'off'}`
+        : 'Chamber light';
+  }
 }
 
-function buildStatusCard(root, toolheads, handlers) {
+/**
+ * Reflect a pending state onto an element for the stylesheet.
+ *
+ * The module's vocabulary is 'sent'/'lost'; the DOM's is `data-pend="1"|"lost"`, which
+ * the stylesheet and three test suites already key on. This is the one place the two
+ * meet, rather than the attribute spelling leaking into the state machine.
+ */
+function setPend(node, state) {
+  if (!state) { delete node.dataset.pend; return; }
+  node.dataset.pend = state === 'sent' ? '1' : 'lost';
+}
+
+function buildStatusCard(root, toolheads, ctx) {
   root.innerHTML = '';
+  const handlers = ctx.handlers;
+  const st = ctx.state;
 
   toolheads.forEach((t, i) => {
     root.appendChild(tempRow(`e${i}`, `iconExtruder${i + 1}`, LIMITS.nozzleTemp,
                              `Toolhead ${i + 1} temperature`,
-                             (v) => handlers.setExtruderTemp(i, v)));
+                             (v) => handlers.setExtruderTemp(i, v), ctx.pending));
   });
   root.appendChild(tempRow('bed', 'iconHotBedTemperature', LIMITS.bedTemp,
-                           'Heated bed temperature', (v) => handlers.setBedTemp(v)));
+                           'Heated bed temperature',
+                           (v) => handlers.setBedTemp(v), ctx.pending));
 
-  const st = () => root.__state || {};
   const tiles = el('div', 'qtiles');
 
   tiles.appendChild(tile('speed', 'iconSpeed', 'Print speed', (anchor) => {
-    const { speed } = st();
+    const speed = st.speed();
     openPopover(anchor, {
       title: 'Print speed', width: 300,
       build: (b) => b.appendChild(sliderRow('iconSpeed', 'Print Speed',
@@ -458,7 +464,7 @@ function buildStatusCard(root, toolheads, handlers) {
   }));
 
   tiles.appendChild(tile('fan', 'iconMainCooling', 'Fan control', (anchor) => {
-    const { fans } = st();
+    const fans = st.fans();
     openPopover(anchor, {
       title: 'Fan control', width: 330,
       build: (b) => {
@@ -471,7 +477,8 @@ function buildStatusCard(root, toolheads, handlers) {
   }));
 
   tiles.appendChild(tile('pur', 'iconPurifier', 'Air purifier', (anchor) => {
-    const { purifier, purAbsent } = st();
+    const purifier = st.purifier();
+    const purAbsent = !purifier.present || !purifier.powerDetected;
     openPopover(anchor, {
       title: 'Air purifier', width: 290,
       build: (b) => {
@@ -498,12 +505,16 @@ function buildStatusCard(root, toolheads, handlers) {
     });
   }));
 
-  // A binary needs no panel - the switch is the whole control
+  // A binary needs no panel - the switch is the whole control. The click asks for the
+  // opposite of what is *shown*, which while a request is outstanding is the request
+  // rather than the machine: clicking twice in a second must undo the first click, not
+  // re-send it because the printer has not caught up yet.
   const sw = el('button', 'switch');
   sw.setAttribute('role', 'switch');
   sw.onclick = (e) => {
     e.stopPropagation();
-    handlers.setLed(!(root.__state && root.__state.led.on));
+    const shown = ctx.pending.resolve('led', st.led().on).value;
+    handlers.setLed(!shown);
   };
   tiles.appendChild(tile('led', 'iconLed', 'Chamber light', null, sw));
 
@@ -559,8 +570,6 @@ function sliderRow(iconName, label, value, min, max, step, apply, ticks) {
 const JOG_STEPS = [10, 1, 0.1];
 const BED_STEPS = [10, 1, 0.1];
 
-let activeTool = 0;
-let head = {};          // last `toolhead` snapshot: active tool, position, homing
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 function svgEl(tag, attrs) {
@@ -576,7 +585,7 @@ function svgEl(tag, attrs) {
  * Sectors are real annular paths, so each has its own hit area - a CSS approximation
  * with rectangles would put the corners in the wrong quadrant.
  */
-function jogWheel(handlers) {
+function jogWheel(handlers, head, activeTool) {
   const R_OUT = 128, SZ = (R_OUT + 8) * 2, C = SZ / 2;
   const home = Math.round(R_OUT * 0.246);
   const span = R_OUT - home;
@@ -659,9 +668,21 @@ function jogWheel(handlers) {
   return svg;
 }
 
-export function renderControlMain(root, toolheads, handlers, th) {
+/**
+ * Toolhead picker and motion.
+ *
+ * `activeTool` - which head jog and extrude are aimed at - is the user's, not the
+ * machine's, so it lives in the page's state and arrives on the context. It used to be
+ * a module-level `let` in this file, which meant the renderer held state the rest of
+ * the page could not see and re-called itself argument-less to keep it; the `head`
+ * snapshot existed only to survive that self-call, and is now read live.
+ */
+export function renderControlMain(root, ctx) {
   root.innerHTML = '';
-  if (th) head = th;
+  const handlers = ctx.handlers;
+  const toolheads = ctx.state.toolheads();
+  const head = ctx.state.toolhead();
+  const activeTool = ctx.activeTool;
   const machineTool = head.activeIndex != null ? head.activeIndex : null;
 
   /* --- toolhead picker, left of the wheel --- */
@@ -677,7 +698,7 @@ export function renderControlMain(root, toolheads, handlers, th) {
       : `Target jog and extrude at toolhead ${i + 1} (does not change the tool)`;
     b.appendChild(icon(`iconExtruder${i + 1}`));
     // selection only: changing the live tool is a separate, deliberate action
-    b.onclick = () => { activeTool = i; renderControlMain(root, toolheads, handlers); };
+    b.onclick = () => handlers.selectTool(i);
     boxes.appendChild(b);
   }
   pick.appendChild(boxes);
@@ -714,7 +735,7 @@ export function renderControlMain(root, toolheads, handlers, th) {
 
   /* --- the wheel, and Z under it --- */
   const motion = el('div', 'motion-col');
-  motion.appendChild(jogWheel(handlers));
+  motion.appendChild(jogWheel(handlers, head, activeTool));
 
   // Z moves the bed on this machine, so it is a row that says "Bed" rather than a
   // third axis on a wheel that would imply the toolhead travels.

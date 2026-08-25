@@ -1245,3 +1245,17 @@ text.step {
 .stor-grid[data-kind="gcodes"] .stor-actions { padding: 0; margin: 0; }
 .stor-grid[data-kind="logs"] .stor-actions .btn,
 .stor-grid[data-kind="gcodes"] .stor-actions .btn { flex: 0 0 auto; }
+
+/* The chamber light, while the printer has not yet echoed it. Same pulse as a sent
+   temperature, for the same reason: the control is showing a request, not a reading. */
+.qtile[data-pend="1"] .switch { animation: pend 1.2s ease-in-out infinite; }
+.qtile[data-pend="lost"] .switch { box-shadow: inset 0 0 0 1px #B8801F; }
+
+/* A panel whose update() threw. It keeps whatever it last painted; this says why the
+   rest of it is not there, rather than leaving a half-built panel looking finished. */
+[data-paint-error]::after {
+  content: "this panel failed to paint: " attr(data-paint-error);
+  display: block; padding: 10px 14px;
+  font: 12px/1.5 var(--mono); color: #7A2A18; background: #FDF3F0;
+  border-top: 1px solid #F0C9C0;
+}

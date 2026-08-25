@@ -20,6 +20,7 @@ import { Sswcp, isTimeout } from '../../shared/js/sswcp.js';
 import { MachineState } from '../../shared/js/state.js';
 import { machineActivity, isBusy } from '../../shared/js/activity.js';
 import { installMock } from './mock.js';
+import { Pending } from './pending.js';
 import { mountBuildBadge } from '../../shared/js/buildinfo.js';
 import * as ui from './ui.js';
 import { buildShell, paint } from './shell.js';
@@ -58,6 +59,13 @@ let storageKind = 'timelapses';
 // Whether we are talking to a printer right now. Computed once per frame and read by
 // every panel, so it is module state rather than a local passed down five signatures.
 let reachable = false;
+// Which toolhead jog and extrude are aimed at. The user's choice, not the machine's -
+// picking a head to jog does not change the tool - so nothing on the stream sets it.
+let activeTool = 0;
+// Every control that has asked the machine for something and is waiting to be told it
+// happened. One store, because the request-vs-mirror bug has now been found in three
+// separate controls; see pending.js.
+const pending = new Pending({ onChange: () => render() });
 
 function setStatus(text, kind = '') {
   const n = ui.$('#status');
@@ -331,12 +339,18 @@ const handlers = {
     send(CMD.CONTROL_GENERIC_FAN,
          { name: NAMED.cavityFan, speed: clampTo(LIMITS.fanSpeed, v) }, 'set assist fan'),
 
+  // Held until the printer echoes it, like a setpoint: measured at 236ms, 2029ms and
+  // 620ms across three runs, and the switch reverted under the mirror in two of them.
   setLed: (on) =>
-    send(CMD.CONTROL_LED, { name: NAMED.cavityLed, white: on ? 1 : 0 }, 'set led'),
+    pending.track('led', !!on,
+      send(CMD.CONTROL_LED, { name: NAMED.cavityLed, white: on ? 1 : 0 }, 'set led')),
 
   // mode is an integer on the wire; the page used to send 'inner'/'exhaust' strings.
   setPurifierMode: (mode) =>
     send(CMD.CONTROL_PURIFIER, { mode: Number(mode) }, 'set purifier mode'),
+
+  /** Aim jog and extrude at a head. Selection only - it does not change the tool. */
+  selectTool: (i) => { activeTool = Number(i) || 0; render(); },
 
   // Motion has no dedicated bridge command - the shipped page sends G-code, so
   // this does too. G28 homes; G91/G0/G90 makes one relative step.
@@ -1000,6 +1014,8 @@ const handlers = {
 const ctx = {
   state,
   handlers,
+  pending,
+  get activeTool() { return activeTool; },
   get device() { return device; },
   get devices() { return devices; },
   get reachable() { return reachable; },

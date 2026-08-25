@@ -47,14 +47,10 @@ export default {
   },
 
   update(root, ctx) {
-    const state = ctx.state;
     // The shipped page renders the whole control surface and fades it while the machine
     // is unreachable, rather than hiding it. Match that.
     root.firstChild.dataset.enabled = ctx.reachable ? '1' : '0';
-    ui.renderStatusCard(root.querySelector('#status-card'), state.toolheads(), state.bed(),
-                        state.led(), state.fans(), state.purifier(),
-                        state.speed(), ctx.handlers);
-    ui.renderControlMain(root.querySelector('#control-main'), state.toolheads(),
-                         ctx.handlers, state.toolhead());
+    ui.renderStatusCard(root.querySelector('#status-card'), ctx);
+    ui.renderControlMain(root.querySelector('#control-main'), ctx);
   },
 };

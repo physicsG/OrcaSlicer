@@ -393,10 +393,16 @@ panel_src = {f[:-3]: open(os.path.join(PANELS, f), encoding="utf-8").read()
 # Every panel's declaration, concatenated: several checks below ask "does any control
 # on the page do X", and a panel module is where that is now written down.
 panels_all = "\n".join(panel_src.values())
+pending_src = open(os.path.join(WEB, "device_page", "js", "pending.js"),
+                   encoding="utf-8").read()
 app_src = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
 proto_src = open(PROTO, encoding="utf-8").read()
+# Was: `handlers.selectTool` must not appear in ui.js - which was true while the
+# selection was assigned inline there. It is a page-state handler now, so the check
+# asks what it always meant: that choosing a head sends the machine nothing.
+_sel = re.search(r"selectTool:.*?\n", app_src, re.S)
 check("choosing which toolhead to jog does NOT move the machine",
-      "handlers.selectTool" not in ui_src,
+      _sel is not None and "send(" not in _sel.group(0) and "CMD." not in _sel.group(0),
       "selection is a UI choice; a toolchange must be deliberate, not a side effect")
 check("changing the live toolhead is its own action",
       "handlers.pickTool" in ui_src and "pickTool:" in app_src,
@@ -620,15 +626,31 @@ check("clicking the target selects it, so a set value is typed over rather than 
       "tgt.select()" in ui_src and "claiming" in ui_src,
       "focus alone does not survive the mouseup that follows it")
 check("a sent target is held on screen until the machine echoes it back",
-      "function pend(" in ui_src and "TEMP_CONFIRM_MS" in ui_src,
+      "pending.track(" in ui_src and "CONFIRM_MS" in pending_src,
       "the next state push lands before the printer has reported the change")
 check("a setpoint the machine never confirms is given up on and said so",
-      "unpend(row, 'lost')" in ui_src and '[data-pend="lost"]' in css,
+      "e.state = 'lost'" in pending_src and '[data-pend="lost"]' in css,
       "an accepted command that changes nothing is exactly what a silent refusal "
       "looks like, and it must not sit there looking applied")
 check("a failed command stops the row waiting immediately",
-      "ok === false" in ui_src and "async function setpoint" in app_src,
+      "ok === false" in pending_src and "async function setpoint" in app_src,
       "the row cannot see a command that never left")
+
+# Found by asking the structural question rather than by using the page: the request
+# and the mirror had been confused in three separate controls, each fixed its own way.
+check("request-against-mirror is one mechanism, not one per control",
+      "class Pending" in pending_src
+      and "pending.track(" in ui_src and "pending.track('led'" in app_src,
+      "tool selection, a temperature and the chamber light all had this bug; the "
+      "first two were fixed separately and the third was not fixed at all")
+check("the chamber light shows what was asked for until the printer echoes it",
+      "ctx.pending.resolve('led'" in ui_src
+      and '.qtile[data-pend="1"] .switch' in css,
+      "measured against the printer: the echo took 236ms, 2029ms and 620ms over three "
+      "runs, and the switch reverted under the mirror in two of them")
+check("a control reads what is shown, not what the machine says, when it acts",
+      "const shown = ctx.pending.resolve('led'" in ui_src,
+      "clicking twice inside the echo window must undo the first click, not re-send it")
 check("the reading reserves three digits so the row cannot shift under it",
       re.search(r"\.status-row \.cur\s*\{[^}]*min-width:\s*27px[^}]*text-align:\s*right",
                 css, re.S) is not None,

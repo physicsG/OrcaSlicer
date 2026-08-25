@@ -622,27 +622,50 @@ shape — state with no single home:
   clear `innerHTML` on every frame, about once a second. Every focus, scroll and
   popover-anchor bug is downstream of that, and each was fixed by inventing a new guard on
   the spot.
-- **The pending-until-confirmed model exists twice and is missing once — measured.** *The
-  request was stored in the thing that mirrors the machine* is written up above for tool
-  selection and for temperature, solved two unrelated ways: a poll-until-confirmed dialog
-  in `app.js`, DOM datasets and timers in `ui.js`. The LED switch has neither. `ui.js`
-  reads `root.__state.led.on` for the click and the render loop rewrites `aria-checked`
-  from `led.on` on every frame, so the mirror wins until the printer echoes.
+- **The pending-until-confirmed model existed twice and was missing once. It is one
+  thing now.** *The request was stored in the thing that mirrors the machine* is written
+  up above for tool selection and for temperature, solved two unrelated ways: a
+  poll-until-confirmed dialog in `app.js`, DOM datasets and timers in `ui.js`. The LED
+  switch had neither — `ui.js` read `root.__state.led.on` for the click and the render
+  loop rewrote `aria-checked` from `led.on` every frame, so the mirror won until the
+  printer echoed.
 
-  Driven against the machine three times (`--real --drive`), toggling the chamber light
-  and putting it back:
+  Driven against the machine, toggling the chamber light and putting it back, three runs
+  each side:
 
-  | run | printer echoed after | switch reverted while waiting |
+  | | printer echoed after | switch reverted while waiting |
   |---|---|---|
-  | 1 | 236 ms | no |
-  | 2 | **2029 ms** | **yes** |
-  | 3 | 620 ms | **yes** |
+  | before | 236 / **2029** / 620 ms | **2 of 3** |
+  | after | 1219 / 214 / 1024 ms | **0 of 3** |
 
-  So it is the temperature bug again, with a wider window than temperature's measured
-  552–1516 ms: click the light and for up to two seconds the switch sits on its old value,
-  which is indistinguishable from a click that did nothing. Run 1 is why one measurement
-  is not evidence — it happened to echo before a repaint landed and looked clean.
+  Run 1 of the "before" set is why one measurement is not evidence: it echoed in 236 ms,
+  before a repaint landed, and looked clean. The trace after the fix shows the mechanism
+  working rather than the outcome only — `switch=true machine=false` at 102 ms, the
+  request on screen while the mirror still disagrees.
 
-  The fix is not a fourth ad-hoc guard. It is the shared `pending` primitive, and the LED
-  is its first customer.
+  [`pending.js`](../../resources/web/device_page/js/pending.js) is that one mechanism. A
+  request has three ends — confirmed, refused, lost — and the third is the one that
+  matters: *an instant `ok` is indistinguishable from success*, so a silently-ignored
+  command has to be timed out and reported rather than left looking applied. It touches
+  no DOM, so `unit_jsc.py` tests it directly against an injected clock: 12 new checks,
+  including that `200` and `"200"` are the same answer (the wire carries either) and that
+  a late refusal cannot overwrite what the user has moved on to.
+
+  The click reads *what is shown* rather than what the machine says, so clicking twice
+  inside the echo window undoes the first click instead of re-sending it.
+
+- **A throwing panel is no longer silent.** Found the hard way during this pass: `jogWheel`
+  still referenced a module variable that had moved, and the whole paint runs inside one
+  `requestAnimationFrame` callback — so the page simply stopped having a motion column,
+  with nothing in the console. `run_webkit.py`'s 17 checks all passed, because they cover
+  the temperature rows and not the wheel. What caught it was the structural DOM dump.
+  `paint()` now catches per panel: the one that failed says so on the page and logs once,
+  and the others still paint.
+
+- **`ui.js` has no module-level mutable state left.** `activeTool` is the user's choice,
+  not the machine's, so it is page state on `ctx`; `head` existed only to survive a
+  render function calling itself argument-less, and is read live. `root.__state` — a
+  snapshot of six state objects written onto the DOM every frame for the popovers'
+  closures to find — is gone with them, since the context is the same idea with one copy
+  instead of one per frame.
 

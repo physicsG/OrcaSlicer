@@ -368,8 +368,72 @@ def main():
     # field so it had to be deleted before anything could be typed, and a value that had
     # just been sent vanishing when the next state push landed a second later, before the
     # printer had reported the change.
+    # ---- the primitive, with no DOM at all --------------------------------
+    # pending.js exists because this bug has been found in three unrelated controls, so
+    # it is worth testing as itself rather than only through one of its customers. It
+    # touches nothing but a Map and a clock, so there is nothing to stub but the clock.
+    print("\n== pending: request against mirror ==")
+    ctxp = new_ctx(os.path.join(WEB, "device_page", "js", "pending.js"))
+    js(ctxp, """
+      var NOW = 1000000;
+      var fired = [];
+      var P = new Pending({ now: function () { return NOW; },
+                            onChange: function (k) { fired.push(k); } });
+    """)
+
+    check("nothing outstanding shows the machine",
+          js(ctxp, "P.resolve('t', 60).value").to_double() == 60
+          and js(ctxp, "P.resolve('t', 60).state").to_string() == "")
+
+    js(ctxp, "P.set('t', 200);")
+    check("a sent value is shown instead of the machine's",
+          js(ctxp, "P.resolve('t', 0).value").to_double() == 200
+          and js(ctxp, "P.resolve('t', 0).state").to_string() == "sent",
+          "the whole bug in one line: the mirror still says 0 and must not win")
+    check("and starting a request asks for a repaint",
+          js(ctxp, "fired.join(',')").to_string() == "t",
+          "nothing on the stream prompts one - that is why the switch sat still")
+
+    check("the machine echoing it ends the wait",
+          js(ctxp, "P.resolve('t', 200).state").to_string() == ""
+          and js(ctxp, "P.waiting('t')").to_boolean() is False)
+
+    # the wire carries whatever it carries: 200 and "200" are the same answer
+    js(ctxp, "P.set('t', 200);")
+    check("a string from the wire confirms a number that was sent",
+          js(ctxp, "P.resolve('t', '200').state").to_string() == "",
+          "Object.is would go on waiting for a value that had already arrived")
+
+    js(ctxp, "P.set('led', true);")
+    check("and a truthy mirror confirms a boolean",
+          js(ctxp, "P.resolve('led', 1).state").to_string() == "")
+
+    # accepted, and then quietly ignored - an instant ok is indistinguishable from
+    # success, which is why this end exists at all
+    js(ctxp, "P.set('t', 200); NOW += 11000;")
+    check("a value the machine never echoes is given up on",
+          js(ctxp, "P.resolve('t', 0).state").to_string() == "lost")
+    check("and the machine's own value is shown while it is said",
+          js(ctxp, "P.resolve('t', 0).value").to_double() == 0
+          and js(ctxp, "P.resolve('t', 0).asked").to_double() == 200,
+          "the number on screen must be true even while the message explains it")
+    js(ctxp, "NOW += 9000;")
+    check("the warning clears itself",
+          js(ctxp, "P.resolve('t', 0).state").to_string() == "")
+
+    js(ctxp, "P.set('t', 200); P.fail('t', 200);")
+    check("a refused command stops the wait at once, without the timeout",
+          js(ctxp, "P.resolve('t', 0).state").to_string() == "lost",
+          "there is nothing coming to confirm a command that never left")
+
+    js(ctxp, "P.set('t', 210); P.fail('t', 200);")
+    check("but a late refusal cannot overwrite what the user moved on to",
+          js(ctxp, "P.resolve('t', 0).state").to_string() == "sent"
+          and js(ctxp, "P.resolve('t', 0).value").to_double() == 210)
+
     print("\n== the temperature row ==")
-    ctx4 = new_ctx(os.path.join(WEB, "device_page", "js", "ui.js"))
+    ctx4 = new_ctx(os.path.join(WEB, "device_page", "js", "pending.js"),
+                   os.path.join(WEB, "device_page", "js", "ui.js"))
     # ui.js is written against a DOM there is none of here. The row functions touch four
     # things - a dataset, an input value, one style width, and document.activeElement -
     # so those four are all that is stubbed. Date.now is stubbed too, because one of the
@@ -382,35 +446,39 @@ def main():
         var parts = { '.cur':  { textContent: '' },
                       '.heat': { style: { width: '0' } },
                       '.tgt':  { value: '', dataset: { target: '0' } } };
-        return { dataset: { name: 'Toolhead 1' }, title: '',
+        // `k` is how the row names itself to the pending store
+        return { dataset: { name: 'Toolhead 1', k: 'e0' }, title: '',
                  querySelector: function (s) { return parts[s]; } };
       }
-      var r = row(), t = r.querySelector('.tgt');
+      // one store per row() so a test cannot inherit the previous one's wait
+      var P;
+      function fresh() { P = new Pending({ now: function () { return NOW; } }); return row(); }
+      var r = fresh(), t = r.querySelector('.tgt');
     """)
 
-    js(ctx4, "updateTempRow(r, 24, 0);")
+    js(ctx4, "updateTempRow(r, 24, 0, P);")
     check("a heater that is off leaves the field empty, so the dash shows through",
           js(ctx4, "t.value").to_string() == "",
           "a literal 0 has to be deleted before a temperature can be typed")
     check("an off row says so",
           js(ctx4, "r.title").to_string() == "Toolhead 1 — off")
 
-    js(ctx4, "updateTempRow(r, 24, 200);")
+    js(ctx4, "updateTempRow(r, 24, 200, P);")
     check("a target the machine reports lands in the field",
           js(ctx4, "t.value").to_string() == "200")
     check("and the row says it is heating",
           js(ctx4, "r.dataset.heat").to_string() == "heating"
           and js(ctx4, "r.title").to_string() == "Toolhead 1 — heating to 200 °C")
 
-    js(ctx4, "document.activeElement = t; t.value = '55'; updateTempRow(r, 24, 200);")
+    js(ctx4, "document.activeElement = t; t.value = '55'; updateTempRow(r, 24, 200, P);")
     check("a focused field is never overwritten by an incoming reading",
           js(ctx4, "t.value").to_string() == "55")
     js(ctx4, "document.activeElement = null;")
 
     # the vanishing value, exactly as it happened
-    js(ctx4, "r = row(); t = r.querySelector('.tgt'); updateTempRow(r, 24, 0);"
-             "pend(r, 200); t.value = '200';"
-             "updateTempRow(r, 24, 0);")
+    js(ctx4, "r = fresh(); t = r.querySelector('.tgt'); updateTempRow(r, 24, 0, P);"
+             "P.set('e0', 200); t.value = '200';"
+             "updateTempRow(r, 24, 0, P);")
     check("a sent target survives the push that still reports the old one",
           js(ctx4, "t.value").to_string() == "200"
           and js(ctx4, "r.dataset.pend").to_string() == "1",
@@ -418,14 +486,14 @@ def main():
     check("and the row says it is waiting on the printer",
           "waiting for the printer" in js(ctx4, "r.title").to_string())
 
-    js(ctx4, "updateTempRow(r, 25, 200);")
+    js(ctx4, "updateTempRow(r, 25, 200, P);")
     check("the machine echoing the target ends the wait",
           js(ctx4, "String(r.dataset.pend)").to_string() == "undefined"
           and js(ctx4, "t.value").to_string() == "200")
 
     # a setpoint the printer accepted and then ignored
-    js(ctx4, "r = row(); t = r.querySelector('.tgt'); updateTempRow(r, 24, 0);"
-             "pend(r, 200); t.value = '200'; NOW += 11000; updateTempRow(r, 24, 0);")
+    js(ctx4, "r = fresh(); t = r.querySelector('.tgt'); updateTempRow(r, 24, 0, P);"
+             "P.set('e0', 200); t.value = '200'; NOW += 11000; updateTempRow(r, 24, 0, P);")
     check("a target the machine never echoes is given up on, not left standing",
           js(ctx4, "r.dataset.pend").to_string() == "lost"
           and js(ctx4, "t.value").to_string() == "",
@@ -433,40 +501,40 @@ def main():
     check("and the row names the value that did not take",
           js(ctx4, "r.title").to_string()
           == "Toolhead 1 — the printer did not take 200 °C")
-    js(ctx4, "NOW += 9000; updateTempRow(r, 24, 0);")
+    js(ctx4, "NOW += 9000; updateTempRow(r, 24, 0, P);")
     check("the warning clears itself",
           js(ctx4, "String(r.dataset.pend)").to_string() == "undefined")
 
     # the bar: how far along the ramp, from where it started when the target was set
-    js(ctx4, "r = row(); updateTempRow(r, 24, 0); updateTempRow(r, 24, 200);")
+    js(ctx4, "r = fresh(); updateTempRow(r, 24, 0, P); updateTempRow(r, 24, 200, P);")
     check("the heat bar starts empty at the foot of the ramp",
           js(ctx4, "r.querySelector('.heat').style.width").to_string() == "0.0%")
-    js(ctx4, "updateTempRow(r, 112, 200);")
+    js(ctx4, "updateTempRow(r, 112, 200, P);")
     check("and tracks the climb",
           js(ctx4, "r.querySelector('.heat').style.width").to_string() == "50.0%")
-    js(ctx4, "updateTempRow(r, 199, 200);")
+    js(ctx4, "updateTempRow(r, 199, 200, P);")
     check("arriving is a state of its own, and the bar stops",
           js(ctx4, "r.dataset.heat").to_string() == "ready"
           and js(ctx4, "r.querySelector('.heat').style.width").to_string() == "0")
 
-    js(ctx4, "r = row(); updateTempRow(r, 200, 200); updateTempRow(r, 200, 0);"
-             "updateTempRow(r, 120, 0);")
+    js(ctx4, "r = fresh(); updateTempRow(r, 200, 200, P); updateTempRow(r, 200, 0, P);"
+             "updateTempRow(r, 120, 0, P);")
     check("cooling is shown while the hardware is still hot",
           js(ctx4, "r.dataset.heat").to_string() == "cooling"
           and js(ctx4, "r.querySelector('.heat').style.width").to_string() == "40.0%",
           "a nozzle at 120 with the heater off is not the same as an idle one")
     # measured on hardware: asked for 40, the nozzle went to 48
-    js(ctx4, "r = row(); updateTempRow(r, 26, 0); updateTempRow(r, 26, 40);"
-             "updateTempRow(r, 33, 40); updateTempRow(r, 48, 40);")
+    js(ctx4, "r = fresh(); updateTempRow(r, 26, 0, P); updateTempRow(r, 26, 40, P);"
+             "updateTempRow(r, 33, 40, P); updateTempRow(r, 48, 40, P);")
     check("an overshoot restarts the ramp instead of leaving the bar full",
           js(ctx4, "r.dataset.heat").to_string() == "cooling"
           and js(ctx4, "r.querySelector('.heat').style.width").to_string() == "0.0%",
           "the bar was still measuring the climb, so it read 100% while falling")
-    js(ctx4, "updateTempRow(r, 44, 40);")
+    js(ctx4, "updateTempRow(r, 44, 40, P);")
     check("and then measures the fall",
           js(ctx4, "r.querySelector('.heat').style.width").to_string() == "50.0%")
 
-    js(ctx4, "updateTempRow(r, 30, 0);")
+    js(ctx4, "updateTempRow(r, 30, 0, P);")
     check("and stops once it is cool enough to touch",
           js(ctx4, "r.dataset.heat").to_string() == ""
           and js(ctx4, "r.title").to_string() == "Toolhead 1 — off")

@@ -161,6 +161,12 @@ function tracePane() {
 }
 
 /**
+ * What each panel last failed with, so a paint that throws on every frame - which is the
+ * usual shape - reports once rather than sixty times a second.
+ */
+const paintFailed = new Map();
+
+/**
  * Repaint. Only the destination on screen is painted - the other one's panels are behind
  * `hidden`, so painting them costs a full rebuild that nothing can see.
  */
@@ -173,6 +179,21 @@ export function paint(ctx, view) {
   PANELS.forEach((p) => {
     if (p.view !== null && p.view !== view) return;
     const root = document.getElementById(p.bodyId || `${p.id}-body`);
-    if (root) p.update(root, ctx);
+    if (!root) return;
+    try {
+      p.update(root, ctx);
+    } catch (e) {
+      // One panel's throw used to take the rest of the frame with it, in silence: the
+      // whole paint runs inside one requestAnimationFrame callback, so a ReferenceError
+      // halfway through left the page half-built with nothing in the console. It
+      // happened during this restructure - a renderer kept a reference to a module
+      // variable that had moved - and the page simply stopped having a motion column.
+      // Now the panel that failed says so and the others still paint.
+      if (paintFailed.get(p.id) !== e.message) {
+        paintFailed.set(p.id, e.message);
+        console.error(`[shell] ${p.id} panel failed to paint:`, e);
+      }
+      root.dataset.paintError = e.message;
+    }
   });
 }
