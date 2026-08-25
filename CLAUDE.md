@@ -130,6 +130,9 @@ python3 resources/web/shared/tests/run_webkit.py --shots /tmp/shots
 python3 resources/web/shared/tests/run_webkit.py --real --watch    # stays open
 python3 resources/web/shared/tests/run_webkit.py --real --drive script.js
 python3 resources/web/shared/tests/run_webkit.py --real --device-ip 192.0.2.1
+
+# the SHIPPED Flutter bundle instead of the reconstruction (implies --real)
+python3 resources/web/shared/tests/run_webkit.py --original --watch
 ```
 
 - `--watch` keeps the window open until it is closed, and the terminal becomes a live
@@ -138,6 +141,9 @@ python3 resources/web/shared/tests/run_webkit.py --real --device-ip 192.0.2.1
   `window.__report`. This is how hardware behaviour gets measured rather than assumed.
 - `--device-ip` points the saved device somewhere unroutable, to exercise the page with
   no printer there.
+- `--original` loads the real Snapmaker bundle. It boots and talks to the same host,
+  but stalls at `ConnectionStatus.unknown` pending the page-owned `deviceList` /
+  `deviceFilamentInfo` cache - see `docs/u1-webui/tools/harness/README.md`.
 - **`--real` needs Orca closed** — it authenticates with the same saved `clientId`, and
   a broker evicts the older holder. It is a second host speaking Orca's contract
   (`docs/u1-webui/tools/u1_bridge.py`), so it proves the page and the printer agree, not

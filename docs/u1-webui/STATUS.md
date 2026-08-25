@@ -371,6 +371,22 @@ Written up in [08-function-gap-analysis.md](02-device-page/08-function-gap-analy
 `run_webkit.py --device-ip 192.0.2.1` points the saved device somewhere unroutable,
 which is how the nothing-there path is exercised without switching the printer off.
 
+### The shipped bundle runs here too (2026-08-25)
+
+`run_webkit.py --original` loads the **real Flutter bundle** in WebKitGTK against a real
+printer, through `u1_bridge.py`. That was not previously possible in this environment at
+all — the screenshot harness needs a chromium that will not start.
+
+It boots and renders the four panels. It stops at `sn=`,
+`ConnectionStatus.unknown`, having subscribed to the cache keys **`deviceList`** and
+**`deviceFilamentInfo`** — the same wall
+[the harness README](tools/harness/README.md) documents, now named precisely. The six
+Orca-side commands it needs and the reconstruction never did are answered; that cleared
+every timeout and did not move the wall. Whatever seeds `deviceList` is the next thread.
+
+Measured on the way: **the bundle's own request timeout is 3 seconds**, against the
+reconstruction's 15. Worth knowing before blaming a host for a command it answered.
+
 ### Tooling worth knowing about
 
 ```bash

@@ -202,6 +202,8 @@ class Bridge:
         self.clients = {}          # id -> Client
         self.subs = {}             # (client id, topic) -> [event_id]
         self.status_events = []    # from sw_SubscribeMachineState
+        self.cache = {}            # the page's own key/value store; Orca only holds it
+        self.cache_subs = {}       # key -> [event_id]
         self.pending = {}          # rpc id -> (seqid, deadline, cmd)
         self.engine = None
         self.sn = None
@@ -227,6 +229,23 @@ class Bridge:
             "sw_GetUserLoginState": self._login_state,
             "sw_FileLog": self._file_log,
             "sw_SetLogLevel": lambda s, p, e: self._ok(s, {}),
+            # --- what the SHIPPED bundle asks for and the reconstruction never did.
+            # All Orca-side facilities rather than printer commands: subscription
+            # registrations it pushes to later, a key/value store the page owns and
+            # Orca only holds, and a telemetry sink.
+            "sw_SubscribePageStateChange": self._ack_sub,
+            "sw_UnsubscribePageStateChange": self._ack_sub,
+            "sw_SubscribeUserLoginState": self._sub_login,
+            "sw_SubscribeRecentFiles": self._sub_recent,
+            "sw_GetRecentProjects": lambda s, p, e: self._ok(s, []),
+            "sw_SubUserUpdatePrivacy": self._ack_sub,
+            "sw_GetUserUpdatePrivacy": lambda s, p, e: self._ok(s, {"status": 1}),
+            "sw_UploadEvent": lambda s, p, e: self._ok(s, {}),
+            "sw_SubscribeCacheKey": self._sub_cache,
+            "sw_UnsubscribeCacheKeys": self._ack_sub,
+            "sw_GetCache": self._get_cache,
+            "sw_SetCache": self._set_cache,
+            "sw_RemoveCache": self._remove_cache,
             # Orca answers this about itself, so the honest answer here is us.
             "sw_GetSoftwareInfo": lambda s, p, e: self._ok(
                 s, {"version": "u1_bridge", "build_number": ""}),
@@ -363,11 +382,61 @@ class Bridge:
         self.status_events.clear()
         self._ok(seqid, {})
 
+    # ---- what the shipped bundle needs ----------------------------------
+
+    def _ack_sub(self, seqid, params, event_id):
+        """A subscription Orca registers and pushes to later. Registering is the whole
+        contract; a page that never gets a push is a page nothing changed for."""
+        self._ok(seqid, {})
+
+    def _sub_login(self, seqid, params, event_id):
+        self._ok(seqid, {"status": "offline"})
+
+    def _sub_recent(self, seqid, params, event_id):
+        self._ok(seqid, [])
+
+    def _sub_cache(self, seqid, params, event_id):
+        keys = params.get("keys") or params.get("key") or []
+        if isinstance(keys, str):
+            keys = [keys]
+        for k in keys:
+            self.cache_subs.setdefault(str(k), []).append(event_id)
+        self._ok(seqid, {})
+
+    def _get_cache(self, seqid, params, event_id):
+        """The page's own store, which Orca holds and relays back.
+
+        `deviceList` and `deviceFilamentInfo` live here - written by the page, read by
+        the page, never by the printer. The screenshot harness could not get a
+        connected Device page precisely because nothing was holding them.
+        """
+        key = str(params.get("key", ""))
+        self._ok(seqid, {"key": key, "value": self.cache.get(key)})
+
+    def _set_cache(self, seqid, params, event_id):
+        key = str(params.get("key", ""))
+        self.cache[key] = params.get("value")
+        self._ok(seqid, {"key": key})
+        # Whoever is watching that key hears about it, which is what makes this a
+        # store the page can coordinate through rather than a bucket.
+        for ev in self.cache_subs.get(key, []):
+            self._push(ev, {"key": key, "value": self.cache[key]})
+
+    def _remove_cache(self, seqid, params, event_id):
+        self.cache.pop(str(params.get("key", "")), None)
+        self._ok(seqid, {})
+
     # ---- the device book ------------------------------------------------
 
     def _get_devices(self, seqid, params, event_id):
         # Orca replies with a BARE ARRAY here (m_res_data = devices).
         self._ok(seqid, self.devices)
+        # sw_SubscribeLocalDevices then PUSHES the same array (protocol.js). The
+        # reconstruction reads the ack and does not need the push; the shipped bundle
+        # sits at sn= with no device chosen until one arrives, so it is watching the
+        # subscription rather than the reply.
+        if event_id:
+            threading.Timer(0.5, lambda: self._push(event_id, self.devices)).start()
 
     def _connected_machine(self, seqid, params, event_id):
         conn = next((d for d in self.devices if d.get("connected")), None)

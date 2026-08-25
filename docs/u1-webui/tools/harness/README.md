@@ -87,6 +87,30 @@ fixture answered — which is the quickest way to find what a screen actually ne
   otherwise reuse a stale `wcp-bridge.js` between runs and silently ignore edits.
 - `/json/new` is PUT-only in current Chrome; `cdp.py` attaches to the target the
   browser already opened and navigates that instead.
+- **There is now a second way to run the bundle**, and it needs no chromium:
+  `run_webkit.py --original` loads it in WebKitGTK - the engine Orca itself renders
+  with - against a **real printer**, through `u1_bridge.py` rather than fixtures. It
+  injects this directory's `cloud-stub.js` for the same reason this harness does.
+
+  ```bash
+  python3 resources/web/shared/tests/run_webkit.py --original --watch
+  ```
+
+  It boots, renders the four panels, and issues **10 distinct commands** - six of which
+  the reconstruction never needs: `sw_SubscribePageStateChange`,
+  `sw_SubscribeUserLoginState`, `sw_SubscribeRecentFiles`, `sw_SubUserUpdatePrivacy`,
+  `sw_UploadEvent`, and `sw_SubscribeCacheKey`. The bridge answers all of them now.
+
+  Measured while doing it: **the bundle's own request timeout is 3 seconds**
+  (`请求超时, timeout: 3s`), against the reconstruction's 15. A host that takes longer
+  than that to answer anything the bundle asks for is a host the bundle gives up on.
+
+  It stops in the same place this harness does, and now names it precisely: `sn=`,
+  `ConnectionStatus.unknown`, having subscribed to the cache keys **`deviceList`** and
+  **`deviceFilamentInfo`**. Answering the six commands cleared every timeout and did
+  not move that. The page picks no device, so it never starts the connect it would
+  otherwise drive itself.
+
 - A **fully connected** Device page with live telemetry was not reached. The
   session additionally depends on the page's own `deviceList` /
   `deviceFilamentInfo` cache — written by the page, only relayed by the host — so

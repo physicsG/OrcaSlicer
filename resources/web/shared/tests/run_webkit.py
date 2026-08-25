@@ -47,8 +47,12 @@ from gi.repository import Gtk, WebKit2, GLib, Gdk       # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.dirname(os.path.dirname(HERE))
+# Served one level up, at resources/, because the shipped bundle's index.html carries
+# <base href="/web/flutter_web/"> and resolves every asset against it.
+SERVE = os.path.dirname(WEB)
 ROOT = os.path.dirname(os.path.dirname(WEB))
 TOOLS = os.path.join(ROOT, "docs", "u1-webui", "tools")
+HARNESS = os.path.join(TOOLS, "harness")
 
 # The page reaches a printer through `window.wx`. Orca installs that; outside Orca it
 # has to be installed here, and answered by something that can talk to the machine.
@@ -213,6 +217,10 @@ def main():
     ap.add_argument("--settle", type=float, default=None,
                     help="seconds to let state arrive before checking "
                          "(default 3, or 15 with --real: a connect has to happen first)")
+    ap.add_argument("--original", action="store_true",
+                    help="load the SHIPPED Flutter bundle instead of the "
+                         "reconstruction. Implies --real: the bundle has no simulator "
+                         "of its own, so something has to answer window.wx.")
     ap.add_argument("--real", action="store_true",
                     help="talk to the real printer instead of the simulator "
                          "(Orca must be closed)")
@@ -229,6 +237,10 @@ def main():
                          "hand: bare --watch stays until the window is closed, "
                          "--watch 90 stays that long")
     args = ap.parse_args()
+    if args.original:
+        args.real = True
+        if args.settle is None:
+            args.settle = 25.0        # Flutter boots, then runs its own connect
     if args.settle is None:
         args.settle = 15.0 if args.real else 3.0
 
@@ -236,16 +248,24 @@ def main():
         print("no display: this needs one (WSLg provides it). Skipping.")
         return 0
 
-    port = serve(WEB)
+    port = serve(SERVE)
     bridge = None
     ucm = WebKit2.UserContentManager()
 
     if args.real:
         sys.path.insert(0, TOOLS)
         from u1_bridge import Bridge                                 # noqa: PLC0415
-        ucm.add_script(WebKit2.UserScript.new(
-            WX_SHIM, WebKit2.UserContentInjectedFrames.TOP_FRAME,
-            WebKit2.UserScriptInjectionTime.START, None, None))
+        scripts = [WX_SHIM]
+        if args.original:
+            # The bundle treats a failed cloud call as "the user is offline" and tears
+            # its own session down, so the REST API has to be answered before it boots.
+            # Same stub the screenshot harness uses.
+            scripts.append(open(os.path.join(HARNESS, "cloud-stub.js"),
+                                encoding="utf-8").read())
+        for src in scripts:
+            ucm.add_script(WebKit2.UserScript.new(
+                src, WebKit2.UserContentInjectedFrames.TOP_FRAME,
+                WebKit2.UserScriptInjectionTime.START, None, None))
         ucm.register_script_message_handler("wx")
 
     win = Gtk.Window()
@@ -268,16 +288,33 @@ def main():
             print(f"  pretending the printer is at {args.device_ip}")
         bridge = Bridge(send=to_page, devices=devices)
 
+        seen = []
+        inner = bridge.handle
+
+        def counting(text):
+            try:
+                seen.append(json.loads(text)["payload"]["cmd"])
+            except Exception:                                        # noqa: BLE001
+                pass
+            return inner(text)
+        bridge.handle = counting
+
         def on_wx(_ucm, result):
             # 4.1 hands over a JSCValue; 4.0 wrapped it in a JavascriptResult.
             val = result if hasattr(result, "to_string") else result.get_js_value()
             bridge.handle(val.to_string())
         ucm.connect("script-message-received::wx", on_wx)
 
-    url = f"http://127.0.0.1:{port}/device_page/index.html"
-    view.load_uri(url if args.real else url + "?mock=1")
-    print(f"serving {WEB} on {url}"
-          + ("  [real printer]" if args.real else "  [simulator]"))
+    if args.original:
+        url = f"http://127.0.0.1:{port}/web/flutter_web/index.html?path=2"
+    else:
+        url = f"http://127.0.0.1:{port}/web/device_page/index.html"
+        if not args.real:
+            url += "?mock=1"
+    view.load_uri(url)
+    print(f"serving {SERVE} on {url}"
+          + ("  [real printer]" if args.real else "  [simulator]")
+          + ("  [shipped bundle]" if args.original else ""))
 
     state = {"rc": 1, "report": "the page never finished loading", "printed": False}
 
@@ -332,6 +369,24 @@ def main():
 
     def go():
         shot("loaded")
+        if args.original:
+            # A Flutter canvas has no DOM worth querying, so the evidence is what the
+            # page asked the host for and whether the session came up.
+            cmds = []
+            for c in seen:
+                if c not in cmds:
+                    cmds.append(c)
+            lines = [f"INFO  the bundle issued {len(seen)} commands, "
+                     f"{len(cmds)} distinct"]
+            lines.append(f"INFO  {', '.join(cmds)}" if cmds
+                         else "FAIL  the bundle never reached the host")
+            lines.append(("PASS" if bridge.engine else "FAIL")
+                         + "  the bundle brought an MQTT session up")
+            lines.append(("PASS" if bridge.sn else "FAIL")
+                         + f"  and attached an engine for {bridge.sn}")
+            state["report"] = "\n".join(lines)
+            state["rc"] = 1 if "FAIL" in state["report"] else 0
+            return wrap_up()
         if args.drive:
             # A driving script is asynchronous by nature - it waits on the machine -
             # so it hands its report back through window.__report rather than by
