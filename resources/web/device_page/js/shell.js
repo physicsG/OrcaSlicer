@@ -20,8 +20,8 @@
  */
 'use strict';
 
-import { $, el, icon } from './dom.js';
-import { PANELS, VIEWS } from './panels/registry.js';
+import { $, el, icon } from './core/dom.js';
+import { PANELS, VIEWS } from './registry.js';
 
 /* ---- header controls ------------------------------------------------- */
 

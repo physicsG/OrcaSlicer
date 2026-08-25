@@ -41,29 +41,40 @@ wxString url = wxString::FromUTF8(LOCALHOST_URL
 
 ## Files
 
-**Start at [`js/panels/registry.js`](js/panels/registry.js)** — it lists what is on this
-page, what each panel reads, and which bridge commands each panel can send. Everything
-inside `.content` is built from it.
+**Start at [`js/registry.js`](js/registry.js)** — it lists the page's two destinations
+and which panels each one has. Everything inside `.content` is built from it.
 
-| File | Role |
+Then **one panel is one directory**, and everything about it is in there:
+
+```
+js/views/device-control/camera/
+    camera-panel.js      what it reads, and its mount/update
+    camera-view.js       its DOM: built once, then patched
+    camera-commands.js   everything it can ask the machine to do
+```
+
+| | |
 |---|---|
 | `index.html` | The shell, and only the shell: the rail and an empty `.content` |
-| `js/panels/registry.js` | **What this page is made of.** Panel order, headers, `reads`, `sends` |
-| `js/panels/*.js` | One module per panel: what it reads, and how it paints |
-| `js/commands/*.js` | One module per panel: everything that panel can **do** |
-| `js/shell.js` | Builds the page from the registry; the header-control vocabulary |
-| `js/store.js` | **What the page remembers** — view, tab, fetched lists, chosen tool |
-| `js/pending.js` | What was asked for and not yet confirmed. Neither state nor store |
-| `js/render.js` | The one update discipline: rebuild on a signature, reconcile by key |
-| `js/dom.js` | `$`, `el`, `icon` — the three primitives panels build with |
-| `js/session.js` | Having a printer on the other end: connect, staleness, retry, the stream |
-| `js/connection.js` | The connect path itself: pairing, mTLS, the MQTT engine |
-| `js/diag.js` | The `?diag=1` beacon |
-| `js/app.js` | Startup, and the control handlers |
-| `js/ui.js` | Rendering (plain DOM). Being emptied into `js/panels/` a panel at a time |
-| `js/overlay.js` | Menus, dialogs and popovers |
-| `js/mock.js` | Installs the shared simulator, so the page runs with no hardware |
+| `js/registry.js` | **What this page is made of.** Destinations, panels, order |
+| `js/shell.js` | Builds the page from the registry; scopes each panel's commands |
+| `js/app.js` | Startup, the rail's device menu, the render loop |
+| `js/page-commands.js` | The few commands that belong to no single panel |
+| `js/views/<destination>/<panel>/` | One directory per panel — see above |
+| `js/core/store.js` | **What the page remembers** — view, tab, fetched lists, chosen tool |
+| `js/core/pending.js` | What was asked for and not yet confirmed. Neither state nor store |
+| `js/core/render.js` | The one update discipline: rebuild on a signature, reconcile by key |
+| `js/core/dom.js` | `$`, `el`, `icon` — the three primitives every view builds with |
+| `js/core/session.js` | Having a printer on the other end: connect, staleness, retry, the stream |
+| `js/core/connection.js` | The connect path itself: pairing, mTLS, the MQTT engine |
+| `js/core/overlay.js` | Menus, dialogs and popovers |
+| `js/core/diag.js` | The `?diag=1` beacon |
+| `js/core/mock.js` | Installs the shared simulator, so the page runs with no hardware |
+| `js/core/thumbs.js` | The thumbnail sniffer, shared by the job card and Storage |
+| `js/widgets/` | The rail, the trace pane, and art/formatting used by more than one view |
 | `css/device.css` | Styling |
+
+Every filename carries its component, so nothing in the tree is called `panel.js`.
 
 The bridge client, protocol constants, state store, activity table, fault catalogue and
 simulated host are shared with the print-processing popup and live in
@@ -87,8 +98,8 @@ over what the user just asked for. `pending.js` documents all three.
 
 ### Adding a panel
 
-Write `js/panels/<id>.js` with `mount`/`update`, `js/commands/<id>.js` with the things
-it can do, and add the panel to `PANELS` in the registry. That is the whole change — the
+Make `js/views/<destination>/<id>/` with its three files, and add the panel to `PANELS`
+in the registry. That is the whole change — the
 `<section>`, the 40px header, the title, the header buttons and the paint loop all come
 from the declaration. It used to mean editing five files with nothing to check you had
 done all five.

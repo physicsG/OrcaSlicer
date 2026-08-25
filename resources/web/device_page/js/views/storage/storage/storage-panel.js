@@ -8,7 +8,7 @@
  */
 'use strict';
 
-import * as ui from '../ui.js';
+import { renderStorage } from './storage-view.js';
 
 export const KINDS = [
   { value: 'timelapses', icon: 'videoCall',           title: 'Time-lapses' },
@@ -39,7 +39,7 @@ export default {
   reads: ['store.cam.timelapses', 'store.history', 'store.files'],
 
   update(root, ctx) {
-    ui.renderStorage(root, ctx.store.storageKind, ctx.handlers.storageData(),
+    renderStorage(root, ctx.store.storageKind, ctx.handlers.storageData(),
                      ctx.handlers, ctx.store.device);
   },
 };

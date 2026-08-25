@@ -885,3 +885,52 @@ Not reproduced, and recorded rather than claimed: one run reported 39 storage ca
 inside the hidden container. Three later runs report zero and a MutationObserver never
 fires. The likely cause is an orphaned `WebKitWebProcess` from an earlier scripted run
 that had clicked into Storage - the trap already documented above - but it was seen once.
+
+### Structure, pass six: one panel, one directory (2026-08-25)
+
+The last of it. `ui.js` was still one 1,359-line module rendering all six panels, so
+changing the Camera panel meant three files in three places and hunting among six
+renderers in the third. It decomposed cleanly along panel lines - nothing unclassified:
+
+```
+js/
+  registry.js              the two destinations, and which panels each has
+  shell.js  app.js  page-commands.js
+  core/      dom render pending store session connection overlay diag mock thumbs
+  widgets/   rail  rail-commands  trace  art  format
+  views/
+    device-control/        "Device control"
+      camera/    camera-panel.js   camera-view.js   camera-commands.js
+      control/   control-panel.js  control-view.js  control-commands.js
+      task/      ...
+      filament/  ...
+    storage/
+      storage/   storage-panel.js  storage-view.js  storage-commands.js
+    fault/       fault-panel.js    fault-view.js    fault-commands.js
+```
+
+**Every filename carries its component.** Six files called `panel.js` in a file switcher
+is not a structure, it is a lottery; `camera-panel.js` is unambiguous everywhere.
+
+`temps()` fell out as dead - defined, exported by nothing, called by nothing. Four
+helpers were genuinely shared and moved to `widgets/`: the two pieces of empty-state art,
+and `clock()`. Everything else belonged to exactly one panel.
+
+**The move was mechanical and checked as such.** Imports were rewritten by resolving each
+specifier against the file's *old* directory and re-relativising to its new one, then a
+sweep confirmed all 55 + 19 specifiers resolve **and** that every named import is actually
+exported. The rendered DOM is byte-identical across both the move and the rename.
+
+**Two checks had quietly stopped covering things**, both for the same reason - a flat
+`os.listdir` where the tree is now nested:
+
+- `unit_jsc.py`'s per-module parse sweep went from 2 modules to **37** once it walked.
+  It had been checking almost nothing.
+- `check_coverage.py`'s implemented-command scan reported **17** commands where there
+  are 55.
+
+Neither failed; both under-reported, which is worse. Any tool that enumerates this tree
+walks it now.
+
+**Verified.** 150/150 conformance, 134/134 `unit_jsc`, 23/23 `run_webkit`, coverage
+clean, DOM unchanged, and 5/5 against the U1.

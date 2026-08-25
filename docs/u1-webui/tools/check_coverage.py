@@ -198,24 +198,31 @@ OWNED_ELSEWHERE = {
 def owned_by_panels():
     """Which panel can issue each command, from the module that panel is handed.
 
-    Not a declaration: commands/<panel>.js IS the panel's command set, so a command
-    appears here exactly when code a user can reach issues it. commands/page.js is
-    shared by every panel and commands/device.js belongs to the rail's menu rather
-    than to a panel, which is why both are named rather than attributed.
+    Not a declaration: js/views/<destination>/<panel>/<panel>-commands.js IS that
+    panel's command set, so a command appears here exactly when code a user can reach
+    issues it. page-commands.js is shared by every panel and widgets/rail-commands.js
+    belongs to the rail's menu rather than to a panel, so both are named rather than
+    attributed to one.
     """
-    d = os.path.join(WEB, "device_page", "js", "commands")
+    js = os.path.join(WEB, "device_page", "js")
     proto = open(os.path.join(WEB, "shared", "js", "protocol.js"), encoding="utf-8").read()
     table = dict(re.findall(r"^\s*([A-Z][A-Z0-9_]*)\s*:\s*'(sw_[A-Za-z0-9_]+)'",
                             proto, re.M))
+
+    files = [(os.path.join(js, "page-commands.js"), "page"),
+             (os.path.join(js, "widgets", "rail-commands.js"), "device")]
+    for root, _dirs, fs in os.walk(os.path.join(js, "views")):
+        for f in sorted(fs):
+            if f.endswith("-commands.js"):
+                files.append((os.path.join(root, f), f[:-len("-commands.js")]))
+
     owner = {}
-    for f in sorted(os.listdir(d)):
-        if not f.endswith(".js") or f == "util.js":
-            continue
+    for path, panel in files:
         src = re.sub(r"//[^\n]*|/\*.*?\*/", "",
-                     open(os.path.join(d, f), encoding="utf-8").read(), flags=re.S)
+                     open(path, encoding="utf-8").read(), flags=re.S)
         for name in re.findall(r"\bCMD\.([A-Z][A-Z0-9_]*)", src):
             if name in table:
-                owner.setdefault(table[name], []).append(f[:-3])
+                owner.setdefault(table[name], []).append(panel)
     return owner
 
 
@@ -262,7 +269,7 @@ def main():
 
     if unreachable:
         print("\nUNREACHABLE - implemented, but no control on the page issues it.")
-        print("  Move it into the command module of the panel that should offer it, or")
+        print("  Move it into <panel>-commands.js for the panel that should offer it, or")
         print("  say where it lives in OWNED_ELSEWHERE:")
         for c in unreachable:
             print(f"  {c}")

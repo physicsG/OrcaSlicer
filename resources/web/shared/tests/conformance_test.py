@@ -211,7 +211,49 @@ cpp = open(SSWCP_CPP, encoding='utf-8').read() if os.path.exists(SSWCP_CPP) else
 check("SSWCP.cpp readable", bool(cpp))
 
 conn_src = ""
-cfile = os.path.join(WEB, "device_page", "js", "connection.js")
+JS = os.path.join(WEB, "device_page", "js")
+VIEWS = os.path.join(JS, "views")
+PANEL_NAMES = ["camera", "control", "task", "filament", "storage", "fault"]
+
+
+def panel_dir(panel):
+    """Where one panel lives: js/views/<destination>/<panel>/, or views/<panel>/."""
+    for dest in sorted(os.listdir(VIEWS)):
+        d = os.path.join(VIEWS, dest, panel)
+        if os.path.isdir(d):
+            return d
+        if dest == panel and os.path.isdir(os.path.join(VIEWS, dest)):
+            return os.path.join(VIEWS, dest)
+    raise KeyError(panel)
+
+
+def view_src(panel):
+    """One panel's three files, concatenated.
+
+    Everything about a panel lives in one directory now - its declaration, its DOM and
+    its commands - so a check about a panel asks for the panel rather than for a file.
+    """
+    d = panel_dir(panel)
+    return "\n".join(open(os.path.join(d, f), encoding="utf-8").read()
+                     for f in sorted(os.listdir(d)) if f.endswith(".js"))
+
+
+def part_src(panel, part):
+    """One of the three: 'panel', 'view' or 'commands'."""
+    return open(os.path.join(panel_dir(panel), f"{panel}-{part}.js"),
+                encoding="utf-8").read()
+
+
+def all_views():
+    """Every view file on the page, for checks that do not care which panel."""
+    out = []
+    for root, _d, fs in os.walk(VIEWS):
+        out += [open(os.path.join(root, f), encoding="utf-8").read()
+                for f in sorted(fs) if f.endswith("-view.js")]
+    return "\n".join(out)
+
+
+cfile = os.path.join(JS, "core", "connection.js")
 if os.path.exists(cfile):
     conn_src = open(cfile, encoding='utf-8').read()
 check("connection.js exists", bool(conn_src))
@@ -284,15 +326,17 @@ print("\n== hardware-measured shapes ==")
 # without going red.
 HW = os.path.join(DATA, "hardware-shapes.json")
 hw = json.load(open(HW, encoding="utf-8"))
-app_js = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
+app_js = open(os.path.join(JS, "app.js"), encoding="utf-8").read()
 # The handlers are one module per panel now, so a check about what a command DOES looks
 # in the module that issues it rather than in app.js.
-CMDS = os.path.join(WEB, "device_page", "js", "commands")
-cmd_src = {f[:-3]: open(os.path.join(CMDS, f), encoding="utf-8").read()
-           for f in sorted(os.listdir(CMDS)) if f.endswith(".js")}
+cmd_src = {n: part_src(n, "commands") for n in PANEL_NAMES}
+cmd_src["page"] = open(os.path.join(JS, "page-commands.js"), encoding="utf-8").read()
+cmd_src["device"] = open(os.path.join(JS, "widgets", "rail-commands.js"),
+                         encoding="utf-8").read()
+cmd_src["util"] = open(os.path.join(JS, "core", "thumbs.js"), encoding="utf-8").read()
 # Where a check does not care WHICH module, only that some reachable command does it.
 cmds_all = "\n".join(cmd_src.values())
-ui_js = open(os.path.join(WEB, "device_page", "js", "ui.js"), encoding="utf-8").read()
+ui_js = all_views()
 
 def js_const(name, source=src):
     m = re.search(r"export const " + re.escape(name) + r"\s*=\s*([^;]+);", source)
@@ -377,8 +421,7 @@ check("the simulator sends filament colour in the printer's forms, not CSS",
       "'#RRGGBBAA' is not what the wire carries")
 check("a colour normaliser exists and is used",
       "export function cssColor" in src
-      and "cssColor" in open(os.path.join(WEB, "device_page", "js", "ui.js"),
-                             encoding="utf-8").read(),
+      and "cssColor" in part_src("filament", "view"),
       "assigning an ARGB int to style.background is silently dropped")
 
 # the control panel needs `toolhead`, which was never subscribed
@@ -394,23 +437,18 @@ check("the axis readout uses motion_report.live_position",
       "live_position" in state_src,
       "positions are available without subscribing `toolhead`")
 
-ui_src = open(os.path.join(WEB, "device_page", "js", "ui.js"), encoding="utf-8").read()
-shell_src = open(os.path.join(WEB, "device_page", "js", "shell.js"), encoding="utf-8").read()
-PANELS = os.path.join(WEB, "device_page", "js", "panels")
-panel_src = {f[:-3]: open(os.path.join(PANELS, f), encoding="utf-8").read()
-             for f in sorted(os.listdir(PANELS)) if f.endswith(".js")}
+ui_src = all_views()
+shell_src = open(os.path.join(JS, "shell.js"), encoding="utf-8").read()
+panel_src = {n: part_src(n, "panel") for n in PANEL_NAMES}
 # Every panel's declaration, concatenated: several checks below ask "does any control
 # on the page do X", and a panel module is where that is now written down.
 panels_all = "\n".join(panel_src.values())
-pending_src = open(os.path.join(WEB, "device_page", "js", "pending.js"),
-                   encoding="utf-8").read()
-render_src = open(os.path.join(WEB, "device_page", "js", "render.js"),
-                  encoding="utf-8").read()
+pending_src = open(os.path.join(JS, "core", "pending.js"), encoding="utf-8").read()
+render_src = open(os.path.join(JS, "core", "render.js"), encoding="utf-8").read()
 # Having a printer on the other end of the bridge - the connect path, staleness, retry,
 # the heartbeat and the state stream - left app.js for its own module.
-session_src = open(os.path.join(WEB, "device_page", "js", "session.js"),
-                   encoding="utf-8").read()
-app_src = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
+session_src = open(os.path.join(JS, "core", "session.js"), encoding="utf-8").read()
+app_src = open(os.path.join(JS, "app.js"), encoding="utf-8").read()
 proto_src = open(PROTO, encoding="utf-8").read()
 # Was: `handlers.selectTool` must not appear in ui.js - which was true while the
 # selection was assigned inline there. It is a page-state handler now, so the check
@@ -569,7 +607,7 @@ check("the job card is one card at every state, not two",
       "job-badge" in ui_src and "job-bar" in ui_src
       and "'No active print'" not in ui_src,   # the emitted literal, not the comment
       "an idle machine and a printing one differ in the numbers, not the furniture")
-app_src = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
+app_src = open(os.path.join(JS, "app.js"), encoding="utf-8").read()
 
 # `.fault{display:flex}` is a class rule and beats the UA stylesheet's
 # [hidden]{display:none}, so setting .hidden in JS did nothing and an empty banner
@@ -825,8 +863,8 @@ def _strip_js(src):
             out.append(c); i += 1
     return "".join(out)
 
-for label, path in (("device_page/js/ui.js", os.path.join(WEB, "device_page", "js", "ui.js")),
-                    ("device_page/js/app.js", os.path.join(WEB, "device_page", "js", "app.js"))):
+for label, path in (("device_page/js/app.js", os.path.join(JS, "app.js")),
+                    ("device_page/js/shell.js", os.path.join(JS, "shell.js"))):
     src_js = open(path, encoding="utf-8").read()
     code = _strip_js(src_js)
     declared = set(re.findall(r"(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)", code))

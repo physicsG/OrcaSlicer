@@ -8,7 +8,7 @@
  */
 'use strict';
 
-import { installMockHost } from '../../shared/js/mockhost.js';
+import { installMockHost } from '../../../shared/js/mockhost.js';
 
 /** Commands only the Device tab issues. */
 const DEVICE_HANDLERS = {

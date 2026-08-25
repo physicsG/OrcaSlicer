@@ -6,7 +6,7 @@
  */
 'use strict';
 
-import * as ui from '../ui.js';
+import { renderTask } from './task-view.js';
 
 export default {
   id: 'task',
@@ -19,6 +19,6 @@ export default {
 
   update(root, ctx) {
     ctx.handlers.refreshJobThumb(ctx.state.job().filename);
-    ui.renderTask(root, ctx.state.job(), ctx.handlers, ctx.store.device, ctx.store.jobThumb.data);
+    renderTask(root, ctx.state.job(), ctx.handlers, ctx.store.device, ctx.store.jobThumb.data);
   },
 };

@@ -83,8 +83,14 @@ def main():
         jsdir = os.path.join(WEB, d, "js")
         if not os.path.isdir(jsdir):
             continue
-        mods += [(f"{d}/js/{n}", os.path.join(jsdir, n))
-                 for n in sorted(os.listdir(jsdir)) if n.endswith(".js")]
+        # Walk, not listdir: the Device page's modules live in core/, widgets/ and
+        # views/<destination>/<panel>/ now, and a flat listing quietly stopped checking
+        # all but two of them.
+        for root, _dirs, fs in os.walk(jsdir):
+            rel = os.path.relpath(root, jsdir)
+            pre = f"{d}/js" if rel == "." else f"{d}/js/{rel}"
+            mods += [(f"{pre}/{n}", os.path.join(root, n))
+                     for n in sorted(fs) if n.endswith(".js")]
     for label, path in mods:
         raw = open(path, encoding="utf-8").read()
         res, exc = JSC.Context.new().check_syntax(
@@ -373,7 +379,7 @@ def main():
     # it is worth testing as itself rather than only through one of its customers. It
     # touches nothing but a Map and a clock, so there is nothing to stub but the clock.
     print("\n== pending: request against mirror ==")
-    ctxp = new_ctx(os.path.join(WEB, "device_page", "js", "pending.js"))
+    ctxp = new_ctx(os.path.join(WEB, "device_page", "js", "core", "pending.js"))
     js(ctxp, """
       var NOW = 1000000;
       var fired = [];
@@ -432,8 +438,11 @@ def main():
           and js(ctxp, "P.resolve('t', 0).value").to_double() == 210)
 
     print("\n== the temperature row ==")
-    ctx4 = new_ctx(os.path.join(WEB, "device_page", "js", "pending.js"),
-                   os.path.join(WEB, "device_page", "js", "ui.js"))
+    # The temperature row is the Control panel's DOM, which lives with the rest of that
+    # panel now rather than in one shared ui.js.
+    ctx4 = new_ctx(os.path.join(WEB, "device_page", "js", "core", "pending.js"),
+                   os.path.join(WEB, "device_page", "js", "views", "device-control",
+                                "control", "control-view.js"))
     # ui.js is written against a DOM there is none of here. The row functions touch four
     # things - a dataset, an input value, one style width, and document.activeElement -
     # so those four are all that is stubbed. Date.now is stubbed too, because one of the

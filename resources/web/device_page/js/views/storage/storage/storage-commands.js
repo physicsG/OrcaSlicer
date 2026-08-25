@@ -18,9 +18,9 @@
 'use strict';
 
 import { CMD, timelapseUrl }
-  from '../../../shared/js/protocol.js';
-import { openDialog } from '../overlay.js';
-import { pickThumb } from './util.js';
+  from '../../../../../shared/js/protocol.js';
+import { openDialog } from '../../../core/overlay.js';
+import { pickThumb } from '../../../core/thumbs.js';
 
 export function create(deps) {
   // `bridge` is deliberately NOT destructured: it does not exist yet when these are

@@ -12,7 +12,7 @@
  */
 'use strict';
 
-import { CMD } from '../../shared/js/protocol.js';
+import { CMD } from '../../../shared/js/protocol.js';
 
 /** A plain HTTP POST that shares nothing with SSWCP. Harmless with no collector. */
 const DIAG_URL = 'http://127.0.0.1:8799/';

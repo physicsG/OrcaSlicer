@@ -6,7 +6,7 @@
  */
 'use strict';
 
-import * as ui from '../ui.js';
+import { renderFilament } from './filament-view.js';
 
 export default {
   id: 'filament',
@@ -27,6 +27,6 @@ export default {
   reads: ['filaments'],
 
   update(root, ctx) {
-    ui.renderFilament(root, ctx.state.filaments(), ctx.handlers);
+    renderFilament(root, ctx.state.filaments(), ctx.handlers);
   },
 };

@@ -25,7 +25,7 @@
 'use strict';
 
 import { CMD, DEVICE, PAIR_PORT, LAN_AUTH_CODE, MQTT_KEEPALIVE, hasTlsMaterial }
-  from '../../shared/js/protocol.js';
+  from '../../../shared/js/protocol.js';
 
 /*
  * Cloud hosts. The `.com` / `.cn` split is region selection; Orca appends the

@@ -24,7 +24,7 @@
 'use strict';
 
 import { CMD, SUBSCRIBE_OBJECTS, DEVICE, deviceLabel, hasTlsMaterial }
-  from '../../shared/js/protocol.js';
+  from '../../../shared/js/protocol.js';
 import { openDialog } from './overlay.js';
 import { connect as connectDevice, disconnect as disconnectDevice } from './connection.js';
 

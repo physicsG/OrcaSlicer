@@ -25,7 +25,7 @@ shape, subscription ack-then-push, partial-state merging, control round-trips, e
 import { CMD, SUBSCRIBE_OBJECTS, TOOLHEADS, LIMITS, NAMED, decodeErrorCode } from '../js/protocol.js';
 import { Sswcp } from '../js/sswcp.js';
 import { MachineState, unwrapStatus } from '../js/state.js';
-import { installMock } from '../../device_page/js/mock.js';
+import { installMock } from '../../device_page/js/core/mock.js';
 
 const out = document.getElementById('out');
 let pass = 0, fail = 0;

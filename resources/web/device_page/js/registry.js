@@ -2,11 +2,18 @@
  * registry.js - what this page is made of.
  *
  * The Device page grew a panel at a time, and each addition landed in five places:
- * markup in index.html, classes in device.css, a renderer in ui.js, a render call and a
- * slice of module state in app.js, and a click handler in wireChrome. Nothing tied the
- * five together and nothing listed them, so there was no answer to "what is on this
- * page, what does each part read, and what can each part send" short of reading all of
- * it. This file is that answer.
+ * markup in index.html, classes in device.css, a renderer somewhere in one shared
+ * ui.js, a render call and a slice of module state in app.js, and a click handler in
+ * wireChrome. Nothing tied the five together and nothing listed them, so there was no
+ * answer to "what is on this page, and what does each part do" short of reading all
+ * of it.
+ *
+ * This file is that answer, and everything one panel is made of now lives together in
+ * js/views/<destination>/<panel>/ :
+ *
+ *   panel.js     the declaration below, plus mount/update
+ *   view.js      its DOM - built once, then patched
+ *   commands.js  everything it can ask the machine to do
  *
  * Every panel declares:
  *
@@ -41,12 +48,12 @@
  */
 'use strict';
 
-import fault from './fault.js';
-import camera from './camera.js';
-import control from './control.js';
-import task from './task.js';
-import filament from './filament.js';
-import storage from './storage.js';
+import fault from './views/fault/fault-panel.js';
+import camera from './views/device-control/camera/camera-panel.js';
+import control from './views/device-control/control/control-panel.js';
+import task from './views/device-control/task/task-panel.js';
+import filament from './views/device-control/filament/filament-panel.js';
+import storage from './views/storage/storage/storage-panel.js';
 
 export const PANELS = [fault, camera, control, task, filament, storage];
 

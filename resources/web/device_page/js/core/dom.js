@@ -1,8 +1,9 @@
 /*
  * dom.js - the three primitives every panel builds with.
  *
- * These lived inside ui.js, where only ui.js could reach them. Panels need the same
- * three, and a second copy is how two spellings of `icon()` start.
+ * These lived inside the one big ui.js, where only that file could reach them. Every
+ * panel's view needs the same three, and a second copy is how two spellings of `icon()`
+ * start.
  */
 'use strict';
 

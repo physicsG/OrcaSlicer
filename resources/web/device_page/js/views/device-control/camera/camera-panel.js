@@ -6,7 +6,7 @@
  */
 'use strict';
 
-import * as ui from '../ui.js';
+import { renderCamera } from './camera-view.js';
 
 export default {
   id: 'camera',
@@ -18,6 +18,6 @@ export default {
   reads: ['store.cam', 'reachable'],
 
   update(root, ctx) {
-    ui.renderCamera(root, ctx.store.reachable, ctx.store.cam, ctx.handlers);
+    renderCamera(root, ctx.store.reachable, ctx.store.cam, ctx.handlers);
   },
 };

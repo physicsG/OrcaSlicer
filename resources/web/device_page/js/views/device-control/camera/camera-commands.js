@@ -14,8 +14,8 @@
 'use strict';
 
 import { CMD, CAMERA_DOMAIN, CAMERA_INTERVAL }
-  from '../../../shared/js/protocol.js';
-import * as ui from '../ui.js';
+  from '../../../../../shared/js/protocol.js';
+import { cameraFrameUrl } from './camera-view.js';
 
 export function create(deps) {
   // `bridge` is deliberately NOT destructured: it does not exist yet when these are
@@ -66,7 +66,7 @@ export function create(deps) {
       // Only the MQTT leg has been watched directly, so take the URL from whichever
       // channel produces it first and ignore the second.
       const useUrl = (payload) => {
-        const url = ui.cameraFrameUrl(payload, store.device);
+        const url = cameraFrameUrl(payload, store.device);
         if (!url || url === store.cam.frameUrl) return;
         store.cam.frameUrl = url;
         render();

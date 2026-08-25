@@ -13,8 +13,8 @@
 'use strict';
 
 import { CMD, TASK_CONFIG, cssColor }
-  from '../../../shared/js/protocol.js';
-import { openDialog } from '../overlay.js';
+  from '../../../../../shared/js/protocol.js';
+import { openDialog } from '../../../core/overlay.js';
 
 export function create(deps) {
   // `bridge` is deliberately NOT destructured: it does not exist yet when these are

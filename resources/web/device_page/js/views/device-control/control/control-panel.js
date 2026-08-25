@@ -7,8 +7,8 @@
  */
 'use strict';
 
-import { el } from '../dom.js';
-import * as ui from '../ui.js';
+import { el } from '../../../core/dom.js';
+import { renderControlMain, renderStatusCard } from './control-view.js';
 
 export default {
   id: 'control',
@@ -42,7 +42,7 @@ export default {
     // The shipped page renders the whole control surface and fades it while the machine
     // is unreachable, rather than hiding it. Match that.
     root.firstChild.dataset.enabled = ctx.store.reachable ? '1' : '0';
-    ui.renderStatusCard(root.querySelector('#status-card'), ctx);
-    ui.renderControlMain(root.querySelector('#control-main'), ctx);
+    renderStatusCard(root.querySelector('#status-card'), ctx);
+    renderControlMain(root.querySelector('#control-main'), ctx);
   },
 };

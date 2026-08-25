@@ -7,7 +7,7 @@
  */
 'use strict';
 
-import * as ui from '../ui.js';
+import { renderFault } from './fault-view.js';
 
 export default {
   id: 'fault',
@@ -20,6 +20,6 @@ export default {
   reads: ['activity', 'store.exception'],
 
   update(root, ctx) {
-    ui.renderFault(root, ctx.state.activity(), ctx.store.exception, ctx.handlers);
+    renderFault(root, ctx.state.activity(), ctx.store.exception, ctx.handlers);
   },
 };

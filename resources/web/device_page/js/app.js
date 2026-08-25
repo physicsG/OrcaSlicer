@@ -14,29 +14,31 @@ import { CMD, SUBSCRIBE_OBJECTS, NAMED, LIMITS, TASK_CONFIG, PRINT_PREFERENCES,
          CAMERA_DOMAIN, CAMERA_INTERVAL, cssColor, timelapseUrl }
   from '../../shared/js/protocol.js';
 import { openMenu, openDialog, openBlockingDialog, toggleField, numberField }
-  from './overlay.js';
-import { connect as connectDevice, disconnect as disconnectDevice } from './connection.js';
+  from './core/overlay.js';
+import { connect as connectDevice, disconnect as disconnectDevice } from './core/connection.js';
 import { Sswcp, isTimeout } from '../../shared/js/sswcp.js';
 import { MachineState } from '../../shared/js/state.js';
 import { machineActivity, isBusy } from '../../shared/js/activity.js';
-import { installMock } from './mock.js';
-import { Pending } from './pending.js';
-import { createStore } from './store.js';
-import { createSession } from './session.js';
-import { DIAG, createLog } from './diag.js';
+import { installMock } from './core/mock.js';
+import { Pending } from './core/pending.js';
+import { createStore } from './core/store.js';
+import { createSession } from './core/session.js';
+import { DIAG, createLog } from './core/diag.js';
 import { mountBuildBadge } from '../../shared/js/buildinfo.js';
-import * as ui from './ui.js';
+import { $ } from './core/dom.js';
+import { renderRail } from './widgets/rail.js';
+import { makeTrace } from './widgets/trace.js';
 import { buildShell, paint } from './shell.js';
 // aliased: this file has its own render()
-import * as renderPrims from './render.js';
-import * as cmdPage from './commands/page.js';
-import * as cmdControl from './commands/control.js';
-import * as cmdTask from './commands/task.js';
-import * as cmdCamera from './commands/camera.js';
-import * as cmdFilament from './commands/filament.js';
-import * as cmdStorage from './commands/storage.js';
-import * as cmdFault from './commands/fault.js';
-import * as cmdDevice from './commands/device.js';
+import * as renderPrims from './core/render.js';
+import * as cmdPage from './page-commands.js';
+import * as cmdControl from './views/device-control/control/control-commands.js';
+import * as cmdTask from './views/device-control/task/task-commands.js';
+import * as cmdCamera from './views/device-control/camera/camera-commands.js';
+import * as cmdFilament from './views/device-control/filament/filament-commands.js';
+import * as cmdStorage from './views/storage/storage/storage-commands.js';
+import * as cmdFault from './views/fault/fault-commands.js';
+import * as cmdDevice from './widgets/rail-commands.js';
 
 const qs = new URLSearchParams(location.search);
 const wantMock = qs.get('mock') === '1';
@@ -77,13 +79,13 @@ const session = createSession({
 });
 
 function setStatus(text, kind = '') {
-  const n = ui.$('#status');
+  const n = $('#status');
   n.textContent = text;
   n.className = 'status ' + kind;
 }
 
 async function boot() {
-  trace = ui.makeTrace(ui.$('#trace'));
+  trace = makeTrace($('#trace'));
 
   // Use the real host when present; fall back to the simulator otherwise.
   let mock = null;
@@ -94,8 +96,8 @@ async function boot() {
   } else {
     setStatus('connected to Orca', 'ok');
   }
-  ui.$('#mode').textContent = mock ? 'MOCK' : 'LIVE';
-  ui.$('#mode').className = 'mode ' + (mock ? 'mock' : 'live');
+  $('#mode').textContent = mock ? 'MOCK' : 'LIVE';
+  $('#mode').className = 'mode ' + (mock ? 'mock' : 'live');
 
   bridge = new Sswcp({
     log: (kind, packet) => {
@@ -177,7 +179,7 @@ async function boot() {
 
   // Reconstruction marker: shows which surface this is and which build it
   // reports, so a rebuilt page is identifiable on sight.
-  mountBuildBadge(ui.$('#build-badge'), 'Device', bridge)
+  mountBuildBadge($('#build-badge'), 'Device', bridge)
     .then((info) => { window.__devicePage.build = info; })
     .catch(() => {});
 }
@@ -286,7 +288,7 @@ function render() {
     // talking to a printer.
     store.reachable = session.isLive() && (!conn.state || conn.state === 'ready');
 
-    ui.renderRail(store.device, conn, store.devices, store.reachable);
+    renderRail(store.device, conn, store.devices, store.reachable);
     paint(ctx, store.view);
   });
 }
@@ -307,7 +309,7 @@ function render() {
  * js/panels/registry.js and built by js/shell.js.
  */
 function wireDeviceMenu() {
-  const sel = ui.$('#device-select');
+  const sel = $('#device-select');
   sel.setAttribute('data-menu-anchor', '');
   sel.onclick = () => {
     const items = store.devices.length

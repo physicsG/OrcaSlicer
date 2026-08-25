@@ -15,7 +15,7 @@
 
 import { CMD, deviceLabel, DEVICE }
   from '../../../shared/js/protocol.js';
-import { openDialog, toggleField, numberField } from '../overlay.js';
+import { openDialog, toggleField, numberField } from '../core/overlay.js';
 
 export function create(deps) {
   // `bridge` is deliberately NOT destructured: it does not exist yet when these are

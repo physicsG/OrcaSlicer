@@ -10,7 +10,7 @@
 'use strict';
 
 import { CMD }
-  from '../../../shared/js/protocol.js';
+  from '../../../../shared/js/protocol.js';
 
 export function create(deps) {
   // `bridge` is deliberately NOT destructured: it does not exist yet when these are

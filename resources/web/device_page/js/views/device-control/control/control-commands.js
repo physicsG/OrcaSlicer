@@ -16,10 +16,10 @@
 'use strict';
 
 import { CMD, NAMED, LIMITS, PRINT_PREFERENCES }
-  from '../../../shared/js/protocol.js';
-import { openDialog, openBlockingDialog, toggleField } from '../overlay.js';
-import { isTimeout } from '../../../shared/js/sswcp.js';
-import { machineActivity, isBusy } from '../../../shared/js/activity.js';
+  from '../../../../../shared/js/protocol.js';
+import { openDialog, openBlockingDialog, toggleField } from '../../../core/overlay.js';
+import { isTimeout } from '../../../../../shared/js/sswcp.js';
+import { machineActivity, isBusy } from '../../../../../shared/js/activity.js';
 
 export function create(deps) {
   // `bridge` is deliberately NOT destructured: it does not exist yet when these are
