@@ -7,7 +7,6 @@
  */
 'use strict';
 
-import { CMD } from '../../../shared/js/protocol.js';
 import { el } from '../dom.js';
 import * as ui from '../ui.js';
 
@@ -27,13 +26,6 @@ export default {
   ],
 
   reads: ['toolheads', 'bed', 'led', 'fans', 'purifier', 'speed', 'toolhead', 'reachable'],
-  sends: [CMD.CONTROL_EXTRUDER_TEMP, CMD.CONTROL_BED_TEMP, CMD.CONTROL_PRINT_SPEED,
-          CMD.CONTROL_MAIN_FAN, CMD.CONTROL_GENERIC_FAN, CMD.CONTROL_PURIFIER,
-          CMD.CONTROL_LED, CMD.SEND_GCODES, CMD.UPDATE_MACHINE_FILAMENT_INFO,
-          // this header's Refresh re-reads the whole page, not just this panel.
-          // The Filament header's Refresh is the same action.
-          CMD.GET_MACHINE_SYSTEM_INFO, CMD.FILE_STATUS, CMD.FILES_ROOTS,
-          CMD.EXCEPTION_QUERY],
 
   mount(root) {
     const grid = el('div', 'control-grid');

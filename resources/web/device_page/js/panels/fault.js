@@ -7,7 +7,6 @@
  */
 'use strict';
 
-import { CMD } from '../../../shared/js/protocol.js';
 import * as ui from '../ui.js';
 
 export default {
@@ -19,10 +18,6 @@ export default {
   hiddenAtRest: true,
 
   reads: ['activity', 'store.exception'],
-  // BEDMESH_ABORT is deliberately absent: handlers.abortBedMesh exists but nothing
-  // calls it, so no control on this page can issue it. Declaring it here would hide
-  // exactly the gap `sends` is for.
-  sends: [CMD.EXCEPTION_QUERY],
 
   update(root, ctx) {
     ui.renderFault(root, ctx.state.activity(), ctx.store.exception, ctx.handlers);

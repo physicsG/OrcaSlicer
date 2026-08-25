@@ -129,18 +129,18 @@ export function buildShell(ctx) {
     n.dataset.view = v.id;
     n.appendChild(icon(v.icon));
     n.appendChild(el('span', null, v.label));
-    n.onclick = () => ctx.handlers.showView(v.id);
+    n.onclick = () => ctx.commandsFor('page').showView(v.id);
     nav.appendChild(n);
   });
 
   PANELS.filter((p) => p.view === null)
-        .forEach((p) => content.appendChild(buildPanel(p, ctx)));
+        .forEach((p) => content.appendChild(buildPanel(p, ctxFor(ctx, p.id))));
 
   VIEWS.forEach((v) => {
     const box = el('div', 'view');
     box.id = `view-${v.id}`;
     PANELS.filter((p) => p.view === v.id)
-          .forEach((p) => box.appendChild(buildPanel(p, ctx)));
+          .forEach((p) => box.appendChild(buildPanel(p, ctxFor(ctx, p.id))));
     content.appendChild(box);
   });
 
@@ -181,6 +181,24 @@ const headerSync = [];
 const paintFailed = new Map();
 
 /**
+ * The context one panel sees: the shared one, with `handlers` narrowed to that panel's
+ * own commands plus the page-level ones.
+ *
+ * Prototype delegation rather than a copy, so `state`, `store` and `pending` stay the
+ * one live object and only `handlers` differs. Built once per panel and held, because
+ * header controls and mount-time closures capture it.
+ */
+const scoped = new Map();
+function ctxFor(ctx, id) {
+  if (!scoped.has(id)) {
+    const c = Object.create(ctx);
+    c.handlers = ctx.commandsFor(id);
+    scoped.set(id, c);
+  }
+  return scoped.get(id);
+}
+
+/**
  * Repaint. Only the destination on screen is painted - the other one's panels are behind
  * `hidden`, so painting them costs a full rebuild that nothing can see.
  */
@@ -196,7 +214,7 @@ export function paint(ctx, view) {
     const root = document.getElementById(p.bodyId || `${p.id}-body`);
     if (!root) return;
     try {
-      p.update(root, ctx);
+      p.update(root, ctxFor(ctx, p.id));
     } catch (e) {
       // One panel's throw used to take the rest of the frame with it, in silence: the
       // whole paint runs inside one requestAnimationFrame callback, so a ReferenceError

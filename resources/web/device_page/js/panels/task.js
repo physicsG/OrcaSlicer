@@ -6,7 +6,6 @@
  */
 'use strict';
 
-import { CMD } from '../../../shared/js/protocol.js';
 import * as ui from '../ui.js';
 
 export default {
@@ -17,7 +16,6 @@ export default {
   bodyClass: 'task-body',
 
   reads: ['job', 'device', 'store.jobThumb'],
-  sends: [CMD.PRINT_PAUSE, CMD.PRINT_RESUME, CMD.PRINT_CANCEL, CMD.FILE_THUMBS_B64],
 
   update(root, ctx) {
     ctx.handlers.refreshJobThumb(ctx.state.job().filename);

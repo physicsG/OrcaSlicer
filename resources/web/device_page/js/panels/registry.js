@@ -21,16 +21,21 @@
  *   bare          no <section>/<header> at all; the body element is the whole thing
  *   header        header controls, declared - see shell.js for the vocabulary
  *   reads         which state objects and store slices this panel renders from
- *   sends         which bridge commands it can issue
  *   mount(root)   build the body's fixed structure, once
  *   update(root)  patch it, on every frame
  *
- * `reads` and `sends` are the point of the exercise. 07-parity.md reported the command
- * surface complete on the strength of `CMD.NAME` appearing somewhere in the source,
- * which proves a command is *mentioned* - not that a control exists to issue it. A
- * panel with no button counted every command it would have called. With ownership
- * declared here, check_coverage.py can ask the honest question instead: is every
- * implemented command reachable from something a user can press?
+ * What a panel can SEND is deliberately not here. It was, briefly: a `sends` array per
+ * panel, which made ownership a promise - nothing stopped a panel claiming a command it
+ * never issued, and one did. Each panel is now handed `js/commands/<id>.js` and nothing
+ * else, so the module IS the answer and check_coverage.py reads it there. Referencing a
+ * command is the only way to claim it.
+ *
+ * That closes what 07-parity.md got wrong: it reported the command surface complete on
+ * the strength of `CMD.NAME` appearing somewhere in the source, which proves a command
+ * is *mentioned* - not that a control exists to issue it. A panel with no button counted
+ * every command it would have called.
+ *
+ * `reads` stays declared, because there is nothing to derive it from.
  *
  * Order is render order and paint order.
  */

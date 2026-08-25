@@ -6,7 +6,6 @@
  */
 'use strict';
 
-import { CMD } from '../../../shared/js/protocol.js';
 import * as ui from '../ui.js';
 
 export default {
@@ -26,7 +25,6 @@ export default {
   ],
 
   reads: ['filaments'],
-  sends: [CMD.UPDATE_MACHINE_FILAMENT_INFO],
 
   update(root, ctx) {
     ui.renderFilament(root, ctx.state.filaments(), ctx.handlers);

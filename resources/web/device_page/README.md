@@ -49,7 +49,8 @@ inside `.content` is built from it.
 |---|---|
 | `index.html` | The shell, and only the shell: the rail and an empty `.content` |
 | `js/panels/registry.js` | **What this page is made of.** Panel order, headers, `reads`, `sends` |
-| `js/panels/*.js` | One module per panel |
+| `js/panels/*.js` | One module per panel: what it reads, and how it paints |
+| `js/commands/*.js` | One module per panel: everything that panel can **do** |
 | `js/shell.js` | Builds the page from the registry; the header-control vocabulary |
 | `js/store.js` | **What the page remembers** — view, tab, fetched lists, chosen tool |
 | `js/pending.js` | What was asked for and not yet confirmed. Neither state nor store |
@@ -86,13 +87,19 @@ over what the user just asked for. `pending.js` documents all three.
 
 ### Adding a panel
 
-Write `js/panels/<id>.js` with `mount`/`update` and its `reads`/`sends`, then add it to
-`PANELS` in the registry. That is the whole change — the `<section>`, the 40px header,
-the title, the header buttons and the paint loop all come from the declaration. It used
-to mean editing five files with nothing to check you had done all five.
+Write `js/panels/<id>.js` with `mount`/`update`, `js/commands/<id>.js` with the things
+it can do, and add the panel to `PANELS` in the registry. That is the whole change — the
+`<section>`, the 40px header, the title, the header buttons and the paint loop all come
+from the declaration. It used to mean editing five files with nothing to check you had
+done all five.
 
-`sends` is not decoration. `check_coverage.py` reads it and fails on any implemented
-command no panel claims, which is how a handler nothing calls gets found.
+A panel is handed **its own command module and nothing else**, so reaching for another
+panel's command is a `TypeError` rather than a quiet dependency. That is also what makes
+the tooling honest: `check_coverage.py` reads the `CMD.` references out of
+`commands/<id>.js` to answer *which panel can issue this*, and a conformance check fails
+on any handler nothing calls. Both are facts about the code rather than declarations
+that can drift — an earlier version had each panel declare a `sends` list, and one of
+them claimed a command no code issued.
 
 ## Tests
 

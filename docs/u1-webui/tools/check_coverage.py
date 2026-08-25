@@ -14,16 +14,22 @@ rather than in a bug report.
 There are two questions here, and 07-parity.md answered only the first:
 
   1. Is the command implemented?  A `CMD.NAME` reference from client code.
-  2. Can a user reach it?         A panel declaring it in `sends`.
+  2. Can a user reach it?         A command module that some panel is handed.
 
 The second is the one that matters and the one that was missing. A command can be
 referenced by a handler that nothing calls - a panel with no button - and the first
 question counts it as done. `sw_BedMesh_AbortProbeMesh` was exactly that.
 
+The answer used to be a hand-written `sends` list in each panel, which made it a
+promise: nothing stopped a panel claiming a command it never issued, and one did
+(`DELETE_MACHINE_FILE`). It is now read out of `device_page/js/commands/<panel>.js` -
+the module that panel is actually handed - so the attribution is a fact about the
+imports instead.
+
 Sources of truth:
-  data/wcp-commands.json   which commands the bundle references and the host dispatches
-  resources/web/**.js      which commands the reconstruction can issue
-  device_page/js/panels/   which panel owns each one, from its `sends` declaration
+  data/wcp-commands.json    which commands the bundle references and the host dispatches
+  resources/web/**.js       which commands the reconstruction can issue
+  device_page/js/commands/  which panel can issue each one
 
 Usage: check_coverage.py [--quiet]
 Exit:  0 when every command is classified, 1 otherwise.
@@ -148,12 +154,15 @@ def implemented():
         os.path.join(WEB, "device_page", "js"),
         os.path.join(WEB, "shared", "js"),
     ):
-        for f in sorted(os.listdir(path)):
-            # mock.js / mockhost.js are the simulated HOST, not the client;
-            # protocol.js is the table itself.
-            if not f.endswith(".js") or f in ("mock.js", "mockhost.js", "protocol.js"):
-                continue
-            client += open(os.path.join(path, f), encoding="utf-8").read()
+        # Walk, not listdir: the commands and the panels live in subdirectories, and a
+        # listdir here silently reported 17 implemented commands where there are 55.
+        for root, _dirs, fs in os.walk(path):
+            for f in sorted(fs):
+                # mock.js / mockhost.js are the simulated HOST, not the client;
+                # protocol.js is the table itself.
+                if not f.endswith(".js") or f in ("mock.js", "mockhost.js", "protocol.js"):
+                    continue
+                client += open(os.path.join(root, f), encoding="utf-8").read()
 
     used = {table[n] for n in re.findall(r"\bCMD\.([A-Z][A-Z0-9_]*)", client) if n in table}
     # a couple of call sites still use the literal directly
@@ -161,28 +170,18 @@ def implemented():
     return used
 
 
-# Commands with no panel, because they are not a control: the session brings itself up,
-# the rail's device menu is about Orca rather than about the printer, and a few are
-# answered by the page itself. Same discipline as EXCLUDED - a written reason, not
-# silence.
+# Commands with no command module, because they are not a control: the session brings
+# itself up, and a couple are answered by the page itself. Same discipline as EXCLUDED -
+# a written reason, not silence.
+#
+# This list halved when the handlers were split per panel. Fifteen of its entries said
+# "rail device menu", which was true and hand-written; commands/device.js now says the
+# same thing by being the module that menu is handed.
 OWNED_ELSEWHERE = {
     "sw_GetSoftwareInfo": "build badge",
     "sw_FileLog": "diagnostics beacon (?diag=1)",
     "sw_GetUserLoginState": "boot: who is signed in",
-    "sw_GetLocalDevices": "boot + subscription: the rail's device list",
     "sw_SubscribeLocalDevices": "the rail's device list",
-    "sw_GetConnectedMachine": "boot: which machine this page is about",
-    "sw_RenameDevice": "rail device menu",
-    "sw_DeleteDevices": "rail device menu",
-    "sw_SystemGetDeviceInfo": "rail device menu: printer information",
-    "sw_GetPrinterInfo": "rail device menu: printer information",
-    "sw_SetDeviceName": "rail device menu: rename renames the machine too",
-    "sw_GetDeviceDataStorageSpace": "rail device menu: printer information",
-    "sw_PrinterDefectDetection": "rail device menu: defect detection",
-    "sw_StartMachineFind": "rail device menu: find printers",
-    "sw_StopMachineFind": "rail device menu: find printers",
-    "sw_AddDevice": "rail device menu; opens Orca's own dialog",
-    "sw_ConnectOtherMachine": "rail device menu; opens Orca's own dialog",
     "sw_create_mqtt_client": "connect path (connection.js)",
     "sw_mqtt_connect": "connect path",
     "sw_mqtt_disconnect": "connect path",
@@ -193,28 +192,28 @@ OWNED_ELSEWHERE = {
     "sw_SubscribeMachineState": "state stream",
     "sw_GetMachineState": "state stream + the toolchange wait's polling",
     "sw_MachineHeartbeat": "session supervisor",
-    "sw_GetMachineObjects": "rail device menu: printer information",
-    "sw_FileGetStatus": "transfer progress, polled by pollTransfer()",
 }
 
 
-def declared_by_panels():
-    """What each panel says it can send, read out of its own `sends` declaration."""
-    panels = os.path.join(WEB, "device_page", "js", "panels")
+def owned_by_panels():
+    """Which panel can issue each command, from the module that panel is handed.
+
+    Not a declaration: commands/<panel>.js IS the panel's command set, so a command
+    appears here exactly when code a user can reach issues it. commands/page.js is
+    shared by every panel and commands/device.js belongs to the rail's menu rather
+    than to a panel, which is why both are named rather than attributed.
+    """
+    d = os.path.join(WEB, "device_page", "js", "commands")
     proto = open(os.path.join(WEB, "shared", "js", "protocol.js"), encoding="utf-8").read()
     table = dict(re.findall(r"^\s*([A-Z][A-Z0-9_]*)\s*:\s*'(sw_[A-Za-z0-9_]+)'",
                             proto, re.M))
     owner = {}
-    for f in sorted(os.listdir(panels)):
-        if not f.endswith(".js") or f == "registry.js":
+    for f in sorted(os.listdir(d)):
+        if not f.endswith(".js") or f == "util.js":
             continue
-        src = open(os.path.join(panels, f), encoding="utf-8").read()
-        # the `sends:` array, up to its closing bracket; comments inside are skipped
-        m = re.search(r"^\s*sends:\s*\[(.*?)\]", src, re.S | re.M)
-        if not m:
-            continue
-        body = re.sub(r"//[^\n]*", "", m.group(1))
-        for name in re.findall(r"\bCMD\.([A-Z][A-Z0-9_]*)", body):
+        src = re.sub(r"//[^\n]*|/\*.*?\*/", "",
+                     open(os.path.join(d, f), encoding="utf-8").read(), flags=re.S)
+        for name in re.findall(r"\bCMD\.([A-Z][A-Z0-9_]*)", src):
             if name in table:
                 owner.setdefault(table[name], []).append(f[:-3])
     return owner
@@ -247,10 +246,11 @@ def main():
             for c in notbuilt:
                 print(f"  {c:38} {EXCLUDED[c][10:]}")
     # --- can a user actually reach it? ------------------------------------
-    owner = declared_by_panels()
+    owner = owned_by_panels()
     claimed = set(owner)
     unreachable = [c for c in done if c not in claimed and c not in OWNED_ELSEWHERE]
-    phantom = sorted(c for c in claimed if c not in have)
+    # `phantom` is gone with the declaration it checked: a command module cannot claim
+    # a command it does not reference, because referencing it IS the claim.
 
     if not quiet:
         print("\nreachability - which panel can issue it")
@@ -258,20 +258,14 @@ def main():
             cs = sorted(c for c, ps in owner.items() if panel in ps)
             print(f"  {panel:10} {len(cs):2}  {' '.join(c[3:] for c in cs)}")
         print(f"  {'elsewhere':10} {len([c for c in done if c in OWNED_ELSEWHERE]):2}"
-              f"  session, rail device menu, state stream")
+              f"  session, connect path, state stream")
 
     if unreachable:
         print("\nUNREACHABLE - implemented, but no control on the page issues it.")
-        print("  Wire it to a panel and add it to that panel's `sends`, or say where it")
-        print("  lives in OWNED_ELSEWHERE:")
+        print("  Move it into the command module of the panel that should offer it, or")
+        print("  say where it lives in OWNED_ELSEWHERE:")
         for c in unreachable:
             print(f"  {c}")
-    if phantom:
-        print("\nCLAIMED BUT NOT IMPLEMENTED - a panel's `sends` names a command no")
-        print("  code issues:")
-        for c in phantom:
-            print(f"  {c}")
-
     if unclassified:
         print(f"\nUNCLASSIFIED - implement it, or add it to EXCLUDED with a reason:")
         for c in unclassified:
@@ -280,7 +274,7 @@ def main():
         print(f"\nstale exclusions - now implemented, remove from EXCLUDED:")
         for c in stale:
             print(f"  {c}")
-    return 1 if (unclassified or stale or unreachable or phantom) else 0
+    return 1 if (unclassified or stale or unreachable) else 0
 
 
 if __name__ == "__main__":

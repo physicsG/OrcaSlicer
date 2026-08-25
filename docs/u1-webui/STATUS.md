@@ -799,11 +799,51 @@ they name a file — the same repointing pass one needed. Worth noting as a prop
 this suite rather than a nuisance: it pins *decisions* to *places*, so moving a decision
 is meant to be a visible edit.
 
-**Where this leaves `app.js`.** 1,272 lines, and one job left that is really two: the
-40-function `handlers` bag, and startup. `handlers` is the interesting half — it is the
-last thing handed whole to every panel, and the only record of who uses what is each
-panel's own hand-written `sends` declaration. Splitting it per domain would let a panel
-receive only its own commands, which would make `sends` **derivable** instead of
-declared — the check that found the dead `abortBedMesh` handler would then be checking a
-fact rather than a promise. That is a design decision worth taking deliberately, not as a
-side effect of a move.
+### Structure, pass five: a panel is handed its own commands and nothing else (2026-08-25)
+
+The last undifferentiated thing was `handlers` — 43 functions, 687 lines, one flat bag
+given whole to every renderer. It is `js/commands/<panel>.js` now, one module per panel
+plus `page.js` for the two things every panel shares and `device.js` for the rail's menu,
+which is about Orca rather than about the printer and so has no panel to belong to.
+
+`shell.js` gives each panel `commandsFor(id)` — its own module merged with the page-level
+one — through a prototype-delegating context, so `state`, `store` and `pending` stay one
+live object and only the commands differ. **Reaching for another panel's command is now a
+`TypeError`.**
+
+**The tooling checks facts instead of promises.** The `sends` array each panel used to
+declare is gone. `check_coverage.py` reads the `CMD.` references out of the module a
+panel is *actually handed*, so referencing a command is the only way to claim one:
+
+```
+camera      2   control     9   device     13   fault    1
+filament    1   page        5   storage    12   task     4     elsewhere 29
+```
+
+Two things fell out of that:
+
+- **`OWNED_ELSEWHERE` halved.** Fifteen of its entries said "rail device menu", which was
+  true and hand-written; `commands/device.js` says the same thing by *being* the module
+  that menu is handed.
+- **A new check asks the question directly**: is every handler a panel is given actually
+  called? `check_coverage` found `abortBedMesh` because it named a command; `showFiles`
+  named none, so nothing could. Verified by planting a dead handler — it fails and names
+  it.
+
+**Two failures worth recording.** The page came up blank at first: `session` is built
+before the command modules and holds a reference to the merged bag, so the `const` for it
+was in its temporal dead zone. And a parse check over every module reported nine
+"failures" that were all artefacts of the stripper — worth knowing that a green parse
+sweep is not a green *load*, because what actually broke was resolution and ordering, not
+syntax.
+
+**Verified.** 150/150 conformance, 109/109 `unit_jsc`, 17/17 `run_webkit`, coverage
+clean, DOM unchanged, and against the U1: 26 objects with live telemetry, and the chamber
+light echoing at 1853 ms and 812 ms with **no revert** — the pending model still holding
+at nearly two seconds.
+
+**Where this leaves the page.** `app.js` is **375 lines** — startup, `send`/`setpoint`,
+the render loop and the device menu — down from 1,595. The largest file is `ui.js` at
+1,359, and it is the obvious next thing: it is still one module rendering six panels, and
+each panel's renderer wants to move into the panel module that already owns everything
+else about it. That is a move rather than a design decision, which is why it can wait.

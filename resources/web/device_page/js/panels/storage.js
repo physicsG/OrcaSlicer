@@ -8,7 +8,6 @@
  */
 'use strict';
 
-import { CMD } from '../../../shared/js/protocol.js';
 import * as ui from '../ui.js';
 
 export const KINDS = [
@@ -38,15 +37,9 @@ export default {
   ],
 
   reads: ['store.cam.timelapses', 'store.history', 'store.files'],
-  // No DELETE_MACHINE_FILE: Delete sat a few pixels from a one-click Print and only
-  // one of them is reversible, so the card offers view and print only.
-  sends: [CMD.TIMELAPSE_LIST, CMD.TIMELAPSE_DELETE, CMD.PRINT_HISTORY,
-          CMD.FILES_ROOTS, CMD.FILES_GET_DIRECTORY, CMD.FILE_LIST_PAGE,
-          CMD.FILES_METADATA, CMD.FILE_THUMBS_B64, CMD.FILE_THUMBNAILS,
-          CMD.PRINT_START, CMD.DOWNLOAD_MACHINE_FILE],
 
   update(root, ctx) {
-    ui.renderStorage(root, ctx.store.storageKind, ctx.storageData(),
+    ui.renderStorage(root, ctx.store.storageKind, ctx.handlers.storageData(),
                      ctx.handlers, ctx.store.device);
   },
 };

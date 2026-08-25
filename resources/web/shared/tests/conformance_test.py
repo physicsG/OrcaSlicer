@@ -285,6 +285,13 @@ print("\n== hardware-measured shapes ==")
 HW = os.path.join(DATA, "hardware-shapes.json")
 hw = json.load(open(HW, encoding="utf-8"))
 app_js = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
+# The handlers are one module per panel now, so a check about what a command DOES looks
+# in the module that issues it rather than in app.js.
+CMDS = os.path.join(WEB, "device_page", "js", "commands")
+cmd_src = {f[:-3]: open(os.path.join(CMDS, f), encoding="utf-8").read()
+           for f in sorted(os.listdir(CMDS)) if f.endswith(".js")}
+# Where a check does not care WHICH module, only that some reachable command does it.
+cmds_all = "\n".join(cmd_src.values())
 ui_js = open(os.path.join(WEB, "device_page", "js", "ui.js"), encoding="utf-8").read()
 
 def js_const(name, source=src):
@@ -311,18 +318,20 @@ check("cameraFrameUrl builds the HTTP URL instead",
 
 th = hw["thumbnails"]
 b64_cmd, path_cmd = "FILE_THUMBS_B64", "FILE_THUMBNAILS"
-i_b64, i_path = app_js.find("CMD." + b64_cmd), app_js.find("CMD." + path_cmd)
+_thumbs = cmd_src["storage"]
+i_b64, i_path = _thumbs.find("CMD." + b64_cmd), _thumbs.find("CMD." + path_cmd)
 check("the thumbnail command that returns bytes is asked first",
       0 <= i_b64 < i_path,
       "server.files.thumbnails succeeds while returning only paths, so asking it "
       "first means the catch-fallback never fires and no image is ever shown")
 check("pickThumb looks for the field the printer actually fills",
       th["server.files.thumbnails_base64"]["image_field"] in
-      re.search(r"for \(const k of \[([^\]]*)\]", app_js).group(1))
+      re.search(r"for \(const k of \[([^\]]*)\]", cmd_src["util"]).group(1))
 check("pickThumb knows the timelapse spelling too",
-      hw["timelapse"]["thumbnail_direct_adds"] in app_js)
+      hw["timelapse"]["thumbnail_direct_adds"] in cmd_src["util"])
 check("the timelapse listing is read by its real field name",
-      "instances" in app_js and hw["timelapse"]["thumbnail_direct_adds"] in ui_js)
+      "instances" in cmd_src["storage"]
+      and hw["timelapse"]["thumbnail_direct_adds"] in ui_js)
 
 check("the simulator refuses the domain the printer refuses",
       str(cam["domain_rejected"]["code"]) in open(MOCK, encoding="utf-8").read(),
@@ -406,18 +415,18 @@ proto_src = open(PROTO, encoding="utf-8").read()
 # Was: `handlers.selectTool` must not appear in ui.js - which was true while the
 # selection was assigned inline there. It is a page-state handler now, so the check
 # asks what it always meant: that choosing a head sends the machine nothing.
-_sel = re.search(r"selectTool:.*?\n", app_src, re.S)
+_sel = re.search(r"selectTool:.*?\n", cmd_src["control"], re.S)
 check("choosing which toolhead to jog does NOT move the machine",
       _sel is not None and "send(" not in _sel.group(0) and "CMD." not in _sel.group(0),
       "selection is a UI choice; a toolchange must be deliberate, not a side effect")
 check("changing the live toolhead is its own action",
-      "handlers.pickTool" in ui_src and "pickTool:" in app_src,
+      "handlers.pickTool" in ui_src and "pickTool:" in cmd_src["control"],
       "there must be a dedicated control, not an overloaded segmented button")
 check("a toolchange blocks the surface while the gantry moves",
       "openBlockingDialog" in app_src,
       "a second command sent mid-change is not what the user meant")
 check("the toolchange is confirmed by the machine, not by the ack",
-      "activeIndex === idx" in app_src,
+      "activeIndex === idx" in cmd_src["control"],
       "the G-code ack only says the command was queued")
 
 print("\n== panel invariants ==")
@@ -447,9 +456,9 @@ check("a tab meets the card and a refresh button fills the header",
 # re-declares the filter, re-snapshots, and re-reads system info, file status, the
 # exception state and the file roots. Both of its pills send the identical set.
 check("refresh re-reads the machine, not Orca's device book",
-      "async function refreshAll" in app_src
-      and "refreshAll()" in app_src
-      and "startStateStream('refresh')" in app_src,
+      "async function refreshAll" in cmd_src["page"]
+      and "refreshAll()" in cmd_src["page"]
+      and "startStateStream('refresh')" in cmd_src["page"],
       "the buttons called refresh(), which asks for the device list - two commands "
       "that say nothing about the printer, so pressing refresh changed nothing visible")
 
@@ -501,6 +510,29 @@ _hidden_optouts = [c for c in (".fault", ".stor-foot")
 check("anything hidden from JS opts out of its own display rule",
       not _hidden_optouts,
       f"missing a [hidden] rule: {_hidden_optouts} - setting .hidden on these does nothing")
+# Two handlers had been sitting in the bag with no caller - abortBedMesh, which cannot
+# have one, and showFiles, whose own comment called it "the one useful action from an
+# idle job card". check_coverage found the first because it named a command; the second
+# names none, so nothing could. This asks the question directly instead.
+_uncalled = []
+_callers = ui_src + shell_src + app_src + panels_all + cmds_all
+for _mod, _src in sorted(cmd_src.items()):
+    if _mod == "util":
+        continue
+    _ret = re.search(r"\n  return \{\n(.*)\n  \};\n\}", _src, re.S)
+    if not _ret:
+        _uncalled.append(f"{_mod}: no return block found")
+        continue
+    for _h in re.findall(r"^    ([a-zA-Z_$][\w$]*)[:,]", _ret.group(1), re.M):
+        # a handler is reached as handlers.X (a panel or a renderer) or cmd.X (another
+        # module); its own definition is not a call site
+        n = len(re.findall(rf"(?:handlers|cmd)\.{re.escape(_h)}\b", _callers))
+        if n == 0:
+            _uncalled.append(f"{_mod}.{_h}")
+check("every command a panel is handed can actually be reached",
+      not _uncalled,
+      f"nothing calls: {', '.join(_uncalled)} - either wire a control to it or delete it")
+
 check("the storage refresh is an action, not another picker",
       "'icon-btn'" in panel_src["storage"] and ".icon-btn" in css,
       "sitting in the row of kind buttons it read as another one of them")
@@ -509,7 +541,7 @@ check("the storage refresh is an action, not another picker",
 # called by nothing - its own comment calls it "the one useful action from an idle job
 # card". The card had a disabled play button titled "Nothing to start here" instead.
 check("an idle job card is not a dead end",
-      "handlers.showFiles()" in ui_src and "showFiles:" in app_src
+      "handlers.showFiles()" in ui_src and "showFiles:" in cmd_src["task"]
       and "main_btn.disabled" not in ui_src,
       "with nothing running, the one useful action is to go and find something to print")
 
@@ -570,7 +602,7 @@ check("a sector is a real annular path, not a box",
       "A${r2" in ui_src or "sector(" in ui_src,
       "rectangles would put the corners in the wrong quadrant")
 check("an unhomed axis blocks the jog and says so",
-      "data-blocked" in ui_src and "allHomed === false" in app_src,
+      "data-blocked" in ui_src and "allHomed === false" in ui_src,
       "Klipper refuses the move silently, which looks like a dead button")
 
 # absent hardware
@@ -687,7 +719,7 @@ check("a failed command stops the row waiting immediately",
 # and the mirror had been confused in three separate controls, each fixed its own way.
 check("request-against-mirror is one mechanism, not one per control",
       "class Pending" in pending_src
-      and "pending.track(" in ui_src and "pending.track('led'" in app_src,
+      and "pending.track(" in ui_src and "pending.track('led'" in cmd_src["control"],
       "tool selection, a temperature and the chamber light all had this bug; the "
       "first two were fixed separately and the third was not fixed at all")
 check("the chamber light shows what was asked for until the printer echoes it",
@@ -738,10 +770,10 @@ check("the Control panel sizes to its content",
 # T0..T3 do - so there is nothing else to check them against. An earlier guess of `T-1`
 # for park did nothing at all.
 check("picking a toolhead sends T<n> A0, as the printer's own UI does",
-      re.search(r"`T\$\{idx\} A0`", app_src) is not None,
+      re.search(r"`T\$\{idx\} A0`", cmd_src["control"]) is not None,
       "a bare T<n> is not what the firmware's own macro sends either")
 check("parking uses PARK_EXTRUDER, numbered like Klipper's extruders",
-      "PARK_EXTRUDER" in app_src and "idx === 0 ? '' : idx" in app_src,
+      "PARK_EXTRUDER" in cmd_src["control"] and "idx === 0 ? '' : idx" in cmd_src["control"],
       "PARK_EXTRUDER for 0, PARK_EXTRUDER1..3 above it")
 check("one button, and its meaning follows the selected toolhead's state",
       "isLive ? 'Park extruder' : 'Pick extruder'" in ui_src
@@ -751,7 +783,7 @@ check("one button, and its meaning follows the selected toolhead's state",
       "the shipped page carries one button per toolhead, reading Park when that head "
       "is ACTIVATE and Pick when it is not")
 check("park still checks the machine before acting",
-      "state.toolhead().activeIndex" in app_src,
+      "state.toolhead().activeIndex" in cmd_src["control"],
       "only a live head can be parked, whatever the caller passes")
 check("picking no longer opens a dialog to re-ask the same question",
       "pickExtruder(" not in ui_src,
@@ -807,12 +839,13 @@ check("engagement is read only from extruder*.state",
       "toolhead.extruder names the last head used even after it is parked, so using "
       "it as a fallback made the panel offer to park a head that was not there")
 check("a toolchange waits on the machine, not on the request",
-      "runToolAction" in app_src and "// deliberately not awaited" in app_src,
+      "runToolAction" in cmd_src["control"]
+      and "// deliberately not awaited" in cmd_src["control"],
       "sw_SendGCodes does not return until Klipper finishes, but the bridge gives up "
       "at 15s - so a rejection there means still working, not refused")
 sswcp_js = open(SSWCP, encoding="utf-8").read()
 check("a bridge timeout is not treated as a refusal",
-      "isTimeout(e)" in app_src and "export function isTimeout" in sswcp_js,
+      "isTimeout(e)" in cmds_all and "export function isTimeout" in sswcp_js,
       "the printer is still moving; telling the user to retry is wrong")
 check("both clocks' wording counts as a timeout, and Orca's code with it",
       "e.code === -2" in sswcp_js
@@ -820,7 +853,8 @@ check("both clocks' wording counts as a timeout, and Orca's code with it",
       "Orca fails a timed-out request as -2 / 'time out' (SSWCP.cpp on_timeout); "
       "matching only the client's 'timed out' misses it")
 check("the wait shows, and follows, what the machine says it is doing",
-      "machineActivity" in app_src and "isBusy(act)" in app_src and "quietDeadline" in app_src,
+      "machineActivity" in cmd_src["control"] and "isBusy(act)" in cmd_src["control"]
+      and "quietDeadline" in cmd_src["control"],
       "the calibration that makes a toolchange slow is reported in main_state, not "
       "action_code - reading only the latter left the dialog silent for it")
 act_src = open(os.path.join(SHARED, "js", "activity.js"), encoding="utf-8").read()
@@ -842,21 +876,21 @@ check("bed buttons are disabled rather than silently refused",
       "b.disabled = blocked" in ui_src,
       "a button that looks live and does nothing is worse than one plainly disabled")
 check("homing observes homed_axes rather than assuming",
-      "refreshWaitState" in app_src and "allHomed === true" in app_src,
+      "refreshWaitState" in cmd_src["control"] and "allHomed === true" in cmd_src["control"],
       "homed_axes is not on the stream, so the wait has to fetch it to see the change")
 
 # machine_state_manager reads {main_state: 0, action_code: 0} straight through a manual
 # toolchange on this firmware, so a wait that trusted it alone saw silence and gave up on
 # work that was going fine - which is what reported a finished home as a timeout.
 check("a wait takes 'busy' from every source, not just machine_state_manager",
-      "busyReason" in state_src and "reason.busy" in app_src,
+      "busyReason" in state_src and "reason.busy" in cmd_src["control"],
       "the docking calibration, the macro's message and physical motion all answer "
       "when machine_state_manager does not")
 check("the wait re-reads the objects the stream does not carry",
-      "refreshWaitState" in app_src and "lastPoll" in app_src,
+      "refreshWaitState" in cmd_src["control"] and "lastPoll" in cmd_src["control"],
       "toolhead and extruder_offset_calibration are not subscribed")
 check("homing finishes on the machine reporting homed, not on a busy->idle edge",
-      "done: () => state.toolhead().allHomed === true" in app_src,
+      "done: () => state.toolhead().allHomed === true" in cmd_src["control"],
       "the edge never came, because nothing ever reported busy")
 check("homing is what the wait reports during a toolchange",
       "Homing axes" in state_src and "homed_axes" in state_src,

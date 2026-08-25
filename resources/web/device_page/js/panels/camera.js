@@ -6,7 +6,6 @@
  */
 'use strict';
 
-import { CMD } from '../../../shared/js/protocol.js';
 import * as ui from '../ui.js';
 
 export default {
@@ -17,7 +16,6 @@ export default {
   bodyClass: 'camera-body',
 
   reads: ['store.cam', 'reachable'],
-  sends: [CMD.CAMERA_START, CMD.CAMERA_STOP],
 
   update(root, ctx) {
     ui.renderCamera(root, ctx.store.reachable, ctx.store.cam, ctx.handlers);
