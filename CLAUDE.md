@@ -131,6 +131,12 @@ js/views/device-control/camera/
     camera-commands.js   everything it can ask the machine to do
 ```
 
+The four control panels sit in **two unequal columns**, not a 2x2 grid: a main column
+that takes what is left, and a side column pinned at `--col-w` (830) holding Control and
+Filament. A panel names its own column in its declaration (`column`, `grow`); the
+destination names them in `registry.js`. Below a 1600px window it is one centred column
+and none of that applies.
+
 with `js/core/` for what every view needs (`dom`, `render`, `pending`, `store`,
 `session`, `connection`, `overlay`, `diag`, `mock`, `thumbs`) and `js/widgets/` for the
 rail, the trace pane and shared art. A panel is handed **its own commands and nothing
@@ -144,6 +150,10 @@ the vendored chromium do not work here.
 # checks against the simulated printer, then exits
 python3 resources/web/shared/tests/run_webkit.py --shots /tmp/shots
 
+# --size matters: the two-column layout only engages at 1600 and above, so the
+# default 1500 checks the single-column one instead
+python3 resources/web/shared/tests/run_webkit.py --size 1920x1080
+
 # the same page against the REAL printer, with no Orca at all
 python3 resources/web/shared/tests/run_webkit.py --real --watch    # stays open
 python3 resources/web/shared/tests/run_webkit.py --real --drive script.js
@@ -155,6 +165,10 @@ python3 resources/web/shared/tests/run_webkit.py --original --sn <SN> --watch
 
 - `--watch` keeps the window open until it is closed, and the terminal becomes a live
   trace of what each click sends.
+- `--size WxH` sets the window, which the Device page's layout depends on - see above.
+- Committed drive scripts live in `resources/web/shared/tests/drive/`: the DOM walker,
+  the camera panel against the simulator and against a printer, and the no-printer
+  branch. See its README - they were re-written from scratch every time before.
 - `--drive FILE` runs JavaScript in the live page; the script reports by setting
   `window.__report`. This is how hardware behaviour gets measured rather than assumed.
 - `--device-ip` points the saved device somewhere unroutable, to exercise the page with

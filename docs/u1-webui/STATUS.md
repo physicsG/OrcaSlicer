@@ -608,7 +608,167 @@ and there is no pycairo here.
 
 ## What to pick up next
 
-In rough order of value:
+**Two of three design changes are built and driven against the machine.** The study is
+[02-device-page/camera-layout-ace-mockup.html](02-device-page/camera-layout-ace-mockup.html)
+— the versions that were weighed, with the ones not chosen still switchable in it.
+
+| | | |
+|---|---|---|
+| **Layout** | L3 + H1 | **built** — two unequal columns, no C++ |
+| **Camera** | S2 + view grid + M-A | **built** — 9.5 fps against 0.5, no C++ |
+| **multiACE** | P1 | **not started** — deferred |
+
+### The layout: two columns, not a 2x2 grid
+
+The four panels were one grid of equal cells, every body locked to
+`aspect-ratio: 830/548`, so a wider window bought four wider squares and the camera — the
+only one whose content scales — gained nothing. Now: a main column that takes what is
+left, and a side column pinned at `--col-w` (830), the width the Control cluster already
+is. **Control keeps its layout and gives up only height**, and Filament grows into what it
+releases.
+
+`registry.js` gained `columns` on a destination and `column` / `grow` on a panel, so a
+panel says where it goes instead of the CSS guessing from source order. `#view-control`
+stopped being `display: contents` — the two columns have to distribute height
+independently, which a contents box cannot do.
+
+Measured at 1920x1080: Control **424** and Filament **496**, against 588 and 588, which
+did not fit and made the destination scroll. Control's cluster is untouched at 758.
+
+**A panel body hides its overflow, so a body too short for its card clips it in silence.**
+Printing Task was pinned at 150 px on the reasoning that a job card "has a natural height
+and no reason to grow" — the second half is true and the first was never measured. The
+card is **304**, so the progress bar and both job buttons were cut off and nothing said
+so. It sizes to its content now, and `run_webkit.py` asks every panel body at every width
+whether its `scrollHeight` fits, rather than asking about this one.
+
+**The breakpoint is the trade-off and it is one number** (`1600`, up from 1420). The main
+column is `window - 304 - 20 - 830`; the old grid gave `(window - 324) / 2`. Those cross
+at **1984**, so between the breakpoint and 1984 the camera is narrower than it was — 446
+against 638 at 1600, 766 against 798 at 1920. The 1920 case costs 32px and buys Filament
+172px. **The 1600 case costs 192px and is the weakest point of the design**; raising the
+number to 1984 removes the cost entirely, at the price of most laptops never getting two
+columns. `run_webkit.py --size WxH` exists so both layouts can be checked.
+
+### The camera: four transports, four view layouts, and detection
+
+`CAMERA_INTERVAL = 2` — the shipped page's camera is **half a frame per second**. A U1
+running paxx12's Extended Firmware also runs a camera service, and the panel now finds it:
+
+- **Detection, never configuration.** `GET :7125/server/webcams/list` answering with a
+  camera *is* the detection. Nothing answers on stock firmware and the monitor file stays.
+- **Two of the four entries in that list are not cameras.** The printer registers its own
+  touchscreen as `gui` and the multiACE web panel as `multiACE`. An entry is a camera when
+  it has a `snapshot_url`; the touchscreen is kept, labelled *Screen*, and sorted last.
+- **Both streaming transports are dead in WebKitGTK** and it is not close:
+  `MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E")` is `false` (VP8 is
+  `true`, so MSE is fine — the codec is missing) and `typeof RTCPeerConnection` is
+  `"undefined"`. Windows and macOS ship both, so `AUTO` **probes** rather than picking.
+- **Named after transports, not after picture quality.** A greyed row then explains itself
+  in the same words as the reason — "this engine has no H.264 decoder" beats "not on
+  Linux" for someone who has to act on it. `AUTO` reports which one it landed on.
+- **One to four pictures**: single, split, 2x2 and picture-in-picture. A 2x2 with three
+  cameras says *No fourth camera* in the empty cell rather than reflowing the moment a
+  second USB camera is plugged in.
+- **The focused tile polls fast and the rest at 1 fps.** A grid is one poll per tile —
+  there is no multiplexed stream — and the case camera's 226 KB frame is nearly all of the
+  cost. That one rule is 4.7 MB/s down to 3.5.
+
+Driven against the printer, in the panel rather than in a synthetic loop:
+
+```
+9.5 fps      through the panel at 15 requested   (14.0 for a bare Image chain)
+1.0 fps      when 1 is asked for
+9.8 / 1.0    focused tile against its neighbour
+1920x1080    case      1280x720  usb      480x320  gui
+38 ms        to give up and fall back with no printer there
+```
+
+**Two traps found by building it.** A `?t=` cache-buster appended to a `data:` URI
+corrupts the data — base64 often survives the trailing bytes and an SVG never does, which
+is exactly how the simulated cameras rendered nothing while every other check passed;
+busting is scheme-aware now. And the poller schedules the next fetch from `onload` rather
+than on a fixed interval, so the rate self-limits to what the link can do instead of
+queueing requests into unbounded lag.
+
+The simulator answers the camera list too (`mockWebcams()`, copied from the real payload
+including both non-cameras), because frames are plain HTTP and a simulated run would
+otherwise never execute the tile grid, the transport list or the focus rule at all.
+
+### A popover drew the state it was opened with
+
+Reported from ordinary use: the camera settings' buttons worked and none of them moved
+its own tick until the panel was reopened. **A popover lives on `document.body`, outside
+every panel `paint()` walks**, so it is built once and never again. Invisible for a
+slider, whose thumb carries its own position — which is why the Control panel's four
+never showed it — and plainly broken for anything drawing a selected state from the store.
+
+`overlay.js` has `repaintPopover()` now, called from `paint()` and **guarded by a
+signature the caller supplies**: rebuilding the body every frame is the bug `render.js`
+exists to prevent, and it would take focus, hover and a slider mid-drag with it. A popover
+that passes no `sig` is never rebuilt, so the existing four behave exactly as before —
+which `drive/popover-live.js` checks in both directions.
+
+### The job card is a band now, and the status is in the header
+
+**306 px to 128.** The card was a stack in a panel 766 px wide, and it spent that height
+on a 152 px thumbnail, a 40 px grey percentage, a row carrying the machine's own name —
+which the rail already shows — and a row of its own for two buttons.
+
+Three moves, all of them Bambu's:
+
+- the thumbnail **anchors** the block (96 px) instead of sitting above the bar
+- the metadata joins the filename's line
+- **the buttons ride the bar's line** — a 6 px bar and a 30 px button cost 70 stacked and
+  30 side by side, which is most of the saving
+
+And the status word moved into the **panel header**, beside the title, so a panel says
+what it is and what it is doing on one line. `shell.js` grew a `status` header kind for
+it — a label with no click, synced through `headerSync` for the same reason a tab is: a
+header has no renderer of its own.
+
+The camera above took the height: **752 px, up from 576**. And `--task-h` is gone —
+pinned at 150 it clipped a 306 px card; kept as a floor it padded a 128 px band by 22.
+The card draws a 96 px thumbnail, so what stops it collapsing is the card.
+
+`filament_used` is millimetres, so the card shows **metres**. Bambu's shows grams there;
+grams need a diameter and a density this page is not told, and the guess would look like
+a measurement.
+
+**A design finding worth keeping** — [part 04 of the study](02-device-page/camera-layout-ace-mockup.html)
+draws four versions and the arithmetic that argues *against* the obvious reason to do
+this: **at 1920 a shorter card buys black, not picture.** The camera is width-bound there
+(766 px at 16:9 is 431 tall), so every pixel the card releases becomes letterbox. Past
+about 2000 it becomes height-bound and the same pixels are all frame. The band is the
+better card at any width — that is the argument, and it is not the one about space.
+
+### Drive scripts are committed now
+
+[`resources/web/shared/tests/drive/`](../../resources/web/shared/tests/drive/) — the DOM
+walker this file has been recommending for months, plus the camera panel against the
+simulator (50 checks), against the printer (13), and the no-printer branch (8). They were
+ad-hoc every time before, which is the same as not existing.
+
+```bash
+R=resources/web/shared/tests
+python3 $R/run_webkit.py --size 1920x1080                       # 37 checks, layout included
+python3 $R/run_webkit.py --size 1920x1080 --drive $R/drive/camera.js
+python3 $R/run_webkit.py --real --size 1920x1080 --drive $R/drive/camera-real.js
+python3 docs/u1-webui/tools/check_mockup.py <a mockup>          # 82 checks, both themes
+```
+
+### Still open, from the study
+
+The multiACE panel (part 03), which needs no new bridge command for most of it: `ace` is a
+Klipper object and `sw_GetMachineState {objects:{ace:null}}` answers in **277 ms**. Every
+control is a documented G-code macro. What it cannot do without Orca is name the filament
+in an *unloaded* bay — the raw slots carry no identity and `/multiace/api/state` is
+CORS-refused. And `head_ace` reads `{0:0, 1:1, 2:2, 3:0}` on a machine with
+`device_count: 1`, so heads 2 and 3 name units that **do not exist**: resolve a head's
+source as `head_manual`, then `head_feeder`, and `head_ace` only for the remainder.
+
+Then, in rough order of value:
+Then, in rough order of value:
 
 1. **Drive the rebuilt page from inside Orca.** Narrower than it was: the whole page runs
    against the printer through `run_webkit.py --real`, so the page-and-machine half is
