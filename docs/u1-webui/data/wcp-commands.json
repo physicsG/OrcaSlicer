@@ -427,6 +427,16 @@
   "routing_group": "machine_connect",
   "wire_name": "sw_GetPincode"
  },
+ "sw_GetPrintHistory": {
+  "dart_enum_value": null,
+  "implemented_in_cpp": true,
+  "index": null,
+  "note": "host-only: dispatched by SSWCP.cpp but absent from the page's WcpCmd enum",
+  "push_channel": null,
+  "referenced_in_bundle": false,
+  "routing_group": "machine_option",
+  "wire_name": "sw_GetPrintHistory"
+ },
  "sw_GetPrintLegal": {
   "dart_enum_value": null,
   "implemented_in_cpp": true,

@@ -12,10 +12,10 @@ Two independent sources are cross-referenced:
 | | Count |
 |---|---|
 | Commands in the page's `WcpCmd` enum | 116 |
-| Implemented by the C++ host | 124 |
+| Implemented by the C++ host | 125 |
 | Present on both sides | 111 |
 | Page-only — no host handler | 5 |
-| Host-only — absent from `WcpCmd` | 13 |
+| Host-only — absent from `WcpCmd` | 14 |
 
 ## Version skew
 
@@ -44,6 +44,7 @@ the page's 3-second timeout.
 - `sw_DeleteMachineFile`
 - `sw_FinishPreprint`
 - `sw_GetMachineFindSupportInfo`
+- `sw_GetPrintHistory`
 - `sw_GetPrintLegal`
 - `sw_GetPrintZip`
 - `sw_Test_connect`
@@ -89,7 +90,7 @@ in one of eight `unordered_set`s; anything unmatched falls through to the base
 
 ### Machine control, files, print jobs
 
-`SSWCP_MachineOption_Instance` — 55 commands
+`SSWCP_MachineOption_Instance` — 56 commands
 
 | Wire name | `WcpCmd` value | Idx | Push channel | Host |
 |---|---|---|---|---|
@@ -119,6 +120,7 @@ in one of eight `unordered_set`s; anything unmatched falls through to the base
 | `sw_GetMachineObjects` | `getMachineObjects` | 8 | — | yes |
 | `sw_GetMachineState` | `getMachinState` | 5 | — | yes |
 | `sw_GetMachineSystemInfo` | `getMachineSystemInfo` | 13 | — | yes |
+| `sw_GetPrintHistory` | `—` | — | — | yes |
 | `sw_GetPrintLegal` | `—` | — | — | yes |
 | `sw_GetPrintZip` | `—` | — | — | yes |
 | `sw_GetPrinterInfo` | `getPrinterInfo` | 12 | — | yes |
