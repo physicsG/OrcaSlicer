@@ -472,6 +472,63 @@ unstyled = sorted(c for c in js_classes if c not in css_classes)
 check("every class the Device page emits is styled somewhere",
       not unstyled, f"unstyled: {unstyled}")
 
+# The page can be run against a real printer with no Orca (run_webkit.py --real),
+# which only works while every command it issues is either mapped to a printer method
+# or answered locally. A new command silently falls through as "not dispatched".
+TOOLS = os.path.join(ROOT, "docs", "u1-webui", "tools")
+bridge_table = json.load(open(os.path.join(DATA, "bridge-methods.json"), encoding="utf-8"))
+bridge_src = open(os.path.join(TOOLS, "u1_bridge.py"), encoding="utf-8").read()
+local_cmds = set(re.findall(r'"(sw_\w+)":\s*(?:self\.|lambda)', bridge_src))
+refused = set(re.findall(r'"(sw_\w+)":\s*"', bridge_src))
+wire = dict(re.findall(r"(\w+):\s*'(sw_\w+)'",
+                       open(PROTO, encoding="utf-8").read()))
+page_cmds = {wire[m] for m in re.findall(r"CMD\.(\w+)", app_src + conn_src) if m in wire}
+unanswered = sorted(c for c in page_cmds
+                    if c not in local_cmds and c not in refused
+                    and not bridge_table.get(c, {}).get("method"))
+check("every command the page issues is answered or refused in as many words",
+      not unanswered,
+      f"no printer method, no local handler, no written reason: {unanswered}")
+check("the bridge table is generated from the C++, not written down",
+      "extract_bridge_methods.py" in open(os.path.join(TOOLS, "run_all.py"),
+                                          encoding="utf-8").read(),
+      "a hand-kept mapping drifts from the source it claims to describe")
+check("the transport commands are NOT mapped to a printer method",
+      not any(bridge_table.get(c, {}).get("method")
+              for c in ("sw_mqtt_publish", "sw_mqtt_subscribe", "sw_create_mqtt_client")),
+      "the page drives the socket itself; these are answered by the host, and a "
+      "mis-slice once mapped sw_mqtt_publish to machine.system_info")
+
+# A printer that has gone away stops sending, so nothing repaints to say so.
+check("connected is a question about now, not about ever",
+      "function isLive" in app_src and "state.age(" in app_src
+      and "state.lastUpdate > 0 &&" not in app_src,
+      "lastUpdate > 0 means the machine spoke once; it left a rebooting printer "
+      "showing as connected with its last snapshot presented as current")
+check("and something asks it on a clock of its own",
+      "superviseConnection" in app_src and "setInterval" in app_src,
+      "every other repaint is triggered by something arriving, which is exactly what "
+      "stops")
+check("the heartbeat's answer is used rather than discarded",
+      "lastPong" in app_src,
+      "it is the only evidence a machine with nothing to report is still there")
+
+check("a printer that is not there yet is retried, not given up on",
+      "RETRY_MS" in app_src and "function reconnect" in app_src
+      and "retryAt" in app_src,
+      "one attempt at boot meant starting the app before the printer left it dark "
+      "until a reload, and a rebooted printer never came back")
+check("the retry backs off instead of polling",
+      re.search(r"RETRY_MS\s*=\s*\[[^\]]+\]", app_src) is not None
+      and "Math.min(retryStep + 1" in app_src)
+check("a dead engine is dropped before a new one is made",
+      re.search(r"function reconnect\(\)[^}]*disconnectDevice", app_src, re.S) is not None,
+      "the old socket outlives the session that owned it")
+check("Connect is offered on live evidence, not on the persisted flag",
+      "engineId && isLive()" in app_src,
+      "DeviceInfo.connected is force-cleared on every config save, so it answers "
+      "neither 'is it there' nor 'do we have a session'")
+
 check("the control row is capped so the gaps cannot drift with panel width",
       re.search(r"\.control-grid\s*\{[^}]*max-width:", css) is not None,
       "space-between hands every extra pixel to the gaps")
@@ -487,6 +544,45 @@ check("a focused target is never overwritten by an incoming reading",
 check("the row's target is read from the DOM, not from a closure",
       "tgt.dataset.target" in ui_src,
       "a captured value goes stale as soon as the printer changes it")
+
+# Two faults found on hardware, both about the field saying something the machine did
+# not: a 0 sitting where nothing was set, and a value written back over one just sent.
+check("a heater that is off shows a dash, not a zero",
+      "tgt.placeholder" in ui_src and "function showTarget" in ui_src,
+      "an idle row carried a 0 that had to be deleted before anything could be typed")
+check("clicking the target selects it, so a set value is typed over rather than edited",
+      "tgt.select()" in ui_src and "claiming" in ui_src,
+      "focus alone does not survive the mouseup that follows it")
+check("a sent target is held on screen until the machine echoes it back",
+      "function pend(" in ui_src and "TEMP_CONFIRM_MS" in ui_src,
+      "the next state push lands before the printer has reported the change")
+check("a setpoint the machine never confirms is given up on and said so",
+      "unpend(row, 'lost')" in ui_src and '[data-pend="lost"]' in css,
+      "an accepted command that changes nothing is exactly what a silent refusal "
+      "looks like, and it must not sit there looking applied")
+check("a failed command stops the row waiting immediately",
+      "ok === false" in ui_src and "async function setpoint" in app_src,
+      "the row cannot see a command that never left")
+check("the reading reserves three digits so the row cannot shift under it",
+      re.search(r"\.status-row \.cur\s*\{[^}]*min-width:\s*27px[^}]*text-align:\s*right",
+                css, re.S) is not None,
+      "99 -> 100 moved the slash, the target and the unit one digit to the right")
+check("the pending mark outranks the row's own hover paint",
+      '.status-row[data-pend="1"] .tgt:not(:focus):not(:invalid)' in css,
+      "a descendant hover rule at the same weight wins on source order")
+
+# There was no sign at all that a heater was working: the reading climbs a degree a
+# second, which reads as nothing happening.
+check("the row shows whether the heater is working",
+      "function heatState(" in ui_src and "row.dataset.heat" in ui_src
+      and '[data-heat="heating"]' in css and '[data-heat="cooling"]' in css,
+      "a temperature that was accepted and one that was ignored looked identical")
+check("the heat bar measures the ramp from where it started",
+      "function rampProgress(" in ui_src and "dataset.start" in ui_src,
+      "progress against 0 would jump about whenever the target changed")
+check("the heat states are named in the palette, not hard-coded at the rule",
+      "--heat:" in css and "--cool:" in css,
+      "this surface must define every token it styles against")
 
 # Granularity and labelling are different questions: a step-1 fan labelled at every
 # step printed 101 ticks across the panel.
@@ -579,9 +675,15 @@ check("a toolchange waits on the machine, not on the request",
       "runToolAction" in app_src and "// deliberately not awaited" in app_src,
       "sw_SendGCodes does not return until Klipper finishes, but the bridge gives up "
       "at 15s - so a rejection there means still working, not refused")
+sswcp_js = open(SSWCP, encoding="utf-8").read()
 check("a bridge timeout is not treated as a refusal",
-      "/timed out/i.test" in app_src,
+      "isTimeout(e)" in app_src and "export function isTimeout" in sswcp_js,
       "the printer is still moving; telling the user to retry is wrong")
+check("both clocks' wording counts as a timeout, and Orca's code with it",
+      "e.code === -2" in sswcp_js
+      and re.search(r"tim\(\?:e\|ed\)", sswcp_js) is not None,
+      "Orca fails a timed-out request as -2 / 'time out' (SSWCP.cpp on_timeout); "
+      "matching only the client's 'timed out' misses it")
 check("the wait shows, and follows, what the machine says it is doing",
       "machineActivity" in app_src and "isBusy(act)" in app_src and "quietDeadline" in app_src,
       "the calibration that makes a toolchange slow is reported in main_state, not "

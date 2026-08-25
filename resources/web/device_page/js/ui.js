@@ -188,6 +188,44 @@ function speedTicks() {
   return out;
 }
 
+/*
+ * Heat states, read off the two numbers the machine already sends.
+ *
+ * `power` would say directly whether a heater is being driven, but only the extruders
+ * report it - `heater_bed` is subscribed for `temperature` and `target` alone - so the
+ * comparison below is the one question both can answer.
+ */
+const TEMP_TOL  = 2;    // within this of the target counts as arrived
+const TEMP_WARM = 40;   // above this the hardware is still hot to the touch
+/**
+ * How long a sent target may go unechoed before the row stops claiming it.
+ *
+ * A command that fails marks the row the moment it fails, so this only covers the other
+ * shape: the bridge accepted the command and the machine never reported the new target.
+ * That is what a silently-ignored setpoint looks like, and it deserves to be said rather
+ * than to sit there looking applied.
+ */
+const TEMP_CONFIRM_MS = 10000;
+/** How long the row keeps saying a target was not taken. */
+const TEMP_LOST_MS = 8000;
+
+function heatState(cur, target) {
+  if (!Number.isFinite(cur)) return '';
+  if (target > 0 && cur < target - TEMP_TOL) return 'heating';
+  if (target > 0 && Math.abs(cur - target) <= TEMP_TOL) return 'ready';
+  // Cooling is only worth saying while the part is still hot enough to matter.
+  if (cur > target + TEMP_TOL && cur > TEMP_WARM) return 'cooling';
+  return '';
+}
+
+/** How far along the ramp from where it started to where it is going. */
+function rampProgress(start, cur, target) {
+  if (!Number.isFinite(start) || !Number.isFinite(cur)) return 0;
+  const span = target - start;
+  if (Math.abs(span) < 1) return 1;
+  return Math.min(1, Math.max(0, (cur - start) / span));
+}
+
 /**
  * A row is an icon and a reading. No label: the shipped icons carry the identity -
  * iconExtruder1..4 are numbered - and the label was costing the width the numbers need.
@@ -196,10 +234,16 @@ function speedTicks() {
  * keyboard, selection and min/max validation with it, styled to look like text until the
  * row is hovered. Committing on Enter or blur rather than on every keystroke, because
  * each commit is a G-code round trip to the machine.
+ *
+ * A target of zero is a heater that is off, and it shows as an empty field over a dash
+ * rather than as `0`. The zero was never information - every idle row carried one - and
+ * it had to be deleted before a number could be typed. Focus selects whatever is there
+ * for the same reason: this field is replaced far more often than it is edited.
  */
 function tempRow(key, iconName, limit, title, apply) {
   const row = el('div', 'status-row');
   row.dataset.k = key;
+  row.dataset.name = title;
   row.title = title;
   row.appendChild(icon(iconName));
 
@@ -211,25 +255,80 @@ function tempRow(key, iconName, limit, title, apply) {
   tgt.type = 'number';
   tgt.min = String(limit.min);
   tgt.max = String(limit.max);
+  tgt.placeholder = '—';
   tgt.setAttribute('aria-label', title);
   // The machine's current target lives on the element, not in a closure: the row is
   // never rebuilt, so a captured value would go stale the moment the printer changed it.
   tgt.dataset.target = '0';
-  const revert = () => { tgt.value = tgt.dataset.target; };
+  const revert = () => showTarget(tgt, tgt.dataset.target);
   const commit = () => {
-    const v = Number(tgt.value);
+    // An empty field is not an instruction to switch the heater off. It is a cleared
+    // field on the way to a number, or a keystroke the browser refused. Off is asked
+    // for by typing a zero, which is explicit and cannot happen by walking away.
+    const raw = tgt.value.trim();
+    if (raw === '') return revert();
+    const v = Number(raw);
     if (!Number.isFinite(v) || v < limit.min || v > limit.max) return revert();
-    if (v !== Number(tgt.dataset.target)) apply(v);
+    if (v === Number(tgt.dataset.target)) return;
+    // Hold the asked-for value on screen until the machine echoes it back. Writing the
+    // machine's target straight back in is what made a set temperature vanish: the next
+    // state push lands about a second later, before the printer has reported the change,
+    // so the field went back to what it said before - usually 0.
+    pend(row, v);
+    const sent = apply(v);
+    if (sent && typeof sent.then === 'function') {
+      // Only this value's failure, and only while it is still the one being waited on:
+      // a refusal that arrives after the user has moved on must not overwrite what
+      // they moved on to. The bridge gives a command 15s, the row gives it 10.
+      sent.then((ok) => {
+        if (ok === false && row.dataset.pendVal === String(v)) unpend(row, 'lost');
+      });
+    }
   };
   tgt.onkeydown = (e) => {
     if (e.key === 'Enter') { e.preventDefault(); tgt.blur(); }
     if (e.key === 'Escape') { revert(); tgt.blur(); }
   };
   tgt.onblur = commit;
+  // Select on focus, with the guard that pattern needs: on a click, focus fires before
+  // mouseup, and mouseup would otherwise collapse the selection focus had just made.
+  let claiming = false;
+  tgt.onmousedown = () => { claiming = document.activeElement !== tgt; };
+  tgt.onmouseup = (e) => { if (claiming) { e.preventDefault(); claiming = false; } };
+  tgt.onfocus = () => tgt.select();
   row.appendChild(tgt);
 
-  row.appendChild(el('span', 'unit', '\u00B0C'));
+  row.appendChild(el('span', 'unit', '°C'));
+  // The heat bar carries no reading of its own - only how far along the ramp the
+  // machine is. It is positioned out of flow because the row has no spare width: 126px
+  // is the measured column, and a 2px bar under the numbers costs none of it.
+  row.appendChild(el('i', 'heat'));
   return row;
+}
+
+/** Zero is off, and off shows as the placeholder dash rather than as a digit. */
+function showTarget(tgt, t) {
+  const n = Number(t);
+  tgt.value = Number.isFinite(n) && n > 0 ? String(n) : '';
+}
+
+/** Remember what was asked for, and when, so the machine can be held to it. */
+function pend(row, v) {
+  row.dataset.pend = '1';
+  row.dataset.pendVal = String(v);
+  row.dataset.pendAt = String(Date.now());
+}
+
+function unpend(row, how) {
+  delete row.dataset.pendAt;
+  if (how === 'lost') {
+    // Keep pendVal: the row is about to say which value it was that did not take.
+    row.dataset.pend = 'lost';
+    row.dataset.lostUntil = String(Date.now() + TEMP_LOST_MS);
+    return;
+  }
+  delete row.dataset.pend;
+  delete row.dataset.pendVal;
 }
 
 /**
@@ -238,15 +337,65 @@ function tempRow(key, iconName, limit, title, apply) {
  * The status card used to be rebuilt on every state push - roughly once a second - which
  * destroyed whatever input the user was typing into. That is what made entering a
  * temperature feel like a race: you had a sub-second window before the field was
- * replaced under you. Values are written in place instead, and the target field is left
- * alone entirely while it has focus.
+ * replaced under you. Values are written in place instead, the target field is left
+ * alone entirely while it has focus, and a target that has been sent but not yet echoed
+ * back is left alone as well.
  */
 function updateTempRow(row, cur, target) {
-  const t = String(Math.round(Number(target) || 0));
-  row.querySelector('.cur').textContent = fmtTemp(cur);
+  const t = Math.round(Number(target) || 0);
+  const c = Number(cur);
   const tgt = row.querySelector('.tgt');
-  tgt.dataset.target = t;
-  if (document.activeElement !== tgt) tgt.value = t;
+  row.querySelector('.cur').textContent = fmtTemp(cur);
+
+  // A new target restarts the ramp the bar is measured against. Whoever set it - this
+  // page, the printer's own screen, or the G-code of a running print - the row reports
+  // the machine, so the machine's target is what it tracks.
+  if (String(t) !== tgt.dataset.target || row.dataset.start == null) {
+    tgt.dataset.target = String(t);
+    row.dataset.start = String(Number.isFinite(c) ? c : t);
+  }
+
+  const now = Date.now();
+  if (row.dataset.pend === '1') {
+    if (Number(row.dataset.pendVal) === t) unpend(row);
+    else if (now - Number(row.dataset.pendAt) > TEMP_CONFIRM_MS) unpend(row, 'lost');
+  } else if (row.dataset.pend === 'lost' && now > Number(row.dataset.lostUntil)) {
+    delete row.dataset.pend;
+    delete row.dataset.pendVal;
+    delete row.dataset.lostUntil;
+  }
+
+  if (document.activeElement !== tgt && row.dataset.pend !== '1') showTarget(tgt, t);
+
+  const st = heatState(c, t);
+  // A ramp restarts when the direction does, not only when the target does. Measured
+  // on a real nozzle: asked for 40, it overshot to 48, and the bar - still measuring
+  // the climb from 26 - sat at 100% while the temperature was falling.
+  if (st !== row.dataset.heat && (st === 'heating' || st === 'cooling')) {
+    row.dataset.start = String(Number.isFinite(c) ? c : t);
+  }
+  row.dataset.heat = st;
+  const moving = st === 'heating' || st === 'cooling';
+  row.querySelector('.heat').style.width =
+    moving ? `${(rampProgress(Number(row.dataset.start), c, t) * 100).toFixed(1)}%` : '0';
+  row.title = rowTitle(row, st, t);
+}
+
+/** The row says what it is doing in the tooltip, which is where there is room for words. */
+function rowTitle(row, st, target) {
+  const name = row.dataset.name || '';
+  if (row.dataset.pend === '1') {
+    return `${name} — ${row.dataset.pendVal} °C sent, waiting for the printer`;
+  }
+  if (row.dataset.pend === 'lost') {
+    return `${name} — the printer did not take ${row.dataset.pendVal} °C`;
+  }
+  if (st === 'heating') return `${name} — heating to ${target} °C`;
+  if (st === 'cooling') {
+    return `${name} — ${target > 0 ? `cooling to ${target} °C` : 'cooling down'}`;
+  }
+  if (st === 'ready') return `${name} — at ${target} °C`;
+  return target > 0 ? `${name} — set to ${target} °C` : `${name} — off`;
 }
 
 function fmtTemp(v) {

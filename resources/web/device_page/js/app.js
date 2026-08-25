@@ -16,7 +16,7 @@ import { CMD, SUBSCRIBE_OBJECTS, NAMED, LIMITS, TASK_CONFIG, PRINT_PREFERENCES,
 import { openMenu, openDialog, openBlockingDialog, toggleField, numberField }
   from './overlay.js';
 import { connect as connectDevice, disconnect as disconnectDevice } from './connection.js';
-import { Sswcp } from '../../shared/js/sswcp.js';
+import { Sswcp, isTimeout } from '../../shared/js/sswcp.js';
 import { MachineState } from '../../shared/js/state.js';
 import { machineActivity, isBusy } from '../../shared/js/activity.js';
 import { installMock } from './mock.js';
@@ -130,6 +130,7 @@ async function boot() {
 
   state.onChange(render);
   render();
+  superviseConnection();
 
   // The shipped page brings a session up by itself on load - the very first
   // harness capture caught it emitting sw_create_mqtt_client unprompted. Match
@@ -162,10 +163,26 @@ const clampTo = (lim, v) => Math.min(lim.max, Math.max(lim.min, Math.round(v)));
 async function send(cmd, params, label) {
   try {
     await bridge.request(cmd, params);
+    return true;
   } catch (e) {
     console.error(`[app] ${label} failed:`, e.message);
     setStatus(`${label} failed: ${e.message}`, 'err');
+    return false;
   }
+}
+
+/**
+ * A heater setpoint: send it, then say so.
+ *
+ * The row holds the asked-for value on screen until the machine echoes it back, so the
+ * one thing it cannot see for itself is a command that never left. Returning whether
+ * the bridge accepted it lets the row stop waiting the moment it did not, instead of
+ * sitting on a value the printer never heard.
+ */
+async function setpoint(cmd, params, label, said) {
+  const ok = await send(cmd, params, label);
+  if (ok) setStatus(said);
+  return ok;
 }
 
 /**
@@ -219,7 +236,9 @@ function runToolAction({ title, script, waiting, done, gaveUp, settle }) {
   let refused = null;
   // deliberately not awaited - see (1)
   bridge.request(CMD.SEND_GCODES, { script }).catch((e) => {
-    if (!/timed out/i.test(String(e && e.message))) refused = e;
+    // A timeout is not a refusal - the machine is still moving. Which clock ran out
+    // is isTimeout's business; see the note on it in sswcp.js.
+    if (!isTimeout(e)) refused = e;
   });
 
   const started = Date.now();
@@ -282,12 +301,19 @@ const handlers = {
   setSpeed: (v) =>
     send(CMD.CONTROL_PRINT_SPEED, { percentage: clampTo(LIMITS.printSpeed, v) }, 'set speed'),
 
-  setBedTemp: (v) =>
-    send(CMD.CONTROL_BED_TEMP, { temp: clampTo(LIMITS.bedTemp, v) }, 'set bed temp'),
+  setBedTemp: (v) => {
+    const t = clampTo(LIMITS.bedTemp, v);
+    return setpoint(CMD.CONTROL_BED_TEMP, { temp: t }, 'set bed temp',
+                    t > 0 ? `Heated bed \u2192 ${t} \u00B0C` : 'Heated bed off');
+  },
 
-  setExtruderTemp: (index, v) =>
-    send(CMD.CONTROL_EXTRUDER_TEMP,
-         { temp: clampTo(LIMITS.nozzleTemp, v), index, map: index }, 'set nozzle temp'),
+  setExtruderTemp: (index, v) => {
+    const t = clampTo(LIMITS.nozzleTemp, v);
+    return setpoint(CMD.CONTROL_EXTRUDER_TEMP, { temp: t, index, map: index },
+                    'set nozzle temp',
+                    t > 0 ? `Toolhead ${index + 1} \u2192 ${t} \u00B0C`
+                          : `Toolhead ${index + 1} off`);
+  },
 
   setMainFan: (v) =>
     send(CMD.CONTROL_MAIN_FAN, { speed: clampTo(LIMITS.fanSpeed, v) }, 'set main fan'),
@@ -843,6 +869,107 @@ const handlers = {
 
 /* ---- render ------------------------------------------------------- */
 
+/**
+ * How long the machine may say nothing before the page stops vouching for it.
+ *
+ * Measured on an idle U1: **2 status pushes in 30 seconds**, gaps of 4s to 14s across
+ * runs. Klipper only pushes fields that change and a machine doing nothing changes
+ * almost nothing, so this has to be several times the idle gap or a quiet printer
+ * would flicker as if it had gone away. 45s is about 3x the widest gap seen, and the
+ * heartbeat's own 30s covers a machine that has genuinely nothing to say.
+ */
+const STALE_MS = 45000;
+
+/** When the printer last answered a heartbeat. Its own evidence, not the stream's. */
+let lastPong = 0;
+
+/**
+ * Are we talking to a printer *now*?
+ *
+ * `state.lastUpdate > 0` used to stand in for this, which is a claim about the past:
+ * once anything had arrived the page went on saying "connected" for the rest of the
+ * session, and a rebooting printer kept its last snapshot on screen as if current.
+ *
+ * Two independent pieces of evidence, either sufficient: something arrived on the
+ * stream recently, or the printer answered a heartbeat recently.
+ */
+function isLive(now = Date.now()) {
+  if (!Object.keys(state.objects).length) return false;
+  return state.age(now) < STALE_MS || now - lastPong < STALE_MS;
+}
+
+/**
+ * How long to wait between attempts, backing off and then holding.
+ *
+ * A printer that is off is off for minutes, not milliseconds, and a failed attempt
+ * costs a 15s TCP connect - so the ladder starts short enough to feel immediate when
+ * someone flips the switch and settles somewhere that is not a poll loop.
+ */
+const RETRY_MS = [5000, 10000, 20000, 30000];
+let retryAt = 0;
+let retryStep = 0;
+
+/** A manual attempt starts over: the user knows something the backoff does not. */
+function resetBackoff() {
+  retryAt = 0;
+  retryStep = 0;
+}
+
+/**
+ * Keep the session up, and repaint when it is not.
+ *
+ * Two jobs on one clock, because both need the same thing - something that ticks when
+ * nothing is arriving:
+ *
+ *  1. Repaint on the flip. Every other repaint here is triggered by a message, which
+ *     is exactly what a printer that has gone away stops sending, so the page would
+ *     otherwise hold its last frame forever.
+ *  2. Reconnect. The page used to make ONE attempt, at boot, and only if nothing had
+ *     ever arrived. Start the app before the printer and it stayed dark until a
+ *     reload; reboot the printer and it never came back. Both are the ordinary way
+ *     this hardware gets used.
+ */
+function superviseConnection() {
+  let was = null;
+  setInterval(() => {
+    const live = isLive();
+    if (live !== was) {
+      was = live;
+      if (!live && device) {
+        setStatus(`${deviceLabel(device)} \u2014 not responding`, 'warn');
+      }
+      render();
+    }
+    if (live) { resetBackoff(); return; }
+    if (connecting || !device) return;
+    // Pairing needs a human reading a code off the machine, so a device that cannot
+    // authorise itself is not something to retry at.
+    if (!device[DEVICE.IP] || !device[DEVICE.SN]) return;
+    if (Date.now() < retryAt) return;
+    // Schedule the next attempt before starting this one: a failing connect can take
+    // 15s by itself, and the interval is between attempts, not between failures.
+    retryStep = Math.min(retryStep + 1, RETRY_MS.length);
+    retryAt = Date.now() + RETRY_MS[retryStep - 1];
+    reconnect();
+  }, 2000);
+}
+
+/**
+ * Bring the session back.
+ *
+ * The dead engine is dropped first. It still holds a socket at the host, and the next
+ * connect makes a new one - a printer rebooted a few times would otherwise leave a
+ * line of them behind, all subscribed to topics nothing will publish.
+ */
+function reconnect() {
+  if (engineId) {
+    const dead = engineId;
+    engineId = null;
+    disconnectDevice(bridge, dead).catch(() => { /* already gone; that was the point */ });
+  }
+  return doConnect(device, { silent: true, retrying: true });
+}
+
 let raf = 0;
 function render() {
   if (raf) return;
@@ -855,8 +982,7 @@ function render() {
     // so it is false on disk by construction and only meaningful within a run.
     // Live machine state is the real evidence — if objects are arriving, we are
     // talking to a printer.
-    const live = state.lastUpdate > 0 && Object.keys(state.objects).length > 0;
-    const reachable = live && (!conn.state || conn.state === 'ready');
+    const reachable = isLive() && (!conn.state || conn.state === 'ready');
 
     ui.renderRail(device, conn, devices, reachable);
     ui.renderCamera(ui.$('#camera'), reachable, cam, handlers);
@@ -980,7 +1106,12 @@ async function doConnect(target, opts = {}) {
   } catch (e) {
     // ConnectError names the step that failed, which is the useful half.
     if (opts.silent) {
-      setStatus(`${deviceLabel(target)} — not connected (${e.message})`, 'warn');
+      // Time left on the clock, not the interval it was set to: the attempt that just
+      // failed may have taken longer than the gap it was scheduled with.
+      const left = Math.max(0, Math.round((retryAt - Date.now()) / 1000));
+      const again = opts.retrying
+        ? (left ? ` — trying again in ${left}s` : ' — trying again') : '';
+      setStatus(`${deviceLabel(target)} — not connected (${e.message})${again}`, 'warn');
     } else {
       setStatus(`connect failed — ${e.message}`, 'err');
     }
@@ -1046,7 +1177,12 @@ async function pollTransfer() {
 function startHeartbeat() {
   if (heartbeat) clearInterval(heartbeat);
   heartbeat = setInterval(() => {
-    bridge.request(CMD.HEARTBEAT, {}).catch(() => { /* transient */ });
+    // Not fire-and-forget any more: this round trip is the only evidence a machine
+    // with nothing to report is still there, and its failure is evidence it is not.
+    bridge.request(CMD.HEARTBEAT, {})
+      .then(() => { lastPong = Date.now(); })
+      .catch(() => { /* the staleness window decides; nothing to record */ })
+      .then(() => render());
   }, 30000);
 }
 
@@ -1181,13 +1317,17 @@ function wireChrome() {
     // Disconnect is only offered for a session this page created - the engine is
     // addressed by the id sw_create_mqtt_client handed back, and a session Orca
     // brought up on its own has no id we can name.
-    if (device && device[DEVICE.CONNECTED] && engineId) {
+    // Gated on live evidence, not on DeviceInfo.connected: that flag is force-cleared
+    // on every config save (AppConfig.cpp:887), so it read false for a machine that was
+    // right there - and could read true for a session that had died. Connect was being
+    // offered, and withheld, on the strength of a field that answers neither question.
+    if (device && engineId && isLive()) {
       items.push({ label: 'Disconnect', icon: 'iconHome', onClick: () => doDisconnect() });
-    } else if (device && !device[DEVICE.CONNECTED]) {
+    } else if (device) {
       items.push({
-        label: hasTlsMaterial(device) ? 'Connect' : 'Pair and connect…',
+        label: hasTlsMaterial(device) ? 'Connect now' : 'Pair and connect…',
         icon: 'deviceControl',
-        onClick: () => doConnect(device),
+        onClick: () => { resetBackoff(); doConnect(device); },
       });
     }
     if (device) {

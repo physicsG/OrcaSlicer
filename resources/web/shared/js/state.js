@@ -374,6 +374,17 @@ export class MachineState {
     return { mainState: m.main_state ?? null, actionCode: m.action_code ?? null };
   }
 
+  /**
+   * Milliseconds since anything last arrived; Infinity if nothing ever has.
+   *
+   * `lastUpdate > 0` answers a different question - whether the machine has EVER
+   * spoken - and using it as a liveness test left a rebooting printer showing as
+   * connected, with its last snapshot presented as current.
+   */
+  age(now = Date.now()) {
+    return this.lastUpdate ? now - this.lastUpdate : Infinity;
+  }
+
   connection() {
     const w = this.objects['webhooks'] || {};
     return { state: w.state ?? null, message: w.state_message ?? '' };

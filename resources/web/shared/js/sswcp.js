@@ -58,6 +58,28 @@ export function unwrapRpc(data) {
   return data;
 }
 
+/**
+ * True when a rejection means "still working", not "refused".
+ *
+ * Two clocks produce one, and they are different questions:
+ *
+ *   the client's   this file, 15s - the page giving up on the BRIDGE
+ *   Orca's         80s waiting on the PRINTER (MoonRaker.hpp:344), which fails the
+ *                  request as code -2, message "time out"
+ *
+ * Note the space: matching only /timed out/ - the client's wording - misses Orca's
+ * own. It stayed hidden because the client's clock is the shorter of the two and
+ * normally fires first, so Orca's -2 arrives after the request has been forgotten.
+ * A host that answers sooner brings it straight out, and a working 31s toolchange
+ * gets reported as a refusal.
+ *
+ * Either way the machine is still moving. Telling the user to retry would be wrong.
+ */
+export function isTimeout(e) {
+  if (!e) return false;
+  return e.code === -2 || /tim(?:e|ed)\s?out/i.test(String(e.message || ''));
+}
+
 export class SswcpError extends Error {
   constructor(code, message, cmd) {
     super(`${cmd} failed (code ${code})${message ? ': ' + message : ''}`);

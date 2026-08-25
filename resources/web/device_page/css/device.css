@@ -42,6 +42,11 @@
   --ok: #1F7A4D;
   --warn: #9A5B12;
   --err: #E03131;
+  /* heater states. Not measured off the shipped page - it shows none - so these are
+     chosen to read as temperature rather than as status: warm going up, cool coming
+     down, and the panel's own ink once the machine is holding. */
+  --heat: #E8590C;
+  --cool: #1971C2;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
@@ -799,7 +804,16 @@ body {
 
 /* ---- readings: icon and value, no label ---------------------------- */
 .status-row {
-  display: flex; align-items: center; gap: 5px;
+  position: relative;
+  /* 4px, not the 5 the rest of the panel uses: the target field has to hold three
+     digits (a 350 nozzle, a 100 bed) and 9px per tabular digit plus its own padding
+     does not fit in a 126px column at 5. Measured in the page, not estimated.
+
+     Centred, because the row's contents are now all fixed width - icon, three digits,
+     separator, field, unit - so there is nothing left to make centring move. Left
+     aligned they sat 8px in from one edge and 2px from the other, which read as a
+     readings column shifted off the quick settings squarely below it. */
+  display: flex; align-items: center; justify-content: center; gap: 4px;
   height: 38px; padding: 0 6px;
   border: 2px solid transparent; border-radius: 8px;
   font-size: 13px; color: var(--ink);
@@ -807,14 +821,25 @@ body {
 /* 20px, the size the picker boxes use - a 17px glyph read as a smaller class of
    thing than the toolhead it names. */
 .status-row img { width: 20px; height: 20px; flex: 0 0 20px; opacity: .85; }
-.status-row .cur { font-variant-numeric: tabular-nums; font-weight: 600; }
+/* Always three digits of room, right-aligned against the separator. A reading
+   climbing from 99 to 100 used to push the slash, the target and the unit along with
+   it, so a row could not be read at a glance while it was moving - and five rows at
+   different temperatures never lined up with each other. 9.00px per tabular digit,
+   measured in the page rather than guessed. min-width, not width, so a reading that
+   somehow needs more room takes it instead of being clipped. */
+.status-row .cur {
+  min-width: 27px; text-align: right;
+  font-variant-numeric: tabular-nums; font-weight: 600;
+}
 .status-row .sl { color: var(--ink-dim); }
 .status-row .unit { color: var(--ink-dim); font-size: 12px; }
 
 /* The target looks like text until the row is hovered. Keyed to the ROW, not the
    input: a 30px number is not a target you find by accident. */
 .status-row .tgt {
-  width: 30px; padding: 2px 3px;
+  /* 27px of digits + 6 padding + 2 border. At 30 a target of 220 lost its last digit,
+     which is worse than an unstyled field: it read as 22. */
+  width: 35px; padding: 2px 3px;
   font: inherit; font-size: 13px; font-variant-numeric: tabular-nums;
   color: var(--ink); background: transparent;
   border: 1px solid transparent; border-radius: 5px;
@@ -833,6 +858,34 @@ body {
 }
 .status-row:focus-within { border-color: var(--accent); background: var(--accent-soft); }
 .status-row .tgt:invalid { border-color: var(--warn); color: var(--warn); }
+
+/* ---- what the heater is doing --------------------------------------- *
+ * The readings column is 126px and every pixel of it is spoken for, so the feedback
+ * is carried by colour and by a bar under the numbers rather than by another glyph.
+ * The bar runs from the temperature the ramp started at to the target, so it moves
+ * for as long as the machine does - which is the point: a set temperature used to
+ * land in silence, and a nozzle climbing 1 degree a second reads as nothing at all. */
+.status-row .heat {
+  position: absolute; left: 6px; bottom: 1px;
+  width: 0; max-width: calc(100% - 12px); height: 2px;
+  border-radius: 1px; background: var(--heat);
+  transition: width .6s linear;
+}
+.status-row[data-heat="cooling"] .heat { background: var(--cool); }
+.status-row[data-heat="heating"] .cur { color: var(--heat); }
+.status-row[data-heat="cooling"] .cur { color: var(--cool); }
+.status-row[data-heat="ready"]   .cur { color: var(--ok); }
+
+/* A target that has been sent and not yet echoed back by the machine. Same :not()
+   guards as the hover rule and after it in the file, so neither masks the other. */
+.status-row[data-pend="1"] .tgt:not(:focus):not(:invalid) {
+  border-style: dashed; border-color: var(--heat); color: var(--heat);
+  background: transparent; animation: pend 1.2s ease-in-out infinite;
+}
+.status-row[data-pend="lost"] .tgt:not(:focus):not(:invalid) {
+  border-color: var(--err); color: var(--err); background: transparent;
+}
+@keyframes pend { 50% { opacity: .4; } }
 
 /* ---- quick settings ------------------------------------------------- */
 .qtiles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }

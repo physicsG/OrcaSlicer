@@ -33,6 +33,8 @@ STEPS = [
     # NB: this one writes to argv[-1] - without an explicit output path it
     # would take its own path as the destination and overwrite itself.
     ("map_sswcp.py", [REPO, os.path.join(DATA, "sswcp-commands.json")]),
+    # which printer method each bridge command becomes - what u1_bridge.py runs on
+    ("extract_bridge_methods.py", []),
     # --- generators: data/ -> markdown ---
     ("gen_command_catalogue.py", []),
     ("gen_command_reference.py", [REPO]),
