@@ -180,6 +180,69 @@ CHECKS = r"""
                + r.querySelector('.unit').getBoundingClientRect().right) / 2;
   say('the readings are centred in their column, like the tiles under them',
       Math.abs(mid - (card.left + card.width / 2)) <= 1, true);
+
+  // ---- the two columns, and which panel grows in each -------------------
+  // The four panels were one 2x2 grid of equal cells locked to 830/548. They are two
+  // unequal columns now, and the whole point is that each distributes height on its own:
+  // Control shrinks to its cluster and Filament takes what it gives up. Geometry is the
+  // only honest witness to that, and it is why --size exists - below the 1600 breakpoint
+  // this is a single centred column and none of it applies.
+  const box = (sel) => {
+    const e = document.querySelector(sel);
+    if (!e) return null;
+    const r = e.getBoundingClientRect();
+    return { w: Math.round(r.width), h: Math.round(r.height),
+             x: Math.round(r.left), y: Math.round(r.top) };
+  };
+  const wide = window.innerWidth >= 1600;
+  say('two columns are built whatever the width',
+      document.querySelectorAll('.view-col').length, 2);
+  say('the camera and the job card share one column',
+      document.querySelectorAll('.col-main > .panel').length, 2);
+  say('control and filament share the other',
+      document.querySelectorAll('.col-side > .panel').length, 2);
+  say('one panel per column takes the leftover height',
+      document.querySelectorAll('.view-col > .panel.grows').length, 2);
+  if (wide) {
+    const main = box('.col-main'), side = box('.col-side');
+    const cam = box('.col-main > .panel'), ctl = box('.col-side > .panel');
+    const fil = box('.col-side > .panel.grows'), task = box('.col-main > .panel:last-child');
+    say('the side column is --col-w', side.w, 830);
+    say('the columns start level', main.y, side.y);
+    say('and end level', Math.abs((main.y + main.h) - (side.y + side.h)) <= 2, true);
+    // 588 is what the old 830/548 ratio forced on the Control panel. Anything near it
+    // means the ratio came back, which is the regression this layout exists to undo.
+    say('control sizes to its cluster, not to a ratio', ctl.h < 460, true);
+    say('and its cluster is untouched at 758', box('.control-grid').w, 758);
+    say('the job card sizes to itself rather than to a number',
+        Math.abs(task.h - 40 - document.querySelector('#task').scrollHeight) <= 1, true);
+    say('the camera takes more than 16:9 of its column', cam.h > cam.w * 9 / 16, true);
+    say('filament got the height control released', fil.h > 324, true);
+    say('the destination fits the window',
+        document.documentElement.scrollHeight <= window.innerHeight + 1, true);
+  } else {
+    const cols = [...document.querySelectorAll('.view-col')]
+      .map((e) => Math.round(e.getBoundingClientRect().width));
+    say('below the breakpoint both columns are the measured single width',
+        cols[0] === cols[1] && cols[0] === Math.round(0.6 * (window.innerWidth - 262) + 219),
+        true);
+    const cam = box('.col-main > .panel');
+    say('and the camera keeps 16:9 there, since no column can give it height',
+        Math.abs(cam.h - 40 - cam.w * 9 / 16) <= 2, true);
+  }
+  // `.panel-body` hides its overflow, so a body shorter than its card clips it in
+  // silence - which is exactly what a pinned 150px did to the Printing Task panel: the
+  // progress bar and both job buttons were cut off and nothing said so. Asked of every
+  // body at every width, because a body can be too short in either layout.
+  document.querySelectorAll('#view-control .panel-body').forEach((el) => {
+    if (getComputedStyle(el).overflowY === 'auto') return;     // scrolling is not clipping
+    say(`#${el.id} shows all of its content`,
+        el.scrollHeight <= el.clientHeight + 1, true);
+  });
+
+  say('the page never scrolls sideways',
+      document.documentElement.scrollWidth <= window.innerWidth + 1, true);
+
   return out.join('\n');
 })()
 """
@@ -258,6 +321,9 @@ def serve(directory):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--shots", help="directory to write screenshots into")
+    ap.add_argument("--size", metavar="WxH", default="1500x980",
+                    help="window size; the layout breakpoint is 1600, so pass "
+                         "e.g. --size 1920x1080 to see the two-column layout")
     ap.add_argument("--settle", type=float, default=None,
                     help="seconds to let state arrive before checking "
                          "(default 3, or 15 with --real: a connect has to happen first)")
@@ -325,7 +391,14 @@ def main():
         ucm.register_script_message_handler("wx")
 
     win = Gtk.Window()
-    win.set_default_size(1500, 980)
+    # The Device page is responsive and its breakpoint is now load-bearing - the two
+    # column layout only engages above it - so a suite that can only ever look at one
+    # width can only ever check one of the two layouts.
+    try:
+        _w, _h = (int(n) for n in args.size.lower().split("x"))
+    except Exception:
+        raise SystemExit(f"--size wants WxH, got {args.size!r}")
+    win.set_default_size(_w, _h)
     view = WebKit2.WebView.new_with_user_content_manager(ucm)
     win.add(view)
     win.show_all()

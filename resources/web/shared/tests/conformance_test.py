@@ -582,6 +582,25 @@ check("every command a panel is handed can actually be reached",
       not _uncalled,
       f"nothing calls: {', '.join(_uncalled)} - either wire a control to it or delete it")
 
+# A popover lives on document.body, outside every panel paint() walks, so it draws the
+# state it was opened with and then goes stale. Invisible for a slider, whose thumb
+# carries its own position - and plainly broken for anything with a selected-state
+# marker, which is how the camera's settings shipped: every control worked and none of
+# them moved its own tick. The mechanism is what is checked, because the instance was
+# only found by someone using it.
+overlay_src = open(os.path.join(JS, "core", "overlay.js"), encoding="utf-8").read()
+check("an open popover is repainted from state, and only when it changes",
+      "export function repaintPopover" in overlay_src
+      and "repaintPopover()" in shell_src
+      and "openPopSeen" in overlay_src,
+      "a popover outside the panel tree draws the state it was opened with for ever")
+# The guard is the other half: rebuilding every frame takes focus, hover and a slider
+# mid-drag with it, which is the bug render.js exists to prevent.
+check("and a popover that declares no signature is never rebuilt",
+      re.search(r"if \(!openPopEl \|\| !openPopSig \|\| !openPopBuild\) return;", overlay_src)
+      is not None,
+      "the Control panel's four sliders pass no sig and must keep behaving as they did")
+
 check("the storage refresh is an action, not another picker",
       "'icon-btn'" in panel_src["storage"] and ".icon-btn" in css,
       "sitting in the row of kind buttons it read as another one of them")
@@ -603,10 +622,21 @@ check("a header picker follows the state, not the click that changed it",
       "a selection can change without a click, and the header has no renderer of its "
       "own to correct it afterwards")
 
+# `job-badge` is declared in task-panel.js now rather than emitted by the view: the
+# status word moved to the panel header, where a panel says what it is and what it is
+# doing on one line. The check follows it - what it holds is that there is ONE card,
+# zeroed, and not a second card for an idle machine.
 check("the job card is one card at every state, not two",
-      "job-badge" in ui_src and "job-bar" in ui_src
+      "job-badge" in ui_src + panels_all and "job-bar" in ui_src
       and "'No active print'" not in ui_src,   # the emitted literal, not the comment
       "an idle machine and a printing one differ in the numbers, not the furniture")
+# The card was a stack in a panel that is a band: 306px on a 152px thumbnail, a 40px
+# grey percentage, a row repeating the machine name the rail already shows, and a row of
+# its own for two buttons. 128 now. The saving that mattered most is the last one.
+check("the job card's buttons ride the progress bar's line",
+      "job-actions" in ui_src and "job-row" in ui_src
+      and re.search(r"\.job-row\s*\{[^}]*display:\s*flex", css) is not None,
+      "a 6px bar and a 30px button cost 70 stacked and 30 side by side")
 app_src = open(os.path.join(JS, "app.js"), encoding="utf-8").read()
 
 # `.fault{display:flex}` is a class rule and beats the UA stylesheet's
