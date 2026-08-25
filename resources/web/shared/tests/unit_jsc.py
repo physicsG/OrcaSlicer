@@ -135,10 +135,19 @@ def main():
           js(ctx2, "JSON.stringify(unwrapRpc("
                    "{jsonrpc:'2.0',error:{code:-32000,message:'x'},id:1}))").to_string()
           == '{"jsonrpc":"2.0","error":{"code":-32000,"message":"x"},"id":1}')
-    check("a status push (no jsonrpc key) is left alone",
+    # Inverted: this asserted that a {data, method} push is left alone, which encoded
+    # the belief that Orca passes payloads through untouched. It reshapes them - the
+    # push and the command reply have the SAME shape, and both unwrap here.
+    check("a status push is unwrapped to the objects it carries",
           js(ctx2, "JSON.stringify(unwrapRpc({data:{extruder:{temperature:27}},"
                    "method:'notify_status_update'}))").to_string()
-          == '{"data":{"extruder":{"temperature":27}},"method":"notify_status_update"}')
+          == '{"extruder":{"temperature":27}}',
+          "unwrapStatus then passes it through unchanged, having nothing left to strip")
+    check("and Klipper's array form survives it",
+          js(ctx2, "JSON.stringify(unwrapRpc({data:[{extruder:{temperature:27}},1.5],"
+                   "method:'notify_status_update'}))").to_string()
+          == '[{"extruder":{"temperature":27}},1.5]',
+          "notify_status_update sends [ {objects}, eventtime ]; unwrapStatus takes [0]")
 
     # A timeout is not a refusal, and there are two clocks that produce one.
     check("the client's own timeout is recognised",
@@ -154,6 +163,21 @@ def main():
           .to_boolean()
           and not js(ctx2, "isTimeout(null)").to_boolean(),
           "this is the check that decides whether the user is told to retry")
+
+    # The shape Orca actually delivers, which is NOT the raw envelope: only a
+    # `passthrough` response target gets that.
+    check("Orca's reshaped reply is unwrapped to the result",
+          js(ctx2, "JSON.stringify(unwrapRpc({method:'', data:{count:5,jobs:[1,2]}}))")
+          .to_string() == '{"count":5,"jobs":[1,2]}',
+          "on_response_arrived builds {data: result, method}; reading r.jobs off that "
+          "returns undefined, which is how the timelapse list was silently empty")
+    check("an error reply is left whole, so the caller is owed the detail",
+          js(ctx2, "JSON.stringify(unwrapRpc({method:'', error:{code:-32601}}))")
+          .to_string() == '{"method":"","error":{"code":-32601}}')
+    check("a payload that merely has a data key is left alone",
+          js(ctx2, "JSON.stringify(unwrapRpc({data:'x', other:1}))").to_string()
+          == '{"data":"x","other":1}',
+          "the pair is the signature, not the data key on its own")
 
     # the shape the file browser actually receives
     fl = {"jsonrpc": "2.0", "id": 3,

@@ -87,29 +87,42 @@ fixture answered — which is the quickest way to find what a screen actually ne
   otherwise reuse a stale `wcp-bridge.js` between runs and silently ignore edits.
 - `/json/new` is PUT-only in current Chrome; `cdp.py` attaches to the target the
   browser already opened and navigates that instead.
-- **There is now a second way to run the bundle**, and it needs no chromium:
-  `run_webkit.py --original` loads it in WebKitGTK - the engine Orca itself renders
-  with - against a **real printer**, through `u1_bridge.py` rather than fixtures. It
-  injects this directory's `cloud-stub.js` for the same reason this harness does.
+- **There is now a second way to run the bundle**, it needs no chromium, and it
+  reaches a **connected** page with live telemetry:
 
   ```bash
-  python3 resources/web/shared/tests/run_webkit.py --original --watch
+  python3 resources/web/shared/tests/run_webkit.py --original --sn <SN> --watch
   ```
 
-  It boots, renders the four panels, and issues **10 distinct commands** - six of which
-  the reconstruction never needs: `sw_SubscribePageStateChange`,
-  `sw_SubscribeUserLoginState`, `sw_SubscribeRecentFiles`, `sw_SubUserUpdatePrivacy`,
-  `sw_UploadEvent`, and `sw_SubscribeCacheKey`. The bridge answers all of them now.
+  It loads the bundle in WebKitGTK - the engine Orca itself renders with - against a
+  real printer, answered by [`u1_bridge.py`](../u1_bridge.py) rather than fixtures.
+  This directory's `cloud-stub.js` is injected for the same reason this harness injects
+  it. `--sn` matters: Orca's config can hold stale records, and the bundle tries to
+  connect every device it is handed.
 
-  Measured while doing it: **the bundle's own request timeout is 3 seconds**
-  (`请求超时, timeout: 3s`), against the reconstruction's 15. A host that takes longer
-  than that to answer anything the bundle asks for is a host the bundle gives up on.
+  Four things had to be right, and each was read out of the C++ rather than guessed:
 
-  It stops in the same place this harness does, and now names it precisely: `sn=`,
-  `ConnectionStatus.unknown`, having subscribed to the cache keys **`deviceList`** and
-  **`deviceFilamentInfo`**. Answering the six commands cleared every timeout and did
-  not move that. The page picks no device, so it never starts the connect it would
-  otherwise drive itself.
+  1. **Orca posts replies as a JSON STRING.** `send_to_js` builds
+     `window.postMessage(JSON.stringify({...}), '*')`. Posting the object instead - which
+     the reconstruction's client happily parses - makes the bundle ignore every reply in
+     silence. This one masquerades as "the page will not pick a device".
+  2. **TLS is decided by the credentials, not the scheme**: `if (ca != "" && cert != ""
+     && key != "")`. The bundle asks for `mqtt://<ip>:8883` - plain scheme, TLS port.
+  3. **Orca keeps its own connection to the printer.** `get_connect_host()` is what
+     answers `sw_GetMachineState`, and it is not the MQTT clients the page creates. The
+     bundle never calls `sw_mqtt_set_engine` because in Orca a host is already attached,
+     so the bridge brings up a session of its own.
+  4. **`sw_GetConnectedMachine` is the gate.** It returns the first saved device flagged
+     `connected`; with none, the page sits at `sn=` forever. The bridge probes each
+     saved device with a TCP connect and reports the ones that answer.
+
+  Also measured: **the bundle's own request timeout is 3 seconds**, against the
+  reconstruction's 15. And `local_devices_arrived` - which Orca posts on a separate,
+  non-envelope channel - appears **zero** times in `main.dart.js`; it is for Orca's own
+  non-Flutter device cards, not for this bundle.
+
+  Still rough: a "Binding rejected" dialog from the cloud stub, and toolheads 2-4 read
+  `_/_ °C` while toolhead 1 and the bed carry real numbers.
 
 - A **fully connected** Device page with live telemetry was not reached. The
   session additionally depends on the page's own `deviceList` /

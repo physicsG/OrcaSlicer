@@ -53,6 +53,15 @@ export function isOk(code) {
  */
 export function unwrapRpc(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  // The shape Orca ACTUALLY delivers for a printer command:
+  // Moonraker_Mqtt::on_response_arrived reshapes the reply to
+  // `{data: <result>, method: <name or "">}` for every target that is not
+  // `passthrough`, which is all of the ordinary ones. Guarded on the pair, because a
+  // payload that merely happens to carry a `data` key is not this.
+  if (typeof data.method === 'string' && ('data' in data || 'error' in data)) {
+    return 'data' in data ? data.data : data;
+  }
+  // The raw JSON-RPC envelope, which is what a `passthrough` target hands over.
   if (typeof data.jsonrpc !== 'string') return data;
   if ('result' in data) return data.result;
   return data;

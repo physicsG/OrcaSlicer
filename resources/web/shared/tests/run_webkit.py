@@ -221,6 +221,11 @@ def main():
                     help="load the SHIPPED Flutter bundle instead of the "
                          "reconstruction. Implies --real: the bundle has no simulator "
                          "of its own, so something has to answer window.wx.")
+    ap.add_argument("--prime", metavar="PATH", default="",
+                    help="with --original: load this ?path= surface first, then go to "
+                         "the Device tab - the host's cache is shared between surfaces. "
+                         "Off by default: ?path=1 is a login surface and writes nothing, "
+                         "which is worth knowing before spending 45s on it again.")
     ap.add_argument("--real", action="store_true",
                     help="talk to the real printer instead of the simulator "
                          "(Orca must be closed)")
@@ -228,6 +233,13 @@ def main():
                     help="with --real: pretend the saved printer is at this address. "
                          "Point it somewhere unroutable (192.0.2.1) to exercise the "
                          "page with no printer there.")
+    ap.add_argument("--trace", action="store_true",
+                    help="log each command's parameters in full instead of the first "
+                         "120 characters")
+    ap.add_argument("--sn", metavar="SN",
+                    help="with --real: use only this saved device. Orca's config can "
+                         "hold stale records, and the shipped bundle tries to connect "
+                         "every one it is given.")
     ap.add_argument("--drive", metavar="FILE",
                     help="run this JavaScript in the page instead of the built-in "
                          "checks; it reports by setting window.__report when done")
@@ -275,18 +287,35 @@ def main():
     win.show_all()
 
     if args.real:
-        def to_page(msg):
-            js = f"window.postMessage({json.dumps(msg)}, '*')"
+        def to_page(msg, as_string=True):
+            # Orca posts the WCP envelope as a STRING - send_to_js builds
+            # `window.postMessage(JSON.stringify({...}), '*')` - and the legacy
+            # `command` messages as an object. The reconstruction's client parses
+            # either; the Flutter bundle does not, and silently ignored every reply
+            # until this matched.
+            body = json.dumps(json.dumps(msg)) if as_string else json.dumps(msg)
+            js = f"window.postMessage({body}, '*')"
             # The bridge answers on its own threads; WebKit is main-loop only.
             GLib.idle_add(lambda: bool(view.evaluate_javascript(
                 js, -1, None, None, None, None, None) and False))
 
         devices = None
-        if args.device_ip:
+        if args.device_ip or args.sn:
             from u1_bridge import orca_devices                        # noqa: PLC0415
-            devices = [dict(d, ip=args.device_ip) for d in orca_devices()]
-            print(f"  pretending the printer is at {args.device_ip}")
-        bridge = Bridge(send=to_page, devices=devices)
+            devices = orca_devices()
+            if args.sn:
+                devices = [d for d in devices if d.get("sn") == args.sn]
+                print(f"  using only {args.sn} ({len(devices)} saved record(s) match)")
+            if args.device_ip:
+                devices = [dict(d, ip=args.device_ip) for d in devices]
+                print(f"  pretending the printer is at {args.device_ip}")
+        bridge = Bridge(send=to_page, devices=devices,
+                        trace=100000 if args.trace else 120)
+        if args.original:
+            # Orca reaches the Device tab with a printer host already attached. The
+            # bundle never brings one up itself - it makes its own MQTT clients for
+            # its own purposes and expects sw_GetMachineState to just work.
+            threading.Thread(target=bridge.self_connect, daemon=True).start()
 
         seen = []
         inner = bridge.handle
@@ -305,8 +334,9 @@ def main():
             bridge.handle(val.to_string())
         ucm.connect("script-message-received::wx", on_wx)
 
+    bundle = f"http://127.0.0.1:{port}/web/flutter_web/index.html?path="
     if args.original:
-        url = f"http://127.0.0.1:{port}/web/flutter_web/index.html?path=2"
+        url = bundle + (args.prime or "2")
     else:
         url = f"http://127.0.0.1:{port}/web/device_page/index.html"
         if not args.real:
@@ -369,24 +399,6 @@ def main():
 
     def go():
         shot("loaded")
-        if args.original:
-            # A Flutter canvas has no DOM worth querying, so the evidence is what the
-            # page asked the host for and whether the session came up.
-            cmds = []
-            for c in seen:
-                if c not in cmds:
-                    cmds.append(c)
-            lines = [f"INFO  the bundle issued {len(seen)} commands, "
-                     f"{len(cmds)} distinct"]
-            lines.append(f"INFO  {', '.join(cmds)}" if cmds
-                         else "FAIL  the bundle never reached the host")
-            lines.append(("PASS" if bridge.engine else "FAIL")
-                         + "  the bundle brought an MQTT session up")
-            lines.append(("PASS" if bridge.sn else "FAIL")
-                         + f"  and attached an engine for {bridge.sn}")
-            state["report"] = "\n".join(lines)
-            state["rc"] = 1 if "FAIL" in state["report"] else 0
-            return wrap_up()
         if args.drive:
             # A driving script is asynchronous by nature - it waits on the machine -
             # so it hands its report back through window.__report rather than by
@@ -414,13 +426,47 @@ def main():
                     GLib.timeout_add(500, poll)
             poll()
             return False
+        if args.original:
+            # A Flutter canvas has no DOM worth querying, so the evidence is what the
+            # page asked the host for and whether the session came up.
+            cmds = []
+            for c in seen:
+                if c not in cmds:
+                    cmds.append(c)
+            lines = [f"INFO  the bundle issued {len(seen)} commands, "
+                     f"{len(cmds)} distinct"]
+            lines.append(f"INFO  {', '.join(cmds)}" if cmds
+                         else "FAIL  the bundle never reached the host")
+            lines.append(("PASS" if bridge.engine else "FAIL")
+                         + "  the bundle brought an MQTT session up")
+            lines.append(("PASS" if bridge.sn else "FAIL")
+                         + f"  and attached an engine for {bridge.sn}")
+            state["report"] = "\n".join(lines)
+            state["rc"] = 1 if "FAIL" in state["report"] else 0
+            return wrap_up()
         view.evaluate_javascript(REAL_CHECKS if args.real else CHECKS,
                                  -1, None, None, None, done)
         return False
 
-    view.connect("load-changed", lambda v, e:
-                 GLib.timeout_add(int(args.settle * 1000), go)
-                 if e == WebKit2.LoadEvent.FINISHED else None)
+    phase = {"primed": not (args.original and args.prime)}
+
+    def loaded(v, e):
+        if e != WebKit2.LoadEvent.FINISHED:
+            return
+        if not phase["primed"]:
+            # Let the priming surface run long enough to write what it writes, then
+            # hand the same host - and the same cache - to the Device tab.
+            def then():
+                phase["primed"] = True
+                held = sorted(bridge.cache) if bridge else []
+                print(f"  primed on ?path={args.prime}; cache holds {held or 'nothing'}")
+                view.load_uri(bundle + "2")
+                return False
+            GLib.timeout_add(int(args.settle * 1000), then)
+            return
+        GLib.timeout_add(int(args.settle * 1000), go)
+
+    view.connect("load-changed", loaded)
     # Closing the window is how a person ends this, and Ctrl-C is how they end it from
     # the terminal - GLib swallows SIGINT otherwise, so it has to be asked for.
     win.connect("destroy", lambda *_: Gtk.main_quit())

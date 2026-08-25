@@ -31,6 +31,7 @@ and still needs the app. See STATUS.md, "What to pick up next", item 1.
 """
 import glob
 import json
+import socket
 import os
 import queue
 import ssl
@@ -80,6 +81,15 @@ def _log(msg):
 
 
 # --------------------------------------------------------------------------- config
+
+def reachable(ip, port, timeout=1.5):
+    """Can this host open a socket to the machine? Cheap, and it is real evidence."""
+    try:
+        socket.create_connection((ip, int(port or 8883)), timeout=timeout).close()
+        return True
+    except OSError:
+        return False
+
 
 def orca_devices():
     """Every device Orca has saved. ca/cert/key are always blank there by design."""
@@ -196,8 +206,11 @@ def tls_context(ca, cert, key, tmp):
 # ----------------------------------------------------------------------------- host
 
 class Bridge:
-    def __init__(self, send, log=_log, devices=None):
+    def __init__(self, send, log=_log, devices=None, trace=120):
+        # send(msg, as_string=True) - the WCP envelope travels as a JSON string, which
+        # is what send_to_js posts; the legacy `command` messages travel as an object.
         self.send, self.log = send, log
+        self.trace = trace         # how much of each command's params to log
         self.devices = devices if devices is not None else orca_devices()
         self.clients = {}          # id -> Client
         self.subs = {}             # (client id, topic) -> [event_id]
@@ -233,6 +246,8 @@ class Bridge:
             # All Orca-side facilities rather than printer commands: subscription
             # registrations it pushes to later, a key/value store the page owns and
             # Orca only holds, and a telemetry sink.
+            "sw_Connect": self._connect_device,
+            "sw_Disconnect": self._disconnect_device,
             "sw_SubscribePageStateChange": self._ack_sub,
             "sw_UnsubscribePageStateChange": self._ack_sub,
             "sw_SubscribeUserLoginState": self._sub_login,
@@ -250,6 +265,10 @@ class Bridge:
             "sw_GetSoftwareInfo": lambda s, p, e: self._ok(
                 s, {"version": "u1_bridge", "build_number": ""}),
         }
+        # Before anything is listening: this opens sockets, and doing it from a
+        # command handler would block the main loop the replies travel on - which the
+        # page reads as a timeout, having waited all of 3 seconds.
+        self.probe_devices()
         threading.Thread(target=self._expire, daemon=True).start()
 
     # ---- to the page ----------------------------------------------------
@@ -291,7 +310,7 @@ class Bridge:
         event_id = p.get("event_id")
         # sw_FileLog travels over the bridge being watched; logging it is a feedback loop
         if cmd != "sw_FileLog":
-            self.log(f"[bridge] {cmd} {json.dumps(params)[:120]}")
+            self.log(f"[bridge] {cmd} {json.dumps(params)[:self.trace]}")
 
         fn = self.local.get(cmd)
         if fn:
@@ -315,19 +334,22 @@ class Bridge:
 
     def _create(self, seqid, params, event_id):
         addr = params.get("server_address") or ""
-        scheme, _, rest = addr.partition("://")
+        _, _, rest = addr.partition("://")
         host, _, port = rest.partition(":")
-        secure = scheme == "mqtts"
-        tls = None
-        if secure:
-            tls = tls_context(params.get("ca"), params.get("cert"), params.get("key"),
-                              self._tmp)
+        ca, cert, key = (params.get(k) or "" for k in ("ca", "cert", "key"))
+        # TLS is decided by the CREDENTIALS, not the scheme - `if (ca != "" && cert !=
+        # "" && key != "")` in sw_create_mqtt_client. The shipped bundle asks for
+        # `mqtt://<ip>:8883`, plain scheme on the TLS port, and expects a TLS client
+        # back; reading the scheme instead opened a bare socket against a TLS listener.
+        secure = bool(ca and cert and key)
+        tls = tls_context(ca, cert, key, self._tmp) if secure else None
         self._n += 1
         cid = f"c{self._n}"
         client_id = params.get("clientId") or params.get("clientid") or f"orca-{cid}"
         self.clients[cid] = Client(cid, host, int(port or (8883 if secure else 1883)),
                                    client_id, tls, self._on_mqtt, self.log)
-        self.log(f"[bridge] client {cid} = {scheme}://{host}:{port} as {client_id}")
+        self.log(f"[bridge] client {cid} = {host}:{port} "
+                 f"{'TLS' if secure else 'plain'} as {client_id}")
         self._ok(seqid, {"type": "mqtt", "id": cid})
 
     def _client(self, params):
@@ -382,7 +404,60 @@ class Bridge:
         self.status_events.clear()
         self._ok(seqid, {})
 
+    # ---- a session of the host's own -------------------------------------
+
+    def self_connect(self):
+        """Bring up an mTLS session this host owns, and attach it as the engine.
+
+        Orca keeps its own connection to the printer - `get_connect_host()` - which is
+        what answers sw_GetMachineState and every other printer command. It is NOT the
+        MQTT clients the page creates: the shipped bundle makes its own and never calls
+        sw_mqtt_set_engine, because in Orca there is already a host attached.
+
+        The reconstruction hands one over instead, which is why this was never needed
+        until the bundle ran. Same connect path either way, just driven from here:
+        LAN auth on :1884 for keys, then mTLS on the port the printer names.
+        """
+        dev = next((d for d in self.devices if d.get("connected")), None)
+        if not dev or self.engine:
+            return
+        ip, sn = dev.get("ip"), dev.get("sn")
+        client_id = dev.get("clientId") or f"orca-{sn}"
+        try:
+            sys.path.insert(0, HERE)
+            from u1_probe import Session                              # noqa: PLC0415
+            sess = Session(ip, sn, client_id, verbose=False)
+            self.log(f"[bridge] host session: asking {ip} for keys")
+            auth = sess.request_keys()
+            port = int(auth.get("port") or 8883)
+
+            self._n += 1
+            cid = f"h{self._n}"
+            tls = tls_context(auth.get("ca"), auth.get("cert"), auth.get("key"),
+                              self._tmp)
+            c = Client(cid, ip, port, client_id, tls, self._on_mqtt, self.log)
+            self.clients[cid] = c
+            c.start()
+            c.submit(lambda _: c.open()).result(20)
+            for suffix in ("status", "response", "notification"):
+                c.submit(lambda cli, t=f"{sn}/{suffix}": cli.subscribe(t, 1)).result(10)
+            self.sn = sn
+            self.engine = c
+            self.log(f"[bridge] host session up on {ip}:{port} as engine {cid}")
+        except Exception as e:                                       # noqa: BLE001
+            self.log(f"[bridge] host session failed: {e}")
+
     # ---- what the shipped bundle needs ----------------------------------
+
+    def _disconnect_device(self, seqid, params, event_id):
+        """Orca drops its own host here. The page calls it before making its own."""
+        self.log(f"[bridge] host session released ({params.get('dev_id')})")
+        self._ok(seqid, {})
+
+    def _connect_device(self, seqid, params, event_id):
+        threading.Thread(target=self.self_connect, daemon=True).start()
+        self._ok(seqid, {})
+
 
     def _ack_sub(self, seqid, params, event_id):
         """A subscription Orca registers and pushes to later. Registering is the whole
@@ -404,39 +479,88 @@ class Bridge:
         self._ok(seqid, {})
 
     def _get_cache(self, seqid, params, event_id):
-        """The page's own store, which Orca holds and relays back.
+        """`{keys: [...]}` in, an ARRAY out, positionally, `{}` for anything missing.
 
-        `deviceList` and `deviceFilamentInfo` live here - written by the page, read by
-        the page, never by the printer. The screenshot harness could not get a
-        connected Device page precisely because nothing was holding them.
+        The store is `SSWCP_Instance::m_wcp_cache`, a static held in memory and shared
+        by every surface Orca opens - not a file, and not seeded. `deviceList` and
+        `deviceFilamentInfo` get there because a page PUT them there; the Device tab
+        only reads them. That is why opening the Device tab on its own leaves it with
+        no device: in Orca as much as here, nothing has written the list yet.
         """
-        key = str(params.get("key", ""))
-        self._ok(seqid, {"key": key, "value": self.cache.get(key)})
+        keys = params.get("keys")
+        if not isinstance(keys, list) or not keys:
+            return self._err(seqid, -1, "sw_GetCache wants a non-empty keys array")
+        self._ok(seqid, [self.cache.get(str(k), {}) for k in keys])
 
     def _set_cache(self, seqid, params, event_id):
-        key = str(params.get("key", ""))
-        self.cache[key] = params.get("value")
-        self._ok(seqid, {"key": key})
-        # Whoever is watching that key hears about it, which is what makes this a
-        # store the page can coordinate through rather than a bucket.
-        for ev in self.cache_subs.get(key, []):
-            self._push(ev, {"key": key, "value": self.cache[key]})
+        """`{objects: [{key, value}, ...]}`.
+
+        Orca uses `m_wcp_cache.insert(...)`, which does NOT overwrite an existing key -
+        so a second write of the same key is dropped while its notification still goes
+        out with the new value. That is faithfully reproduced: a host standing in for
+        Orca has to be wrong in the same places, or it is testing something else.
+        """
+        objects = params.get("objects")
+        if not isinstance(objects, list) or not objects:
+            return self._err(seqid, -1, "sw_SetCache wants a non-empty objects array")
+        for o in objects:
+            key, value = str(o.get("key", "")), o.get("value")
+            self.cache.setdefault(key, value)          # insert(), not assignment
+            self.log(f"[bridge] cache {key} = {json.dumps(value)[:120]}")
+            # The notification carries the value that was offered, whether or not the
+            # store took it, and is shaped { <key>: <value> } - keyed by name.
+            for ev in self.cache_subs.get(key, []):
+                self._push(ev, {key: value})
+        self._ok(seqid, {})
 
     def _remove_cache(self, seqid, params, event_id):
-        self.cache.pop(str(params.get("key", "")), None)
+        for k in (params.get("keys") or []):
+            self.cache.pop(str(k), None)
         self._ok(seqid, {})
 
     # ---- the device book ------------------------------------------------
 
+    def probe_devices(self):
+        """Say which saved devices are actually there.
+
+        `connected` is what the shipped bundle gates on: sw_GetConnectedMachine returns
+        the first device carrying it, and with no device the page sits at `sn=` and
+        never starts the session it would otherwise drive itself. Orca sets the flag
+        when Orca has a connection; this host sets it when the machine answers a
+        socket, which is the same claim made on evidence it can actually check.
+        """
+        for d in self.devices:
+            up = reachable(d.get("ip"), d.get("port"))
+            d["connected"] = up
+            self.log(f"[bridge] {d.get('dev_name')} at {d.get('ip')}: "
+                     f"{'reachable' if up else 'not answering'}")
+
     def _get_devices(self, seqid, params, event_id):
+        if event_id:
+            self.subs.setdefault(("__devices__", ""), []).append(event_id)
         # Orca replies with a BARE ARRAY here (m_res_data = devices).
         self._ok(seqid, self.devices)
-        # sw_SubscribeLocalDevices then PUSHES the same array (protocol.js). The
-        # reconstruction reads the ack and does not need the push; the shipped bundle
-        # sits at sn= with no device chosen until one arrives, so it is watching the
-        # subscription rather than the reply.
         if event_id:
-            threading.Timer(0.5, lambda: self._push(event_id, self.devices)).start()
+            # Orca does BOTH of these every time the device list changes, and they are
+            # different channels: device_card_notify() pushes on the WCP subscription,
+            # and a raw window.postMessage carries the legacy `command` shape. The
+            # reconstruction reads neither - it takes the reply - so the second channel
+            # went unimplemented until the shipped bundle sat at `sn=` waiting for it.
+            threading.Timer(0.5, self.announce_devices).start()
+
+    def announce_devices(self):
+        """Say the device list has arrived, on both channels Orca uses.
+
+        `sequece_id` is spelled that way in SSWCP.cpp. It is not a typo here.
+        """
+        for ev in self.subs.get(("__devices__", ""), []):
+            self._push(ev, self.devices)
+        # Orca posts this too, and it is kept for fidelity - but the Flutter bundle
+        # does not listen for it: `local_devices_arrived` appears zero times in
+        # main.dart.js. It is for Orca's own non-Flutter device cards.
+        self.send({"command": "local_devices_arrived",
+                   "sequece_id": "10001",
+                   "data": self.devices}, as_string=False)
 
     def _connected_machine(self, seqid, params, event_id):
         conn = next((d for d in self.devices if d.get("connected")), None)
@@ -512,10 +636,29 @@ class Bridge:
         if topic == f"{self.sn}/response":
             got = self.pending.pop(msg.get("id"), None)
             if got:
-                # Orca hands the printer's reply to the page STILL WRAPPED in its
-                # JSON-RPC envelope (SSWCP.cpp:946 puts m_res_data straight into
-                # payload.data). The page unwraps it itself. Do not help.
-                self._ok(got[0], msg)
+                if self.trace > 1000:
+                    err = msg.get("error")
+                    body = json.dumps(msg.get("result", msg))
+                    self.log(f"[bridge] <- {got[2]} "
+                             + (f"ERROR {json.dumps(err)}" if err
+                                else f"{len(body)}B {body[:400]}"))
+                # Orca RESHAPES a printer reply before the page sees it -
+                # Moonraker_Mqtt::on_response_arrived, the `passthrough == false` arm,
+                # which every ordinary command takes:
+                #
+                #     {"data": <the JSON-RPC result>, "method": <method or "">}
+                #
+                # not the raw envelope. The shipped bundle reads `status` off that one
+                # level down and calls the envelope an error - which is what left it
+                # showing a single toolhead while holding all four.
+                out = {"method": msg.get("method", "")}
+                if "result" in msg:
+                    out["data"] = msg["result"]
+                elif "error" in msg:
+                    # An RPC error still arrives as a SUCCESSFUL bridge reply whose
+                    # data carries the error; the bridge decided the command was sent.
+                    out["error"] = msg["error"]
+                self._ok(got[0], out)
             return
 
         if topic in (f"{self.sn}/status", f"{self.sn}/notification"):
