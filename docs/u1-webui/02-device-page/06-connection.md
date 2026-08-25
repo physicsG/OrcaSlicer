@@ -283,7 +283,7 @@ works with nobody signed in.
 
 ## The implementation
 
-`resources/web/device_page/js/connection.js`. `connect(bridge, device, opts)` picks the
+`resources/web/device_page/js/core/connection.js`. `connect(bridge, device, opts)` picks the
 path, and `opts.requestPin` is an async callback so the UI decides how to collect the
 code (the reconstruction opens a modal).
 

@@ -21,7 +21,12 @@ are one config flag away — see
 what the reconstructions do not cover.
 
 **Continuing this work?** Start at [`STATUS.md`](STATUS.md) — what is proven against
-real hardware, what is not, and what to pick up next.
+real hardware, what is not, and what to pick up next. If you are about to *change* the
+Device page, read
+[how it is put together](STATUS.md#how-the-device-page-is-put-together) first: it is one
+directory per panel now, and the tooling checks that a command is reachable rather than
+merely mentioned. The reasoning is in
+[`02-device-page/09-restructure.md`](02-device-page/09-restructure.md).
 
 ## Layout
 

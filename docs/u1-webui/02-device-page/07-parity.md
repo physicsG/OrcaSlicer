@@ -1,5 +1,17 @@
 # Parity with the shipped Device tab
 
+> **Superseded, and worth reading anyway.** This document reported the command surface
+> complete on the strength of `CMD.NAME` appearing somewhere in the source. That proves a
+> command is *mentioned* — not that a control exists to issue it, and a panel with no
+> button counted every command it would have called. Seven user-visible faults were found
+> on hardware against this "complete" page.
+>
+> `check_coverage.py` asks the reachability question too now, by reading the command
+> module each panel is actually handed. See
+> [09-restructure.md](09-restructure.md) and
+> [08-function-gap-analysis.md](08-function-gap-analysis.md).
+
+
 What the reconstruction covers, what it does not, and how that was measured rather
 than estimated.
 

@@ -127,7 +127,7 @@ Every packet in and out, so the bridge can be watched while the page runs.
 Two independent test layers, both passing.
 
 **1. Conformance** — re-derives the constant tables from `data/` and fails if
-`js/protocol.js` has drifted. This is the guard that ties the code to the evidence.
+`shared/js/protocol.js` has drifted. This is the guard that ties the code to the evidence.
 
 ```
 12/12 checks passed

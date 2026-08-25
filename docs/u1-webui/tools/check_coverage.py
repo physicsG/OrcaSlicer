@@ -22,14 +22,14 @@ question counts it as done. `sw_BedMesh_AbortProbeMesh` was exactly that.
 
 The answer used to be a hand-written `sends` list in each panel, which made it a
 promise: nothing stopped a panel claiming a command it never issued, and one did
-(`DELETE_MACHINE_FILE`). It is now read out of `device_page/js/commands/<panel>.js` -
-the module that panel is actually handed - so the attribution is a fact about the
-imports instead.
+(`DELETE_MACHINE_FILE`). It is now read out of the command module a panel is actually
+handed - js/views/<destination>/<panel>/<panel>-commands.js - so the attribution is a
+fact about the imports instead.
 
 Sources of truth:
   data/wcp-commands.json    which commands the bundle references and the host dispatches
   resources/web/**.js       which commands the reconstruction can issue
-  device_page/js/commands/  which panel can issue each one
+  device_page/js/views/    which panel can issue each one
 
 Usage: check_coverage.py [--quiet]
 Exit:  0 when every command is classified, 1 otherwise.

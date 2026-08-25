@@ -123,7 +123,7 @@ HTTP 403  Cloudflare error 1010 "browser_signature_banned"
 
 which is a user-agent rule, not an authentication result — the bearer token is never
 evaluated. Reaching it legitimately means letting the page make the call from Orca's webview,
-where `fetchCloudCert()` in `device_page/js/connection.js` already implements it. Until then,
+where `fetchCloudCert()` in `device_page/js/core/connection.js` already implements it. Until then,
 these remain unconfirmed: the endpoint hostname, the real topic strings, and therefore
 whether the SN-prefixed C++ can address a WAN device at all.
 

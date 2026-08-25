@@ -118,6 +118,24 @@ The reconstructed U1 web UI needs **no rebuild** — `build/resources` is a syml
 `resources/`, the HTTP server reads files per request and sends no cache headers, so
 edit and reload. Only C++ changes need `ninja`.
 
+**Where things are.** The page has two destinations in one webview — Device control and
+Storage — switched by the left rail with no reload.
+[`js/registry.js`](resources/web/device_page/js/registry.js) lists them and their panels;
+everything inside `.content` is built from it. **One panel is one directory**, holding all
+three of its files:
+
+```
+js/views/device-control/camera/
+    camera-panel.js      what it reads, and its mount/update
+    camera-view.js       its DOM: built once, then patched
+    camera-commands.js   everything it can ask the machine to do
+```
+
+with `js/core/` for what every view needs (`dom`, `render`, `pending`, `store`,
+`session`, `connection`, `overlay`, `diag`, `mock`, `thumbs`) and `js/widgets/` for the
+rail, the trace pane and shared art. A panel is handed **its own commands and nothing
+else**. Full rationale: [docs/u1-webui/02-device-page/09-restructure.md](docs/u1-webui/02-device-page/09-restructure.md).
+
 Iterate on it with `run_webkit.py`, which drives the real page in **WebKitGTK — the
 engine Orca's own webview uses**. It needs a display (WSLg provides one); playwright and
 the vendored chromium do not work here.
@@ -155,6 +173,20 @@ python3 resources/web/shared/tests/run_webkit.py --original --sn <SN> --watch
 Use it to check engine behaviour that source-text checks cannot see: focus and
 selection, whether a committed value survives the next state push, layout that must not
 shift, and anything about a real machine's timing.
+
+**Every suite has been green while the page was visibly broken.** A `ReferenceError` left
+the page with no motion column and all 17 browser checks passed; a rename broke `boot()`
+and the simulator stayed green because the broken line was on the *not-connected* branch,
+which the mock never takes. Two habits follow:
+
+- **Dump the DOM and diff it** before and after any move — a `--drive` script that walks
+  `.app` printing every tag, id, class and `data-*` answers *what is on the page* rather
+  than *is this one thing right*. It caught both failures above.
+- **`--real --device-ip 192.0.2.1`** forces the not-connected branch with no printer
+  involved. Run it on anything touching the device record.
+
+**`--shots` writes blank PNGs here** — EGL finds no driver under WSL, so the files are
+byte-identical before and after any change. The DOM assertions are the evidence.
 
 The other suites:
 
