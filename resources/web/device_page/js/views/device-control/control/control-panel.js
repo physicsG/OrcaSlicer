@@ -14,6 +14,7 @@ export default {
   id: 'control',
   title: 'Control',
   view: 'control',
+  column: 'side',
   bodyClass: 'control-body',
 
   header: [

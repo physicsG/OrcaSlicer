@@ -3,17 +3,34 @@
  *
  * The thumbnail is fetched once per file rather than per repaint - this card repaints
  * about once a second, and `sw_FilesThumbnailsBase64` is a round trip to the printer.
+ *
+ * The status word lives in the header rather than in the card. It was a badge on a row
+ * of its own, above a second row repeating the machine's name that the rail already
+ * shows - two rows of furniture around one word. A panel header is where a panel says
+ * what it is; saying what it is DOING in the same line costs nothing and gives the card
+ * back 24px plus its margin.
  */
 'use strict';
 
-import { renderTask } from './task-view.js';
+import { renderTask, stateLabel } from './task-view.js';
 
 export default {
   id: 'task',
   title: 'Printing Task',
   view: 'control',
+  column: 'main',
   bodyId: 'task',
   bodyClass: 'task-body',
+
+  header: [
+    { kind: 'gap' },
+    { kind: 'status', id: 'task-state', cls: 'job-badge',
+      text: (ctx) => stateLabel(ctx.state.job().state),
+      state: (ctx) => ctx.state.job().state,
+      // The machine's own word stays on the title, so the rename to `idle` hides nothing.
+      title: (ctx) => `print_stats.state: ${ctx.state.job().state}` },
+    { kind: 'spacer' },
+  ],
 
   reads: ['job', 'device', 'store.jobThumb'],
 

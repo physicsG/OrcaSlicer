@@ -236,6 +236,11 @@ const MODULES = {
 const deps = {
   // a getter: boot() decides between the real host and the simulator, long after this
   get bridge() { return bridge; },
+  // and the simulator itself, for the one thing that does not go over the bridge at all.
+  // Camera frames are plain HTTP to the printer, so with no printer there is nothing to
+  // answer them - the simulator has to, or the camera is the one panel a simulated run
+  // cannot exercise.
+  get mock() { return window.__devicePage.mock; },
   state, store, pending, session, cmd: all,
   send, setpoint, setStatus, render: () => render(),
 };

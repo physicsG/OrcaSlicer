@@ -69,11 +69,31 @@ export function createStore() {
     exception: null,
 
     /**
-     * The camera. Frames are polled rather than pushed: `camera.start_monitor` returns a
-     * URL and the printer then rewrites that one file at the monitor interval.
+     * The camera.
+     *
+     * Frames are polled rather than pushed on every transport this page can actually
+     * use. The stock one is `camera.start_monitor`, which returns a URL and then has the
+     * printer rewrite that one file every two seconds - half a frame a second. A printer
+     * running the extended firmware answers `/server/webcams/list` with real cameras
+     * whose stills can be re-fetched as fast as the engine will take them; 14.0 fps
+     * measured in WebKitGTK.
+     *
+     *   cams       what /server/webcams/list said, filtered to things with a still
+     *   caps       what THIS engine can decode - see engineCaps(). Probed once
+     *   transport  which of CAMERA_TRANSPORT is asked for; AUTO resolves per frame
+     *   view       how many pictures at once - CAMERA_VIEW
+     *   picked     camera names, in tile order. Longer than the view needs is fine
+     *   fps        what the focused tile asks for. Others get CAMERA_FPS_UNFOCUSED
+     *   focus      which tile index is being watched, so the rest can poll slowly
+     *   frames     name -> the URL its <img> should point at
+     *
+     * `frameUrl` is kept because the monitor transport has exactly one frame and no
+     * camera name to hang it off.
      */
     cam: { mode: 'live', streaming: false, frameUrl: null,
-           timelapses: [], error: '' },
+           timelapses: [], error: '',
+           cams: [], caps: null, transport: 'auto',
+           view: 'single', picked: [], fps: 15, focus: 0, frames: {} },
 
     /** A machine-file listing, for Storage's two file-backed kinds. */
     files: { loading: false, error: '', root: '', roots: [], items: [] },

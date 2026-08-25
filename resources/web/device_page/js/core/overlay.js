@@ -189,12 +189,44 @@ export function openBlockingDialog({ title, message }) {
 
 let openPopEl = null;
 let openPopAnchor = null;
+let openPopBuild = null;
+let openPopSig = null;
+let openPopSeen = null;
 
 export function closePopover() {
   if (openPopAnchor) openPopAnchor.removeAttribute('aria-expanded');
   if (openPopEl) openPopEl.remove();
   openPopEl = null;
   openPopAnchor = null;
+  openPopBuild = null;
+  openPopSig = null;
+  openPopSeen = null;
+}
+
+/**
+ * Re-run an open popover's `build` when what it draws has changed.
+ *
+ * A popover lives on `document.body`, outside every panel, so `paint()` never reaches
+ * it: it was built once from the state at the moment it opened and then went stale. That
+ * is invisible for a slider, whose thumb carries its own position - which is why the
+ * Control panel's four never showed it - and plainly broken for anything with a
+ * selected-state marker. The camera's settings shipped that way: clicking a view or a
+ * transport did the thing and left the tick where it was until the panel was reopened.
+ *
+ * Signature-guarded, and the signature is the caller's, because rebuilding on every
+ * frame is the bug `render.js` exists to prevent - it would take focus, hover and a
+ * slider mid-drag with it. A popover that passes no `sig` is never rebuilt, so the
+ * existing four behave exactly as they did.
+ */
+export function repaintPopover() {
+  if (!openPopEl || !openPopSig || !openPopBuild) return;
+  const now = String(openPopSig());
+  if (now === openPopSeen) return;
+  openPopSeen = now;
+  const body = openPopEl.querySelector('.popover-body');
+  if (!body) return;
+  body.innerHTML = '';
+  openPopBuild(body);
 }
 
 /**
@@ -209,7 +241,7 @@ export function closePopover() {
  * than the 126px column it usually hangs from, so it is clamped to stay on screen, and
  * it flips above the anchor when there is no room below.
  */
-export function openPopover(anchor, { title, build, width = 320 }) {
+export function openPopover(anchor, { title, build, width = 320, sig = null }) {
   const reopening = openPopAnchor === anchor;
   closePopover();
   closeMenu();
@@ -252,6 +284,9 @@ export function openPopover(anchor, { title, build, width = 320 }) {
   anchor.setAttribute('aria-expanded', 'true');
   openPopEl = pop;
   openPopAnchor = anchor;
+  openPopBuild = build;
+  openPopSig = sig;
+  openPopSeen = sig ? String(sig()) : null;
   return pop;
 }
 

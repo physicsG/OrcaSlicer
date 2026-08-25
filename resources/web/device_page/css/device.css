@@ -75,34 +75,94 @@ body {
 }
 
 /*
- * The shipped page is responsive: one centred column when narrow, a 2x2 grid
- * once there is room. Measured on the real page (viewport -> panel width):
+ * Two columns, and they are not the same width.
  *
- *   1280 -> 830   1330 -> 860   1400 -> 902      one column
- *   1450 -> 564   1600 -> 639   1920 -> 799      two columns
+ * The shipped page put four panels in a 2x2 grid and locked every cell to
+ * `aspect-ratio: 830/548`, so a wider window bought four wider squares. The camera is
+ * the only one of the four whose content actually scales, and it gained nothing the
+ * others did not; the Control panel, whose content is a fixed 758px cluster, gained a
+ * band of empty white.
  *
- * Single column fits `0.6 * available + 219` exactly across all three samples;
- * two columns fit `(viewport - 322) / 2`, which is what a 2-track grid with
- * 21px side padding and a 20px gap produces. The switch happens between 1400
- * and 1450.
+ * So: a main column that takes what is left, and a side column pinned at --col-w, the
+ * width the Control cluster already is. Control keeps its layout untouched and gives up
+ * only HEIGHT - it sizes to its cluster instead of to a ratio - and Filament, directly
+ * beneath it, grows into what it releases. The camera fills its own column in both
+ * directions and its frame letterboxes, which is what a video viewport does anyway.
+ *
+ * Measured, at a 980px window: Control 340 and Filament 572, against 588 and 324 before.
+ *
+ * The narrow layout below the breakpoint is unchanged in shape - one centred column at
+ * `0.6 * available + 219`, which fits the shipped page's own measurements at 1280, 1330
+ * and 1400.
+ *
+ * THE BREAKPOINT IS A TRADE-OFF, and it is this one number. The main column is
+ * `window - 304 - 20 - 830`; the old equal grid gave each panel `(window - 324) / 2`.
+ * Those cross at exactly 1984, so below 1984 this layout's camera is NARROWER than the
+ * grid's was, and the single centred column is wider than either:
+ *
+ *     window   main (here)   old grid   one column
+ *       1600       446          638        1021
+ *       1920       766          798        1213
+ *       1984       830          830        1252
+ *       2560      1406         1118        1597
+ *
+ * 1600 is chosen because the 1920 case - the common maximised width - costs the camera
+ * 32px and buys a Filament panel with real height and a destination that fits the
+ * window without scrolling. The 1600 case costs it 192px, which is the weakest point of
+ * this design. Raise this number to 1984 to make the two-column layout cost the camera
+ * nothing anywhere; lower it to 1420 to keep the old switching point.
  */
 .content {
   flex: 1;
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  justify-items: center;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 20px;
   padding: 20px 0 40px;
 }
 
-@media (min-width: 1420px) {
-  .content {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    justify-items: stretch;
-    padding: 20px 21px 40px;
+/* The destination itself is a column: the two panel columns in a row, and the
+   development aids beneath them rather than beside them. */
+#view-control {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.view-cols {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.view-col {
+  width: calc(60% + 219px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+@media (min-width: 1600px) {
+  .content { align-items: stretch; padding: 20px 21px 40px; }
+  /* A definite height is what lets `flex: 1` mean anything: without it the camera and
+     the Filament panel have no leftover to grow into and both collapse to content.
+     `min-height` rather than `height`, so a window too short for the cluster scrolls
+     instead of clipping it. */
+  #view-control { align-items: stretch; min-height: calc(100vh - 60px); }
+  .view-cols {
+    flex: 1; min-height: 0;
+    flex-direction: row; align-items: stretch;
   }
+  .view-col { width: auto; }
+  .col-main { flex: 1 1 0; }
+  .col-side { flex: 0 0 var(--col-w); }
+  /* one per column takes the leftover: the camera on the left, Filament on the right */
+  .panel.grows { flex: 1; min-height: 0; }
+  .panel.grows > .panel-body { flex: 1; min-height: 0; }
 }
 
 /* ---- rail ----------------------------------------------------------- */
@@ -148,12 +208,14 @@ body {
 .nav-item img { width: 22px; height: 22px; }
 
 /* ---- panels --------------------------------------------------------- */
-.panel { width: calc(60% + 219px); min-width: 0; }
-
-@media (min-width: 1420px) {
-  /* in the grid each panel simply fills its track */
-  .panel { width: auto; }
-}
+/* A panel fills its column. `.grows` is the one in each column that takes the leftover
+   height - the camera on the left, Filament on the right - and it is declared in the
+   panel's own module, not inferred from source order here.
+   It only applies where a column HAS leftover height, which is the two-column layout;
+   see the media query below. Applied unconditionally it sets `min-height: 0` on bodies
+   in the single column, which collapsed the Filament panel to 180px with a 260px
+   min-height written directly above it. */
+.panel { min-width: 0; display: flex; flex-direction: column; }
 
 .panel-head {
   height: var(--head-h);
@@ -206,19 +268,26 @@ body {
 }
 .pref-pill .chev { width: 9px; height: 13px; }
 
-/* The body scales with the panel rather than being a fixed height: 548/830 at
-   1280 single-column, and close to the same ratio at every two-column width.
-   Keeping it proportional is what makes the 2x2 grid sit correctly. */
+/* No blanket ratio any more. 830/548 came off the shipped page and was right when every
+   panel was one cell of an equal grid; with unequal columns it only forced three panels
+   to be the wrong height so the fourth could be the right one. Each body now says what
+   it needs: the camera and Filament take their column's leftover, Printing Task is a
+   card with a natural height, Control sizes to its cluster. */
 .panel-body {
   background: var(--panel);
-  aspect-ratio: 830 / 548;
-  min-height: 320px;
   border-radius: 0 0 var(--radius) var(--radius);
   overflow: hidden;
+  flex: 0 0 auto;
 }
 
 /* ---- camera --------------------------------------------------------- */
-.camera-body { display: grid; place-items: center; }
+/* 16:9 while the column has no height to give it - which is the narrow layout - and
+   nothing at all once it does, because there the column decides and the frame
+   letterboxes inside it. */
+.camera-body { display: grid; place-items: center; aspect-ratio: 16 / 9; min-height: 240px; }
+@media (min-width: 1600px) {
+  .camera-body { aspect-ratio: auto; }
+}
 /* The bundle's illustration is 803x509 and the shipped page draws it at panel
    width, with the printer artwork occupying the middle third. Anything smaller
    makes it read as a stray thumbnail. */
@@ -358,13 +427,22 @@ body {
 /* ---- printing task -------------------------------------------------- */
 /* The job card fills the panel from the top; only the empty states are centred.
    Centring the card left a band of white above the badge that the original has not. */
+/* Exactly as tall as its card, and no taller.
+   This was pinned at 150px on the reasoning that a job card "has a natural height and no
+   reason to grow" - the second half was true and the first was never measured. The card
+   was 304, `.panel-body` hides its overflow, and the progress bar and both job buttons
+   were cut off with nothing to say they had been.
+   Then it was given `min-height: 150` as a floor for an idle machine - and the card
+   became a band, so the floor stopped being a floor and started being 22px of nothing.
+   There is no floor now: the card always draws a 96px thumbnail, so it cannot collapse,
+   and whatever it comes to is what the panel is. The camera above takes the rest. */
 .task-body { display: grid; place-items: center; }
 .task-body:has(> .job) { place-items: start stretch; }
 .task-body img.placeholder { width: 803px; max-width: 100%; height: auto; display: block; }
 .task-body .empty { color: #9AA3AF; font-size: 13px; }
 
 /* ---- trace (development aid, not part of the shipped page) ---------- */
-.trace-panel { width: 100%; grid-column: 1 / -1; }
+.trace-panel { width: 100%; }
 .trace-panel summary {
   cursor: pointer; color: #9AA3AF; font-size: 12px;
   font-family: var(--mono); padding: 6px 2px;
@@ -379,7 +457,7 @@ body {
 #trace .t-mock-push { color: #B9BFC8; }
 
 .status-line {
-  width: 100%; grid-column: 1 / -1;
+  width: 100%;
   font: 11px/1 var(--mono); color: #9AA3AF;
   display: flex; justify-content: space-between; align-items: center;
 }
@@ -395,6 +473,7 @@ body {
 
 .filament-body {
   display: flex; align-items: center; justify-content: center;
+  min-height: 260px;
   /* cards are 64 wide and the measured pitch is 174; let the gap shrink
      rather than overflow once a grid track gets narrow */
   gap: clamp(24px, 8%, 110px);
@@ -520,8 +599,73 @@ body {
  * One card at every state, zeroed rather than replaced. Laid out off the shipped
  * page: badge and machine name on top, a square thumbnail beside the numbers, the
  * bar across the full width, and one round control under it. */
-.job { width: 100%; padding: 18px 24px; }
-.job-head { display: flex; align-items: center; gap: 10px; }
+/* ---- the printing task card ------------------------------------------ *
+ * A band: a 96px thumbnail anchoring three rows. See task-view.js for what each move
+ * was worth - the buttons riding the bar's line is most of it. */
+.job {
+  width: 100%; padding: 16px 20px;
+  display: flex; gap: 18px; align-items: flex-start;
+}
+.job-thumb {
+  flex: 0 0 96px; width: 96px; height: 96px;
+  display: grid; place-items: center; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+}
+.job-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.job-thumb .job-thumb-ph { width: 72px; }
+
+.job-col { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+/* Every row is the same shape: something that shrinks on the left, something that does
+   not on the right. That is what keeps three unrelated rows reading as one block. */
+.job-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+.job-name {
+  flex: 1 1 auto; min-width: 0;
+  font-size: 13px; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.job-meta {
+  flex: 0 0 auto; display: flex; gap: 14px;
+  font: 11px/1 var(--mono); color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+/* Each of the four figures is one token and must never be broken across lines: they sit
+   in rows that shrink, and a wrapped "0h 22m" makes the row taller than the band. */
+.job-elapsed, .job-used, .job-layer, .job-time { white-space: nowrap; }
+.job-time { text-align: right; }
+/* The percentage is still the thing you see first - it just stopped being 40px of grey
+   above a bar saying the same thing. Green, because it is the one number on this card
+   that is about progress rather than about the file. */
+.job-pct {
+  flex: 1 1 auto;
+  font-size: 26px; line-height: 1; font-weight: 600;
+  color: var(--ok); font-variant-numeric: tabular-nums;
+}
+.job-nums {
+  flex: 0 0 auto; display: flex; gap: 14px;
+  font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.job-bar {
+  flex: 1 1 auto; min-width: 0;
+  height: 6px; border-radius: 999px; background: #EEF1F5; overflow: hidden;
+}
+.job-bar > div { height: 100%; background: var(--accent); }
+.job-actions { flex: 0 0 auto; display: flex; gap: 10px; }
+.job-btn {
+  width: 30px; height: 30px; padding: 0;
+  display: grid; place-items: center;
+  border: 0; border-radius: 50%; background: var(--pill); cursor: pointer;
+}
+.job-btn svg { width: 18px; height: 18px; fill: #9AA3AF; }
+.job-btn:not(:disabled):hover { background: var(--line); }
+.job-btn:not(:disabled) svg { fill: var(--ink-dim); }
+.job-btn:disabled { cursor: default; }
+.job-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.job-msg { font-size: 12px; color: var(--ink-dim); }
+
+/* The status badge, now a header item. The colours stay here rather than moving with it,
+   because they are the card's language and the card is what they describe. */
 .job-badge {
   padding: 2px 7px; border-radius: 4px;
   background: #16A34A; color: #FFFFFF;
@@ -531,55 +675,11 @@ body {
 .job-badge[data-state="paused"]   { background: var(--warn); }
 .job-badge[data-state="error"],
 .job-badge[data-state="failed"]   { background: var(--err); }
-.job-dev { font-size: 17px; color: var(--ink); }
 
-.job-main { display: flex; gap: 26px; margin-top: 18px; }
-.job-thumb {
-  flex: 0 0 152px; width: 152px; height: 152px;
-  display: grid; place-items: center; overflow: hidden;
-  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
-}
-.job-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
-.job-thumb .job-thumb-ph { width: 118px; }
-.job-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-.job-name {
-  font-size: 13px; color: var(--ink-dim);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.job-pct { font-size: 40px; line-height: 1.2; color: #C9CDD4; font-variant-numeric: tabular-nums; }
-.job-nums {
-  display: flex; justify-content: space-between; align-items: flex-end;
-  margin-top: auto; font-size: 12px; color: var(--ink-dim);
-  font-variant-numeric: tabular-nums;
-}
-/* Layers left, time right - the pair the shipped card puts under the percentage. */
-.job-layer { white-space: nowrap; }
-.job-time { white-space: nowrap; text-align: right; }
-
-.job-actions { display: flex; justify-content: center; gap: 14px; margin-top: 20px; }
-.job-btn {
-  width: 34px; height: 34px; padding: 0;
-  display: grid; place-items: center;
-  border: 0; border-radius: 50%; background: var(--pill); cursor: pointer;
-}
-.job-btn svg { width: 20px; height: 20px; fill: #9AA3AF; }
-.job-btn:not(:disabled):hover { background: var(--line); }
-.job-btn:not(:disabled) svg { fill: var(--ink-dim); }
-.job-btn:disabled { cursor: default; }
-.job-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.job-msg { margin-top: 14px; font-size: 12px; color: var(--ink-dim); text-align: center; }
-.job-bar {
-  margin-top: 16px;
-  height: 6px; border-radius: 999px; background: #EEF1F5;
-  margin: 14px 0 10px; overflow: hidden;
-}
-.job-bar > div { height: 100%; background: var(--accent); }
-.job-meta {
+.job-meta-row {
   display: flex; gap: 18px; align-items: center;
   font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums;
 }
-.job-state { margin-left: auto; text-transform: capitalize; color: var(--ink); }
-.job-btns { display: flex; gap: 10px; margin-top: 18px; }
 
 /* ---- machine files --------------------------------------------------- */
 .files { width: 100%; height: 100%; padding: 14px 18px; display: flex;
@@ -629,9 +729,64 @@ body {
   align-items: center; justify-content: center; gap: 14px;
   background: #000; overflow: hidden;
 }
+
+/* ---- the tile grid --------------------------------------------------- *
+ * One to four pictures in one viewport. The printer offers three live views - the case
+ * camera, the USB camera and its own touchscreen - and watching two at once is the
+ * reason to have a second camera at all.
+ *
+ * A tile is an <img> a poller re-points; nothing here decides what it shows. The tiles
+ * are absolutely positioned into a grid rather than laid out by content, so a frame
+ * arriving at a different resolution cannot move the tile it is in. */
+.cam-tiles {
+  position: absolute; inset: 0;
+  display: grid; gap: 2px; background: #05080B;
+}
+.cam-view[data-view="single"] .cam-tiles { grid-template-columns: 1fr; }
+.cam-view[data-view="split"]  .cam-tiles { grid-template-columns: 1fr 1fr; }
+.cam-view[data-view="grid"]   .cam-tiles { grid-template-columns: 1fr 1fr;
+                                           grid-template-rows: 1fr 1fr; }
+/* Picture-in-picture: the first tile is the picture and the second floats over it. The
+   inset is by definition the unfocused one, which is what makes PiP the cheapest way to
+   watch two things - it polls at 1 fps. */
+.cam-view[data-view="pip"] .cam-tiles { grid-template-columns: 1fr; }
+.cam-view[data-view="pip"] .cam-tile:nth-child(2) {
+  position: absolute; right: 12px; top: 12px;
+  width: 31%; aspect-ratio: 16 / 9;
+  border-radius: 7px; border: 2px solid rgba(255, 255, 255, .5);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
+  overflow: hidden; z-index: 3;
+}
+.cam-view[data-view="pip"] .cam-tile:nth-child(n+3) { display: none; }
+
+.cam-tile {
+  position: relative; overflow: hidden; min-width: 0; min-height: 0;
+  background: #0B0F14;
+}
+.cam-tile.is-empty { display: grid; place-items: center; }
+.cam-tile-msg { color: #5D6774; font-size: 11px; font-family: var(--mono); }
+/* Which tile is being watched, and therefore which one polls fast. A ring rather than a
+   tint, because anything drawn over the picture is drawn over the thing being watched. */
+.cam-tile.is-focus { box-shadow: inset 0 0 0 2px var(--accent); }
+.cam-tile[tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cam-tile-name {
+  position: absolute; left: 7px; bottom: 6px; z-index: 2;
+  font: 10.5px/1 var(--mono); color: #fff;
+  background: rgba(8, 11, 16, .68); padding: 4px 7px; border-radius: 4px;
+  pointer-events: none;
+}
+/* A tile whose camera stopped answering keeps its last frame, dimmed, rather than going
+   black - the usual cause is the printer rebooting, and a stale frame says more than
+   nothing does while the poller keeps retrying. */
+.cam-tile .cam-frame[data-failed="1"] { opacity: .25; }
+.cam-tile .cam-frame {
+  position: absolute; inset: 0; margin: auto;
+  max-width: 100%; max-height: 100%; object-fit: contain;
+}
+
 .cam-view .cam-frame { position: absolute; inset: 0; margin: auto; }
 .cam-play {
-  position: relative;
+  position: relative; z-index: 4;
   width: 56px; height: 56px; flex: 0 0 56px;
   display: grid; place-items: center;
   border: 0; border-radius: 50%; padding: 0;
@@ -655,7 +810,6 @@ body {
 
 /* ---- fault banner ---------------------------------------------------- */
 .fault {
-  grid-column: 1 / -1;
   width: 100%;
   display: flex; align-items: flex-start; gap: 12px;
   padding: 13px 16px;
@@ -1171,11 +1325,12 @@ text.step {
    Device control page. #view-control opted back in and this did not. The runtime check
    in run_webkit.py now asserts it of every hidden element rather than of a list. */
 #view-storage[hidden] { display: none; }
-/* `display: contents` so the four panels stay direct children of the 2x2 grid - a real
-   wrapper box would break the layout. It has to opt back into `hidden` explicitly:
-   the UA's `[hidden] { display: none }` loses to this id selector, so without the
-   second rule the control panels went on rendering underneath Storage. */
-#view-control { display: contents; }
+/* This was `display: contents` for as long as the four panels had to be direct children
+   of a 2x2 grid. They are in two column wrappers now, so it is a real box - which is
+   what lets the two columns distribute height independently of each other.
+   It still has to opt back into `hidden` explicitly: the UA's `[hidden]{display:none}`
+   loses to an id selector, and without the second rule the control panels went on
+   rendering underneath Storage. */
 #view-control[hidden] { display: none; }
 .panel.storage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .storage-body {
@@ -1268,3 +1423,76 @@ text.step {
   font: 12px/1.5 var(--mono); color: #7A2A18; background: #FDF3F0;
   border-top: 1px solid #F0C9C0;
 }
+
+/* ---- camera settings, in the popover the gear opens ------------------ *
+ * Anchored under the gear rather than replacing the picture, because every setting here
+ * is about what the picture looks like and a sheet would hide it at exactly the moment
+ * it is being adjusted. `core/overlay.js` does the anchoring; this is only the contents. */
+.cam-set { display: flex; flex-direction: column; gap: 16px; }
+.cam-set-group { display: flex; flex-direction: column; gap: 7px; }
+.cam-set-label {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--ink-dim); font-weight: 600;
+}
+.cam-seg {
+  display: inline-flex; gap: 2px; padding: 3px;
+  border: 1px solid var(--line); border-radius: 9px; background: #fff;
+}
+.cam-seg-btn {
+  flex: 1 1 0; min-width: 0;
+  height: 28px; padding: 0 9px;
+  border: 0; border-radius: 6px; background: none;
+  font: 12.5px/1 var(--sans); color: var(--ink-dim); cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.cam-seg-btn[data-on="1"] { background: var(--accent); color: #fff; }
+.cam-seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.cam-pick-row { display: flex; gap: 7px; flex-wrap: wrap; }
+.cam-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px 6px 6px;
+  border: 1px solid var(--line); border-radius: 9px; background: #fff;
+  cursor: pointer; font: inherit; text-align: left;
+}
+.cam-chip[data-on="1"] { border-color: var(--accent); }
+.cam-chip[data-focus="1"] { box-shadow: inset 0 0 0 1px var(--accent); }
+.cam-chip-th { width: 40px; height: 24px; flex: 0 0 40px; border-radius: 4px;
+               background: #0B0F14; }
+.cam-chip-meta { display: flex; flex-direction: column; min-width: 0; }
+.cam-chip-name { font-size: 12.5px; color: var(--ink); }
+.cam-chip-sub { font: 10.5px/1.3 var(--mono); color: var(--ink-dim); }
+
+.cam-modes { display: flex; flex-direction: column; gap: 5px; }
+.cam-mode {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 9px; background: #fff;
+  cursor: pointer; font: inherit; text-align: left; width: 100%;
+}
+.cam-mode[data-on="1"] { border-color: var(--accent); background: var(--accent-soft); }
+/* Greyed, and the reason next to it - which is the whole argument for naming these
+   after transports rather than after picture quality. "This engine has no H.264
+   decoder" is something a person can act on; "not on Linux" is not. */
+.cam-mode[data-off="1"] { opacity: .55; cursor: not-allowed; background: var(--pill); }
+.cam-mode-dot {
+  width: 14px; height: 14px; flex: 0 0 14px; border-radius: 50%;
+  border: 1.5px solid var(--ink-dim); position: relative;
+}
+.cam-mode[data-on="1"] .cam-mode-dot { border-color: var(--accent); }
+.cam-mode[data-on="1"] .cam-mode-dot::after {
+  content: ""; position: absolute; inset: 2.5px; border-radius: 50%;
+  background: var(--accent);
+}
+.cam-mode-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cam-mode-name { font-size: 12.5px; color: var(--ink); font-weight: 600; }
+.cam-mode-hint { font: 10.5px/1.35 var(--mono); color: var(--ink-dim); }
+.cam-mode-tag {
+  flex: 0 0 auto; font: 10px/1 var(--mono); padding: 3px 6px; border-radius: 4px;
+  background: rgba(31, 122, 77, .12); color: var(--ok); white-space: nowrap;
+}
+.cam-mode-tag.is-no { background: rgba(224, 49, 49, .12); color: var(--err); }
+
+.cam-note { font: 11px/1.5 var(--sans); color: var(--ink-dim); }
+.cam-set-foot { display: flex; }
+.cam-set-foot .btn { flex: 1; }

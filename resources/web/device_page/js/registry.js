@@ -27,6 +27,9 @@
  *   panelClass    extra class on the <section>
  *   bare          no <section>/<header> at all; the body element is the whole thing
  *   header        header controls, declared - see shell.js for the vocabulary
+ *   column        which column of its destination it sits in, for destinations that
+ *                 declare columns. Ignored otherwise
+ *   grow          this panel takes the column's leftover height. One per column
  *   reads         which state objects and store slices this panel renders from
  *   mount(root)   build the body's fixed structure, once
  *   update(root)  patch it, on every frame
@@ -57,9 +60,20 @@ import storage from './views/storage/storage/storage-panel.js';
 
 export const PANELS = [fault, camera, control, task, filament, storage];
 
-/** The rail's destinations, in the order they appear in it. */
+/**
+ * The rail's destinations, in the order they appear in it.
+ *
+ * `columns` is what makes a destination two columns rather than a grid of equal cells.
+ * The four control panels used to sit in a 2x2 grid where every cell was locked to
+ * `aspect-ratio: 830/548`, so a wider window bought four wider squares and the camera -
+ * the only panel whose content actually scales - gained nothing the others did not.
+ *
+ * Naming them here rather than in the stylesheet is what lets a panel say which column
+ * it belongs to instead of the CSS guessing from source order.
+ */
 export const VIEWS = [
-  { id: 'control', label: 'Device control', icon: 'deviceControl' },
+  { id: 'control', label: 'Device control', icon: 'deviceControl',
+    columns: ['main', 'side'] },
   { id: 'storage', label: 'Storage',        icon: 'iconModelFileFolder' },
 ];
 

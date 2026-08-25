@@ -12,6 +12,8 @@ export default {
   id: 'filament',
   title: 'Filament',
   view: 'control',
+  column: 'side',
+  grow: true,
   bodyId: 'filament',
   bodyClass: 'filament-body',
 

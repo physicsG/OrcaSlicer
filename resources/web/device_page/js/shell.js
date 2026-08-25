@@ -15,12 +15,15 @@
  *   { kind: 'icon',  id, cls, icon, title, on } an icon button
  *   { kind: 'pill',  id, cls, label, chev, on } the Print Preferences pill
  *   { kind: 'tabs',  group, cls, items, active, on }   one-of-N picker
+ *   { kind: 'status', id, cls, text, state, title }    a live label, no click
  *
  * `on` is called with the live context; for `tabs` it also gets the value clicked.
  */
 'use strict';
 
 import { $, el, icon } from './core/dom.js';
+import { text, data } from './core/render.js';
+import { repaintPopover } from './core/overlay.js';
 import { PANELS, VIEWS } from './registry.js';
 
 /* ---- header controls ------------------------------------------------- */
@@ -78,6 +81,31 @@ function tabGroup(spec, ctx, into) {
   headerSync.push(sync);
 }
 
+/**
+ * A label in the header that follows the state.
+ *
+ * The Printing Task card carried its own status - a badge on a row of its own, above a
+ * second row repeating the machine's name that the rail already shows. Both rows were
+ * furniture around one word. The word belongs in the header, beside the panel's title,
+ * where a panel says what it is and what it is doing in the same line.
+ *
+ * It syncs through `headerSync` for the same reason a tab does: a header has no
+ * renderer, so without this nothing would ever change it except a click, and this one
+ * has no click at all.
+ */
+function statusChip(spec, ctx) {
+  const n = el('span', spec.cls || 'head-status');
+  if (spec.id) n.id = spec.id;
+  const sync = () => {
+    text(n, spec.text(ctx));
+    if (spec.state) data(n, 'state', String(spec.state(ctx)));
+    if (spec.title) n.title = spec.title(ctx);
+  };
+  sync();
+  headerSync.push(sync);
+  return n;
+}
+
 function headerItem(spec, ctx, into) {
   switch (spec.kind) {
     case 'gap':    into.appendChild(el('span', 'gap-36')); return;
@@ -86,6 +114,7 @@ function headerItem(spec, ctx, into) {
     case 'icon':   into.appendChild(iconBtn(spec, ctx)); return;
     case 'pill':   into.appendChild(pillBtn(spec, ctx)); return;
     case 'tabs':   tabGroup(spec, ctx, into); return;
+    case 'status': into.appendChild(statusChip(spec, ctx)); return;
     default: throw new Error(`shell: unknown header item "${spec.kind}"`);
   }
 }
@@ -116,8 +145,14 @@ function buildPanel(panel, ctx) {
  * Fill `.content` and the rail's nav from the registry.
  *
  * `#view-control` and `#view-storage` stay direct children of `.content`, and the fault
- * banner stays their sibling: `#view-control { display: contents }` and
- * `.content:has(> #view-storage:not([hidden]))` both depend on exactly that nesting.
+ * banner stays their sibling: `.content:has(> #view-storage:not([hidden]))` depends on
+ * exactly that nesting.
+ *
+ * A destination that declares `columns` (see registry.js) gets `.view-cols` holding one
+ * `.view-col` each, and every panel lands in the one it names. `#view-control` used to
+ * be `display: contents` so its panels were direct children of a 2x2 grid; it is a real
+ * box again now, because the two columns have to distribute height independently -
+ * Control shrinking to its cluster is what gives Filament the room to grow.
  */
 export function buildShell(ctx) {
   const content = $('.content');
@@ -139,8 +174,33 @@ export function buildShell(ctx) {
   VIEWS.forEach((v) => {
     const box = el('div', 'view');
     box.id = `view-${v.id}`;
-    PANELS.filter((p) => p.view === v.id)
-          .forEach((p) => box.appendChild(buildPanel(p, ctxFor(ctx, p.id))));
+    const panels = PANELS.filter((p) => p.view === v.id);
+
+    if (v.columns) {
+      // A destination with columns gets one wrapper per column inside a row, and the
+      // row is a separate element from the destination itself so the development aids
+      // below can sit under it rather than beside it.
+      //
+      // A panel's column comes from its own declaration, not from source order:
+      // ordering the four by which column they land in would have made the registry's
+      // list - which is also paint order - a statement about layout, and those two
+      // stopped being the same thing the moment the columns were unequal.
+      const row = el('div', 'view-cols');
+      const cols = new Map(v.columns.map((c) => {
+        const w = el('div', `view-col col-${c}`);
+        row.appendChild(w);
+        return [c, w];
+      }));
+      panels.forEach((p) => {
+        const section = buildPanel(p, ctxFor(ctx, p.id));
+        if (p.grow) section.classList.add('grows');
+        (cols.get(p.column) || row).appendChild(section);
+      });
+      box.appendChild(row);
+    } else {
+      panels.forEach((p) => box.appendChild(buildPanel(p, ctxFor(ctx, p.id))));
+    }
+
     content.appendChild(box);
   });
 
@@ -208,6 +268,10 @@ export function paint(ctx, view) {
 
   VIEWS.forEach((v) => { $(`#view-${v.id}`).hidden = v.id !== view; });
   headerSync.forEach((f) => f());
+  // A popover is on document.body, so the panel loop below never reaches it. It has its
+  // own signature guard; without this call it draws the state it was opened with, for as
+  // long as it stays open.
+  repaintPopover();
 
   PANELS.forEach((p) => {
     if (p.view !== null && p.view !== view) return;

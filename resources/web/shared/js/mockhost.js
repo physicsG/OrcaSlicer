@@ -234,6 +234,14 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
           return ok({});
 
         /* ---- camera ----------------------------------------------------- */
+        // The camera LIST is not a bridge command on a real printer - it is plain HTTP
+        // to Moonraker, which a simulator has none of. It is answered here anyway,
+        // because otherwise the camera is the one panel a simulated run cannot exercise
+        // at all: with no printer, `discover()` gets a failed fetch and every run falls
+        // back to the monitor file, so the tile grid, the transport list and the focus
+        // rule would never be executed by any test. See mockWebcams() below, which is
+        // what the client actually calls.
+
         case 'sw_CameraStartMonitor': {
           if (!eventId) return fail('sw_CameraStartMonitor requires an event_id');
           if (params.domain !== 'lan') {
@@ -387,7 +395,7 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
     for (const eventId of subs.keys()) push(eventId, delta);
   }, TICK_MS);
 
-  return { printer, stop() { clearInterval(timer); } };
+  return { printer, webcams: mockWebcams, stop() { clearInterval(timer); } };
 }
 
 function clamp01(v) { return Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0)); }
@@ -579,3 +587,46 @@ export function makePrinter() {
 
 function round1(v) { return Math.round(v * 10) / 10; }
 function round2(v) { return Math.round(v * 100) / 100; }
+
+/**
+ * What `/server/webcams/list` answers, shaped exactly as the real one does.
+ *
+ * Copied from a U1 running paxx12's Extended Firmware on 2026-08-25, down to the
+ * `service` strings and the fact that **two of the four entries are not cameras**: the
+ * printer registers its own touchscreen as `gui` and the multiACE web panel as
+ * `multiACE`. Keeping both here is the point - `isCamera()` has to reject the one with
+ * no `snapshot_url`, and a simulator that only ever returned real cameras would never
+ * exercise that.
+ *
+ * `snapshot_url` is a data: URI rather than the real `/webcam/snapshot.jpg`, for the
+ * same reason the monitor reply is: there is no HTTP server behind a simulated printer,
+ * and `snapshotUrl()` passes an absolute URL through unchanged.
+ */
+const MOCK_FRAME =
+  'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360">'
+    + '<rect width="640" height="360" fill="#12181f"/>'
+    + '<path d="M120 300 H520 L440 190 H200 Z" fill="#1b2530"/>'
+    + '<rect x="290" y="150" width="60" height="42" fill="#8d453c"/>'
+    + '<rect x="300" y="96" width="44" height="46" fill="#39434f"/>'
+    + '</svg>');
+
+export function mockWebcams() {
+  return [
+    { name: 'case', enabled: true, service: 'webrtc-camerastreamer',
+      target_fps: 15, target_fps_idle: 5, aspect_ratio: '16:9',
+      stream_url: '/webcam/webrtc', snapshot_url: MOCK_FRAME,
+      extra_data: { resolution: '1920x1080' } },
+    { name: 'usb', enabled: true, service: 'webrtc-camerastreamer',
+      target_fps: 15, target_fps_idle: 5, aspect_ratio: '16:9',
+      stream_url: '/webcam2/webrtc', snapshot_url: MOCK_FRAME,
+      extra_data: { resolution: '1280x720' } },
+    { name: 'gui', enabled: true, service: 'iframe',
+      target_fps: 15, aspect_ratio: '480:320',
+      stream_url: '/screen/', snapshot_url: MOCK_FRAME,
+      extra_data: { resolution: '480x320' } },
+    // No snapshot_url: a web panel, not a camera. isCamera() must drop it.
+    { name: 'multiACE', enabled: true, service: 'iframe',
+      stream_url: '/multiace/?panel=1', snapshot_url: '', extra_data: {} },
+  ];
+}

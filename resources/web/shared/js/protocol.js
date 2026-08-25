@@ -302,6 +302,195 @@ export const CAMERA_FRAME_ROOT = 'timelapse';
 export const CAMERA_FRAME_FILE = 'monitor.jpg';
 export const CAMERA_INTERVAL = 2;         // seconds; what the shipped page asks for
 
+/* ------------------------------------------------------------------ *
+ * Cameras, beyond the one monitor file
+ *
+ * The stock path above is half a frame per second: the printer rewrites ONE file every
+ * CAMERA_INTERVAL and the page fetches it. A U1 running paxx12's Extended Firmware
+ * serves the same sensor as fast as the client will take it, serves a second USB camera
+ * beside it, and offers two streaming transports on top.
+ *
+ * Measured on 811002511261022618B3, 2026-08-25, and none of this is inferred:
+ *
+ *   GET :7125/server/webcams/list   ->  4 entries, and only two are cameras:
+ *     case      webrtc-camerastreamer  /webcam/snapshot.jpg   1920x1080  226 KB   81 ms
+ *     usb       webrtc-camerastreamer  /webcam2/snapshot.jpg  1280x720    87 KB   44 ms
+ *     gui       iframe                 /screen/snapshot        480x320   710 B  <- the
+ *                                        printer's own touchscreen, not a camera
+ *     multiACE  iframe                 (no snapshot_url)      <- a web panel entirely
+ *
+ * So the list is Moonraker's and anything may register in it. An entry is a camera when
+ * it has a snapshot_url; `gui` is offered last and labelled, and multiACE never appears.
+ *
+ * Chained in WebKitGTK - the engine Orca renders with - the case camera reached
+ * **14.0 fps**, which is 28x the monitor file. The webcam entries report
+ * `target_fps: 15`, so that IS the printer's cap and asking for 30 buys nothing.
+ * ------------------------------------------------------------------ */
+
+/** Moonraker's own camera list. It sends CORS headers; nginx on :80 does not. */
+export const MOONRAKER_WEBCAMS = '/server/webcams/list';
+
+/**
+ * How a frame gets here. Ordered best-first: `pickTransport` walks this and takes the
+ * first the engine can actually do.
+ *
+ * The two streaming transports are **dead in WebKitGTK** and it is not close - measured
+ * in the engine rather than assumed:
+ *
+ *   canPlayType('video/mp4; codecs="avc1.42E01E")   ->  ""        (empty = no)
+ *   MediaSource.isTypeSupported(same)               ->  false     (VP8 is true, so MSE
+ *                                                                  is fine; the codec
+ *                                                                  is what is missing)
+ *   typeof RTCPeerConnection                        ->  "undefined"
+ *
+ * Windows (WebView2) and macOS (WKWebView) ship both, so this is a per-platform question
+ * and never a global answer. It is why AUTO probes rather than picking.
+ */
+export const CAMERA_TRANSPORT = {
+  AUTO:     'auto',
+  WEBRTC:   'webrtc',      // POST /webcam/webrtc  -> RTCPeerConnection
+  H264:     'h264',        // GET  /webcam/stream.h264 -> MSE
+  SNAPSHOT: 'snapshot',    // GET  /webcam/snapshot.jpg, re-pointed on load
+  MONITOR:  'monitor',     // camera.start_monitor -> timelapse/monitor.jpg
+};
+
+/** Best first. AUTO is not in it: AUTO is the act of walking it. */
+export const CAMERA_TRANSPORT_ORDER = [
+  CAMERA_TRANSPORT.WEBRTC, CAMERA_TRANSPORT.H264,
+  CAMERA_TRANSPORT.SNAPSHOT, CAMERA_TRANSPORT.MONITOR,
+];
+
+/**
+ * What each one is called and why it might not be offered.
+ *
+ * The name IS the transport, deliberately. Naming these Smooth/Sharp/Saver reads better
+ * until one is greyed out, at which point "not on Linux" is a worse explanation than
+ * "this engine has no H.264 decoder" for someone who has to act on it.
+ */
+export const CAMERA_TRANSPORT_TEXT = {
+  [CAMERA_TRANSPORT.AUTO]:     { name: 'Auto',            hint: 'the best this computer can decode' },
+  [CAMERA_TRANSPORT.WEBRTC]:   { name: 'WebRTC',          hint: '/webcam/webrtc \u00b7 30 fps',
+                                 absent: 'this engine has no WebRTC' },
+  [CAMERA_TRANSPORT.H264]:     { name: 'H.264 stream',    hint: '/webcam/stream.h264 \u00b7 30 fps',
+                                 absent: 'this engine has no H.264 decoder' },
+  [CAMERA_TRANSPORT.SNAPSHOT]: { name: 'Direct snapshot', hint: '/webcam/snapshot.jpg \u00b7 up to 15 fps',
+                                 absent: 'this printer has no camera service' },
+  [CAMERA_TRANSPORT.MONITOR]:  { name: 'Monitor file',    hint: 'camera.start_monitor \u00b7 0.5 fps' },
+};
+
+/** How many pictures at once. */
+export const CAMERA_VIEW = { SINGLE: 'single', SPLIT: 'split', GRID: 'grid', PIP: 'pip' };
+
+/** How many tiles each view draws. */
+export const CAMERA_VIEW_TILES = {
+  [CAMERA_VIEW.SINGLE]: 1, [CAMERA_VIEW.SPLIT]: 2,
+  [CAMERA_VIEW.GRID]: 4,   [CAMERA_VIEW.PIP]: 2,
+};
+
+/**
+ * Frames per second the page asks for.
+ *
+ * The scale stops at 15 because the printer does: every webcam entry reports
+ * `target_fps: 15`, and the 14.0 measured in the engine is that cap rather than a client
+ * limit. Offering 30 would offer nothing.
+ */
+export const CAMERA_FPS_CHOICES = [1, 5, 10, 15];
+export const CAMERA_FPS_DEFAULT = 15;
+
+/**
+ * What an unfocused tile drops to.
+ *
+ * A grid is one poll per tile - there is no multiplexed stream to share - so three tiles
+ * at 15 fps is 4.7 MB/s, dominated entirely by the case camera's 226 KB frame (the USB
+ * camera is 87 KB and the touchscreen is 710 bytes). Polling only the focused tile fast
+ * brings that to 3.5 MB/s, and it is one number rather than a policy.
+ */
+export const CAMERA_FPS_UNFOCUSED = 1;
+
+/** Moonraker registers non-cameras in the same list. A camera has a still to fetch. */
+export function isCamera(w) {
+  return !!(w && w.enabled !== false && w.snapshot_url);
+}
+
+/**
+ * The touchscreen is in the webcam list and is not a camera.
+ *
+ * It is genuinely useful as a tile - it shows what the printer thinks it is doing - so
+ * it is offered, last, under its own name rather than sitting in the camera list
+ * unexplained.
+ */
+export const CAMERA_SCREEN_NAME = 'gui';
+export const CAMERA_LABELS = { case: 'Case', usb: 'USB', gui: 'Screen' };
+export function cameraLabel(w) {
+  const n = String((w && w.name) || '');
+  return CAMERA_LABELS[n] || (n ? n.charAt(0).toUpperCase() + n.slice(1) : 'Camera');
+}
+
+/**
+ * A camera's still, absolute.
+ *
+ * `snapshot_url` is relative to the printer's web UI on **:80**, which is where it
+ * genuinely lives - unlike the monitor file, whose reply names a :80 path that answers
+ * with the SPA shell. nginx there sends no `Access-Control-Allow-Origin` at all, so an
+ * `<img>` loads it (images are not CORS-restricted unless their pixels are read) and a
+ * `fetch()` of the identical URL fails "Load failed". Both measured. Display with
+ * `<img>`; never fetch a frame.
+ */
+export function snapshotUrl(device, w) {
+  const ip = device && device[DEVICE.IP];
+  const rel = w && w.snapshot_url;
+  if (!rel) return null;
+  // Absolute already, which is also how the simulator hands back a frame: a data: URI,
+  // the same shape the monitor reply uses.
+  if (/^(data:|blob:|https?:)/i.test(rel)) return rel;
+  if (!ip) return null;
+  return `http://${ip}${rel.startsWith('/') ? '' : '/'}${rel}`;
+}
+
+/** Where the camera list is asked for. Moonraker, because :80 refuses cross-origin. */
+export function webcamListUrl(device) {
+  const ip = device && device[DEVICE.IP];
+  return ip ? `http://${ip}:${MOONRAKER_HTTP_PORT}${MOONRAKER_WEBCAMS}` : null;
+}
+
+/**
+ * What this engine can decode. Three one-line tests, run once.
+ *
+ * Deliberately not cached across reloads: it is a property of the running webview, and
+ * Orca's is WebKitGTK on Linux, WebView2 on Windows and WKWebView on macOS. A value
+ * remembered from one is wrong on the next.
+ */
+export function engineCaps() {
+  const mp4 = 'video/mp4; codecs="avc1.42E01E"';
+  let h264 = false;
+  try {
+    h264 = (typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(mp4))
+        || document.createElement('video').canPlayType(mp4) !== '';
+  } catch { h264 = false; }
+  return { h264, webrtc: typeof RTCPeerConnection !== 'undefined' };
+}
+
+/**
+ * The best transport that both ends can do.
+ *
+ * `direct` says the printer answered the webcam list with at least one camera, which is
+ * how the extended firmware is DETECTED rather than configured. Without it the only
+ * thing on offer is the monitor file, which is what every stock U1 has and what this
+ * page did before.
+ */
+export function pickTransport(caps, direct) {
+  return CAMERA_TRANSPORT_ORDER.find((t) => transportUsable(t, caps, direct))
+      || CAMERA_TRANSPORT.MONITOR;
+}
+
+export function transportUsable(t, caps, direct) {
+  if (t === CAMERA_TRANSPORT.MONITOR) return true;
+  if (!direct) return false;
+  if (t === CAMERA_TRANSPORT.WEBRTC) return !!(caps && caps.webrtc);
+  if (t === CAMERA_TRANSPORT.H264) return !!(caps && caps.h264);
+  return true;                                   // SNAPSHOT, once there is a camera
+}
+
 /** True when a saved device already carries the mTLS material to connect directly. */
 export function hasTlsMaterial(d) {
   return !!(d && d[DEVICE.CA] && d[DEVICE.CERT] && d[DEVICE.KEY]);
