@@ -1172,7 +1172,8 @@ const STORAGE_ROOT = { gcodes: 'gcodes', logs: 'logs' };
 
 function openStorage(kind) {
   storageKind = kind;
-  ui.$('#storage-body').dataset.sig = '';        // force a rebuild for the new kind
+  // No cache to bust: the rebuild guard is keyed on `kind:shape`, so changing kind
+  // rebuilds by construction rather than by remembering to invalidate something.
   if (kind === 'timelapses') handlers.loadTimelapses();
   else if (kind === 'prints') handlers.loadHistory();
   else handlers.openRoot(STORAGE_ROOT[kind]);

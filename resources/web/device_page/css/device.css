@@ -1224,6 +1224,10 @@ text.step {
   display: flex; align-items: center; gap: 12px;
   padding-top: 12px; font-size: 12px; color: var(--ink-dim);
 }
+/* A class rule with `display` beats the UA stylesheet's [hidden]{display:none}, so an
+   element styled this way must opt back in or setting .hidden in JS does nothing. Same
+   trap as .fault, which is the second time this has cost an hour. */
+.stor-foot[hidden] { display: none; }
 
 /* A log or a gcode has no picture, so it does not get a picture's worth of card.
    Same grid, same card, laid out sideways: glyph, name and size, one action. */

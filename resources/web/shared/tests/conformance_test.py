@@ -395,6 +395,8 @@ panel_src = {f[:-3]: open(os.path.join(PANELS, f), encoding="utf-8").read()
 panels_all = "\n".join(panel_src.values())
 pending_src = open(os.path.join(WEB, "device_page", "js", "pending.js"),
                    encoding="utf-8").read()
+render_src = open(os.path.join(WEB, "device_page", "js", "render.js"),
+                  encoding="utf-8").read()
 app_src = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
 proto_src = open(PROTO, encoding="utf-8").read()
 # Was: `handlers.selectTool` must not appear in ui.js - which was true while the
@@ -454,6 +456,22 @@ check("storage is one scrolling grid with previews, for every kind",
       and "'Reprint'" in ui_src and "grid-auto-rows: max-content" in css,
       "recordings, prints and two file roots were four shapes behind three tabs on two "
       "panels; they are all things on the machine you might want to look at")
+# Four disciplines answered "the state changed, what do I do with the DOM", and every
+# focus/scroll/anchor bug in the log came from the differences between them.
+check("there is one rebuild guard, not one attribute name per panel",
+      "export function rebuildOn" in render_src
+      and "dataset.sig" not in ui_src and "dataset.state ===" not in ui_src
+      and "dataset.code ===" not in ui_src,
+      "data-built, data-sig, data-state and data-code were four spellings of one idea")
+check("a list is reconciled by key rather than thrown away and rebuilt",
+      "export function keyedList" in render_src and "keyedList(" in ui_src
+      and "scrollTop = at" not in ui_src,
+      "the container is never replaced, so its scroll position needs no saving")
+check("a recurring fault shows again",
+      "delete root.dataset.built" in ui_src,
+      "the old guard compared a code on the way in and never reset it on the way out, "
+      "so a fault that cleared and came back matched its own stale key and stayed hidden")
+
 check("a print whose file is gone cannot be reprinted",
       "it.exists === false" in ui_src,
       "history keeps the record after the file is deleted; Reprint would send a "
@@ -471,9 +489,34 @@ check("history thumbnails come over HTTP, because the metadata carries paths",
 check("machine files can be viewed and printed, not deleted",
       "handlers.deleteFile" not in ui_src and "deleteFile:" not in app_src,
       "Delete sat a few pixels from a one-click Print and only one of them is reversible")
+# Twice now: an element with a `display` class rule, hidden from JS, went on showing -
+# a class rule outranks the UA stylesheet's [hidden]{display:none}. Both known cases are
+# pinned rather than the rule being re-learned a third time.
+_hidden_optouts = [c for c in (".fault", ".stor-foot")
+                   if f"{c}[hidden]" not in css]
+check("anything hidden from JS opts out of its own display rule",
+      not _hidden_optouts,
+      f"missing a [hidden] rule: {_hidden_optouts} - setting .hidden on these does nothing")
 check("the storage refresh is an action, not another picker",
       "'icon-btn'" in panel_src["storage"] and ".icon-btn" in css,
       "sitting in the row of kind buttons it read as another one of them")
+
+# The reachability half of check_coverage.py found `handlers.showFiles` defined and
+# called by nothing - its own comment calls it "the one useful action from an idle job
+# card". The card had a disabled play button titled "Nothing to start here" instead.
+check("an idle job card is not a dead end",
+      "handlers.showFiles()" in ui_src and "showFiles:" in app_src
+      and "main_btn.disabled" not in ui_src,
+      "with nothing running, the one useful action is to go and find something to print")
+
+# `is-active` moved in the click handler, which is almost right: anything that changed
+# the selection WITHOUT a click left the wrong tab lit, and the line above does exactly
+# that - it opens Storage on gcodes while the header went on highlighting time-lapses.
+check("a header picker follows the state, not the click that changed it",
+      "headerSync.push(sync)" in shell_src and "headerSync.forEach" in shell_src
+      and "b.onclick = () => spec.on(ctx, it.value);" in shell_src,
+      "a selection can change without a click, and the header has no renderer of its "
+      "own to correct it afterwards")
 
 check("the job card is one card at every state, not two",
       "job-badge" in ui_src and "job-bar" in ui_src

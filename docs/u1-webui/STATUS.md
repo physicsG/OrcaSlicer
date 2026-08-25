@@ -669,3 +669,67 @@ shape — state with no single home:
   closures to find — is gone with them, since the context is the same idea with one copy
   instead of one per frame.
 
+### Structure, pass two: one pending model, one render discipline (2026-08-25)
+
+Two of the three things the last section left open are done. The third — the sixteen
+module-level `let`s in `app.js` — is next; `ctx` is already the door they all go through.
+
+**[`pending.js`](../../resources/web/device_page/js/pending.js).** See the LED table
+above for the measurement. Three controls had the same bug and two different fixes
+between them; there is one mechanism now, it touches no DOM, and `unit_jsc.py` tests it
+directly against an injected clock.
+
+**[`render.js`](../../resources/web/device_page/js/render.js).** Four disciplines
+answered *the state changed, what do I do with the DOM* — and they were spelled with four
+different attributes, `data-built`, `data-sig`, `data-state` and `data-code`, which is
+what made them hard to see as one question:
+
+| panel | was | now |
+|---|---|---|
+| status card | `data-built` on toolhead count, then patch | `rebuildOn` |
+| storage | `data-sig`, rebuild whole, `scrollTop` saved by hand | `rebuildOn` on shape + `keyedList` |
+| camera | `data-state`, rebuild whole | `rebuildOn` + patched message |
+| fault | `data-code`, rebuild whole | `rebuildOn` |
+| task, filament, control | `innerHTML = ''` **every frame** | `rebuildOn` / `keyedList` + patch |
+
+The jog wheel's twenty-four SVG sectors were being thrown away and recreated about once a
+second, under whatever the pointer was over. The task card's buttons likewise. Neither is
+rebuilt now unless its shape changes.
+
+Three bugs fell out of writing it down, none of them from using the page:
+
+- **The storage guard hashed the item *count*.** A list whose contents changed without
+  its length did not repaint — a print going `in_progress` → `completed` kept its old
+  badge. `keyedList` reconciles by key and rebuilds a card when its own signature
+  changes, so the guard has nothing left to get wrong.
+- **A recurring fault never showed again.** The banner compared `data-code` on the way in
+  and never cleared it on the way out, so a fault that cleared and came back matched its
+  own stale key, took the early return, and stayed hidden while the machine was
+  reporting it.
+- **`.stor-foot[hidden]` did nothing** — a class rule with `display` outranks the UA
+  stylesheet's `[hidden] { display: none }`. This is the second time it has cost an hour;
+  `.fault` was the first. Both are now pinned by a conformance check rather than
+  re-learned a third time.
+
+And one I introduced in pass one and found by using the page: **`is-active` moved in the
+click handler**, which is almost right. Anything that changed the selection without a
+click left the wrong tab lit — and the fix below does exactly that. A header belongs to
+no renderer, so it now syncs from state on every paint.
+
+**`handlers.showFiles` is live.** The dead handler the reachability check surfaced last
+pass: its own comment calls it "the one useful action from an idle job card", and the
+card had a *disabled* play button titled "Nothing to start here" instead. Driven against
+the simulator: cancel the print, and the card offers one enabled button, "Choose a file
+to print", which opens Storage on print files with the right tab lit.
+
+**Verification.** 149/149 conformance, 106/106 `unit_jsc`, 17/17 `run_webkit`, coverage
+clean. Against the pass-one DOM dump every difference is bookkeeping — the `key`, `sig`
+and `built` attributes the primitives keep, plus a `.stor-foot` that is present and
+hidden rather than absent. No content moved.
+
+**A note on what caught what.** `run_webkit.py`'s 17 checks passed while the page had no
+motion column at all: they cover the temperature rows, and a `ReferenceError` inside the
+single `requestAnimationFrame` callback silently truncated the rest of the paint. The
+structural DOM dump is what found it, and `paint()` now catches per panel so the failure
+is on the page instead of nowhere. Keep the dump in the loop — it is the only check here
+that asks *what is on the page* rather than *is this one thing right*.

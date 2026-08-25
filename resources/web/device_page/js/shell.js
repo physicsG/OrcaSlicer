@@ -46,28 +46,36 @@ function pillBtn(spec, ctx) {
 }
 
 /**
- * A one-of-N picker. `is-active` moves on click rather than waiting for a repaint: the
- * tabs live in the header, which no renderer owns, so nothing else would move it.
+ * A one-of-N picker.
+ *
+ * `is-active` follows the state rather than the click. Moving it in the click handler
+ * was almost right and quietly wrong: anything that changed the selection *without* a
+ * click left the wrong tab lit. The job card's "choose a file to print" does exactly
+ * that - it opens Storage on gcodes - and the header went on highlighting time-lapses
+ * over a grid of print files.
  */
 function tabGroup(spec, ctx, into) {
   const made = [];
+  const group = spec.group || 'value';
   spec.items.forEach((it) => {
     const b = el('button', spec.cls || 'tab');
-    b.dataset[spec.group || 'value'] = it.value;
+    b.dataset[group] = it.value;
     if (it.title) b.title = it.title;
     const im = icon(it.icon);
     im.alt = it.title || '';
     b.appendChild(im);
-    b.onclick = () => {
-      made.forEach((o) => o.classList.toggle('is-active', o === b));
-      spec.on(ctx, it.value);
-    };
+    b.onclick = () => spec.on(ctx, it.value);
     made.push(b);
     into.appendChild(b);
   });
-  const current = spec.active ? spec.active(ctx) : null;
-  const first = made.find((b) => b.dataset[spec.group || 'value'] === current) || made[0];
-  if (first) first.classList.add('is-active');
+  const sync = () => {
+    const cur = String(spec.active ? spec.active(ctx) : '');
+    const hit = made.some((b) => b.dataset[group] === cur);
+    made.forEach((b, i) => b.classList.toggle(
+      'is-active', hit ? b.dataset[group] === cur : i === 0));
+  };
+  sync();
+  headerSync.push(sync);
 }
 
 function headerItem(spec, ctx, into) {
@@ -161,6 +169,12 @@ function tracePane() {
 }
 
 /**
+ * Header controls that reflect state - the pickers. A header belongs to no renderer, so
+ * without this nothing would ever move a tab except the click that made it.
+ */
+const headerSync = [];
+
+/**
  * What each panel last failed with, so a paint that throws on every frame - which is the
  * usual shape - reports once rather than sixty times a second.
  */
@@ -175,6 +189,7 @@ export function paint(ctx, view) {
     (n) => n.classList.toggle('is-active', n.dataset.view === view));
 
   VIEWS.forEach((v) => { $(`#view-${v.id}`).hidden = v.id !== view; });
+  headerSync.forEach((f) => f());
 
   PANELS.forEach((p) => {
     if (p.view !== null && p.view !== view) return;

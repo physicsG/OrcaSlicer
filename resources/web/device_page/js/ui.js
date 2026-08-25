@@ -15,6 +15,7 @@ import { LIMITS, PRINT_STATE, TASK_CONFIG, DEVICE, deviceLabel,
 import { openDialog, numberField, openPopover, closePopover } from './overlay.js';
 import { lookupFault } from '../../shared/js/errors.js';
 import { $, el, icon } from './dom.js';
+import { rebuildOn, keyedList, text, attr, data } from './render.js';
 
 // app.js still reaches the page through ui.$; re-exported so that stays one name.
 export { $ };
@@ -100,58 +101,57 @@ export const CAMERA_TEXT = {
 };
 
 export function renderCamera(root, connected, cam, handlers) {
-  // deliberately not keyed on the frame: the <img> is reused and its src is
-  // re-pointed in place, so a new frame must not rebuild the panel under it.
-  const key = `${connected ? 'on' : 'off'}:${cam.streaming ? 1 : 0}:${cam.frameUrl || ''}`;
-  if (root.dataset.state === key) return;
-  root.dataset.state = key;
-  root.innerHTML = '';
-
-  // live view - one <img>, re-pointed by the frame pump in app.js.
-  //
-  // The body is BLACK and the control is a round play button inside it, which is what
-  // the shipped page shows: a viewport that is dark whether or not a frame is in it.
-  // The rebuild used to put the not-connected illustration here instead, which answers
-  // a different question - "there is no printer" rather than "the camera is off" - and
-  // then offered a text button underneath that the original has nothing like.
-  if (!connected) {
-    const wrap = el('div');
-    wrap.style.textAlign = 'center';
-    illustration(wrap);
-    root.appendChild(wrap);
-    return;
-  }
-
-  const view = el('div', 'cam-view');
-  if (cam.streaming && cam.frameUrl) {
-    const im = el('img', 'cam-frame');
-    im.id = 'cam-live';
-    im.src = cam.frameUrl;
-    im.alt = 'Live view';
-    im.onerror = () => { im.dataset.failed = '1'; };
-    view.appendChild(im);
-  }
-
-  // One control, centred, the way the original has it. While a frame is playing it
-  // only appears on hover, because the original shows an unobstructed picture.
-  const btn = el('button', 'cam-play');
-  btn.type = 'button';
+  // Deliberately not keyed on the frame: the <img> is reused and its src re-pointed in
+  // place by the pump in app.js, so a new frame must not rebuild the panel under it.
+  const shape = !connected ? 'off' : 'view';
   const running = !!cam.streaming;
-  if (running) btn.dataset.on = '1';
-  btn.title = running ? 'Stop the camera' : 'Start the camera';
-  btn.setAttribute('aria-label', btn.title);
-  btn.innerHTML = running
-    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>'
-    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11l9-5.5z"/></svg>';
-  btn.onclick = () => (running ? handlers.stopCamera() : handlers.startCamera());
-  view.appendChild(btn);
 
+  rebuildOn(root, `${shape}:${running ? 1 : 0}:${cam.frameUrl || ''}`, () => {
+    // The body is BLACK and the control is a round play button inside it, which is what
+    // the shipped page shows: a viewport that is dark whether or not a frame is in it.
+    // The rebuild used to put the not-connected illustration here instead, which answers
+    // a different question - "there is no printer" rather than "the camera is off" - and
+    // then offered a text button underneath that the original has nothing like.
+    if (shape === 'off') {
+      const wrap = el('div');
+      wrap.style.textAlign = 'center';
+      illustration(wrap);
+      root.appendChild(wrap);
+      return;
+    }
+
+    const view = el('div', 'cam-view');
+    if (running && cam.frameUrl) {
+      const im = el('img', 'cam-frame');
+      im.id = 'cam-live';
+      im.src = cam.frameUrl;
+      im.alt = 'Live view';
+      im.onerror = () => { im.dataset.failed = '1'; };
+      view.appendChild(im);
+    }
+
+    // One control, centred, the way the original has it. While a frame is playing it
+    // only appears on hover, because the original shows an unobstructed picture.
+    const btn = el('button', 'cam-play');
+    btn.type = 'button';
+    if (running) btn.dataset.on = '1';
+    btn.title = running ? 'Stop the camera' : 'Start the camera';
+    btn.setAttribute('aria-label', btn.title);
+    btn.innerHTML = running
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11l9-5.5z"/></svg>';
+    btn.onclick = () => (running ? handlers.stopCamera() : handlers.startCamera());
+    view.appendChild(btn);
+
+    if (!running || !cam.frameUrl) view.appendChild(el('div', 'cam-msg', ''));
+    root.appendChild(view);
+  });
+
+  // The message is patched rather than keyed on: an error arriving is not a change of
+  // shape, and rebuilding for it would take the live <img> with it.
+  const msg = root.querySelector('.cam-msg');
   // The bundle's own wording, not ours: CAMERA_TEXT holds every string it uses here.
-  if (!running || !cam.frameUrl) {
-    view.appendChild(el('div', 'cam-msg',
-                        cam.error || (running ? CAMERA_TEXT.loading : CAMERA_TEXT.off)));
-  }
-  root.appendChild(view);
+  if (msg) text(msg, cam.error || (running ? CAMERA_TEXT.loading : CAMERA_TEXT.off));
 }
 
 /* ---- control: left status card -------------------------------------- */
@@ -377,11 +377,7 @@ export function renderStatusCard(root, ctx) {
   // Rebuild only when the shape changes; otherwise write the new numbers into the DOM
   // that is already there. Beyond keeping focus, this also keeps a tile alive while its
   // popover is anchored to it - replacing the anchor would orphan the panel.
-  const sig = `${toolheads.length}`;
-  if (root.dataset.built !== sig) {
-    root.dataset.built = sig;
-    buildStatusCard(root, toolheads, ctx);
-  }
+  rebuildOn(root, `${toolheads.length}`, () => buildStatusCard(root, toolheads, ctx));
 
   const rows = root.querySelectorAll('.status-row');
   toolheads.forEach((t, i) => {
@@ -437,7 +433,6 @@ function setPend(node, state) {
 }
 
 function buildStatusCard(root, toolheads, ctx) {
-  root.innerHTML = '';
   const handlers = ctx.handlers;
   const st = ctx.state;
 
@@ -678,12 +673,22 @@ function jogWheel(handlers, head, activeTool) {
  * snapshot existed only to survive that self-call, and is now read live.
  */
 export function renderControlMain(root, ctx) {
-  root.innerHTML = '';
   const handlers = ctx.handlers;
   const toolheads = ctx.state.toolheads();
   const head = ctx.state.toolhead();
   const activeTool = ctx.activeTool;
   const machineTool = head.activeIndex != null ? head.activeIndex : null;
+
+  // Everything below is decided by these four, and nothing else in this panel moves -
+  // so this is the whole of what a repaint has to react to. It used to rebuild on every
+  // frame, which meant the jog wheel's twenty-four SVG sectors were thrown away and
+  // recreated about once a second, under whatever the pointer was over.
+  const sig = `${toolheads.length}:${activeTool}:${machineTool}:${head.allHomed}`;
+  if (!rebuildOn(root, sig, () => build(root, ctx, toolheads, head,
+                                        activeTool, machineTool, handlers))) return;
+}
+
+function build(root, ctx, toolheads, head, activeTool, machineTool, handlers) {
 
   /* --- toolhead picker, left of the wheel --- */
   const pick = el('div', 'pick-col');
@@ -799,76 +804,96 @@ function clock(sec) {
  * printer and a printing one differ in the numbers, not in the furniture.
  */
 export function renderTask(root, job, handlers, device, thumb) {
-  root.innerHTML = '';
-
   const active = job.state === PRINT_STATE.PRINTING || job.state === PRINT_STATE.PAUSED;
   const paused = job.state === PRINT_STATE.PAUSED;
-  const wrap = el('div', 'job');
 
-  const head = el('div', 'job-head');
+  // The card's *shape*: which controls exist and whether there is a thumbnail or a
+  // message at all. The numbers move every second and the shape does not, which is the
+  // whole point - this used to rebuild the card, the buttons and the image once a
+  // second, so a click could land on a node that was about to be replaced.
+  rebuildOn(root, `${active ? 1 : 0}:${paused ? 1 : 0}:${thumb ? 1 : 0}:${job.message ? 1 : 0}`,
+    () => {
+      const wrap = el('div', 'job');
+
+      const head = el('div', 'job-head');
+      head.appendChild(el('span', 'job-badge'));
+      head.appendChild(el('span', 'job-dev'));
+      wrap.appendChild(head);
+
+      const main = el('div', 'job-main');
+      const tw = el('div', 'job-thumb');
+      if (thumb) {
+        tw.appendChild(el('img'));
+      } else {
+        // The bundle's own empty-box art, not the not-connected device illustration -
+        // which answers "there is no printer" rather than "there is no file".
+        const ph = el('img', 'job-thumb-ph');
+        ph.src = 'icons/empty-box.png';
+        ph.alt = '';
+        tw.appendChild(ph);
+      }
+      main.appendChild(tw);
+
+      const info = el('div', 'job-info');
+      info.appendChild(el('div', 'job-name'));
+      info.appendChild(el('div', 'job-pct'));
+      const nums = el('div', 'job-nums');
+      // Layers read as a pair; a machine that reports neither shows the pair as zero,
+      // which is what the original does rather than hiding the row.
+      nums.appendChild(el('span', 'job-layer'));
+      nums.appendChild(el('span', 'job-time'));
+      info.appendChild(nums);
+      main.appendChild(info);
+      wrap.appendChild(main);
+
+      const bar = el('div', 'job-bar');
+      bar.appendChild(el('div'));
+      wrap.appendChild(bar);
+
+      const btns = el('div', 'job-actions');
+      // Idle is not a dead end. The card's one useful action with nothing running is to
+      // go and find something to print, which is what Storage is for - the button used
+      // to be present, disabled, and titled "Nothing to start here".
+      const main_btn = roundBtn(
+        paused || !active ? 'play' : 'pause',
+        paused ? 'Resume the print'
+               : (active ? 'Pause the print' : 'Choose a file to print'),
+        () => (active ? (paused ? handlers.resume() : handlers.pause())
+                      : handlers.showFiles()));
+      btns.appendChild(main_btn);
+      if (active) {
+        btns.appendChild(roundBtn('stop', 'Cancel the print',
+                                  () => handlers.confirmCancel()));
+      }
+      wrap.appendChild(btns);
+
+      if (job.message) wrap.appendChild(el('div', 'job-msg'));
+      root.appendChild(wrap);
+    });
+
+  // ---- the numbers, which is all that moves ------------------------------
   const st = job.state || PRINT_STATE.STANDBY;
+  const badge = root.querySelector('.job-badge');
   // Klipper calls a machine with no job `standby`; the shipped page shows `idle`.
   // The machine's own word stays on the title, so nothing is hidden by the rename.
-  const badge = el('span', 'job-badge', st === PRINT_STATE.STANDBY ? 'idle' : st);
+  text(badge, st === PRINT_STATE.STANDBY ? 'idle' : st);
   badge.title = `print_stats.state: ${st}`;
-  badge.dataset.state = st;
-  head.appendChild(badge);
-  head.appendChild(el('span', 'job-dev', device ? deviceLabel(device) : ''));
-  wrap.appendChild(head);
+  data(badge, 'state', st);
+  text(root.querySelector('.job-dev'), device ? deviceLabel(device) : '');
 
-  const main = el('div', 'job-main');
-  const tw = el('div', 'job-thumb');
   if (thumb) {
-    const im = el('img');
-    im.src = thumb.startsWith('data:') ? thumb : `data:image/png;base64,${thumb}`;
-    im.alt = '';
-    tw.appendChild(im);
-  } else {
-    // The bundle's own empty-box art, not the not-connected device illustration -
-    // which answers "there is no printer" rather than "there is no file".
-    const ph = el('img', 'job-thumb-ph');
-    ph.src = 'icons/empty-box.png';
-    ph.alt = '';
-    tw.appendChild(ph);
+    attr(root.querySelector('.job-thumb img'), 'src',
+         thumb.startsWith('data:') ? thumb : `data:image/png;base64,${thumb}`);
   }
-  main.appendChild(tw);
 
-  const info = el('div', 'job-info');
-  info.appendChild(el('div', 'job-name', job.filename
-    ? (job.filename.split('/').pop() || job.filename) : '\u2014'));
-  info.appendChild(el('div', 'job-pct', `${Math.round(job.progress * 100)}%`));
-  const nums = el('div', 'job-nums');
-  // Layers read as a pair; a machine that reports neither shows the pair as zero,
-  // which is what the original does rather than hiding the row.
-  nums.appendChild(el('span', 'job-layer',
-                      `${job.layer ?? 0}/${job.totalLayer ?? 0}`));
-  nums.appendChild(el('span', 'job-time', `\u2014 ${hm(remaining(job))}`));
-  info.appendChild(nums);
-  main.appendChild(info);
-  wrap.appendChild(main);
-
-  const bar = el('div', 'job-bar');
-  const fill = el('div');
-  fill.style.width = `${Math.round(job.progress * 100)}%`;
-  bar.appendChild(fill);
-  wrap.appendChild(bar);
-
-  const btns = el('div', 'job-actions');
-  const main_btn = roundBtn(
-    paused || !active ? 'play' : 'pause',
-    paused ? 'Resume the print' : (active ? 'Pause the print' : 'Nothing to start here'),
-    () => (paused ? handlers.resume() : handlers.pause()));
-  // Idle offers the button and refuses it: a print starts from a file, not from here.
-  if (!active) main_btn.disabled = true;
-  btns.appendChild(main_btn);
-  if (active) {
-    btns.appendChild(roundBtn('stop', 'Cancel the print',
-                              () => handlers.confirmCancel()));
-  }
-  wrap.appendChild(btns);
-
-  if (job.message) wrap.appendChild(el('div', 'job-msg', job.message));
-  root.appendChild(wrap);
+  const pct = Math.round(job.progress * 100);
+  text(root.querySelector('.job-name'),
+       job.filename ? (job.filename.split('/').pop() || job.filename) : '\u2014');
+  text(root.querySelector('.job-pct'), `${pct}%`);
+  text(root.querySelector('.job-layer'), `${job.layer ?? 0}/${job.totalLayer ?? 0}`);
+  text(root.querySelector('.job-time'), `\u2014 ${hm(remaining(job))}`);
+  root.querySelector('.job-bar > div').style.width = `${pct}%`;
+  if (job.message) text(root.querySelector('.job-msg'), job.message);
 }
 
 /** `0h 0m`, the way the shipped card writes it - clock() pads the minutes and this
@@ -926,48 +951,80 @@ const JOB_STATUS = {
  * rebuilding threw away the scroll position.
  */
 export function renderStorage(root, kind, data, handlers, device) {
-  const sig = storageSig(kind, data);
-  if (root.dataset.sig === sig) return;
-  const keep = root.querySelector('.stor-grid');
-  const at = keep ? keep.scrollTop : 0;
-  root.dataset.sig = sig;
-  root.innerHTML = '';
+  const items = data.items || [];
+  // What the body *is*, rather than what it contains: four shapes, and only a change of
+  // shape needs the chrome rebuilt. The old guard hashed the item COUNT and so never
+  // repainted a list whose contents changed without its length - a print going from
+  // in_progress to completed left the old badge on screen.
+  const shape = data.loading ? 'loading'
+              : data.error ? 'error'
+              : items.length ? 'grid' : 'empty';
 
-  if (data.loading) { root.appendChild(el('div', 'cam-msg', 'Reading the machine\u2026')); return; }
-  if (data.error) {
-    const wrap = el('div', 'stor-empty');
-    wrap.appendChild(el('div', 'cam-msg', data.error));
-    const again = el('button', 'btn', 'Try again');
-    again.onclick = () => handlers.reloadStorage();
-    wrap.appendChild(again);
-    root.appendChild(wrap);
-    return;
-  }
-
-  const cards = (data.items || []).map((it) => storageCard(kind, it, handlers, device));
-  if (!cards.length) {
-    const wrap = el('div', 'stor-empty');
-    illustration(wrap);
-    wrap.appendChild(el('div', 'cam-msg', EMPTY_TEXT[kind] || 'Nothing here'));
-    root.appendChild(wrap);
-    return;
-  }
-
-  const grid = el('div', 'stor-grid');
-  grid.dataset.kind = kind;
-  cards.forEach((c) => grid.appendChild(c));
-  root.appendChild(grid);
-
-  if (data.hasMore) {
+  rebuildOn(root, `${kind}:${shape}`, () => {
+    if (shape === 'loading') {
+      root.appendChild(el('div', 'cam-msg', 'Reading the machine\u2026'));
+      return;
+    }
+    if (shape === 'error') {
+      const wrap = el('div', 'stor-empty');
+      wrap.appendChild(el('div', 'cam-msg', ''));
+      const again = el('button', 'btn', 'Try again');
+      again.onclick = () => handlers.reloadStorage();
+      wrap.appendChild(again);
+      root.appendChild(wrap);
+      return;
+    }
+    if (shape === 'empty') {
+      const wrap = el('div', 'stor-empty');
+      illustration(wrap);
+      wrap.appendChild(el('div', 'cam-msg', EMPTY_TEXT[kind] || 'Nothing here'));
+      root.appendChild(wrap);
+      return;
+    }
+    const grid = el('div', 'stor-grid');
+    grid.dataset.kind = kind;
+    root.appendChild(grid);
     const foot = el('div', 'stor-foot');
-    foot.appendChild(el('span', null, `${cards.length} shown`));
+    foot.appendChild(el('span', null, ''));
     const more = el('button', 'btn', 'Load more');
-    more.onclick = () => handlers.loadMoreStorage(cards.length);
+    more.onclick = () => handlers.loadMoreStorage(root.querySelectorAll('.stor-card').length);
     foot.appendChild(more);
     root.appendChild(foot);
-  }
-  const now = root.querySelector('.stor-grid');
-  if (now && at) now.scrollTop = at;
+  });
+
+  if (shape === 'error') { text(root.querySelector('.cam-msg'), data.error); return; }
+  if (shape !== 'grid') return;
+
+  // The grid is never replaced, so its scroll position needs no saving and restoring -
+  // that hand-rolled `at = keep.scrollTop` was paying for the rebuild above it.
+  keyedList(root.querySelector('.stor-grid'), items, {
+    key: (it, i) => cardKey(it, i),
+    sig: (it) => cardSig(kind, it),
+    create: (it) => storageCard(kind, it, handlers, device),
+  });
+
+  const foot = root.querySelector('.stor-foot');
+  foot.hidden = !data.hasMore;
+  text(foot.querySelector('span'), `${items.length} shown`);
+}
+
+/**
+ * What makes two entries the same entry across frames.
+ *
+ * Falls back to the index, because none of the four sources promises an id: history
+ * rows have a filename that repeats across reprints, and a log file has only its path.
+ * An index-keyed list still reconciles correctly for the one mutation that happens here
+ * - "load more" appending to the end.
+ */
+function cardKey(it, i) {
+  return it.job_id || it.id || it.path || it.filename || it.gcode_name || `#${i}`;
+}
+
+/** What has to change before a card is worth rebuilding. */
+function cardSig(kind, it) {
+  if (kind === 'prints') return `${it.status}:${it.exists}:${it.end_time}`;
+  if (kind === 'timelapses') return `${it.video_file_size}:${it.video_duration}`;
+  return `${it.size}:${it.modified}`;
 }
 
 const EMPTY_TEXT = {
@@ -976,12 +1033,6 @@ const EMPTY_TEXT = {
   gcodes: 'No print files on this machine',
   logs: 'No files in this folder',
 };
-
-function storageSig(kind, d) {
-  const x = d || {};
-  return `${kind}:${(x.items || []).length}:${x.loading ? 1 : 0}:${x.hasMore ? 1 : 0}`
-       + `:${x.error || ''}`;
-}
 
 /** The empty-box art the shipped page uses where there is nothing to show. */
 function placeholder(cls = 'stor-ph') {
@@ -1112,28 +1163,31 @@ export function makeTrace(pane) {
  * popup edits. See docs/u1-webui/00-shared/01-shared-models.md
  */
 export function renderFilament(root, slots, handlers) {
-  root.innerHTML = '';
-  slots.forEach((f, i) => {
-    const css = cssColor(f.color);
-    const slot = el('button', 'slot');
-    slot.title = f.loaded
-      ? `Slot ${i + 1}: ${[f.vendor, f.type, f.subType].filter(Boolean).join(' ')}`
-      : `Slot ${i + 1}: empty`;
+  keyedList(root, slots, {
+    key: (f, i) => i,
+    sig: (f) => `${f.loaded ? 1 : 0}:${f.type}:${f.subType}:${f.vendor}:${f.color}:${f.tag}`,
+    create: (f, i) => {
+      const css = cssColor(f.color);
+      const slot = el('button', 'slot');
+      slot.title = f.loaded
+        ? `Slot ${i + 1}: ${[f.vendor, f.type, f.subType].filter(Boolean).join(' ')}`
+        : `Slot ${i + 1}: empty`;
 
-    const dot = el('div', 'dot', String(i + 1));
-    if (f.loaded) {
-      dot.dataset.loaded = '1';
-      dot.style.background = css || '#C4C4C4';
-      // keep the number legible on dark filament
-      dot.style.color = isDarkColor(f.color) ? '#fff' : '#333';
-    }
-    slot.appendChild(dot);
-    slot.appendChild(el('div', 'bar', f.loaded ? f.type : '/'));
-    // a spool that identified itself is worth distinguishing from one typed in by hand
-    if (f.tag) slot.appendChild(el('span', 'slot-tag', 'RFID'));
-    slot.appendChild(icon('iconFilamentEdit', 'pencil'));
-    slot.onclick = () => editSlot(i, f, handlers);
-    root.appendChild(slot);
+      const dot = el('div', 'dot', String(i + 1));
+      if (f.loaded) {
+        dot.dataset.loaded = '1';
+        dot.style.background = css || '#C4C4C4';
+        // keep the number legible on dark filament
+        dot.style.color = isDarkColor(f.color) ? '#fff' : '#333';
+      }
+      slot.appendChild(dot);
+      slot.appendChild(el('div', 'bar', f.loaded ? f.type : '/'));
+      // a spool that identified itself is worth distinguishing from one typed in by hand
+      if (f.tag) slot.appendChild(el('span', 'slot-tag', 'RFID'));
+      slot.appendChild(icon('iconFilamentEdit', 'pencil'));
+      slot.onclick = () => editSlot(i, f, handlers);
+      return slot;
+    },
   });
 }
 
@@ -1269,29 +1323,37 @@ export function renderFault(root, activity, exception, handlers) {
   const code = (exception && (exception.code || exception.action_code))
             || activity.actionCode;
   const fault = lookupFault(code);
-  if (!fault) { root.hidden = true; root.innerHTML = ''; return; }
 
-  const key = String(fault.code);
-  if (root.dataset.code === key) return;
-  root.dataset.code = key;
+  // Clearing `built` matters: the guard used to be a `data-code` compared on the way in
+  // and never reset on the way out, so a fault that cleared and came back matched its
+  // own stale key, took the early return, and stayed hidden while the machine was
+  // reporting it. A recurring fault is the ordinary case, not an exotic one.
+  if (!fault) {
+    root.hidden = true;
+    root.innerHTML = '';
+    delete root.dataset.built;
+    return;
+  }
+
   root.hidden = false;
-  root.innerHTML = '';
-  // class 0003 is advisory in the catalogue's own numbering; anything else stops work
-  root.dataset.severity = fault.errorClass === '0003' ? 'warn' : 'error';
+  rebuildOn(root, String(fault.code), () => {
+    // class 0003 is advisory in the catalogue's own numbering; anything else stops work
+    root.dataset.severity = fault.errorClass === '0003' ? 'warn' : 'error';
 
-  root.appendChild(icon('exclamationMark'));
-  const body = el('div', 'fault-body');
-  body.appendChild(el('div', 'fault-title', fault.title));
-  body.appendChild(el('div', 'fault-desc', fault.description));
+    root.appendChild(icon('exclamationMark'));
+    const body = el('div', 'fault-body');
+    body.appendChild(el('div', 'fault-title', fault.title));
+    body.appendChild(el('div', 'fault-desc', fault.description));
 
-  const bits = [`code ${fault.code}`];
-  if (fault.subsystemName && fault.subsystemName !== 'unknown') bits.push(fault.subsystemName);
-  if (fault.toolhead) bits.push(`toolhead ${fault.toolhead}`);
-  if (!fault.known) bits.push('not in the shipped catalogue');
-  body.appendChild(el('div', 'fault-code', bits.join(' · ')));
-  root.appendChild(body);
+    const bits = [`code ${fault.code}`];
+    if (fault.subsystemName && fault.subsystemName !== 'unknown') bits.push(fault.subsystemName);
+    if (fault.toolhead) bits.push(`toolhead ${fault.toolhead}`);
+    if (!fault.known) bits.push('not in the shipped catalogue');
+    body.appendChild(el('div', 'fault-code', bits.join(' \u00B7 ')));
+    root.appendChild(body);
 
-  const again = el('button', 'btn', 'Re-check');
-  again.onclick = () => handlers.queryException();
-  root.appendChild(again);
+    const again = el('button', 'btn', 'Re-check');
+    again.onclick = () => handlers.queryException();
+    root.appendChild(again);
+  });
 }
