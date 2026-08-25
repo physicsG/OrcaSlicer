@@ -112,6 +112,53 @@ Run individual test suites:
 ./tests/sla_print/sla_print_tests
 ```
 
+### The U1 Device page (`resources/web/device_page/`)
+
+The reconstructed U1 web UI needs **no rebuild** — `build/resources` is a symlink to
+`resources/`, the HTTP server reads files per request and sends no cache headers, so
+edit and reload. Only C++ changes need `ninja`.
+
+Iterate on it with `run_webkit.py`, which drives the real page in **WebKitGTK — the
+engine Orca's own webview uses**. It needs a display (WSLg provides one); playwright and
+the vendored chromium do not work here.
+
+```bash
+# checks against the simulated printer, then exits
+python3 resources/web/shared/tests/run_webkit.py --shots /tmp/shots
+
+# the same page against the REAL printer, with no Orca at all
+python3 resources/web/shared/tests/run_webkit.py --real --watch    # stays open
+python3 resources/web/shared/tests/run_webkit.py --real --drive script.js
+python3 resources/web/shared/tests/run_webkit.py --real --device-ip 192.0.2.1
+```
+
+- `--watch` keeps the window open until it is closed, and the terminal becomes a live
+  trace of what each click sends.
+- `--drive FILE` runs JavaScript in the live page; the script reports by setting
+  `window.__report`. This is how hardware behaviour gets measured rather than assumed.
+- `--device-ip` points the saved device somewhere unroutable, to exercise the page with
+  no printer there.
+- **`--real` needs Orca closed** — it authenticates with the same saved `clientId`, and
+  a broker evicts the older holder. It is a second host speaking Orca's contract
+  (`docs/u1-webui/tools/u1_bridge.py`), so it proves the page and the printer agree, not
+  that Orca agrees.
+
+Use it to check engine behaviour that source-text checks cannot see: focus and
+selection, whether a committed value survives the next state push, layout that must not
+shift, and anything about a real machine's timing.
+
+The other suites:
+
+```bash
+python3 resources/web/shared/tests/conformance_test.py   # constants vs evidence
+python3 resources/web/shared/tests/unit_jsc.py           # pure logic, in JavaScriptCore
+python3 docs/u1-webui/tools/run_all.py                   # regenerate every data file
+python3 docs/u1-webui/tools/check_coverage.py            # nothing unimplemented in silence
+```
+
+Start at [docs/u1-webui/STATUS.md](docs/u1-webui/STATUS.md): what is proven against
+hardware, what is not, and what to pick up next.
+
 ## Architecture
 
 ### Core Libraries

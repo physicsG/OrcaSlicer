@@ -214,6 +214,10 @@ changes make the existing tests fail when the client assumes wrongly.
 
 ### Testing, given no browser
 
+*(Superseded in round three: WebKitGTK turns out to be drivable, so there is a browser
+after all — see "Testing, in a browser at last" at the end of this document. What follows
+still holds for the pure-logic checks.)*
+
 `playwright` is absent and the vendored chromium will not start (no `libnspr4`/`libnss3`),
 so the 28 browser checks cannot run here. **JavaScriptCore can** — it is what Orca's own
 webview uses, and PyGObject drives it:
@@ -516,3 +520,252 @@ why the wait confirms against `extruder*.state` instead.
 Engagement is now read only from `extruder*.state === 'ACTIVATE'`. Nothing reporting it
 means nothing is engaged — an answer, not a gap to fill from elsewhere. Two unit tests
 that previously asserted the fallback have been inverted; they had encoded the bug.
+
+## Round three — setting a temperature
+
+Two faults from ordinary use: the temperatures *did* apply — the printer heated — but the
+row lied about it either side of the round trip.
+
+### A zero is not a reading
+
+Every idle row showed `24 / 0 °C`, and that `0` had to be selected and deleted before a
+temperature could be typed. It was never information: a target of zero **is** a heater
+that is off, and five rows all saying so at once is noise standing exactly where the
+input goes.
+
+The field now holds an empty string for a zero target and shows `—` through the
+placeholder, and focus selects whatever is there so a set value is typed over rather than
+edited. Clearing the field is no longer read as "switch it off" — that is asked for by
+typing a zero, which cannot happen by walking away from a half-edited field.
+
+`select()` on `<input type="number">` is worth a note: `selectionStart` and
+`setSelectionRange` do not apply to that type and throw, but `select()` does apply. It
+also needs the mousedown/mouseup guard, or the mouseup that follows a click collapses the
+selection focus had just made.
+
+### The value that vanished, and the setpoint that was never confirmed
+
+A committed temperature would disappear a second later, or come back as `0`.
+
+`updateTempRow` wrote the machine's target into the field on every state push. The push
+that follows a commit lands roughly a second before the printer has reported the change,
+so it wrote back the value from *before* the edit. The field being left alone while
+focused was not enough — the commit happens **on blur**, so by the time the value is on
+its way the field is no longer focused and no longer protected.
+
+Same bug class as the tool selection one: *the request was stored in the thing that
+mirrors the machine*. It is now pending-until-confirmed, the same model:
+
+| | |
+|---|---|
+| sent | the asked-for value stays on screen, dashed, until the machine echoes it |
+| confirmed | `extruder<n>.target` comes back equal to it, and the mark clears |
+| refused | the bridge rejects the command — the row stops waiting at once |
+| ignored | ten seconds with no echo: the row drops back to the machine's value and says which value did not take |
+
+That last row is the one worth having. **A command that succeeds and changes nothing is
+exactly what a silently-ignored setpoint looks like** — the same trap as the instant `ok`
+from `PARK_EXTRUDER` — and it must not sit there looking applied.
+
+### There was no sign the heater was working
+
+A nozzle climbs about a degree a second. Watching one number tick while another sits
+still reads as nothing happening, so a temperature that was accepted and one that was
+dropped looked identical for the first half-minute.
+
+The row now says which of four things it is doing, from the two numbers both heaters
+already report — `power` would say it directly, but only the extruders publish it, and
+`heater_bed` is subscribed for `temperature` and `target` alone:
+
+```
+heating   cur < target - 2      warm ink, and a bar under the numbers
+ready     |cur - target| <= 2   the ok ink, no bar
+cooling   cur > target + 2      cool ink and bar, and only while cur > 40 -
+          and cur > 40          a nozzle at 120 with the heater off is not an idle one
+off       target 0, cold        nothing
+```
+
+The bar runs from the temperature the ramp *started* at to the target, so it moves for as
+long as the machine does. Against 0 it would jump about whenever the target changed.
+
+The readings column is 126px and every pixel was already spoken for, so the feedback had
+to cost no width: colour, and 2px under the numbers.
+
+### The column could not hold its own numbers, and would not hold still
+
+Found while looking at the result: at 30px the target field clipped a three-digit value,
+so a nozzle at 220 read as `22`. Measured in the page rather than estimated — 9.00px per
+tabular digit, so 27 + 6 padding + 2 border = 35px. The row gap goes 5px → 4px to pay for
+it, which leaves the widest case the row can be asked to show (350 over 350) fitting the
+126px column with 2px to spare.
+
+The reading beside it had the opposite problem: it was auto-width, so a nozzle climbing
+from 99 to 100 carried the slash, the target field and the unit one digit to the right,
+and five rows at five temperatures never lined up with each other. `.cur` now reserves
+three digits and right-aligns against the separator, so both numbers sit against the
+`/` and nothing downstream of them can move. A browser check asserts it directly -
+`.sl`, `.tgt` and `.unit` must share one x across every row, at one digit and at three.
+
+### Testing, in a browser at last
+
+`run_selftest.py` still cannot run — playwright is absent and the vendored chromium is
+still missing `libnspr4`/`libnss3`. But **WebKitGTK is present**, because it is what Orca
+renders with, and PyGObject drives it the same way it drives JavaScriptCore:
+
+```bash
+python3 resources/web/shared/tests/run_webkit.py --shots /tmp/shots
+```
+
+It serves `resources/web`, loads the Device page against the simulator, and drives the
+real controls. That is a better witness than chromium would have been: the checks run in
+the engine that will run the page for real. It is how the three faults above were
+confirmed fixed, and how the clipped digit was found in the first place.
+
+Screenshots come from `Gdk.pixbuf_get_from_window`, not WebKit's own snapshot API, which
+returns a cairo surface there is no pycairo here to receive. It needs a display; WSLg
+provides one.
+
+### And then against the printer, still without Orca
+
+The page reaches a machine only through `window.wx`, so everything above was checked
+against the simulator. That limit turned out to be one user script wide.
+
+[`tools/u1_bridge.py`](../tools/u1_bridge.py) answers the same SSWCP contract from
+Python: `run_webkit.py --real` installs `window.wx` as a WebKit user script, and the
+bridge behind it speaks MQTT to the real U1 over `mqtt_min.py`. The page then runs its
+own connect path — LAN auth on `:1884`, mTLS on `:8883` — and the log reads the same as
+Orca's, ending in the same `snapshot ok: 24 objects`.
+
+`--watch` turns the same command into a window rather than a test: the checks run and
+report first, then it stays open until closed, with the terminal showing what every
+click sends. That is the loop the connect bugs were found in, without Orca in it.
+
+Three kinds of command, and the split is Orca's, not a design of ours:
+
+| | |
+|---|---|
+| transport | `sw_create_mqtt_client` / `connect` / `subscribe` / `publish` / `disconnect` / `set_engine`. The page drives the socket; the host only owns it |
+| printer | 37 of the page's commands are one JSON-RPC method with the parameters passed nearly straight through |
+| local | the device book and the login state, read from Orca's own config; eight more refused in as many words |
+
+The mapping is **generated**, by [`extract_bridge_methods.py`](../tools/extract_bridge_methods.py),
+from `SSWCP.cpp` and `MoonRaker.cpp` — two hops, `m_cmd == "sw_X"` → `sw_X()` →
+`host->async_x()` → `method = "printer.control.x"`. Writing it down by hand would have
+been the same mistake as the parity claim: a description that stops matching the thing
+it describes.
+
+The generator earned its keep immediately. Its first version sliced a C++ function body
+at the next definition *of the same class*, which let `sw_mqtt_publish` swallow every
+function defined between it and the next MqttAgent member — and come out mapped to
+`machine.system_info`. A publish would have gone out as a system-info query. Bodies now
+end at the first column-one `}`, and a conformance check asserts that the transport
+commands map to no printer method at all.
+
+**What this cannot do**, and it matters: it is a *second host* speaking the same
+contract, so it proves the page and the printer agree. Whether **Orca** agrees is a
+different question, and the open ones — whether a camera `{state, url}` arrives as the
+subscribe ack or as a push, whether `sw_SetSubscribeFilter` narrowing changes what a
+wait can see — are about Orca's leg specifically. Those still need the app. Orca must
+also be closed while this runs: same saved `clientId`, and a broker evicts the older
+holder of a duplicate id.
+
+### What the printer said about the temperature work
+
+Driven end to end through the page's own field, on the machine
+([`--drive`](../../../resources/web/shared/tests/run_webkit.py) runs a script in the
+live page):
+
+```
+sw_ControlExtruderTemp {"temp": 57, "index": 0, "map": 0}
+  the row holds the asked-for value, marked unconfirmed
+  the printer echoed the target back        552 ms one run, 1516 ms the next
+  the wait ended; the row says heating
+  nozzle 42 -> 62 °C over 10s, the bar filling
+  put back to 0; the field returns to a dash
+```
+
+**The echo takes between half a second and a second and a half.** That is the whole bug
+in one measurement: the render tick is about a second, so a push computed before the
+echo arrived was writing the machine's old target — usually `0` — back over the value
+just sent. It was never a race the user could win by typing faster.
+
+The run also found a flaw in the new bar that the simulator could not have shown: asked
+for 40, the nozzle overshot to 48, and the state flipped heating → cooling with the
+target unchanged. The ramp was only restarted when the *target* changed, so the bar sat
+at 100% while the temperature was falling. It now restarts when the direction does.
+
+## Round four — the session, and what "connected" means
+
+Three faults, found by running the page against the machine for longer than a test.
+
+### A slow command is not a refused one, and two clocks say "timeout"
+
+Picking a toolhead on a cold machine reported **"The printer refused the command"** while
+the toolchange ran to completion. The page already knows a timeout is not a refusal - it
+tests the rejection and ignores it - but it was matching one wording out of two.
+
+| | | |
+|---|---|---|
+| the client's | 15s | `sswcp.js`, "sw_X timed out after 15000ms" - the page giving up on the BRIDGE |
+| Orca's | **80s** | `add_response_target`'s default (`MoonRaker.hpp:344`) waiting on the PRINTER, failing as code **-2**, message **"time out"** |
+
+Note the space. `/timed out/i` never matched Orca's own wording, and it stayed hidden
+because the client's clock is the shorter of the two: Orca's `-2` arrives long after the
+request has been forgotten, and is dropped for want of a pending entry.
+
+`u1_bridge.py` brought it out by answering sooner - it had been given a 12s timeout,
+guessed from the client's 15s rather than read from the C++. That put a failure in front
+of the page before its own clock ran, with a message matching nothing. The bridge now
+waits the 80s Orca waits and fails in Orca's exact shape; the test moved into
+`sswcp.js` as `isTimeout()` and keys on the code as well as both wordings.
+
+Measured after, on a cold machine: **31.9s**, walking
+`Homing — Z done → Homing axes… → Homing — X, Y done → Engaging toolhead 1…`, no refusal.
+
+### "Connected" was a claim about the past
+
+A rebooting printer went on showing as connected, its last snapshot presented as current.
+
+```js
+const live = state.lastUpdate > 0 && ...     // has anything EVER arrived
+```
+
+Nothing aged it, so once a session had existed the page vouched for it for the rest of
+the session. The fix needed a number, and the number was surprising: **an idle U1 pushes
+about twice in 30 seconds**, gaps of 4s to 14s. Klipper only sends fields that change and
+an idle machine changes almost nothing - so a staleness window has to be several times
+the idle gap or a quiet printer flickers as if it had gone away. 45s is about 3x the
+widest gap seen, with the 30s heartbeat - now consulted rather than discarded - covering
+a machine that genuinely has nothing to say.
+
+It also needs a clock. Every other repaint in the page is triggered by something
+arriving, which is exactly what stops.
+
+Measured: socket killed under the page, nothing told it. Before, 115s stale and still
+claiming connected. After, the dot drops and the panel fades in ~32s.
+
+### One attempt, at boot, and only if nothing had ever arrived
+
+Start the app before the printer and it stayed dark until a reload. Reboot the printer
+and it never came back. Both are the ordinary way this hardware gets used.
+
+There is now a supervisor on the same 2s clock: not live, not already connecting, and a
+device that can authorise itself → reconnect, backing off 5s / 10s / 20s / 30s and
+holding. The dead engine is dropped first, because it still holds a socket at the host
+and the next connect makes a new one.
+
+The **Connect** menu item was gated on `DeviceInfo.connected`, which is force-cleared on
+every config save (`AppConfig.cpp:887`) - it answers neither "is it there" nor "do we
+have a session". It is gated on live evidence now, and so is **Disconnect**.
+
+Measured both ways:
+
+```
+socket killed          noticed 37.2s, reconnected 37.9s, 26 objects back
+no printer at all      attempts at 11s, 31s, 61s, 91s - gaps 20s, 30s, 30s
+  (--device-ip 192.0.2.1)
+  "U1 G — not connected (connect pairing client: … No route to host) — trying again in 30s"
+```
+
+`--device-ip` points the saved device somewhere unroutable, which is how the
+nothing-there path gets exercised without switching the printer off.

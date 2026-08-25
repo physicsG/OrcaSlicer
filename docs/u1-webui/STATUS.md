@@ -10,7 +10,8 @@ on the LAN at `192.168.2.242`, through Orca 2.3.6 built from this branch.
 | | |
 |---|---|
 | `docs/u1-webui/` | The reverse engineering: architecture, both surfaces, bridge, printer protocol, errors |
-| `docs/u1-webui/tools/` | 17 extractors and generators; `run_all.py` regenerates everything under `data/` and `reconstructed/` |
+| `docs/u1-webui/tools/` | 19 extractors and generators; `run_all.py` regenerates everything under `data/` and `reconstructed/` |
+| `docs/u1-webui/tools/u1_bridge.py` | Answers the page's bridge commands by talking to a real U1, with no Orca |
 | `docs/u1-webui/tools/harness/` | Runs the **shipped** Flutter bundle headlessly against a simulated host |
 | `resources/web/shared/` | Bridge client, protocol constants, state store, simulated host, fault catalogue |
 | `resources/web/device_page/` | Reconstructed **Device tab** |
@@ -105,7 +106,15 @@ python3 docs/u1-webui/tools/run_all.py
 # constants vs evidence, and command coverage
 python3 resources/web/shared/tests/conformance_test.py
 
-# browser end-to-end against the simulated printer
+# the page itself, driven in WebKitGTK - the engine Orca renders with
+python3 resources/web/shared/tests/run_webkit.py --shots /tmp/shots
+
+# the same page, against the REAL printer, with no Orca at all (Orca must be closed)
+python3 resources/web/shared/tests/run_webkit.py --real --watch   # use it by hand
+python3 resources/web/shared/tests/run_webkit.py --real           # check and exit
+python3 resources/web/shared/tests/run_webkit.py --real --drive script.js   # scripted
+
+# browser end-to-end against the simulated printer (needs playwright; see below)
 python3 resources/web/shared/tests/run_selftest.py
 
 # either surface standalone
@@ -246,6 +255,122 @@ One trap worth carrying forward: **an instant `ok` is indistinguishable from suc
 `PARK_EXTRUDER2` against a live head blocks for over 20 s; against a head that is not
 there it returns immediately and successfully. No G-code ack can tell those apart.
 
+### Setting a temperature (2026-08-25)
+
+Reported from ordinary use: the temperatures applied and the printer heated, but the row
+was wrong on both sides of the round trip. Written up in
+[08-function-gap-analysis.md](02-device-page/08-function-gap-analysis.md), "Round three".
+
+- **A target of `0` sat in the field** and had to be deleted before anything could be
+  typed. Zero *is* a heater that is off, so it now shows as a `—` placeholder over an
+  empty field, and focus selects what is there so a set value is typed over.
+- **A committed value vanished, or came back as `0`.** The state push that follows a
+  commit lands about a second before the printer reports the change, and it was writing
+  the pre-edit value back in. Leaving a *focused* field alone was not enough — the commit
+  happens on blur, so the value is in flight exactly when the field stops being
+  protected. Now pending-until-confirmed, the same model tool selection needed, with the
+  same reason behind it: **the request was being stored in the thing that mirrors the
+  machine.**
+- **Nothing said the heater was working.** A nozzle climbs a degree a second, so an
+  accepted setpoint and an ignored one looked identical. The row now shows
+  heating / ready / cooling / off in ink, plus a 2px bar under the numbers running from
+  the temperature the ramp started at to the target. Derived from `temperature` and
+  `target` only: `power` would say it directly but `heater_bed` does not publish it.
+- **Ten seconds with no echo is reported, not hidden.** A command that succeeds and
+  changes nothing is what a silently-ignored setpoint looks like — the `PARK_EXTRUDER`
+  trap again — so the row drops back to the machine's value and names the one that did
+  not take.
+- Found while looking at the result: **the target field clipped three digits**, so a
+  nozzle at 220 read as `22`. 9.00px per tabular digit, measured in the page; the field
+  is 35px and the row gap pays for it.
+- **The row moved as its numbers did.** The reading was auto-width, so 99 → 100 carried
+  the slash, the field and the unit a digit to the right, and five rows at five
+  temperatures never lined up. `.cur` reserves three digits and right-aligns against the
+  separator; a browser check holds `.sl`, `.tgt` and `.unit` to one x across every row.
+
+**There is a browser after all.** WebKitGTK is present — it is what Orca renders with —
+and PyGObject drives it, so the page can now be loaded, clicked and screenshotted:
+
+```bash
+python3 resources/web/shared/tests/run_webkit.py --shots /tmp/shots
+```
+
+That is how the above was confirmed, and how the clipped digit was found. It catches what
+source-text checks cannot: that focus really selects, that a committed value survives the
+next push, that `select()` works on a number input at all.
+
+### And the page now runs against the printer without Orca
+
+[`tools/u1_bridge.py`](tools/u1_bridge.py) answers the SSWCP contract from Python and
+speaks MQTT to the machine; `--real` installs `window.wx` as a user script and points it
+there. The page runs its own connect path and comes up on real state — the same
+`snapshot ok: 24 objects` the Orca path reports.
+
+```bash
+python3 resources/web/shared/tests/run_webkit.py --real --watch
+```
+
+Without `--watch` it is a test: it checks, reports and exits. With `--watch` it is a
+window - the checks still run and report first, then it stays up until you close it,
+and the terminal becomes a live trace of what each click sends. `--watch 90` stays for
+a fixed time instead.
+
+- **The mapping is generated**, not written down:
+  [`extract_bridge_methods.py`](tools/extract_bridge_methods.py) reads
+  `m_cmd == "sw_X"` → `sw_X()` → `host->async_x()` → `method = "…"` out of `SSWCP.cpp`
+  and `MoonRaker.cpp`. **37** of the page's 57 commands are one JSON-RPC method with the
+  parameters passed nearly straight through; 12 are answered locally, 8 refused with a
+  written reason. A conformance check fails if a new command is none of the three.
+- **It found its own bug first.** The generator's first cut sliced a function body at the
+  next definition *of the same class*, and `sw_mqtt_publish` came out mapped to
+  `machine.system_info` — a publish would have gone out as a system-info query.
+- **What it cannot do:** it is a second host speaking the same contract, so it proves the
+  page and the printer agree. Whether *Orca* agrees is a different question, and the open
+  ones (camera ack-vs-push, `sw_SetSubscribeFilter` narrowing) are about Orca's leg
+  specifically. **Orca must be closed** while it runs — same saved `clientId`, and a
+  broker evicts the older holder.
+
+Driven against the machine, the temperature work behaves: the printer echoes a target
+back in **552 ms one run and 1516 ms the next**, which is the whole bug in one
+measurement — the render tick is about a second, so a push computed before the echo
+arrived was writing the old target back over the value just sent. The run also found a
+flaw the simulator could not have: asked for 40 the nozzle overshot to 48, flipping
+heating → cooling with the target unchanged, and the bar — restarted only on a target
+change — sat at 100% while the temperature fell. It now restarts when the direction
+does.
+
+### The session, run for longer than a test (2026-08-25)
+
+Three faults that only showed up once the page was left running against the machine.
+Written up in [08-function-gap-analysis.md](02-device-page/08-function-gap-analysis.md),
+"Round four".
+
+- **A slow command read as a refused one.** Picking a toolhead on a cold machine said
+  "the printer refused the command" through a toolchange that completed. Two clocks say
+  "timeout" and the page matched one: the client's own 15s ("timed out after 15000ms")
+  and **Orca's 80s** wait on the printer, which fails as code **-2**, message
+  **"time out"** — note the space. `/timed out/i` never matched Orca's, and it stayed
+  hidden because the client's clock is the shorter and fires first. The test is
+  `isTimeout()` in `sswcp.js` now and keys on the code too. Measured after: **31.9s**
+  cold, no refusal.
+- **`u1_bridge.py` had been given a 12s timeout**, guessed from the client's 15s instead
+  of read from `MoonRaker.hpp:344`. That is what put a failure in front of the page
+  before its own clock ran. It waits 80s now, and fails in Orca's exact shape.
+- **"Connected" was a claim about the past.** `state.lastUpdate > 0` asks whether the
+  machine ever spoke, so a rebooting printer stayed connected with a frozen snapshot.
+  The window came from measuring: **an idle U1 pushes about twice in 30 seconds**, gaps
+  of 4–14s, so 45s is ~3x the widest gap, with the heartbeat covering the rest. Socket
+  killed under the page: 115s stale and still claiming connected before, ~32s to drop
+  the dot after.
+- **There was no retry.** One attempt, at boot, and only if nothing had ever arrived —
+  so starting the app before the printer left it dark until a reload. A supervisor now
+  reconnects on a 2s clock, backing off 5/10/20/30s and holding, dropping the dead
+  engine first. Measured: socket killed → noticed 37.2s, back at 37.9s. No printer at
+  all → attempts at 11s, 31s, 61s, 91s.
+
+`run_webkit.py --device-ip 192.0.2.1` points the saved device somewhere unroutable,
+which is how the nothing-there path is exercised without switching the printer off.
+
 ### Tooling worth knowing about
 
 ```bash
@@ -259,19 +384,25 @@ python3 resources/web/shared/tests/conformance_test.py   # 106 checks
 installable here. The probes need **Orca closed** — they authenticate with the saved
 `clientId` and a broker evicts the older holder.
 
-`unit_jsc.py` drives **JavaScriptCore via PyGObject**, which is how JS gets executed at
-all here: playwright is absent and the vendored chromium will not start (no
-`libnspr4`/`libnss3`), so **the 28 browser checks have not run for this entire session.**
-Installing those two libraries would restore them and is probably the highest-value
-half-hour available.
+`unit_jsc.py` drives **JavaScriptCore via PyGObject**. `run_webkit.py` goes further and
+drives the whole page in **WebKitGTK**, which is the engine Orca's webview uses — so its
+checks run where the page will actually run. Both come from the same place: playwright is
+absent and the vendored chromium still will not start (no `libnspr4`/`libnss3`), so
+`run_selftest.py` and its 28 checks remain unrunnable. Installing those two libraries
+would restore them; it is worth less now than it was, because WebKitGTK covers the part
+that mattered — driving real controls in a real engine.
+
+`run_webkit.py` needs a display (WSLg provides one) and screenshots through
+`Gdk.pixbuf_get_from_window`, because WebKit's own snapshot API returns a cairo surface
+and there is no pycairo here.
 
 ## What to pick up next
 
 In rough order of value:
 
-1. **Drive the rebuilt Control panel from inside Orca.** Pick, park, home, jog and the
-   wait dialog have all been exercised against the printer — but over MQTT, running
-   `state.js` directly, not through the app. What that cannot check is the bridge leg:
+1. **Drive the rebuilt Control panel from inside Orca.** Narrower than it was: the whole
+   page now runs against the printer through `run_webkit.py --real`, so the page-and-
+   machine half is covered. What remains is exactly the bridge leg:
    whether a camera `{state, url}` arrives as the subscribe ack or as a push (the client
    accepts either), and whether `sw_SetSubscribeFilter` narrowing `EXTRUDER_FIELDS`
    changes what the wait can see. One session with the Device tab open settles both.
