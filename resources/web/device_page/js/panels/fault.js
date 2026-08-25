@@ -25,6 +25,6 @@ export default {
   sends: [CMD.EXCEPTION_QUERY],
 
   update(root, ctx) {
-    ui.renderFault(root, ctx.state.activity(), ctx.exception, ctx.handlers);
+    ui.renderFault(root, ctx.state.activity(), ctx.store.exception, ctx.handlers);
   },
 };

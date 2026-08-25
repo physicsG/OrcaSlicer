@@ -676,7 +676,7 @@ export function renderControlMain(root, ctx) {
   const handlers = ctx.handlers;
   const toolheads = ctx.state.toolheads();
   const head = ctx.state.toolhead();
-  const activeTool = ctx.activeTool;
+  const activeTool = ctx.store.activeTool;
   const machineTool = head.activeIndex != null ? head.activeIndex : null;
 
   // Everything below is decided by these four, and nothing else in this panel moves -

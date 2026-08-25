@@ -51,6 +51,9 @@ inside `.content` is built from it.
 | `js/panels/registry.js` | **What this page is made of.** Panel order, headers, `reads`, `sends` |
 | `js/panels/*.js` | One module per panel |
 | `js/shell.js` | Builds the page from the registry; the header-control vocabulary |
+| `js/store.js` | **What the page remembers** — view, tab, fetched lists, chosen tool |
+| `js/pending.js` | What was asked for and not yet confirmed. Neither state nor store |
+| `js/render.js` | The one update discipline: rebuild on a signature, reconcile by key |
 | `js/dom.js` | `$`, `el`, `icon` — the three primitives panels build with |
 | `js/app.js` | Startup, the session, and the control handlers |
 | `js/ui.js` | Rendering (plain DOM). Being emptied into `js/panels/` a panel at a time |
@@ -62,6 +65,22 @@ inside `.content` is built from it.
 The bridge client, protocol constants, state store, activity table, fault catalogue and
 simulated host are shared with the print-processing popup and live in
 [`../shared/js/`](../shared/js/).
+
+### The three stores, and why there are three
+
+A panel is handed one `ctx` with three of them, because they answer three different
+questions:
+
+| | |
+|---|---|
+| `ctx.state` | what the **machine** says. A mirror, not a memory |
+| `ctx.store` | what the **page** knows — which view, which tab, what it has fetched |
+| `ctx.pending` | what has been **asked for** and not yet confirmed |
+
+The third is the one that has to exist separately. Keeping a request in the thing that
+mirrors the machine is a bug this page has had in three unrelated controls, because the
+next state push arrives before the printer has acted and writes the pre-click value back
+over what the user just asked for. `pending.js` documents all three.
 
 ### Adding a panel
 

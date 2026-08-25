@@ -30,7 +30,7 @@ export default {
   header: [
     { kind: 'sep' },
     { kind: 'tabs', group: 'kind', cls: 'tab', items: KINDS,
-      active: (ctx) => ctx.storageKind,
+      active: (ctx) => ctx.store.storageKind,
       on: (ctx, v) => ctx.handlers.openStorage(v) },
     { kind: 'spacer' },
     { kind: 'icon', id: 'storage-refresh', cls: 'icon-btn', icon: 'refresh',
@@ -46,6 +46,7 @@ export default {
           CMD.PRINT_START, CMD.DOWNLOAD_MACHINE_FILE],
 
   update(root, ctx) {
-    ui.renderStorage(root, ctx.storageKind, ctx.storageData(), ctx.handlers, ctx.device);
+    ui.renderStorage(root, ctx.store.storageKind, ctx.storageData(),
+                     ctx.handlers, ctx.store.device);
   },
 };

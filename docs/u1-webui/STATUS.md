@@ -733,3 +733,51 @@ single `requestAnimationFrame` callback silently truncated the rest of the paint
 structural DOM dump is what found it, and `paint()` now catches per panel so the failure
 is on the page instead of nowhere. Keep the dump in the loop — it is the only check here
 that asks *what is on the page* rather than *is this one thing right*.
+
+### Structure, pass three: the page state has one home (2026-08-25)
+
+The last of the three. What used to be sixteen module-level `let`s in `app.js` is
+[`store.js`](../../resources/web/device_page/js/store.js) — one declared object, with a
+line of prose on each member saying what it is for. Eleven of the sixteen were written
+from more than one place, and a panel reading `cam.error` gave no clue where `cam` was
+set.
+
+A panel now gets one `ctx` carrying three stores, and there are three because they answer
+three different questions:
+
+| | |
+|---|---|
+| `ctx.state` | what the **machine** says. A mirror, not a memory |
+| `ctx.store` | what the **page** knows — which view, which tab, what it has fetched |
+| `ctx.pending` | what has been **asked for** and not yet confirmed |
+
+The third exists separately for the reason this whole restructure keeps running into: a
+request stored in the mirror is overwritten by the next push.
+
+Deliberately **not** an observable store. Making every write notify is the obvious next
+step, and taking it would mean two ways to ask for a repaint alongside `render()` — one
+page with two mechanisms for one job is what this work exists to undo. If explicit
+`render()` turns out to be forgotten in practice, a Proxy is a change to `createStore`
+and nothing else.
+
+**The rename broke the connect path, and the simulator did not notice.** 112 call sites
+moved; the script that moved them protected string literals, which also protected the
+`${...}` inside template literals — so `` `${deviceLabel(device)} — not connected` ``
+kept a name that no longer existed, `boot()` threw a `ReferenceError`, and the page came
+up never connecting to anything.
+
+The reason the browser suite stayed green is worth carrying forward: **that line is on
+the not-connected branch, and the simulator's device reports connected**, so the
+simulator never executes it. What caught it was `--real`. What would also have caught it
+is `--real --device-ip 192.0.2.1`, which forces the same branch with no printer involved
+— that flag is worth running on any change that touches the device record, not only when
+testing the nothing-there path.
+
+Both are verified now: **26 objects and live telemetry** against the U1, and a clean
+`No route to host` down the unroutable path.
+
+**Where this leaves `app.js`.** Still 1,574 lines, and still three jobs: the session
+(connect, retry, heartbeat, staleness, the state stream), the 40-function `handlers` bag,
+and startup. Splitting it is the next pass, and `handlers` is the interesting half —
+it is the last thing handed whole to every panel, and the only record of who uses what is
+each panel's own `sends` declaration.

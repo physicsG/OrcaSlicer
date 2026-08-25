@@ -49,7 +49,7 @@ export default {
   update(root, ctx) {
     // The shipped page renders the whole control surface and fades it while the machine
     // is unreachable, rather than hiding it. Match that.
-    root.firstChild.dataset.enabled = ctx.reachable ? '1' : '0';
+    root.firstChild.dataset.enabled = ctx.store.reachable ? '1' : '0';
     ui.renderStatusCard(root.querySelector('#status-card'), ctx);
     ui.renderControlMain(root.querySelector('#control-main'), ctx);
   },

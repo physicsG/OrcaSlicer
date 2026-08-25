@@ -21,6 +21,7 @@ import { MachineState } from '../../shared/js/state.js';
 import { machineActivity, isBusy } from '../../shared/js/activity.js';
 import { installMock } from './mock.js';
 import { Pending } from './pending.js';
+import { createStore } from './store.js';
 import { mountBuildBadge } from '../../shared/js/buildinfo.js';
 import * as ui from './ui.js';
 import { buildShell, paint } from './shell.js';
@@ -29,39 +30,22 @@ const qs = new URLSearchParams(location.search);
 const wantMock = qs.get('mock') === '1';
 
 const state = new MachineState();
+// What the machine says, what the page knows, and what has been asked for but not yet
+// confirmed. Three stores because they answer three different questions - see ctx below.
+const store = createStore();
 let bridge = null;
-let device = null;      // the machine whose state we show
-let devices = [];       // every machine Orca has saved, connected or not
-let loginUser = {};     // { userid, nickname } - the pairing request wants both
 let subscription = null;
 let trace = () => {};
 let engineId = null;    // the MQTT engine Orca created for us
 let connecting = false;
-let cam = { mode: 'live', streaming: false, frameUrl: null, timelapses: [], error: '' };
 let camPump = null;     // re-points the live <img>; frames are polled, not pushed
 let camSub = null;
-let files = { loading: false, error: '', root: '', roots: [], items: [] };
-let exception = null;   // the active fault, from sw_exception_query
 let heartbeat = null;   // interval handle
 let findSub = null;     // discovery subscription
-let found = [];         // machines discovery has turned up
 const HISTORY_PAGE = 20;
 // A toolchange is mechanical. 60s is what the printer's own UI allows: its handler
 // raises an "Extruder N operating..." overlay with a 60 timeout before dispatching.
 const TOOL_CHANGE_TIMEOUT_MS = 60000;
-let history = { loading: false, error: '', items: [], hasMore: false };
-// The job card shows the printing file's own thumbnail, so it is fetched once per
-// file rather than on every repaint - the card repaints about once a second.
-let jobThumb = { file: null, data: null };
-// Which destination the rail is on, and what Storage is showing.
-let view = 'control';
-let storageKind = 'timelapses';
-// Whether we are talking to a printer right now. Computed once per frame and read by
-// every panel, so it is module state rather than a local passed down five signatures.
-let reachable = false;
-// Which toolhead jog and extrude are aimed at. The user's choice, not the machine's -
-// picking a head to jog does not change the tool - so nothing on the stream sets it.
-let activeTool = 0;
 // Every control that has asked the machine for something and is waiting to be told it
 // happened. One store, because the request-vs-mirror bug has now been found in three
 // separate controls; see pending.js.
@@ -105,37 +89,37 @@ async function boot() {
   // connected flag is set, while sw_GetLocalDevices returns everything Orca knows.
   try {
     const u = await bridge.request(CMD.GET_USER_LOGIN_STATE, {});
-    if (u && u.status === 'online') loginUser = { userid: u.userid, nickname: u.nickname };
+    if (u && u.status === 'online') store.loginUser = { userid: u.userid, nickname: u.nickname };
   } catch (e) { /* not signed in; pairing still works with empty identifiers */ }
 
   try {
-    devices = asDeviceList(await bridge.request(CMD.GET_LOCAL_DEVICES, {}));
+    store.devices = asDeviceList(await bridge.request(CMD.GET_LOCAL_DEVICES, {}));
   } catch (e) {
     console.warn('[app] device list:', e.message);
   }
   try {
     const c = await bridge.request(CMD.GET_CONNECTED_MACHINE, {});
-    device = (c && Object.keys(c).length) ? c : null;
+    store.device = (c && Object.keys(c).length) ? c : null;
   } catch (e) {
     console.warn('[app] no connected machine:', e.message);
   }
   // Fall back to a saved machine, so the page names the printer it is about even
   // while nothing is connected.
-  if (!device) device = devices.find((d) => d[DEVICE.CONNECTED]) || devices[0] || null;
-  if (!device) {
+  if (!store.device) store.device = store.devices.find((d) => d[DEVICE.CONNECTED]) || store.devices[0] || null;
+  if (!store.device) {
     setStatus('no printer configured', 'warn');
-  } else if (!device[DEVICE.CONNECTED]) {
-    setStatus(`${deviceLabel(device)} \u2014 not connected`, 'warn');
+  } else if (!store.device[DEVICE.CONNECTED]) {
+    setStatus(`${deviceLabel(store.device)} \u2014 not connected`, 'warn');
   }
 
   try {
     await bridge.subscribe(CMD.SUBSCRIBE_LOCAL_DEVICES, {}, (d) => {
       const list = asDeviceList(d);
       if (!list.length) return;
-      devices = list;
+      store.devices = list;
       const conn = list.find((x) => x[DEVICE.CONNECTED]);
-      if (conn) device = conn;
-      else if (device) device = list.find((x) => x[DEVICE.SN] === device[DEVICE.SN]) || device;
+      if (conn) store.device = conn;
+      else if (store.device) store.device = list.find((x) => x[DEVICE.SN] === store.device[DEVICE.SN]) || store.device;
       render();
     });
   } catch (e) {
@@ -155,14 +139,14 @@ async function boot() {
   // already has keys, or a signed-in account that can be issued them from the
   // cloud. Pairing needs a human reading a code off the printer, so it stays
   // a deliberate action.
-  if (device && !state.lastUpdate) {
+  if (store.device && !state.lastUpdate) {
     // A LAN machine with an address can authorise itself with the fixed code, so
     // stored keys and a signed-in account are no longer preconditions.
-    if (device[DEVICE.IP] && device[DEVICE.SN]) {
-      setStatus(`Connecting to ${deviceLabel(device)}\u2026`);
-      doConnect(device, { silent: true });
+    if (store.device[DEVICE.IP] && store.device[DEVICE.SN]) {
+      setStatus(`Connecting to ${deviceLabel(store.device)}\u2026`);
+      doConnect(store.device, { silent: true });
     } else {
-      setStatus(`${deviceLabel(device)} \u2014 not paired`, 'warn');
+      setStatus(`${deviceLabel(store.device)} \u2014 not paired`, 'warn');
     }
   }
 
@@ -213,9 +197,9 @@ async function setpoint(cmd, params, label, said) {
 function startCamPump() {
   stopCamPump();
   const tick = () => {
-    if (!cam.streaming || !cam.frameUrl) return stopCamPump();
+    if (!store.cam.streaming || !store.cam.frameUrl) return stopCamPump();
     const im = ui.$('#cam-live');
-    if (im) im.src = `${cam.frameUrl}?t=${Date.now()}`;
+    if (im) im.src = `${store.cam.frameUrl}?t=${Date.now()}`;
   };
   camPump = setInterval(tick, CAMERA_INTERVAL * 1000);
 }
@@ -350,7 +334,7 @@ const handlers = {
     send(CMD.CONTROL_PURIFIER, { mode: Number(mode) }, 'set purifier mode'),
 
   /** Aim jog and extrude at a head. Selection only - it does not change the tool. */
-  selectTool: (i) => { activeTool = Number(i) || 0; render(); },
+  selectTool: (i) => { store.activeTool = Number(i) || 0; render(); },
 
   // Motion has no dedicated bridge command - the shipped page sends G-code, so
   // this does too. G28 homes; G91/G0/G90 makes one relative step.
@@ -449,11 +433,11 @@ const handlers = {
     onConfirm: () => true,
   }),
 
-  reloadStorage: () => openStorage(storageKind),
-  loadMoreStorage: (n) => (storageKind === 'prints' ? handlers.loadHistory(n) : null),
+  reloadStorage: () => openStorage(store.storageKind),
+  loadMoreStorage: (n) => (store.storageKind === 'prints' ? handlers.loadHistory(n) : null),
 
   /** The one useful action from an idle job card: go and find something to print. */
-  showFiles: () => { storageKind = 'gcodes'; showView('storage'); },
+  showFiles: () => { store.storageKind = 'gcodes'; showView('storage'); },
 
   /* ---- print job ---- */
   confirmCancel: () => openDialog({
@@ -468,17 +452,17 @@ const handlers = {
     onConfirm: () => { handlers.cancel(); },
   }),
 
-  /* ---- machine files ---- */
+  /* ---- machine store.files ---- */
   openRoot: async (root) => {
-    files = { loading: true, error: '', root: root || files.root, roots: files.roots, items: [] };
+    store.files = { loading: true, error: '', root: root || store.files.root, roots: store.files.roots, items: [] };
     render();
     try {
-      if (!files.roots.length) {
+      if (!store.files.roots.length) {
         const r = await bridge.request(CMD.FILES_ROOTS, {});
-        files.roots = Array.isArray(r) ? r : (r && (r.roots || r.result)) || [];
-        if (!files.root) {
-          const first = files.roots[0];
-          files.root = typeof first === 'string' ? first : (first && (first.name || first.root)) || 'gcodes';
+        store.files.roots = Array.isArray(r) ? r : (r && (r.roots || r.result)) || [];
+        if (!store.files.root) {
+          const first = store.files.roots[0];
+          store.files.root = typeof first === 'string' ? first : (first && (first.name || first.root)) || 'gcodes';
         }
       }
       // Firmware builds differ on which listing command answers; try the paged
@@ -486,18 +470,18 @@ const handlers = {
       let items = [];
       try {
         const page = await bridge.request(CMD.FILE_LIST_PAGE,
-          { root: files.root, page_number: 0, files_per_page: 50 });
+          { root: store.files.root, page_number: 0, files_per_page: 50 });
         items = (page && (page.files || page.items || page.result)) || (Array.isArray(page) ? page : []);
       } catch {
         const dir = await bridge.request(CMD.FILES_GET_DIRECTORY,
-          { path: files.root, extended: true });
+          { path: store.files.root, extended: true });
         items = (dir && (dir.files || dir.result)) || [];
       }
-      files.items = Array.isArray(items) ? items : [];
+      store.files.items = Array.isArray(items) ? items : [];
     } catch (e) {
-      files.error = `could not read the machine: ${e.message}`;
+      store.files.error = `could not read the machine: ${e.message}`;
     }
-    files.loading = false;
+    store.files.loading = false;
     render();
   },
 
@@ -515,9 +499,9 @@ const handlers = {
 
   /* ---- camera ---- */
   startCamera: async () => {
-    cam.error = '';
-    cam.streaming = true;
-    cam.frameUrl = null;
+    store.cam.error = '';
+    store.cam.streaming = true;
+    store.cam.frameUrl = null;
     render();
 
     // Not a stream and not a frame push. The monitor answers once with a URL, then the
@@ -529,9 +513,9 @@ const handlers = {
     // Only the MQTT leg has been watched directly, so take the URL from whichever
     // channel produces it first and ignore the second.
     const useUrl = (payload) => {
-      const url = ui.cameraFrameUrl(payload, device);
-      if (!url || url === cam.frameUrl) return;
-      cam.frameUrl = url;
+      const url = ui.cameraFrameUrl(payload, store.device);
+      if (!url || url === store.cam.frameUrl) return;
+      store.cam.frameUrl = url;
       render();
       startCamPump();
     };
@@ -542,15 +526,15 @@ const handlers = {
         (data, payload) => useUrl(data !== undefined ? data : payload));
       if (camSub && camSub.ack !== undefined && camSub.ack !== null) useUrl(camSub.ack);
     } catch (e) {
-      cam.streaming = false;
-      cam.error = `camera failed: ${e.message}`;
+      store.cam.streaming = false;
+      store.cam.error = `camera failed: ${e.message}`;
       render();
     }
   },
 
   stopCamera: async () => {
-    cam.streaming = false;
-    cam.frameUrl = null;
+    store.cam.streaming = false;
+    store.cam.frameUrl = null;
     stopCamPump();
     if (camSub && camSub.cancel) camSub.cancel();
     camSub = null;
@@ -561,7 +545,7 @@ const handlers = {
   },
 
   /**
-   * Completed jobs from Moonraker's history store.
+   * Completed jobs from Moonraker's store.history store.
    *
    * `start` pages rather than replacing, so "load more" appends.
    *
@@ -571,20 +555,20 @@ const handlers = {
    * short page comes back rather than counting up to a known end.
    */
   loadHistory: async (start = 0) => {
-    history.loading = start === 0;
-    history.error = '';
+    store.history.loading = start === 0;
+    store.history.error = '';
     render();
     try {
       const r = await bridge.request(CMD.PRINT_HISTORY,
                                      { start, limit: HISTORY_PAGE, order: 'desc' });
       const jobs = (r && (r.jobs || r.items)) || (Array.isArray(r) ? r : []);
-      history.items = start === 0 ? jobs : history.items.concat(jobs);
-      history.hasMore = jobs.length >= HISTORY_PAGE;
+      store.history.items = start === 0 ? jobs : store.history.items.concat(jobs);
+      store.history.hasMore = jobs.length >= HISTORY_PAGE;
     } catch (e) {
-      history.error = `could not read print history: ${e.message}`;
-      if (start === 0) history.items = [];
+      store.history.error = `could not read print history: ${e.message}`;
+      if (start === 0) store.history.items = [];
     }
-    history.loading = false;
+    store.history.loading = false;
     render();
   },
 
@@ -594,12 +578,12 @@ const handlers = {
         { page_index: 0, page_rows: 24, thumbnail_direct: true });
       // `instances` is the printer's own name for the list, and the reply is now
       // unwrapped from its JSON-RPC envelope before it gets here (see unwrapRpc).
-      cam.timelapses = (r && (r.instances || r.list || r.items))
+      store.cam.timelapses = (r && (r.instances || r.list || r.items))
                     || (Array.isArray(r) ? r : []);
-      cam.error = '';
+      store.cam.error = '';
     } catch (e) {
-      cam.timelapses = [];
-      cam.error = `could not list recordings: ${e.message}`;
+      store.cam.timelapses = [];
+      store.cam.error = `could not list recordings: ${e.message}`;
     }
     render();
   },
@@ -612,7 +596,7 @@ const handlers = {
    * instance itself; see timelapseUrl for the port that actually answers with video.
    */
   openTimelapse: (t) => {
-    const url = timelapseUrl(device, t);
+    const url = timelapseUrl(store.device, t);
     const name = t.gcode_name || t.name || t.filename || 'Recording';
     openDialog({
       title: name,
@@ -713,9 +697,9 @@ const handlers = {
   /* ---- diagnostics ---- */
   queryException: async () => {
     try {
-      exception = await bridge.request(CMD.EXCEPTION_QUERY, {});
+      store.exception = await bridge.request(CMD.EXCEPTION_QUERY, {});
     } catch (e) {
-      exception = null;
+      store.exception = null;
     }
     render();
   },
@@ -744,10 +728,10 @@ const handlers = {
           const dd = document.createElement('dd'); dd.textContent = String(v);
           dl.appendChild(dt); dl.appendChild(dd);
         };
-        add('Name', device && deviceLabel(device));
-        add('Model', device && device[DEVICE.MODEL]);
-        add('Serial', device && device[DEVICE.SN]);
-        add('Address', device && `${device[DEVICE.IP]}:${device[DEVICE.PORT] || 8883}`);
+        add('Name', store.device && deviceLabel(store.device));
+        add('Model', store.device && store.device[DEVICE.MODEL]);
+        add('Serial', store.device && store.device[DEVICE.SN]);
+        add('Address', store.device && `${store.device[DEVICE.IP]}:${store.device[DEVICE.PORT] || 8883}`);
         add('State', printer.state);
         add('Host name', printer.hostname);
         add('Firmware', printer.software_version || sys.firmware_version || dev.firmware);
@@ -801,20 +785,20 @@ const handlers = {
 
   /* ---- discovery ---- */
   findMachines: async () => {
-    found = [];
+    store.found = [];
     let dlg;
     const paint = () => {
       const host = document.querySelector('#found-host');
       if (!host) return;
       host.innerHTML = '';
-      if (!found.length) {
+      if (!store.found.length) {
         const p = document.createElement('div');
         p.className = 'empty';
         p.textContent = 'Searching the network…';
         host.appendChild(p);
         return;
       }
-      found.forEach((m) => {
+      store.found.forEach((m) => {
         const row = document.createElement('div');
         row.className = 'found-row';
         const meta = document.createElement('div');
@@ -850,7 +834,7 @@ const handlers = {
     try {
       findSub = await bridge.subscribe(CMD.FIND_START, { last_time: -1 }, (d) => {
         const list = Array.isArray(d) ? d : (d && (d.devices || d.machines)) || [];
-        if (list.length) { found = list; paint(); }
+        if (list.length) { store.found = list; paint(); }
       });
     } catch (e) {
       setStatus(`discovery failed: ${e.message}`, 'err');
@@ -907,7 +891,7 @@ const handlers = {
     });
   },
 
-  /* ---- saved-device management ---- */
+  /* ---- saved-store.device management ---- */
   renameDevice: (d) => {
     let input;
     openDialog({
@@ -1002,29 +986,23 @@ const handlers = {
 /**
  * What a panel is handed, and the only thing it may read.
  *
- * Live getters rather than a snapshot object: panels hold this from the moment they
+ * Three things, and they are three because they answer three different questions:
+ *
+ *   state    what the MACHINE says. A mirror, not a memory.
+ *   store    what the PAGE knows - which view, which tab, what it has fetched.
+ *   pending  what has been ASKED FOR and not yet confirmed. Neither of the above:
+ *            keeping a request in the thing that mirrors the machine is the bug that
+ *            has now been found in three separate controls.
+ *
+ * `handlers` is the fourth member and is on its way out - it is still one flat bag of
+ * forty functions handed to every panel, which is why nothing but each panel's `sends`
+ * declaration records who uses what.
+ *
+ * The store is passed rather than copied. Panels hold this object from the moment they
  * mount, and a frame's worth of values copied into a fresh object every repaint is how
  * a stale `device` reaches a renderer that has been alive longer than the copy.
- *
- * The `cam`/`jobThumb`/`exception`/`storage*` members are page state that has no home
- * yet - they are the sixteen module-level `let`s this file still carries, exposed
- * through one door so that moving them into a store later is a change to this object
- * and nothing else.
  */
-const ctx = {
-  state,
-  handlers,
-  pending,
-  get activeTool() { return activeTool; },
-  get device() { return device; },
-  get devices() { return devices; },
-  get reachable() { return reachable; },
-  get cam() { return cam; },
-  get jobThumb() { return jobThumb.data; },
-  get exception() { return exception; },
-  get storageKind() { return storageKind; },
-  storageData,
-};
+const ctx = { state, store, pending, handlers, storageData };
 
 /* ---- render ------------------------------------------------------- */
 
@@ -1094,16 +1072,16 @@ function superviseConnection() {
     const live = isLive();
     if (live !== was) {
       was = live;
-      if (!live && device) {
-        setStatus(`${deviceLabel(device)} \u2014 not responding`, 'warn');
+      if (!live && store.device) {
+        setStatus(`${deviceLabel(store.device)} \u2014 not responding`, 'warn');
       }
       render();
     }
     if (live) { resetBackoff(); return; }
-    if (connecting || !device) return;
+    if (connecting || !store.device) return;
     // Pairing needs a human reading a code off the machine, so a device that cannot
     // authorise itself is not something to retry at.
-    if (!device[DEVICE.IP] || !device[DEVICE.SN]) return;
+    if (!store.device[DEVICE.IP] || !store.device[DEVICE.SN]) return;
     if (Date.now() < retryAt) return;
     // Schedule the next attempt before starting this one: a failing connect can take
     // 15s by itself, and the interval is between attempts, not between failures.
@@ -1126,7 +1104,7 @@ function reconnect() {
     engineId = null;
     disconnectDevice(bridge, dead).catch(() => { /* already gone; that was the point */ });
   }
-  return doConnect(device, { silent: true, retrying: true });
+  return doConnect(store.device, { silent: true, retrying: true });
 }
 
 /**
@@ -1137,15 +1115,15 @@ function reconnect() {
  * returns paths, which is what made thumbnails silently absent before.
  */
 function refreshJobThumb(file) {
-  if (jobThumb.file === (file || null)) return;
-  jobThumb = { file: file || null, data: null };
+  if (store.jobThumb.file === (file || null)) return;
+  store.jobThumb = { file: file || null, data: null };
   if (!file) return;
   const asked = file;
   bridge.request(CMD.FILE_THUMBS_B64, { path: file })
     .then((r) => {
-      if (jobThumb.file !== asked) return;      // the job moved on while we asked
-      jobThumb.data = pickThumb(r);
-      if (jobThumb.data) render();
+      if (store.jobThumb.file !== asked) return;      // the job moved on while we asked
+      store.jobThumb.data = pickThumb(r);
+      if (store.jobThumb.data) render();
     })
     .catch(() => { /* no thumbnail is a normal answer; the card shows its placeholder */ });
 }
@@ -1153,25 +1131,25 @@ function refreshJobThumb(file) {
 /**
  * What Storage is showing, in the one shape its grid reads.
  *
- * Four different sources - recordings, history, and two file roots - normalised here
- * rather than in the renderer, so the view stays one thing.
+ * Four different sources - recordings, store.history, and two file roots - normalised here
+ * rather than in the renderer, so the store.view stays one thing.
  */
 function storageData() {
-  if (storageKind === 'timelapses') {
-    return { items: cam.timelapses || [], loading: false, error: cam.error || '' };
+  if (store.storageKind === 'timelapses') {
+    return { items: store.cam.timelapses || [], loading: false, error: store.cam.error || '' };
   }
-  if (storageKind === 'prints') {
-    return { items: history.items || [], loading: history.loading,
-             error: history.error, hasMore: history.hasMore };
+  if (store.storageKind === 'prints') {
+    return { items: store.history.items || [], loading: store.history.loading,
+             error: store.history.error, hasMore: store.history.hasMore };
   }
-  return { items: files.items || [], loading: files.loading, error: files.error };
+  return { items: store.files.items || [], loading: store.files.loading, error: store.files.error };
 }
 
 /** The root each file-backed kind reads from. */
 const STORAGE_ROOT = { gcodes: 'gcodes', logs: 'logs' };
 
 function openStorage(kind) {
-  storageKind = kind;
+  store.storageKind = kind;
   // No cache to bust: the rebuild guard is keyed on `kind:shape`, so changing kind
   // rebuilds by construction rather than by remembering to invalidate something.
   if (kind === 'timelapses') handlers.loadTimelapses();
@@ -1181,9 +1159,9 @@ function openStorage(kind) {
 }
 
 function showView(next) {
-  view = next;
+  store.view = next;
   render();
-  if (next === 'storage') openStorage(storageKind);
+  if (next === 'storage') openStorage(store.storageKind);
 }
 
 let raf = 0;
@@ -1198,10 +1176,10 @@ function render() {
     // so it is false on disk by construction and only meaningful within a run.
     // Live machine state is the real evidence — if objects are arriving, we are
     // talking to a printer.
-    reachable = isLive() && (!conn.state || conn.state === 'ready');
+    store.reachable = isLive() && (!conn.state || conn.state === 'ready');
 
-    ui.renderRail(device, conn, devices, reachable);
-    paint(ctx, view);
+    ui.renderRail(store.device, conn, store.devices, store.reachable);
+    paint(ctx, store.view);
   });
 }
 
@@ -1288,13 +1266,13 @@ async function doConnect(target, opts = {}) {
   hostLog(`connect start: sn=${target[DEVICE.SN]} ip=${target[DEVICE.IP]} `
         + `port=${target[DEVICE.PORT]} link=${target[DEVICE.LINK_MODE]} `
         + `clientId=${target[DEVICE.CLIENT_ID] || '(none)'} `
-        + `hasKeys=${hasTlsMaterial(target)} token=${!!loginUser.token} `
+        + `hasKeys=${hasTlsMaterial(target)} token=${!!store.loginUser.token} `
         + `silent=${!!opts.silent}`);
   try {
     const res = await connectDevice(bridge, target, {
       // An automatic attempt never prompts; pairing is a deliberate action.
       requestPin: opts.silent ? null : askForPin,
-      user: loginUser,
+      user: store.loginUser,
       onStep: (t) => { setStatus(t); hostLog(t); },
       trace: (t) => hostLog(t, 'warning'),
     });
@@ -1335,7 +1313,7 @@ async function doDisconnect() {
   await disconnectDevice(bridge, engineId);
   engineId = null;
   if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
-  exception = null;
+  store.exception = null;
   await refresh();
   setStatus('disconnected', 'warn');
 }
@@ -1485,7 +1463,7 @@ async function startStateStream(reason) {
  *
  * Measured by clicking the shipped page's own refresh pill and watching what left it:
  * it re-subscribes, re-declares the field filter, takes a fresh snapshot, then re-reads
- * the system info, the file status, the exception state and the file roots. Both of its
+ * the system info, the file status, the store.exception state and the file roots. Both of its
  * pills - Control and Filament - send the identical set.
  *
  * The rebuild's buttons used to call `refresh()`, which re-reads Orca's DEVICE BOOK:
@@ -1506,10 +1484,10 @@ async function refreshAll() {
 
 async function refresh() {
   try {
-    devices = asDeviceList(await bridge.request(CMD.GET_LOCAL_DEVICES, {}));
+    store.devices = asDeviceList(await bridge.request(CMD.GET_LOCAL_DEVICES, {}));
     const c = await bridge.request(CMD.GET_CONNECTED_MACHINE, {});
-    device = (c && Object.keys(c).length) ? c
-           : (devices.find((d) => d[DEVICE.CONNECTED]) || devices[0] || null);
+    store.device = (c && Object.keys(c).length) ? c
+           : (store.devices.find((d) => d[DEVICE.CONNECTED]) || store.devices[0] || null);
   } catch (e) {
     setStatus(`refresh failed: ${e.message}`, 'err');
   }
@@ -1518,7 +1496,7 @@ async function refresh() {
 
 
 /**
- * The device selector's menu.
+ * The store.device selector's menu.
  *
  * The only chrome left in this file: it is about the *page's* relationship to Orca -
  * which machines are saved, connect, pair, rename, forget, discover - rather than about
@@ -1529,13 +1507,13 @@ function wireDeviceMenu() {
   const sel = ui.$('#device-select');
   sel.setAttribute('data-menu-anchor', '');
   sel.onclick = () => {
-    const items = devices.length
-      ? devices.map((d) => ({
+    const items = store.devices.length
+      ? store.devices.map((d) => ({
           label: deviceLabel(d) + (d[DEVICE.CONNECTED] ? '' : '  (not connected)'),
           icon: 'deviceControl',
           muted: !d[DEVICE.CONNECTED],
           onClick: () => {
-            device = d;
+            store.device = d;
             render();
             if (!d[DEVICE.CONNECTED]) doConnect(d);
           },
@@ -1549,20 +1527,20 @@ function wireDeviceMenu() {
     // on every config save (AppConfig.cpp:887), so it read false for a machine that was
     // right there - and could read true for a session that had died. Connect was being
     // offered, and withheld, on the strength of a field that answers neither question.
-    if (device && engineId && isLive()) {
+    if (store.device && engineId && isLive()) {
       items.push({ label: 'Disconnect', icon: 'iconHome', onClick: () => doDisconnect() });
-    } else if (device) {
+    } else if (store.device) {
       items.push({
-        label: hasTlsMaterial(device) ? 'Connect now' : 'Pair and connect…',
+        label: hasTlsMaterial(store.device) ? 'Connect now' : 'Pair and connect…',
         icon: 'deviceControl',
-        onClick: () => { resetBackoff(); doConnect(device); },
+        onClick: () => { resetBackoff(); doConnect(store.device); },
       });
     }
-    if (device) {
+    if (store.device) {
       items.push({ label: 'Rename…', icon: 'iconEdit',
-                   onClick: () => handlers.renameDevice(device) });
+                   onClick: () => handlers.renameDevice(store.device) });
       items.push({ label: 'Forget this printer…', icon: 'delete',
-                   onClick: () => handlers.forgetDevice(device) });
+                   onClick: () => handlers.forgetDevice(store.device) });
     }
     items.push(null);
     items.push({ label: 'Printer information…', icon: 'deviceControl',
@@ -1591,5 +1569,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // expose for console poking during RE work, and for the screenshot harness
 window.__devicePage = { get state() { return state; }, get bridge() { return bridge; },
-                        get device() { return device; }, get devices() { return devices; },
-                        handlers, mock: null };
+                        get device() { return store.device; },
+                        get devices() { return store.devices; },
+                        store, pending, handlers, mock: null };

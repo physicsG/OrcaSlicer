@@ -20,6 +20,6 @@ export default {
   sends: [CMD.CAMERA_START, CMD.CAMERA_STOP],
 
   update(root, ctx) {
-    ui.renderCamera(root, ctx.reachable, ctx.cam, ctx.handlers);
+    ui.renderCamera(root, ctx.store.reachable, ctx.store.cam, ctx.handlers);
   },
 };
