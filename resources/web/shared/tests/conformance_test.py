@@ -502,14 +502,25 @@ check("history thumbnails come over HTTP, because the metadata carries paths",
 check("machine files can be viewed and printed, not deleted",
       "handlers.deleteFile" not in ui_src and "deleteFile:" not in app_src,
       "Delete sat a few pixels from a one-click Print and only one of them is reversible")
-# Twice now: an element with a `display` class rule, hidden from JS, went on showing -
-# a class rule outranks the UA stylesheet's [hidden]{display:none}. Both known cases are
-# pinned rather than the rule being re-learned a third time.
-_hidden_optouts = [c for c in (".fault", ".stor-foot")
-                   if f"{c}[hidden]" not in css]
+# A `display` rule outranks the UA stylesheet's [hidden]{display:none}, so an element
+# styled that way and hidden from JS goes on showing. This was two named cases - .fault
+# and .stor-foot - and naming them is exactly what let a third through: #view-storage
+# kept the Storage panel's header bar on the Device control page.
+#
+# Derived now, not named: every simple id/class selector in the stylesheet that sets
+# `display` must either have a [hidden] rule of its own, or never be hidden from JS.
+# run_webkit.py asks the same question of the running page, which is the stronger half -
+# this one just fails without a browser.
+_hides = set(re.findall(r"([A-Za-z_$][\w$]*)\.hidden\s*=", ui_src + app_src + shell_src)) \
+       | set(re.findall(r"hiddenAtRest", panels_all))
+_display = set(re.findall(r"^(#[\w-]+|\.[\w-]+)\s*\{[^}]*\bdisplay:", css, re.M))
+_missing = sorted(sel for sel in _display
+                  if f"{sel}[hidden]" not in css
+                  and (sel.lstrip("#.").replace("-", "") in
+                       {h.lower() for h in _hides} | {"viewstorage", "viewcontrol"}))
 check("anything hidden from JS opts out of its own display rule",
-      not _hidden_optouts,
-      f"missing a [hidden] rule: {_hidden_optouts} - setting .hidden on these does nothing")
+      not _missing,
+      f"missing a [hidden] rule: {_missing} - setting .hidden on these does nothing")
 # Two handlers had been sitting in the bag with no caller - abortBedMesh, which cannot
 # have one, and showFiles, whose own comment called it "the one useful action from an
 # idle job card". check_coverage found the first because it named a command; the second

@@ -27,6 +27,8 @@ import { DIAG, createLog } from './diag.js';
 import { mountBuildBadge } from '../../shared/js/buildinfo.js';
 import * as ui from './ui.js';
 import { buildShell, paint } from './shell.js';
+// aliased: this file has its own render()
+import * as renderPrims from './render.js';
 import * as cmdPage from './commands/page.js';
 import * as cmdControl from './commands/control.js';
 import * as cmdTask from './commands/task.js';
@@ -369,7 +371,11 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // expose for console poking during RE work, and for the screenshot harness
+// `render` is here for the harness rather than for console poking: keyedList is DOM
+// reconciliation, so the only honest place to test it is a real DOM, and run_webkit.py's
+// checks run as a classic script that cannot import a module.
 window.__devicePage = { get state() { return state; }, get bridge() { return bridge; },
                         get device() { return store.device; },
                         get devices() { return store.devices; },
-                        store, pending, handlers: all, byModule, mock: null };
+                        store, pending, render: renderPrims,
+                        handlers: all, byModule, mock: null };

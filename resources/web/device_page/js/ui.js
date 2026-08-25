@@ -1165,7 +1165,12 @@ export function makeTrace(pane) {
 export function renderFilament(root, slots, handlers) {
   keyedList(root, slots, {
     key: (f, i) => i,
-    sig: (f) => `${f.loaded ? 1 : 0}:${f.type}:${f.subType}:${f.vendor}:${f.color}:${f.tag}`,
+    // What the card DRAWS, and only that. `f.tag` is the RFID record, an object, and
+    // it went into the signature whole - where it stringified to "[object Object]" for
+    // every tagged spool alike, so swapping one tagged spool for another would not have
+    // rebuilt the card. All the card shows of it is that there is one.
+    sig: (f) => [f.loaded ? 1 : 0, f.type, f.subType, f.vendor, f.color,
+                 f.tag ? 1 : 0].join(':'),
     create: (f, i) => {
       const css = cssColor(f.color);
       const slot = el('button', 'slot');

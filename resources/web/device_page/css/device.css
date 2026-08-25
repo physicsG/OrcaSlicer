@@ -1166,6 +1166,11 @@ text.step {
   display: flex; flex-direction: column; height: 100vh; padding: 20px 21px 20px;
 }
 #view-storage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* Third time: an id rule with `display` outranks the UA stylesheet's
+   [hidden]{display:none}, so the Storage panel went on showing its header bar on the
+   Device control page. #view-control opted back in and this did not. The runtime check
+   in run_webkit.py now asserts it of every hidden element rather than of a list. */
+#view-storage[hidden] { display: none; }
 /* `display: contents` so the four panels stay direct children of the 2x2 grid - a real
    wrapper box would break the layout. It has to opt back into `hidden` explicitly:
    the UA's `[hidden] { display: none }` loses to this id selector, so without the

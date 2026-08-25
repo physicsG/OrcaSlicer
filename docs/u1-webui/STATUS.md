@@ -847,3 +847,41 @@ the render loop and the device menu — down from 1,595. The largest file is `ui
 1,359, and it is the obvious next thing: it is still one module rendering six panels, and
 each panel's renderer wants to move into the panel module that already owns everything
 else about it. That is a move rather than a design decision, which is why it can wait.
+
+### Three reported from the running page (2026-08-25)
+
+**The Filament panel showed ten slots where there are four**, cycling 3-4-1-2. That one
+was mine, from the render pass: `keyedList` dropped a node whose signature had changed
+out of the leftovers map *and* replaced it, so the sweep at the end could no longer see
+it and it stayed in the DOM. One leaked node per content change per repaint. Driven
+against a real DOM:
+
+```
+before   4 -> 5 -> 7 -> 11 -> 13    [a3 b3 c3 d3 a2 b1 c2 d1 a2 c1 a1]
+after    4 -> 4 -> 4 ->  4 ->  3
+```
+
+The interleaving is exactly the reported 3-4-1-2. Five checks in `run_webkit.py` cover it
+now; four of them fail without the fix.
+
+**The Storage panel was showing on the Device control page.** `#view-storage` sets
+`display: flex`, an id rule, which outranks the UA stylesheet's `[hidden]{display:none}` -
+so setting `.hidden` did nothing and it computed to `display: flex` at 588x72, the
+Storage header bar sitting under Filament. `#view-control` had opted back in and this
+never had.
+
+**Third time for that trap**, and the reason it got through is instructive: the
+conformance check pinned `.fault` and `.stor-foot` *by name*. It derives the set now, and
+`run_webkit.py` asks the running page the stronger version - **every element carrying
+`[hidden]` must compute to `display: none`**, whatever the reason. Verified by removing
+the opt-out again: both checks fail and name `#view-storage`.
+
+**A latent one the printer's own data exposed.** The real signatures read
+`1:PLA:null:Jayo:F44336FF:[object Object]` - `f.tag` is the RFID record, an object, so
+every tagged spool signed identically and swapping one for another would not have rebuilt
+the card. The signature carries only what the card draws now: that a tag exists.
+
+Not reproduced, and recorded rather than claimed: one run reported 39 storage cards built
+inside the hidden container. Three later runs report zero and a MutationObserver never
+fires. The likely cause is an orphaned `WebKitWebProcess` from an earlier scripted run
+that had clicked into Storage - the trap already documented above - but it was seen once.

@@ -72,6 +72,50 @@ CHECKS = r"""
   const say = (name, got, want) =>
     out.push(`${got === want ? 'PASS' : 'FAIL'}  ${name}` +
              (got === want ? '' : `   got ${JSON.stringify(got)} want ${JSON.stringify(want)}`));
+  // ---- is what the page hides actually hidden? -------------------------
+  // [hidden] is a UA-stylesheet rule and loses to ANY class or id rule that sets
+  // `display`. Three elements have now been bitten by that - .fault, .stor-foot, and
+  // #view-storage, which went on showing the Storage panel's header bar on the Device
+  // control page. Two of them were pinned by name in a conformance check, which is what
+  // let the third through. Asking the running page covers every case there will be.
+  {
+    const showing = [...document.querySelectorAll('[hidden]')]
+      .filter((n) => getComputedStyle(n).display !== 'none')
+      .map((n) => (n.id ? '#' + n.id : '.' + n.className));
+    say('everything the page hides is actually hidden', showing.join(', '), '');
+  }
+
+  // ---- keyedList, against a real DOM -----------------------------------
+  // Reported from the running page: the Filament panel showed ten slots where there are
+  // four, cycling 3-4-1-2. A node whose signature changed was dropped from the leftovers
+  // map AND replaced, so the sweep at the end could no longer see it and it stayed in
+  // the DOM - one leaked node per content change per repaint. This is DOM reconciliation
+  // and a stub cannot show it, so it is tested here on the real thing.
+  {
+    const kl = window.__devicePage.render.keyedList;
+    const box = document.createElement('div');
+    document.body.appendChild(box);
+    const items = [{id: 'a', v: 1}, {id: 'b', v: 1}, {id: 'c', v: 1}];
+    const paint = () => kl(box, items, {
+      key: (it) => it.id,
+      sig: (it) => String(it.v),
+      create: (it) => Object.assign(document.createElement('span'),
+                                    {textContent: it.id + it.v}),
+    });
+    const shown = () => [...box.children].map((n) => n.textContent).join(' ');
+    paint(); paint();
+    say('a repaint with nothing changed touches nothing', shown(), 'a1 b1 c1');
+    items[0].v = 2; paint();
+    say('a changed item is replaced, not added alongside', shown(), 'a2 b1 c1');
+    items.forEach((it) => { it.v = 3; }); paint();
+    say('and the whole list changing does not multiply it', shown(), 'a3 b3 c3');
+    items.splice(1, 0, {id: 'z', v: 1}); paint();
+    say('an item inserted in the middle lands in the middle', shown(), 'a3 z1 b3 c3');
+    items.shift(); items.pop(); paint();
+    say('and removals still leave', shown(), 'z1 b3');
+    box.remove();
+  }
+
   const rows = [...document.querySelectorAll('.status-row')];
   const key = (n, k) => n.dispatchEvent(new KeyboardEvent('keydown', {key: k, bubbles: true}));
   if (rows.length !== 5) return `FAIL  five reading rows   got ${rows.length}`;

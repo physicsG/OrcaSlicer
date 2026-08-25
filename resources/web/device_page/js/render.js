@@ -65,7 +65,16 @@ export function keyedList(root, items, { key, sig, create, update }) {
       have.delete(k);
       // Same item, different contents: cheaper to rebuild one card than to write a
       // patcher for every field of every kind of card.
-      if (s != null && n.dataset.sig !== s) n = null;
+      //
+      // The old node has to be taken OUT, not merely passed over. It was dropped from
+      // `have` on the line above, so the sweep at the end of this function can no longer
+      // see it - abandoning it here left it in the DOM for good, and a list whose
+      // contents changed grew by one node per change per repaint. The Filament panel
+      // reached ten slots where there are four.
+      if (s != null && n.dataset.sig !== s) {
+        n.remove();
+        n = null;
+      }
     }
     if (!n) {
       n = create(it, i);
