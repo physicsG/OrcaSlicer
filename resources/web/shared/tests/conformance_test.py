@@ -386,12 +386,6 @@ check("the axis readout uses motion_report.live_position",
       "positions are available without subscribing `toolhead`")
 
 ui_src = open(os.path.join(WEB, "device_page", "js", "ui.js"), encoding="utf-8").read()
-check("a running camera can be stopped",
-      ui_src.count("handlers.stopCamera()") >= 2,
-      "the live-view branch returned before the control block was reached")
-check("the idle task panel offers something besides an illustration",
-      "showFiles" in ui_src,
-      "an image with no text and no buttons is not a state")
 app_src = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
 check("choosing which toolhead to jog does NOT move the machine",
       "handlers.selectTool" not in ui_src,
@@ -408,6 +402,42 @@ check("the toolchange is confirmed by the machine, not by the ack",
 
 print("\n== panel invariants ==")
 css = open(os.path.join(WEB, "device_page", "css", "device.css"), encoding="utf-8").read()
+
+check("a running camera can be stopped",
+      "cam-play" in ui_src and "handlers.stopCamera()" in ui_src
+      and "data-on" in css,
+      "one control inside the viewport, for both states - a live-view branch that "
+      "returned early once left a running camera with no way to stop it")
+check("the camera body is the viewport, not an illustration",
+      ".cam-view" in css and "background: #000" in css
+      and "CAMERA_TEXT" in ui_src,
+      "the shipped page shows a dark viewport with a round button in it, and says "
+      "'Camera not on'; the illustration answers 'there is no printer'")
+# Header geometry, measured off the shipped page in pixels: title at 28, separator at
+# 99, selected pill at 117. A 20px separator margin put the Camera tabs 13px right.
+check("the header separator is spaced as measured, not rounded to 20",
+      re.search(r"\.panel-head \.sep\s*\{[^}]*margin:\s*0 13px 0 14px", css) is not None,
+      "title 28 + width 57 + 14 -> separator 99, + 5 + 13 -> pill 117")
+check("a tab meets the card and a refresh button fills the header",
+      "align-self: flex-end" in css and "border-radius: 6px 6px 0 0" in css,
+      "the shipped pill is inset at the TOP only, so its white runs into the body; "
+      "centring 36px in a 40px header leaves grey underneath and it reads as a button")
+
+# Driven on the shipped page by clicking its own refresh pill: it re-subscribes,
+# re-declares the filter, re-snapshots, and re-reads system info, file status, the
+# exception state and the file roots. Both of its pills send the identical set.
+check("refresh re-reads the machine, not Orca's device book",
+      "async function refreshAll" in app_src
+      and "refreshAll()" in app_src
+      and "startStateStream('refresh')" in app_src,
+      "the buttons called refresh(), which asks for the device list - two commands "
+      "that say nothing about the printer, so pressing refresh changed nothing visible")
+
+check("the job card is one card at every state, not two",
+      "job-badge" in ui_src and "job-bar" in ui_src
+      and "'No active print'" not in ui_src,   # the emitted literal, not the comment
+      "an idle machine and a printing one differ in the numbers, not the furniture")
+app_src = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
 
 # `.fault{display:flex}` is a class rule and beats the UA stylesheet's
 # [hidden]{display:none}, so setting .hidden in JS did nothing and an empty banner

@@ -48,6 +48,10 @@
   --heat: #E8590C;
   --cool: #1971C2;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  /* NOT the bundle's HarmonyOS Sans SC: tried, measured, and every title came out
+     narrower than the shipped page's - Camera by 11px - so whatever Flutter renders
+     those titles with, it is not that face at this size. The system stack lands
+     "Camera" on the measured 57px exactly. */
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -161,16 +165,27 @@ body {
   padding: 0 15px 0 28px;
 }
 .panel-title { font-size: 14px; color: var(--ink); }
-.panel-head .sep { color: var(--ink-dim); font-size: 14px; margin: 0 20px; }
+/* 14px before the separator and 13px after, not 20 and 20. Measured on the shipped
+   page: title at 28, separator at 99, selected pill at 117 - so a 20px margin pushed
+   the Camera tabs 13px right of where they belong. The Control and Filament headers
+   have no separator (their refresh pill starts 36px after the title) and were already
+   landing on 117. */
+.panel-head .sep { color: var(--ink-dim); font-size: 14px; margin: 0 13px 0 14px; }
 .panel-head .spacer { flex: 1; }
 /* Control's header has no separator: the title, a 36px gap, then the pill */
 .panel-head .gap-36 { width: 36px; flex: 0 0 36px; }
 
 /* a header tab pill: white when selected, transparent otherwise */
+/* A tab meets the card, it does not hover above it.
+   Measured on the shipped page: the header spans y 20..60 and the selected pill
+   24..60 - inset at the TOP only, so its white runs into the white body underneath.
+   Centring 36px inside a 40px header leaves 2px of grey below it, and that gap is
+   the whole difference between reading as a tab and reading as a loose button. */
 .tab {
+  align-self: flex-end;
   height: 36px; min-width: 52px;
   display: grid; place-items: center;
-  border: 0; border-radius: 6px;
+  border: 0; border-radius: 6px 6px 0 0;
   background: none;
   cursor: pointer;
   padding: 0 14px;
@@ -341,7 +356,10 @@ body {
 }
 
 /* ---- printing task -------------------------------------------------- */
+/* The job card fills the panel from the top; only the empty states are centred.
+   Centring the card left a band of white above the badge that the original has not. */
 .task-body { display: grid; place-items: center; }
+.task-body:has(> .job) { place-items: start stretch; }
 .task-body img.placeholder { width: 803px; max-width: 100%; height: auto; display: block; }
 .task-body .empty { color: #9AA3AF; font-size: 13px; }
 
@@ -498,9 +516,60 @@ body {
 .device-select .dev-state[data-state="none"] { background: #C9CED6; }
 
 /* ---- print job ------------------------------------------------------- */
-.job { width: 100%; padding: 22px 28px; }
-.job-name { font-size: 13px; color: var(--ink); }
+/* ---- the job card ---------------------------------------------------- *
+ * One card at every state, zeroed rather than replaced. Laid out off the shipped
+ * page: badge and machine name on top, a square thumbnail beside the numbers, the
+ * bar across the full width, and one round control under it. */
+.job { width: 100%; padding: 18px 24px; }
+.job-head { display: flex; align-items: center; gap: 10px; }
+.job-badge {
+  padding: 2px 7px; border-radius: 4px;
+  background: #16A34A; color: #FFFFFF;
+  font-size: 11px; font-weight: 600; text-transform: lowercase;
+}
+.job-badge[data-state="printing"] { background: var(--accent); }
+.job-badge[data-state="paused"]   { background: var(--warn); }
+.job-badge[data-state="error"],
+.job-badge[data-state="failed"]   { background: var(--err); }
+.job-dev { font-size: 17px; color: var(--ink); }
+
+.job-main { display: flex; gap: 26px; margin-top: 18px; }
+.job-thumb {
+  flex: 0 0 152px; width: 152px; height: 152px;
+  display: grid; place-items: center; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+}
+.job-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.job-thumb .job-thumb-ph { width: 118px; }
+.job-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.job-name {
+  font-size: 13px; color: var(--ink-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.job-pct { font-size: 40px; line-height: 1.2; color: #C9CDD4; font-variant-numeric: tabular-nums; }
+.job-nums {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  margin-top: auto; font-size: 12px; color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+/* Layers left, time right - the pair the shipped card puts under the percentage. */
+.job-layer { white-space: nowrap; }
+.job-time { white-space: nowrap; text-align: right; }
+
+.job-actions { display: flex; justify-content: center; gap: 14px; margin-top: 20px; }
+.job-btn {
+  width: 34px; height: 34px; padding: 0;
+  display: grid; place-items: center;
+  border: 0; border-radius: 50%; background: var(--pill); cursor: pointer;
+}
+.job-btn svg { width: 20px; height: 20px; fill: #9AA3AF; }
+.job-btn:not(:disabled):hover { background: var(--line); }
+.job-btn:not(:disabled) svg { fill: var(--ink-dim); }
+.job-btn:disabled { cursor: default; }
+.job-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.job-msg { margin-top: 14px; font-size: 12px; color: var(--ink-dim); text-align: center; }
 .job-bar {
+  margin-top: 16px;
   height: 6px; border-radius: 999px; background: #EEF1F5;
   margin: 14px 0 10px; overflow: hidden;
 }
@@ -536,6 +605,35 @@ body {
 
 /* ---- camera ---------------------------------------------------------- */
 .cam-frame { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+
+/* ---- the camera viewport -------------------------------------------- *
+ * Black, and the control lives inside it. The shipped page shows a dark viewport
+ * whether or not a frame is playing, with one round button in the middle of it -
+ * not an illustration with a text button underneath, which is what the rebuild had
+ * and which says "there is no printer" rather than "the camera is off". */
+.cam-view {
+  position: relative;
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  background: #000; overflow: hidden;
+}
+.cam-view .cam-frame { position: absolute; inset: 0; margin: auto; }
+.cam-play {
+  position: relative;
+  width: 56px; height: 56px; flex: 0 0 56px;
+  display: grid; place-items: center;
+  border: 0; border-radius: 50%; padding: 0;
+  background: rgba(255, 255, 255, .28); cursor: pointer;
+  transition: background .15s, opacity .15s;
+}
+.cam-play svg { width: 30px; height: 30px; fill: #FFFFFF; }
+.cam-play:hover { background: rgba(255, 255, 255, .42); }
+.cam-play:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* While it is playing the picture is the point, so the control keeps out of the way
+   until the pointer asks for it. */
+.cam-view:not(:hover) .cam-play[data-on="1"] { opacity: 0; }
+.cam-view .cam-msg { position: relative; color: #FFFFFF; font-size: 13px; }
 .tl-grid {
   width: 100%; height: 100%; overflow: auto; padding: 16px;
   display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;

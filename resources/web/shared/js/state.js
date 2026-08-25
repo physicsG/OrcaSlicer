@@ -251,6 +251,11 @@ export class MachineState {
       totalDuration: num(ps.total_duration),
       filamentUsed: num(ps.filament_used),
       progress: clamp(progress, 0, 1),
+      // Klipper carries the layer counters on print_stats.info, which IS subscribed.
+      // numOrNull, not num: "no layer information" and "layer zero" are different
+      // answers, and the card shows a dash for the first.
+      layer: numOrNull((ps.info || {}).current_layer),
+      totalLayer: numOrNull((ps.info || {}).total_layer),
       isActive: !!vs.is_active,
       fileSize: num(vs.file_size),
       filePosition: num(vs.file_position),

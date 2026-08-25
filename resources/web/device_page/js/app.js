@@ -49,6 +49,9 @@ const HISTORY_PAGE = 20;
 // raises an "Extruder N operating..." overlay with a 60 timeout before dispatching.
 const TOOL_CHANGE_TIMEOUT_MS = 60000;
 let history = { loading: false, error: '', items: [], hasMore: false };
+// The job card shows the printing file's own thumbnail, so it is fetched once per
+// file rather than on every repaint - the card repaints about once a second.
+let jobThumb = { file: null, data: null };
 
 function setStatus(text, kind = '') {
   const n = ui.$('#status');
@@ -970,6 +973,27 @@ function reconnect() {
   return doConnect(device, { silent: true, retrying: true });
 }
 
+/**
+ * Fetch the printing file's thumbnail, once.
+ *
+ * Keyed on the filename, so a card repainting every second asks the printer nothing.
+ * `sw_FilesThumbnailsBase64` is the only command that returns bytes - the other one
+ * returns paths, which is what made thumbnails silently absent before.
+ */
+function refreshJobThumb(file) {
+  if (jobThumb.file === (file || null)) return;
+  jobThumb = { file: file || null, data: null };
+  if (!file) return;
+  const asked = file;
+  bridge.request(CMD.FILE_THUMBS_B64, { path: file })
+    .then((r) => {
+      if (jobThumb.file !== asked) return;      // the job moved on while we asked
+      jobThumb.data = pickThumb(r);
+      if (jobThumb.data) render();
+    })
+    .catch(() => { /* no thumbnail is a normal answer; the card shows its placeholder */ });
+}
+
 let raf = 0;
 function render() {
   if (raf) return;
@@ -995,7 +1019,9 @@ function render() {
                         state.speed(), handlers);
     ui.renderControlMain(ui.$('#control-main'), state.toolheads(), handlers,
                          state.toolhead());
-    ui.renderTask(ui.$('#task'), state.job(), taskTab, files, handlers, history);
+    refreshJobThumb(state.job().filename);
+    ui.renderTask(ui.$('#task'), state.job(), taskTab, files, handlers, history,
+                  device, jobThumb.data);
     ui.renderFilament(ui.$('#filament'), state.filaments(), handlers);
     ui.renderFault(ui.$('#fault'), state.activity(), exception, handlers);
   });
@@ -1188,7 +1214,6 @@ function startHeartbeat() {
 
 /* ---- chrome interactions ------------------------------------------- */
 
-/** Re-read everything the page shows, as the header refresh buttons do. */
 /**
  * Declare the field filter, take a snapshot, and open the live stream.
  *
@@ -1277,6 +1302,30 @@ async function startStateStream(reason) {
   return ok;
 }
 
+/**
+ * Re-read everything the page shows. This is what the header refresh buttons do.
+ *
+ * Measured by clicking the shipped page's own refresh pill and watching what left it:
+ * it re-subscribes, re-declares the field filter, takes a fresh snapshot, then re-reads
+ * the system info, the file status, the exception state and the file roots. Both of its
+ * pills - Control and Filament - send the identical set.
+ *
+ * The rebuild's buttons used to call `refresh()`, which re-reads Orca's DEVICE BOOK:
+ * two commands that say nothing about the machine, so pressing refresh changed nothing
+ * a user could see.
+ */
+async function refreshAll() {
+  await refresh();                       // the device list, as it always did
+  if (!state.lastUpdate && !engineId) return;   // nothing to re-read yet
+  await startStateStream('refresh');     // filter + snapshot + subscription, and it
+                                         // re-reads homed_axes on its own way out
+  handlers.queryException();
+  bridge.request(CMD.GET_MACHINE_SYSTEM_INFO, {}).catch(() => {});
+  bridge.request(CMD.FILE_STATUS, {}).catch(() => {});
+  bridge.request(CMD.FILES_ROOTS, {}).catch(() => {});
+  render();
+}
+
 async function refresh() {
   try {
     devices = asDeviceList(await bridge.request(CMD.GET_LOCAL_DEVICES, {}));
@@ -1363,8 +1412,8 @@ function wireChrome() {
   });
 
   // control + filament refresh
-  ui.$('#refresh').onclick = () => refresh();
-  ui.$('#filament-refresh').onclick = () => refresh();
+  ui.$('#refresh').onclick = () => refreshAll();
+  ui.$('#filament-refresh').onclick = () => refreshAll();
 
   // print preferences
   ui.$('#print-prefs').onclick = () => {

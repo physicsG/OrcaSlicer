@@ -371,21 +371,72 @@ Written up in [08-function-gap-analysis.md](02-device-page/08-function-gap-analy
 `run_webkit.py --device-ip 192.0.2.1` points the saved device somewhere unroutable,
 which is how the nothing-there path is exercised without switching the printer off.
 
-### The shipped bundle runs here too (2026-08-25)
+### The shipped bundle runs here too, and connects (2026-08-25)
 
-`run_webkit.py --original` loads the **real Flutter bundle** in WebKitGTK against a real
-printer, through `u1_bridge.py`. That was not previously possible in this environment at
-all — the screenshot harness needs a chromium that will not start.
+```bash
+python3 resources/web/shared/tests/run_webkit.py --original --sn <SN> --watch
+```
 
-It boots and renders the four panels. It stops at `sn=`,
-`ConnectionStatus.unknown`, having subscribed to the cache keys **`deviceList`** and
-**`deviceFilamentInfo`** — the same wall
-[the harness README](tools/harness/README.md) documents, now named precisely. The six
-Orca-side commands it needs and the reconstruction never did are answered; that cleared
-every timeout and did not move the wall. Whatever seeds `deviceList` is the next thread.
+The **real Flutter bundle**, in WebKitGTK, against the real printer, through
+`u1_bridge.py` — with live telemetry on screen and no modification to the bundle. Not
+previously possible in this environment at all: the screenshot harness needs a chromium
+that will not start.
 
-Measured on the way: **the bundle's own request timeout is 3 seconds**, against the
-reconstruction's 15. Worth knowing before blaming a host for a command it answered.
+Four things had to be right, each read out of the C++:
+
+1. **Orca posts replies as a JSON string** — `send_to_js` builds
+   `window.postMessage(JSON.stringify({...}), '*')`. Posting the object, which the
+   reconstruction's client parses either way, makes the bundle ignore every reply in
+   silence. It presents as "the page will not pick a device", and it cost the most.
+2. **TLS is decided by credentials, not the scheme.** The bundle asks for
+   `mqtt://<ip>:8883` — plain scheme, TLS port — and expects a TLS client back.
+3. **Orca keeps its own connection to the printer.** `get_connect_host()` answers the
+   printer commands and is not the MQTT clients the page creates; the bundle never calls
+   `sw_mqtt_set_engine` because in Orca a host is already attached. The bridge now
+   brings up a session of its own.
+4. **`sw_GetConnectedMachine` is the gate** — the first saved device flagged
+   `connected`. With none the page sits at `sn=`. The bridge probes each saved device
+   with a TCP connect and reports what answers.
+
+`--sn` matters: a config holding a stale record has the bundle trying to connect it.
+
+Also measured: **the bundle's own request timeout is 3 seconds**, against the
+reconstruction's 15. And `local_devices_arrived` — which Orca posts on a separate,
+non-envelope channel — appears **zero** times in `main.dart.js`.
+
+Still rough: a "Binding rejected" dialog from the cloud stub, and toolheads 2–4 read
+`_/_ °C` while toolhead 1 and the bed carry real numbers.
+
+### The reply shape, and the two cards (2026-08-25)
+
+Running the shipped bundle against the same host corrected a **load-bearing finding**.
+`08-function-gap-analysis.md` led with "the JSON-RPC envelope is never unwrapped"; that
+is true only of a `passthrough` response target. Every ordinary command takes the other
+arm of `on_response_arrived`, which reshapes the reply to
+**`{data: <result>, method: <name>}`**. `unwrapRpc` only stripped `jsonrpc` envelopes,
+so against the real contract it was a no-op and every reader outside `unwrapStatus` was
+silently reading `undefined` — the file browser was **empty against a real printer**.
+Fixed in `sswcp.js`, guarded on the `{data, method}` pair; one unit test had encoded the
+old belief and is inverted.
+
+With both surfaces live on one machine, the rebuilt cards were measured against the
+originals rather than judged:
+
+- **Camera** is a black viewport with one round control in it, saying the bundle's own
+  `Camera not on` — it had been showing the not-connected illustration, which answers a
+  different question.
+- **Print** is one card at every state, zeroed rather than replaced. Layer counts come
+  from `print_stats.info`, subscribed all along and unread.
+- **Tabs**: the `|` separator margin is 14/13, not 20/20 (title 28, separator 99, pill
+  117), and a selected pill is inset at the TOP only so it runs into the body. The 36px
+  tabs and 40px refresh pills are different controls, not an inconsistency.
+- **Refresh did nothing** — both pills re-read Orca's device book. Driving the shipped
+  page's own pill settles the set they should send, and both of its pills send the same
+  one.
+
+Dead end, recorded so it is not retried: the bundle ships
+`HarmonyOS_Sans_SC_Regular.ttf`, and adopting it made every title *narrower* than the
+shipped page's. Those titles are not that face at 14px.
 
 ### Tooling worth knowing about
 

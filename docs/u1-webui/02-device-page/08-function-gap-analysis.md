@@ -29,6 +29,44 @@ risk and then did not test for it.
 
 ## Root cause A — the JSON-RPC envelope is never unwrapped
 
+> **Corrected 2026-08-25, and this correction matters.** What follows is true only of a
+> `passthrough` response target. Every ordinary command takes the other arm of
+> `Moonraker_Mqtt::on_response_arrived`, which **reshapes** the reply before Orca ever
+> hands it over:
+>
+> ```cpp
+> if (passthrough || id == 20252025) {
+>     cb(body);                     // the raw envelope - what this section describes
+> } else {
+>     res["data"]   = body["result"];        // unwrapped, one level down
+>     res["method"] = body.count("method") ? body["method"] : "";
+>     cb(res);
+> }
+> ```
+>
+> So the page receives `{data: <result>, method: <name>}`. `unwrapRpc` only stripped
+> `jsonrpc` envelopes, so against the real contract it was a **no-op**, and every reader
+> that was not going through `unwrapStatus` was silently reading `undefined`:
+>
+> ```js
+> cam.timelapses = (r && (r.instances || r.list || r.items)) || [];   // always []
+> ```
+>
+> Measured on hardware, before and after teaching `unwrapRpc` the real shape:
+>
+> ```
+> file panel:  "No files on this machine"  ->  config logs gcodes timelapse camera, print_task.json 4 KB, ...
+> history:     keys method, data           ->  keys count, jobs
+> ```
+>
+> The file browser was **empty against a real printer** and nothing caught it, because
+> the simulator agreed with the client. It surfaced only when the shipped bundle was run
+> against the same host: the bundle reads `status` off that object directly, logged
+> `queryPrinterStatus error` while holding all four extruders, and fell back to the push
+> stream - which is why one toolhead showed and three did not.
+>
+> The mechanism below is real; its scope was wrong.
+
 This one breaks most of the list, and it is a single line.
 
 ```cpp
@@ -769,3 +807,58 @@ no printer at all      attempts at 11s, 31s, 61s, 91s - gaps 20s, 30s, 30s
 
 `--device-ip` points the saved device somewhere unroutable, which is how the
 nothing-there path gets exercised without switching the printer off.
+
+## Round five — the two cards, compared against the original side by side
+
+With both surfaces running on the same printer, the rebuilt cards could be put beside
+the originals and measured rather than judged.
+
+**Camera.** The rebuild showed the not-connected illustration whenever the camera was
+off, which answers "there is no printer" rather than "the camera is off", and offered a
+text button the original has nothing like. It is a **black viewport** with one round
+control inside it, and it says `Camera not on` - the bundle's own string, against the
+invented "Camera is off". The bundle also carries `Camera start failed`,
+`Camera started successfully` and `Camera loading failed. Please try again`, all of which
+the rebuild had been wording for itself.
+
+**Print.** The rebuild swapped in an illustration and "No active print" when idle. The
+original keeps **one card and zeroes it**: status badge, machine name, thumbnail,
+filename, percentage, layers, time, bar, one round button. An idle machine and a
+printing one differ in the numbers, not the furniture. Layer counts come from
+`print_stats.info`, which was already subscribed and unread. Klipper says `standby`; the
+shipped page shows `idle`, so the badge does too, with the machine's own word on the
+tooltip.
+
+**Tabs.** Two findings, one of each kind:
+
+- The `|` separator carried a 20px margin each side. Measured on the shipped page -
+  title at 28, separator at 99, selected pill at 117 - it is **14 before and 13 after**,
+  and the 20 was pushing the Camera tabs 13px right. Only the two headers that have a
+  separator were affected; Control and Filament were already landing on 117.
+- The selected pill is inset **at the top only**, so its white runs into the white body.
+  Centring 36px inside a 40px header leaves 2px of grey underneath, and that is the
+  whole difference between reading as a tab and reading as a loose button.
+
+The 36px tabs and the 40px full-height refresh pills are *not* an inconsistency to fix:
+they are different controls. Control has no separator because its refresh pill is a
+button, not a tab.
+
+**A dead end worth recording:** the residual title-width differences (Printing Task 8px
+narrow, Filament 3px wide) are font metrics, so the bundle's own font was tried -
+`HarmonyOS_Sans_SC_Regular.ttf`, which it ships. Every title came out *narrower*, Camera
+by 11px. Whatever Flutter renders those titles with, it is not that face at 14px. The
+system stack lands "Camera" on the measured 57px exactly, so it stays.
+
+**Refresh did nothing.** Both header pills called `refresh()`, which re-reads Orca's
+device book: two commands that say nothing about the machine. Clicking the shipped
+page's own pill and watching what left it settles what they should do - and both of its
+pills send the identical set:
+
+```
+sw_SubscribeMachineState / sw_SetSubscribeFilter / sw_GetMachineState
+sw_GetMachineSystemInfo / sw_FileGetStatus / sw_exception_query / sw_MachineFilesRoots
+```
+
+A stranded docstring had been sitting above an unrelated function the whole time -
+*"Re-read everything the page shows, as the header refresh buttons do"* - describing
+something nobody had written.
