@@ -11,7 +11,7 @@
 
 import { CMD, SUBSCRIBE_OBJECTS, NAMED, LIMITS, TASK_CONFIG, PRINT_PREFERENCES,
          asDeviceList, deviceLabel, DEVICE, hasTlsMaterial,
-         CAMERA_DOMAIN, CAMERA_INTERVAL, cssColor }
+         CAMERA_DOMAIN, CAMERA_INTERVAL, cssColor, timelapseUrl }
   from '../../shared/js/protocol.js';
 import { openMenu, openDialog, openBlockingDialog, toggleField, numberField }
   from './overlay.js';
@@ -35,7 +35,6 @@ let subscription = null;
 let trace = () => {};
 let engineId = null;    // the MQTT engine Orca created for us
 let connecting = false;
-let taskTab = 'info';
 let cam = { mode: 'live', streaming: false, frameUrl: null, timelapses: [], error: '' };
 let camPump = null;     // re-points the live <img>; frames are polled, not pushed
 let camSub = null;
@@ -52,6 +51,9 @@ let history = { loading: false, error: '', items: [], hasMore: false };
 // The job card shows the printing file's own thumbnail, so it is fetched once per
 // file rather than on every repaint - the card repaints about once a second.
 let jobThumb = { file: null, data: null };
+// Which destination the rail is on, and what Storage is showing.
+let view = 'control';
+let storageKind = 'timelapses';
 
 function setStatus(text, kind = '') {
   const n = ui.$('#status');
@@ -391,11 +393,11 @@ const handlers = {
     });
   },
 
-  /** Jump to the file browser - the idle task panel's one useful action. */
-  showFiles: () => {
-    const tabs = document.querySelectorAll('.panel')[2].querySelectorAll('.tab');
-    if (tabs[1]) tabs[1].click();
-  },
+  reloadStorage: () => openStorage(storageKind),
+  loadMoreStorage: (n) => (storageKind === 'prints' ? handlers.loadHistory(n) : null),
+
+  /** The one useful action from an idle job card: go and find something to print. */
+  showFiles: () => { storageKind = 'gcodes'; showView('storage'); },
 
   /* ---- print job ---- */
   confirmCancel: () => openDialog({
@@ -453,21 +455,6 @@ const handlers = {
     },
     confirmLabel: 'Print',
     onConfirm: () => { send(CMD.PRINT_START, { filename: path }, 'start print'); },
-  }),
-
-  deleteFile: (path) => openDialog({
-    title: 'Delete this file?',
-    build: (b) => {
-      const p = document.createElement('p');
-      p.style.cssText = 'margin:4px 0 6px;font-size:13px;line-height:1.55;color:#39434F';
-      p.textContent = `${path} will be removed from the machine.`;
-      b.appendChild(p);
-    },
-    confirmLabel: 'Delete',
-    onConfirm: async () => {
-      await send(CMD.DELETE_MACHINE_FILE, { path }, 'delete file');
-      handlers.openRoot(files.root);
-    },
   }),
 
   /* ---- camera ---- */
@@ -561,20 +548,108 @@ const handlers = {
     render();
   },
 
-  openTimelapse: (t) => openDialog({
-    title: t.name || t.filename || 'Recording',
+  /**
+   * Play a recording, rather than only offering to delete it.
+   *
+   * The sheet used to say playback was Orca's job and then show a Delete button, which
+   * made "open" mean "destroy". The file is served by Moonraker and the URL is on the
+   * instance itself; see timelapseUrl for the port that actually answers with video.
+   */
+  openTimelapse: (t) => {
+    const url = timelapseUrl(device, t);
+    const name = t.gcode_name || t.name || t.filename || 'Recording';
+    openDialog({
+      title: name,
+      wide: true,
+      build: (b) => {
+        // Whether this engine can play the file at all is a different question from
+        // whether the printer serves it, and they need different answers. Measured:
+        // WebKitGTK here reports canPlayType('video/mp4') === '' and fails with
+        // MEDIA_ERR_SRC_NOT_SUPPORTED - it ships without H.264. Orca's Windows and
+        // macOS webviews do not have that limitation.
+        const playable = !!document.createElement('video').canPlayType('video/mp4');
+        if (url && playable) {
+          const v = document.createElement('video');
+          v.src = url;
+          v.controls = true;
+          v.autoplay = true;
+          v.style.cssText = 'width:100%;max-height:52vh;background:#000;border-radius:6px';
+          v.onerror = () => {
+            v.remove();
+            const p = document.createElement('p');
+            p.style.cssText = 'margin:4px 0;font-size:13px;color:#9A5B12';
+            p.textContent = `The printer did not serve this recording (${url}).`;
+            b.prepend(p);
+          };
+          b.appendChild(v);
+        } else if (url) {
+          // Show the still it already has, and say why there is no player.
+          const thumb = t.thumbnail_base64 || '';
+          if (thumb) {
+            const im = document.createElement('img');
+            im.src = thumb.startsWith('data:') ? thumb : `data:image/jpeg;base64,${thumb}`;
+            im.style.cssText = 'width:100%;max-height:40vh;object-fit:contain;'
+                             + 'background:#000;border-radius:6px;display:block';
+            b.appendChild(im);
+          }
+          const p = document.createElement('p');
+          p.style.cssText = 'margin:10px 0 0;font-size:13px;line-height:1.5;color:#9A5B12';
+          p.textContent = 'This browser engine has no H.264 support, so the recording '
+                        + 'cannot play here. Download plays it in any video player.';
+          b.appendChild(p);
+        } else {
+          const p = document.createElement('p');
+          p.style.cssText = 'margin:4px 0 6px;font-size:13px;color:#39434F';
+          p.textContent = 'This recording carries no playable URL.';
+          b.appendChild(p);
+        }
+        const meta = [t.generate_date, t.video_duration,
+                      t.video_file_size ? `${(t.video_file_size / 1048576).toFixed(1)} MB` : '']
+          .filter(Boolean).join(' \u00B7 ');
+        if (meta) {
+          const m = document.createElement('p');
+          m.style.cssText = 'margin:10px 0 0;font-size:12px;color:#666';
+          m.textContent = meta;
+          b.appendChild(m);
+        }
+        // Deleting is still reachable, but it is no longer what opening a recording
+        // does. It asks again, because this one cannot be undone.
+        const row = document.createElement('div');
+        row.style.cssText = 'margin-top:14px;display:flex;gap:10px';
+        if (url) {
+          const dl = document.createElement('a');
+          dl.href = url;
+          dl.download = `${name}.mp4`;
+          dl.className = 'btn';
+          dl.textContent = 'Download';
+          row.appendChild(dl);
+        }
+        const del = document.createElement('button');
+        del.className = 'btn';
+        del.textContent = 'Delete from printer\u2026';
+        del.onclick = () => handlers.deleteTimelapse(t);
+        row.appendChild(del);
+        b.appendChild(row);
+      },
+      confirmLabel: 'Close',
+      onConfirm: () => true,
+    });
+  },
+
+  deleteTimelapse: (t) => openDialog({
+    title: 'Delete this recording?',
     build: (b) => {
       const p = document.createElement('p');
       p.style.cssText = 'margin:4px 0 6px;font-size:13px;line-height:1.55;color:#39434F';
-      p.textContent = 'Playback is handled by Orca\u2019s own time-lapse window. '
-                    + 'This sheet can remove the recording from the printer.';
+      p.textContent = `${t.gcode_name || t.name || 'This recording'} will be removed `
+                    + 'from the printer. This cannot be undone.';
       b.appendChild(p);
     },
-    confirmLabel: 'Delete from printer',
+    confirmLabel: 'Delete',
     onConfirm: async () => {
       await send(CMD.TIMELAPSE_DELETE,
                  { date_index: t.date_index || t.dateIndex || '',
-                   name: t.name || t.filename || '' }, 'delete recording');
+                   name: t.name || t.gcode_name || '' }, 'delete recording');
       handlers.loadTimelapses();
     },
   }),
@@ -994,6 +1069,41 @@ function refreshJobThumb(file) {
     .catch(() => { /* no thumbnail is a normal answer; the card shows its placeholder */ });
 }
 
+/**
+ * What Storage is showing, in the one shape its grid reads.
+ *
+ * Four different sources - recordings, history, and two file roots - normalised here
+ * rather than in the renderer, so the view stays one thing.
+ */
+function storageData() {
+  if (storageKind === 'timelapses') {
+    return { items: cam.timelapses || [], loading: false, error: cam.error || '' };
+  }
+  if (storageKind === 'prints') {
+    return { items: history.items || [], loading: history.loading,
+             error: history.error, hasMore: history.hasMore };
+  }
+  return { items: files.items || [], loading: files.loading, error: files.error };
+}
+
+/** The root each file-backed kind reads from. */
+const STORAGE_ROOT = { gcodes: 'gcodes', logs: 'logs' };
+
+function openStorage(kind) {
+  storageKind = kind;
+  ui.$('#storage-body').dataset.sig = '';        // force a rebuild for the new kind
+  if (kind === 'timelapses') handlers.loadTimelapses();
+  else if (kind === 'prints') handlers.loadHistory();
+  else handlers.openRoot(STORAGE_ROOT[kind]);
+  render();
+}
+
+function showView(next) {
+  view = next;
+  render();
+  if (next === 'storage') openStorage(storageKind);
+}
+
 let raf = 0;
 function render() {
   if (raf) return;
@@ -1009,6 +1119,15 @@ function render() {
     const reachable = isLive() && (!conn.state || conn.state === 'ready');
 
     ui.renderRail(device, conn, devices, reachable);
+    document.querySelectorAll('.nav-item').forEach(
+      (n) => n.classList.toggle('is-active', n.dataset.view === view));
+    ui.$('#view-control').hidden = view !== 'control';
+    ui.$('#view-storage').hidden = view !== 'storage';
+    if (view === 'storage') {
+      ui.renderStorage(ui.$('#storage-body'), storageKind, storageData(),
+                       handlers, device);
+      return;
+    }
     ui.renderCamera(ui.$('#camera'), reachable, cam, handlers);
 
     // The shipped page renders the whole control surface and fades it while the
@@ -1020,8 +1139,7 @@ function render() {
     ui.renderControlMain(ui.$('#control-main'), state.toolheads(), handlers,
                          state.toolhead());
     refreshJobThumb(state.job().filename);
-    ui.renderTask(ui.$('#task'), state.job(), taskTab, files, handlers, history,
-                  device, jobThumb.data);
+    ui.renderTask(ui.$('#task'), state.job(), handlers, device, jobThumb.data);
     ui.renderFilament(ui.$('#filament'), state.filaments(), handlers);
     ui.renderFault(ui.$('#fault'), state.activity(), exception, handlers);
   });
@@ -1400,18 +1518,17 @@ function wireChrome() {
     openMenu(sel, items);
   };
 
-  // camera tabs
-  document.querySelectorAll('.panel')[0].querySelectorAll('.tab').forEach((t, i) => {
+  // control + filament refresh
+  document.querySelectorAll('.nav-item').forEach((n) => {
+    n.onclick = () => showView(n.dataset.view || 'control');
+  });
+  document.querySelectorAll('#storage .tab').forEach((t) => {
     t.onclick = () => {
       selectTab(t);
-      cam.mode = i === 0 ? 'live' : 'timelapse';
-      ui.$('#camera').dataset.state = '';   // force a repaint
-      render();
-      if (cam.mode === 'timelapse') handlers.loadTimelapses();
+      openStorage(t.dataset.kind);
     };
   });
-
-  // control + filament refresh
+  ui.$('#storage-refresh').onclick = () => openStorage(storageKind);
   ui.$('#refresh').onclick = () => refreshAll();
   ui.$('#filament-refresh').onclick = () => refreshAll();
 
@@ -1432,17 +1549,6 @@ function wireChrome() {
       },
     });
   };
-
-  // printing-task tabs
-  document.querySelectorAll('.panel')[2].querySelectorAll('.tab').forEach((t, i) => {
-    t.onclick = () => {
-      selectTab(t);
-      taskTab = ['info', 'files', 'history'][i] || 'info';
-      render();
-      if (taskTab === 'files' && !files.items.length) handlers.openRoot(files.root);
-      if (taskTab === 'history' && !history.items.length) handlers.loadHistory();
-    };
-  });
 
   ui.$('#filament-help').onclick = () => openDialog({
     title: 'Filament slots',

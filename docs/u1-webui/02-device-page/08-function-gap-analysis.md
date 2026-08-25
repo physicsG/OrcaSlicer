@@ -862,3 +862,53 @@ sw_GetMachineSystemInfo / sw_FileGetStatus / sw_exception_query / sw_MachineFile
 A stranded docstring had been sitting above an unrelated function the whole time -
 *"Re-read everything the page shows, as the header refresh buttons do"* - describing
 something nobody had written.
+
+## Round six — Storage, and four things found by using the page
+
+Reported from ordinary use, each settled by measuring on the machine.
+
+**The toolchange label named the axes done** - "Homing — Z done", then "Y done", then
+"X, Y done". Klipper **clears** `homed_axes` as it re-homes, so Z was reported done and
+then vanished from the list: the machine appeared to go backwards. And nobody waiting on
+a toolhead wants an axis-by-axis account. One step now, `Homing axes…`, confirmed on a
+cold change: `Waiting for toolhead 2… -> Homing axes… -> Engaging toolhead 2…`, 36.2s.
+
+**Lists reset their own scroll.** The task panel repaints on every state push and each
+repaint emptied the node and built it again, which threw away the scroll position - so a
+list scrolled itself to the top while being read, and Load more landed you at the top of
+the old page. Lists rebuild only when their content signature changes now, and the
+scroll is carried across when they do. Measured: 420px held across six pushes and across
+a Load more that took the list from 20 cards to 40.
+
+**Opening a recording only offered to delete it** - the sheet said playback was Orca's
+job and then showed a Delete button, which made "open" mean "destroy". The URL is on the
+instance, and which port answers is not a guess:
+
+```
+http://<ip>:7125/server/files/camera/<name>.mp4   200 video/mp4  23 MB
+http://<ip>/files/camera/<name>.mp4               200 text/html  2.9 KB   <- the SPA
+```
+
+The second is the same trap the camera frame hit. **But this WebKitGTK build has no
+H.264**: `canPlayType('video/mp4')` is empty and playback fails
+`MEDIA_ERR_SRC_NOT_SUPPORTED`. Whether the engine can play a file and whether the printer
+serves it are different questions and get different answers - the sheet shows the still
+and says which one it is. Orca's Windows and macOS webviews are not affected.
+
+**Storage.** Time-lapses, finished prints, print files and logs were four shapes behind
+three tabs on two panels. They are all "things on the machine you might want to look at",
+so they are one destination, one picker, one card - normalised in `storageCard` rather
+than four renderers kept in step by hand. `renderHistory` and `renderFiles` are gone.
+
+Two things worth carrying forward from building it:
+
+- The two views are **siblings in one document**, toggled with `hidden`. A separate page
+  would drop the MQTT session and re-run the LAN key exchange on every switch.
+- `#view-control` is `display: contents`, so the four panels stay direct children of the
+  2×2 grid. **That defeats `hidden`**: the UA's `[hidden] { display: none }` loses to an
+  id selector, so the control panels went on rendering underneath Storage and squeezed
+  its grid to 4px. It has to opt back in explicitly.
+
+Both grids collapsed to strips of thumbnail first, twice, for the same reason: grid rows
+default to `auto` and shared the bounded panel height between them. `grid-auto-rows:
+max-content`.

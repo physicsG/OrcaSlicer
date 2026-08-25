@@ -10,7 +10,7 @@
 
 import { LIMITS, PRINT_STATE, TASK_CONFIG, DEVICE, deviceLabel,
          MOONRAKER_HTTP_PORT, CAMERA_FRAME_ROOT, CAMERA_FRAME_FILE,
-         cssColor, isDarkColor, PURIFIER_MODES }
+         cssColor, isDarkColor, PURIFIER_MODES, jobThumbUrl }
   from '../../shared/js/protocol.js';
 import { openDialog, numberField, openPopover, closePopover } from './overlay.js';
 import { lookupFault } from '../../shared/js/errors.js';
@@ -113,41 +113,10 @@ export const CAMERA_TEXT = {
 export function renderCamera(root, connected, cam, handlers) {
   // deliberately not keyed on the frame: the <img> is reused and its src is
   // re-pointed in place, so a new frame must not rebuild the panel under it.
-  const key = `${connected ? 'on' : 'off'}:${cam.mode}:${cam.streaming ? 1 : 0}:`
-            + `${cam.frameUrl || ''}:${(cam.timelapses || []).length}`;
+  const key = `${connected ? 'on' : 'off'}:${cam.streaming ? 1 : 0}:${cam.frameUrl || ''}`;
   if (root.dataset.state === key) return;
   root.dataset.state = key;
   root.innerHTML = '';
-
-  if (cam.mode === 'timelapse') {
-    const list = cam.timelapses || [];
-    if (!list.length) {
-      const wrap = el('div');
-      wrap.style.textAlign = 'center';
-      illustration(wrap);
-      wrap.appendChild(el('div', 'cam-msg', cam.error || 'No time-lapse recordings'));
-      root.appendChild(wrap);
-      return;
-    }
-    const grid = el('div', 'tl-grid');
-    list.forEach((t) => {
-      const card = el('button', 'tl-card');
-      // thumbnail_base64 is what the printer sends, and it arrives as a full data:
-      // URI already - but only when the request asked for thumbnail_direct.
-      const thumb = t.thumbnail_base64 || t.thumbnail || t.thumb || '';
-      if (thumb) {
-        const im = el('img');
-        im.src = thumb.startsWith('data:') ? thumb : `data:image/jpeg;base64,${thumb}`;
-        card.appendChild(im);
-      }
-      card.appendChild(el('span', 'tl-name',
-                          t.gcode_name || t.name || t.filename || 'recording'));
-      card.onclick = () => handlers.openTimelapse(t);
-      grid.appendChild(card);
-    });
-    root.appendChild(grid);
-    return;
-  }
 
   // live view - one <img>, re-pointed by the frame pump in app.js.
   //
@@ -819,10 +788,8 @@ function clock(sec) {
  * filename, percentage, layers, time, progress bar, and one round button. An idle
  * printer and a printing one differ in the numbers, not in the furniture.
  */
-export function renderTask(root, job, tab, files, handlers, history, device, thumb) {
+export function renderTask(root, job, handlers, device, thumb) {
   root.innerHTML = '';
-  if (tab === 'files') return renderFiles(root, files, handlers);
-  if (tab === 'history') return renderHistory(root, history, handlers);
 
   const active = job.state === PRINT_STATE.PRINTING || job.state === PRINT_STATE.PAUSED;
   const paused = job.state === PRINT_STATE.PAUSED;
@@ -935,133 +902,180 @@ const JOB_STATUS = {
   in_progress: 'In progress', server_exit: 'Interrupted',
 };
 
-/** `history` is { loading, error, items[], count }. */
-export function renderHistory(root, history, handlers) {
-  const h = history || {};
-  if (h.loading) { root.appendChild(el('div', 'cam-msg', 'Loading…')); return; }
-  if (h.error) {
-    const wrap = el('div');
-    wrap.style.textAlign = 'center';
-    wrap.appendChild(el('div', 'cam-msg', h.error));
+/* ---- storage ---------------------------------------------------------- */
+
+/**
+ * One scrolling grid for everything the printer is holding.
+ *
+ * Time-lapses, finished prints, print files and logs were four different shapes behind
+ * three different tabs on two different panels. They are all "things on the machine you
+ * might want to look at", so they get one view, one picker, and one card - normalised
+ * here rather than four renderers kept in step by hand.
+ *
+ * The same rebuild guard as the task lists: this repaints on every state push, and
+ * rebuilding threw away the scroll position.
+ */
+export function renderStorage(root, kind, data, handlers, device) {
+  const sig = storageSig(kind, data);
+  if (root.dataset.sig === sig) return;
+  const keep = root.querySelector('.stor-grid');
+  const at = keep ? keep.scrollTop : 0;
+  root.dataset.sig = sig;
+  root.innerHTML = '';
+
+  if (data.loading) { root.appendChild(el('div', 'cam-msg', 'Reading the machine\u2026')); return; }
+  if (data.error) {
+    const wrap = el('div', 'stor-empty');
+    wrap.appendChild(el('div', 'cam-msg', data.error));
     const again = el('button', 'btn', 'Try again');
-    again.onclick = () => handlers.loadHistory();
+    again.onclick = () => handlers.reloadStorage();
     wrap.appendChild(again);
     root.appendChild(wrap);
     return;
   }
-  const items = h.items || [];
-  if (!items.length) {
-    const wrap = el('div');
-    wrap.style.textAlign = 'center';
+
+  const cards = (data.items || []).map((it) => storageCard(kind, it, handlers, device));
+  if (!cards.length) {
+    const wrap = el('div', 'stor-empty');
     illustration(wrap);
-    wrap.appendChild(el('div', 'cam-msg', 'No completed prints on this printer'));
+    wrap.appendChild(el('div', 'cam-msg', EMPTY_TEXT[kind] || 'Nothing here'));
     root.appendChild(wrap);
     return;
   }
 
-  const list = el('div', 'hist-list');
-  items.forEach((j) => {
-    const rowEl = el('div', 'hist-row');
-    const status = String(j.status || '');
-    rowEl.dataset.status = status === 'completed' ? 'ok'
-                         : (status === 'in_progress' ? 'busy' : 'bad');
+  const grid = el('div', 'stor-grid');
+  grid.dataset.kind = kind;
+  cards.forEach((c) => grid.appendChild(c));
+  root.appendChild(grid);
 
-    const main = el('div', 'hist-main');
-    main.appendChild(el('div', 'hist-name', j.filename || '(unnamed)'));
-    const when = j.end_time || j.start_time;
-    const bits = [];
-    if (when) bits.push(new Date(when * 1000).toLocaleString());
-    if (j.print_duration) bits.push(clock(j.print_duration));
-    if (j.filament_used) bits.push(`${(j.filament_used / 1000).toFixed(2)} m`);
-    main.appendChild(el('div', 'hist-meta', bits.join(' · ')));
-    rowEl.appendChild(main);
-
-    rowEl.appendChild(el('span', 'hist-status', JOB_STATUS[status] || status || '—'));
-    list.appendChild(rowEl);
-  });
-  root.appendChild(list);
-
-  // The reply carries no total, so the footer counts what is loaded and offers more
-  // only while the last page came back full.
-  const foot = el('div', 'hist-foot');
-  foot.appendChild(el('span', null, `${items.length} shown`));
-  if (h.hasMore) {
+  if (data.hasMore) {
+    const foot = el('div', 'stor-foot');
+    foot.appendChild(el('span', null, `${cards.length} shown`));
     const more = el('button', 'btn', 'Load more');
-    more.onclick = () => handlers.loadHistory(items.length);
+    more.onclick = () => handlers.loadMoreStorage(cards.length);
     foot.appendChild(more);
+    root.appendChild(foot);
   }
-  root.appendChild(foot);
+  const now = root.querySelector('.stor-grid');
+  if (now && at) now.scrollTop = at;
 }
 
-/* ---- machine file browser -------------------------------------------- */
+const EMPTY_TEXT = {
+  timelapses: 'No recordings on this printer',
+  prints: 'No completed prints on this printer',
+  gcodes: 'No print files on this machine',
+  logs: 'No files in this folder',
+};
+
+function storageSig(kind, d) {
+  const x = d || {};
+  return `${kind}:${(x.items || []).length}:${x.loading ? 1 : 0}:${x.hasMore ? 1 : 0}`
+       + `:${x.error || ''}`;
+}
+
+/** The empty-box art the shipped page uses where there is nothing to show. */
+function placeholder(cls = 'stor-ph') {
+  const im = el('img', cls);
+  im.src = 'icons/empty-box.png';
+  im.alt = '';
+  return im;
+}
+
+/**
+ * One card, from whichever shape the source hands over.
+ *
+ * Each kind answers the same four questions - what does it look like, what is it
+ * called, what else is worth knowing, and what can be done with it - so the card is
+ * built once and the differences live in this switch.
+ */
+function storageCard(kind, it, handlers, device) {
+  const card = el('div', 'stor-card');
+  const shot = el('div', 'stor-shot');
+  const body = el('div', 'stor-info');
+  const act = el('div', 'stor-actions');
+
+  const withImg = (src, onFail) => {
+    const im = el('img');
+    im.src = src;
+    im.alt = '';
+    im.onerror = () => { im.remove(); shot.appendChild(onFail()); };
+    shot.appendChild(im);
+  };
+
+  if (kind === 'timelapses') {
+    const t = it.thumbnail_base64 || it.thumbnail || '';
+    if (t) withImg(t.startsWith('data:') ? t : `data:image/jpeg;base64,${t}`,
+                   () => el('span', 'tl-none', 'no preview'));
+    else shot.appendChild(el('span', 'tl-none', 'no preview'));
+    if (it.video_duration) shot.appendChild(el('span', 'tl-dur', it.video_duration));
+    body.appendChild(el('span', 'stor-name', it.gcode_name || 'recording'));
+    body.appendChild(el('span', 'stor-sub',
+      [it.generate_date, it.video_file_size ? fmtSize(it.video_file_size) : '']
+        .filter(Boolean).join(' \u00B7 ')));
+    const play = el('button', 'btn primary', 'View');
+    play.onclick = () => handlers.openTimelapse(it);
+    act.appendChild(play);
+
+  } else if (kind === 'prints') {
+    const url = jobThumbUrl(device, it);
+    if (url) withImg(url, placeholder);
+    else shot.appendChild(placeholder());
+    const status = String(it.status || '');
+    const badge = el('span', 'stor-badge', JOB_STATUS[status] || status || '\u2014');
+    badge.dataset.status = status === 'completed' ? 'ok'
+                         : (status === 'in_progress' ? 'busy' : 'bad');
+    shot.appendChild(badge);
+    body.appendChild(el('span', 'stor-name',
+                        String(it.filename || '(unnamed)').split('/').pop()));
+    const when = it.end_time || it.start_time;
+    const bits = [];
+    if (when) bits.push(new Date(when * 1000).toLocaleDateString());
+    if (it.print_duration) bits.push(clock(it.print_duration));
+    const layers = it.metadata && it.metadata.layer_count;
+    if (layers) bits.push(`${layers} layers`);
+    body.appendChild(el('span', 'stor-sub', bits.join(' \u00B7 ')));
+    const again = el('button', 'btn primary', 'Reprint');
+    if (it.exists === false) {
+      again.disabled = true;
+      again.title = 'This file is no longer on the machine';
+    } else {
+      again.onclick = () => handlers.printFile(it.filename);
+    }
+    act.appendChild(again);
+
+  } else {
+    // gcodes and logs are both plain files; only what you can do with them differs.
+    const path = it.path || it.filename || it.name || '';
+    shot.appendChild(icon(kind === 'logs' ? 'iconModelFileFolder' : 'iconFile', 'stor-glyph'));
+    body.appendChild(el('span', 'stor-name', path.split('/').pop() || path));
+    const bits = [];
+    if (it.size != null) bits.push(fmtSize(it.size));
+    if (it.modified) bits.push(new Date(Number(it.modified) * 1000).toLocaleDateString());
+    body.appendChild(el('span', 'stor-sub', bits.join(' \u00B7 ')));
+    if (kind === 'gcodes') {
+      const print = el('button', 'btn primary', 'Print');
+      print.onclick = () => handlers.printFile(path);
+      act.appendChild(print);
+    }
+    const info = el('button', 'btn', 'Details');
+    info.onclick = () => handlers.fileDetails(path);
+    act.appendChild(info);
+  }
+
+  card.appendChild(shot);
+  card.appendChild(body);
+  card.appendChild(act);
+  card.title = it.filename || it.gcode_name || it.path || '';
+  return card;
+}
+
+/* ---- shared formatting ----------------------------------------------- */
 
 function fmtSize(n) {
   const v = Number(n) || 0;
   if (v > 1024 * 1024) return `${(v / 1048576).toFixed(1)} MB`;
   if (v > 1024) return `${(v / 1024).toFixed(0)} KB`;
   return `${v} B`;
-}
-
-/**
- * `files` is { loading, error, root, roots[], items[] }.
- * Items come from sw_GetFileListPage / sw_MachineFilesGetDirectory, whose
- * results differ between firmware builds, so field lookup is tolerant.
- */
-export function renderFiles(root, files, handlers) {
-  root.innerHTML = '';
-  const wrap = el('div', 'files');
-
-  const bar = el('div', 'files-bar');
-  (files.roots || []).forEach((r) => {
-    const name = (typeof r === 'string') ? r : (r.name || r.root || '');
-    if (!name) return;
-    const b = el('button', 'chip' + (name === files.root ? ' is-active' : ''), name);
-    b.onclick = () => handlers.openRoot(name);
-    bar.appendChild(b);
-  });
-  const reload = el('button', 'chip', 'Refresh');
-  reload.onclick = () => handlers.openRoot(files.root);
-  bar.appendChild(reload);
-  wrap.appendChild(bar);
-
-  if (files.loading) {
-    wrap.appendChild(el('div', 'empty', 'Reading the machine…'));
-  } else if (files.error) {
-    wrap.appendChild(el('div', 'empty', files.error));
-  } else if (!(files.items || []).length) {
-    wrap.appendChild(el('div', 'empty', 'No files on this machine'));
-  } else {
-    const list = el('div', 'file-list');
-    files.items.forEach((f) => {
-      const path = f.path || f.filename || f.name || '';
-      const row = el('div', 'file-row');
-      row.appendChild(icon('iconFile'));
-      const meta = el('div', 'file-meta');
-      meta.appendChild(el('span', 'file-name', path.split('/').pop() || path));
-      const sub = [];
-      if (f.size != null) sub.push(fmtSize(f.size));
-      if (f.modified) sub.push(new Date(Number(f.modified) * 1000).toLocaleString());
-      meta.appendChild(el('span', 'file-sub', sub.join(' · ')));
-      row.appendChild(meta);
-
-      const info = el('button', 'btn', 'Details');
-      info.title = 'Metadata, thumbnail and download';
-      info.onclick = () => handlers.fileDetails(path);
-      row.appendChild(info);
-
-      const print = el('button', 'btn', 'Print');
-      print.onclick = () => handlers.printFile(path);
-      row.appendChild(print);
-
-      const del = el('button', 'btn', 'Delete');
-      del.onclick = () => handlers.deleteFile(path);
-      row.appendChild(del);
-
-      list.appendChild(row);
-    });
-    wrap.appendChild(list);
-  }
-  root.appendChild(wrap);
 }
 
 /* ---- trace ---------------------------------------------------------- */

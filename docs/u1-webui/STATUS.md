@@ -438,6 +438,55 @@ Dead end, recorded so it is not retried: the bundle ships
 `HarmonyOS_Sans_SC_Regular.ttf`, and adopting it made every title *narrower* than the
 shipped page's. Those titles are not that face at 14px.
 
+### Storage, and the finetunes that came before it (2026-08-25)
+
+**A Storage destination.** The rail has a second entry below Device control. One picker
+row — time-lapses, prints, print files, logs — over one full-height scrolling grid of
+cards. The Camera's time-lapse tab and the Printing Task's Files and Print-history tabs
+are gone; those cards are now just the live view and the job card.
+
+The two views are **siblings in one document**, toggled with `hidden`, not separate
+pages: a page swap would drop the MQTT session and re-run the LAN key exchange on every
+switch. `#view-control` uses `display: contents` so the four panels stay direct children
+of the 2×2 grid — and it must opt back into `[hidden]` explicitly, because
+`display: contents` beats the UA's `[hidden] { display: none }`. Without that second
+rule the control panels render *underneath* Storage and squeeze its grid to 4px.
+
+Measured rather than assumed:
+
+```
+document nodes     360 (control) -> 823 (storage, 50 file cards)
+state push         does NOT rebuild the grid - the signature guard holds
+switch kind        24 ms cached, 221-472 ms with a printer round trip
+view toggle        ~30-85 ms, two frame waits included
+4 switches         841 -> 853 nodes; nothing accumulates
+```
+
+**Four fixes that preceded it**, each measured on the machine:
+
+- **The toolchange label named the axes done** — "Homing — Z done", then "Y done".
+  Klipper *clears* `homed_axes` as it re-homes, so Z vanished after being reported, and
+  the machine looked like it was going backwards. One step now: `Homing axes…`. Two unit
+  tests and a conformance check had encoded the old behaviour.
+- **Lists reset their scroll.** The task panel repaints on every state push and each
+  repaint emptied the node and rebuilt it. Lists now rebuild only when their *content*
+  signature changes, and the scroll position is carried across when they do — which also
+  fixes Load more landing you at the top.
+- **Opening a recording only offered to delete it.** It plays now. The URL is on the
+  instance: `http://<ip>:7125/server<video_local_url_suffix>` → `200 video/mp4`, where
+  `http://<ip>/…` returns the SPA shell — the same trap the camera frame hit.
+- **Files are viewable and printable, not deletable**, and the files refresh is an icon
+  button rather than a chip sitting in the row of roots, where it read as a filter.
+
+**A limitation worth knowing:** this WebKitGTK build **cannot play H.264** —
+`canPlayType('video/mp4')` is empty and playback fails `MEDIA_ERR_SRC_NOT_SUPPORTED`.
+The dialog shows the still plus Download and says so. Orca's Windows and macOS webviews
+do not have that limitation; Linux Orca probably does.
+
+**Left behind:** the file-browser CSS (`.files`, `.file-row`, `.chip`, …) outlived its
+renderer. Dead-rule detection is unreliable here because `overlay.js` emits many classes
+this scan cannot see, so it was left rather than swept on the way out.
+
 ### Tooling worth knowing about
 
 ```bash
@@ -467,9 +516,9 @@ and there is no pycairo here.
 
 In rough order of value:
 
-1. **Drive the rebuilt Control panel from inside Orca.** Narrower than it was: the whole
-   page now runs against the printer through `run_webkit.py --real`, so the page-and-
-   machine half is covered. What remains is exactly the bridge leg:
+1. **Drive the rebuilt page from inside Orca.** Narrower than it was: the whole page now
+   runs against the printer through `run_webkit.py --real`, so the page-and-machine half
+   is covered. What remains is exactly the bridge leg:
    whether a camera `{state, url}` arrives as the subscribe ack or as a push (the client
    accepts either), and whether `sw_SetSubscribeFilter` narrowing `EXTRUDER_FIELDS`
    changes what the wait can see. One session with the Device tab open settles both.
@@ -482,7 +531,12 @@ In rough order of value:
    is Orca's own Bonjour sweep, so the MQTT probes cannot reach it; it needs the app.
 5. **`sw_SetSubscribeFilter` fails at boot** and is fired best-effort. Worth confirming
    it is genuinely optional rather than papered over.
-6. **Not built:** firmware update, calibration wizards, time-lapse playback.
+6. **The Storage view has no delete anywhere.** Recordings can still be removed from
+   the View sheet, but print files deliberately cannot. If that is wanted it should be
+   a considered decision, not an oversight - `sw_DeleteMachineFile` is implemented in
+   Orca and unreferenced here.
+7. **Not built:** firmware update, calibration wizards, in-page time-lapse playback on
+   Linux (no H.264 in WebKitGTK).
    `check_coverage.py` lists every command not implemented, with a reason.
 7. **The print-processing popup has never been driven against hardware.** Its send path
    (`sw_GetPrintZip` → `sw_StartLocalPrint` → the close protocol) is unproven.

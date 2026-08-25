@@ -347,8 +347,14 @@ export class MachineState {
 
     const hasHomed = Object.prototype.hasOwnProperty.call(th, 'homed_axes');
     const homed = String(th.homed_axes || '').toLowerCase();
-    // Homing while the machine is running is the long phase of a toolchange. Naming the
-    // axes still outstanding turns a frozen spinner into something that visibly moves.
+    // Homing while the machine is running is the long phase of a toolchange.
+    //
+    // The label used to name the axes already done - "Homing - Z done", then "Y done",
+    // then "X, Y done". Two things were wrong with that. Klipper CLEARS homed_axes as
+    // it re-homes, so Z vanishes from the list after being reported done, which reads
+    // as the machine going backwards. And a person waiting for a toolhead does not want
+    // an axis-by-axis account; they want to know it is working and will take a moment.
+    // One step, named for what is happening.
     const homing = running && hasHomed && homed !== 'xyz';
     const engaging = TOOLHEADS.findIndex(
       (k) => (this.objects[k] || {}).activating_move === true);
@@ -356,11 +362,8 @@ export class MachineState {
     let label = null;
     if (calibrating) label = `Calibrating \u2014 ${prettyStep(step)}`;
     else if (engaging >= 0) label = `Engaging toolhead ${engaging + 1}\u2026`;
-    else if (homing) {
-      const done = ['x', 'y', 'z'].filter((a) => homed.includes(a));
-      label = done.length ? `Homing \u2014 ${done.join(', ').toUpperCase()} done`
-                          : 'Homing axes\u2026';
-    } else if (msg) label = msg;
+    else if (homing) label = 'Homing axes\u2026';
+    else if (msg) label = msg;
     else if (moving) label = 'Moving\u2026';
     else if (running) label = 'Working\u2026';
 

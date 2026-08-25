@@ -249,6 +249,55 @@ export const MQTT_KEEPALIVE = 30;
  */
 export const CAMERA_DOMAIN = 'lan';        // '' is refused: -32000 "Start monitor failed"
 export const MOONRAKER_HTTP_PORT = 7125;
+
+/**
+ * Where a recording actually plays from.
+ *
+ * An instance carries `video_local_url_suffix` - `/files/camera/<name>.mp4` - which is
+ * relative to Moonraker's file server, NOT to the printer's web UI. Measured on the
+ * machine:
+ *
+ *   http://<ip>:7125/server/files/camera/<name>.mp4   200 video/mp4  23 MB
+ *   http://<ip>/files/camera/<name>.mp4               200 text/html  2.9 KB  <- the SPA
+ *
+ * The second is the same trap the camera frame hit: port 80 answers any path with its
+ * own shell, so a player pointed there fails with nothing useful to say.
+ */
+export function timelapseUrl(device, instance) {
+  const ip = device && device[DEVICE.IP];
+  const suffix = instance && (instance.video_local_url_suffix || instance.video_url);
+  if (!ip || !suffix) return null;
+  if (/^https?:/i.test(suffix)) return suffix;
+  return `http://${ip}:${MOONRAKER_HTTP_PORT}/server${suffix}`;
+}
+
+/**
+ * A print job's own thumbnail, on the printer's file server.
+ *
+ * `server.history.list` carries `metadata.thumbnails` as
+ * `[{width, height, size, relative_path}]` - **paths, no bytes**, the same trap the
+ * file browser hit. The bytes are fetched over HTTP from Moonraker, the way the camera
+ * frame is. `relative_path` is relative to the gcode's own directory, so a job at the
+ * gcodes root resolves under `gcodes/`.
+ *
+ * Returns null when the file is gone (`exists: false`), because its .thumbs entry went
+ * with it and an <img> pointed at a 404 renders as a broken image.
+ */
+export function jobThumbUrl(device, job, want = 300) {
+  const ip = device && device[DEVICE.IP];
+  const thumbs = job && job.metadata && job.metadata.thumbnails;
+  if (!ip || job.exists === false || !Array.isArray(thumbs) || !thumbs.length) return null;
+  // The largest that is not larger than asked for, else the smallest there is.
+  const fit = thumbs.filter((t) => Number(t.width) <= want)
+                    .sort((a, b) => Number(b.width) - Number(a.width))[0]
+           || thumbs.slice().sort((a, b) => Number(a.width) - Number(b.width))[0];
+  const rel = fit && fit.relative_path;
+  if (!rel) return null;
+  const dir = String(job.filename || '').split('/').slice(0, -1).join('/');
+  const path = [dir, rel].filter(Boolean).join('/');
+  return `http://${ip}:${MOONRAKER_HTTP_PORT}/server/files/gcodes/`
+       + path.split('/').map(encodeURIComponent).join('/');
+}
 export const CAMERA_FRAME_ROOT = 'timelapse';
 export const CAMERA_FRAME_FILE = 'monitor.jpg';
 export const CAMERA_INTERVAL = 2;         // seconds; what the shipped page asks for

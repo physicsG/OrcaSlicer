@@ -317,15 +317,17 @@ def main():
         return json.loads(js(ctx3, "JSON.stringify(m.busyReason())").to_string())
 
     r = step({"toolhead": {"homed_axes": "z"}, "idle_timeout": {"state": "Printing"}})
-    check("0.7s - homing starts, and says which axis is done",
-          r["busy"] and r["label"] == "Homing \u2014 Z done")
+    check("0.7s - homing starts, and says so without an axis-by-axis account",
+          r["busy"] and r["label"] == "Homing axes\u2026",
+          "Klipper clears homed_axes as it re-homes, so naming the axes done reported "
+          "Z and then dropped it - the machine looked like it was going backwards")
     r = step({"toolhead": {"homed_axes": "y"}})
-    check("4.7s - the label follows the axes as they complete",
-          r["busy"] and r["label"] == "Homing \u2014 Y done",
+    check("4.7s - and stays one step while the axes come in",
+          r["busy"] and r["label"] == "Homing axes\u2026",
           "this is the phase a user reads as 'XY calibration'")
     r = step({"toolhead": {"homed_axes": "xy"}})
-    check("14.7s - still homing, now X and Y",
-          r["busy"] and r["label"] == "Homing \u2014 X, Y done")
+    check("14.7s - still the one step",
+          r["busy"] and r["label"] == "Homing axes\u2026")
     r = step({"extruder": {"activating_move": True}})
     check("28.7s - the grab is named separately from the homing",
           r["busy"] and r["label"] == "Engaging toolhead 1\u2026")

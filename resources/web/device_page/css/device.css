@@ -592,6 +592,17 @@ body {
 }
 .chip.is-active { border-color: var(--accent); color: var(--accent); }
 .file-list { overflow: auto; display: flex; flex-direction: column; min-height: 0; }
+/* An action, not a filter: it sits apart from the root chips and carries a glyph. */
+.icon-btn {
+  margin-left: auto;
+  width: 28px; height: 28px; padding: 0;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); cursor: pointer;
+}
+.icon-btn img { width: 16px; height: 16px; opacity: .7; }
+.icon-btn:hover { background: var(--pill); }
+.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .file-row {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 4px; border-bottom: 1px solid var(--line-soft);
@@ -634,17 +645,13 @@ body {
    until the pointer asks for it. */
 .cam-view:not(:hover) .cam-play[data-on="1"] { opacity: 0; }
 .cam-view .cam-msg { position: relative; color: #FFFFFF; font-size: 13px; }
-.tl-grid {
-  width: 100%; height: 100%; overflow: auto; padding: 16px;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;
+.tl-none { color: #6B7280; font-size: 11px; }
+.tl-dur {
+  position: absolute; right: 6px; bottom: 6px;
+  padding: 1px 5px; border-radius: 3px;
+  background: rgba(0, 0, 0, .62); color: #fff;
+  font-size: 11px; font-variant-numeric: tabular-nums;
 }
-.tl-card {
-  border: 1px solid var(--line); border-radius: 8px; background: #fff;
-  padding: 0 0 8px; cursor: pointer; overflow: hidden; text-align: left;
-}
-.tl-card img { width: 100%; height: 92px; object-fit: cover; display: block; }
-.tl-name { display: block; padding: 8px 10px 0; font-size: 12px; color: var(--ink);
-           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- fault banner ---------------------------------------------------- */
 .fault {
@@ -794,37 +801,6 @@ body {
 }
 
 /* ---- print history --------------------------------------------------- */
-.task-body .hist-list { display: flex; flex-direction: column; gap: 2px; }
-.task-body .hist-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 7px 8px;
-  border-radius: 6px;
-  border-left: 3px solid transparent;
-}
-.task-body .hist-row:nth-child(odd) { background: #FAFAFA; }
-.task-body .hist-row[data-status="ok"]   { border-left-color: #16A34A; }
-.task-body .hist-row[data-status="bad"]  { border-left-color: #C9531F; }
-.task-body .hist-row[data-status="busy"] { border-left-color: #0C63E2; }
-.task-body .hist-main { min-width: 0; flex: 1; }
-.task-body .hist-name {
-  font-size: 12px;
-  color: #262E30;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.task-body .hist-meta { font-size: 11px; color: #8B8B8B; margin-top: 2px; }
-.task-body .hist-status { font-size: 11px; color: #6B7280; flex: 0 0 auto; }
-.task-body .hist-foot {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-  font-size: 11px;
-  color: #8B8B8B;
-}
 
 /* The banner is display:flex, which beats the UA stylesheet's [hidden]{display:none} -
    so hiding it in JS did nothing and an empty pink bar sat above the panels forever. */
@@ -1175,3 +1151,97 @@ text.step {
   content: ""; display: inline-block; width: 6px; height: 6px;
   margin-left: 6px; border-radius: 50%; background: var(--ok); vertical-align: middle;
 }
+
+/* ---- storage --------------------------------------------------------- *
+ * One destination for everything the printer is holding. The panel fills the content
+ * area rather than sitting in the 2x2 grid, because the point of the view is a long
+ * list you scroll - it is the only thing on screen. */
+/* Storage is the whole screen while it is open, so the content column stops being a
+   grid of stacked panels and becomes one panel filling the viewport. Without a definite
+   height the panel just grows and the list never scrolls - it runs off the bottom. */
+/* Two destinations, side by side in the markup and never nested: the control panels
+   are one view and Storage is another. Storage fills the viewport, because the point
+   of it is a long list you scroll. */
+.content:has(> #view-storage:not([hidden])) {
+  display: flex; flex-direction: column; height: 100vh; padding: 20px 21px 20px;
+}
+#view-storage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* `display: contents` so the four panels stay direct children of the 2x2 grid - a real
+   wrapper box would break the layout. It has to opt back into `hidden` explicitly:
+   the UA's `[hidden] { display: none }` loses to this id selector, so without the
+   second rule the control panels went on rendering underneath Storage. */
+#view-control { display: contents; }
+#view-control[hidden] { display: none; }
+.panel.storage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.storage-body {
+  flex: 1; min-height: 0;
+  aspect-ratio: auto;                 /* the panels' 830:548 does not apply here */
+  display: flex; flex-direction: column;
+  padding: 16px;
+}
+.stor-grid {
+  flex: 1; min-height: 0; overflow: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(188px, 1fr));
+  gap: 14px; align-content: start; grid-auto-rows: max-content;
+  padding: 2px;
+}
+.stor-card {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); overflow: hidden;
+}
+.stor-card > * { flex: 0 0 auto; }
+.stor-shot {
+  position: relative; width: 100%; aspect-ratio: 4 / 3;
+  display: grid; place-items: center; overflow: hidden;
+  background: var(--pill); border-bottom: 1px solid var(--line-soft);
+}
+.stor-shot img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.stor-shot .stor-ph { width: 58%; height: auto; opacity: .8; }
+.stor-shot .stor-glyph { width: 34px; height: 34px; opacity: .45; }
+.stor-badge {
+  position: absolute; left: 6px; top: 6px;
+  padding: 1px 6px; border-radius: 3px;
+  font-size: 10px; font-weight: 600; color: #FFFFFF; background: #6B7280;
+}
+.stor-badge[data-status="ok"]   { background: #16A34A; }
+.stor-badge[data-status="bad"]  { background: #C9531F; }
+.stor-badge[data-status="busy"] { background: var(--accent); }
+.stor-info { padding: 9px 11px 0; min-width: 0; }
+.stor-name {
+  display: block; font-size: 12px; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stor-sub {
+  display: block; margin-top: 2px; font-size: 11px; color: var(--ink-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stor-actions { display: flex; gap: 6px; padding: 10px 11px 11px; margin-top: auto; }
+.stor-actions .btn { flex: 1; }
+.stor-actions .btn:disabled { opacity: .45; cursor: default; }
+.stor-empty { margin: auto; text-align: center; }
+.stor-foot {
+  display: flex; align-items: center; gap: 12px;
+  padding-top: 12px; font-size: 12px; color: var(--ink-dim);
+}
+
+/* A log or a gcode has no picture, so it does not get a picture's worth of card.
+   Same grid, same card, laid out sideways: glyph, name and size, one action. */
+.stor-grid[data-kind="logs"], .stor-grid[data-kind="gcodes"] {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+.stor-grid[data-kind="logs"] .stor-card,
+.stor-grid[data-kind="gcodes"] .stor-card {
+  display: grid; grid-template-columns: 44px 1fr auto; align-items: center;
+  gap: 10px; padding: 8px 10px;
+}
+.stor-grid[data-kind="logs"] .stor-shot,
+.stor-grid[data-kind="gcodes"] .stor-shot {
+  aspect-ratio: 1 / 1; border: 0; border-radius: 6px; background: var(--pill);
+}
+.stor-grid[data-kind="logs"] .stor-info,
+.stor-grid[data-kind="gcodes"] .stor-info { padding: 0; }
+.stor-grid[data-kind="logs"] .stor-actions,
+.stor-grid[data-kind="gcodes"] .stor-actions { padding: 0; margin: 0; }
+.stor-grid[data-kind="logs"] .stor-actions .btn,
+.stor-grid[data-kind="gcodes"] .stor-actions .btn { flex: 0 0 auto; }

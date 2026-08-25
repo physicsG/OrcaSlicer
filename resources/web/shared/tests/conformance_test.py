@@ -387,6 +387,7 @@ check("the axis readout uses motion_report.live_position",
 
 ui_src = open(os.path.join(WEB, "device_page", "js", "ui.js"), encoding="utf-8").read()
 app_src = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
+proto_src = open(PROTO, encoding="utf-8").read()
 check("choosing which toolhead to jog does NOT move the machine",
       "handlers.selectTool" not in ui_src,
       "selection is a UI choice; a toolchange must be deliberate, not a side effect")
@@ -432,6 +433,34 @@ check("refresh re-reads the machine, not Orca's device book",
       and "startStateStream('refresh')" in app_src,
       "the buttons called refresh(), which asks for the device list - two commands "
       "that say nothing about the printer, so pressing refresh changed nothing visible")
+
+# A person waiting on a toolhead wants to know it is working, not an axis-by-axis
+# account - and Klipper clears homed_axes as it re-homes, so the account went backwards.
+check("storage is one scrolling grid with previews, for every kind",
+      "stor-grid" in ui_src and "jobThumbUrl" in ui_src
+      and "'Reprint'" in ui_src and "grid-auto-rows: max-content" in css,
+      "recordings, prints and two file roots were four shapes behind three tabs on two "
+      "panels; they are all things on the machine you might want to look at")
+check("a print whose file is gone cannot be reprinted",
+      "it.exists === false" in ui_src,
+      "history keeps the record after the file is deleted; Reprint would send a "
+      "filename the machine cannot open")
+check("storage is its own destination, not a panel inside device control",
+      "view-storage" in ui_src or "view-storage" in app_src,
+      "and #view-control must opt back into [hidden] explicitly: display:contents "
+      "beats the UA rule, so the panels went on rendering underneath")
+check("history thumbnails come over HTTP, because the metadata carries paths",
+      "export function jobThumbUrl" in proto_src
+      and "server/files/gcodes/" in proto_src,
+      "metadata.thumbnails is [{width, height, size, relative_path}] - paths, no bytes, "
+      "the same trap the file browser hit")
+check("machine files can be viewed and printed, not deleted",
+      "handlers.deleteFile" not in ui_src and "deleteFile:" not in app_src,
+      "Delete sat a few pixels from a one-click Print and only one of them is reversible")
+check("the storage refresh is an action, not another picker",
+      "icon-btn" in open(os.path.join(WEB, "device_page", "index.html"),
+                          encoding="utf-8").read() and ".icon-btn" in css,
+      "sitting in the row of kind buttons it read as another one of them")
 
 check("the job card is one card at every state, not two",
       "job-badge" in ui_src and "job-bar" in ui_src
@@ -753,10 +782,14 @@ check("the wait re-reads the objects the stream does not carry",
 check("homing finishes on the machine reporting homed, not on a busy->idle edge",
       "done: () => state.toolhead().allHomed === true" in app_src,
       "the edge never came, because nothing ever reported busy")
-check("homing progress drives the wait's label",
-      "Homing \\u2014" in state_src and "homed_axes" in state_src,
+check("homing is what the wait reports during a toolchange",
+      "Homing axes" in state_src and "homed_axes" in state_src,
       "homed_axes walking '' -> z -> y -> xy is the only thing that reports the long "
       "phase of a toolchange; both previously-trusted sources are silent for it")
+check("but not axis by axis",
+      "done.join" not in state_src,
+      "Klipper CLEARS homed_axes as it re-homes, so naming the axes done reported Z "
+      "and then dropped it - and nobody waiting on a toolhead wants the account")
 check("idle_timeout counts as busy, having been measured bracketing the operation",
       "idle.state === 'Printing'" in state_src,
       "excluded before on a lingering read; the capture shows it Printing at 0.7s and "

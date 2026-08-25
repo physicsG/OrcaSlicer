@@ -20,9 +20,13 @@
       <img class="chev" src="icons/keyboardArrowDropDown.svg" alt="">
     </button>
     <nav>
-      <div class="nav-item is-active">
+      <div class="nav-item is-active" id="nav-control" data-view="control">
         <img src="icons/deviceControl.svg" alt="">
         <span>Device control</span>
+      </div>
+      <div class="nav-item" id="nav-storage" data-view="storage">
+        <img src="icons/iconModelFileFolder.svg" alt="">
+        <span>Storage</span>
       </div>
     </nav>
   </aside>
@@ -31,16 +35,12 @@
 
     <div id="fault" class="fault" hidden></div>
 
+    <div class="view" id="view-control">
+
+
     <section class="panel">
       <header class="panel-head">
         <span class="panel-title">Camera</span>
-        <span class="sep">|</span>
-        <button class="tab is-active" title="Live view">
-          <img src="icons/liveCamera.svg" alt="Live view">
-        </button>
-        <button class="tab" title="Time-lapse">
-          <img src="icons/videoCall.svg" alt="Time-lapse">
-        </button>
       </header>
       <div class="panel-body camera-body" id="camera"></div>
     </section>
@@ -68,16 +68,6 @@
     <section class="panel">
       <header class="panel-head">
         <span class="panel-title">Printing Task</span>
-        <span class="sep">|</span>
-        <button class="tab is-active" title="Job info">
-          <img src="icons/exclamationMark.svg" alt="Job info">
-        </button>
-        <button class="tab" title="Files">
-          <img src="icons/iconModelFileFolder.svg" alt="Files">
-        </button>
-        <button class="tab" title="Print history">
-          <img src="icons/printHistory.svg" alt="Print history">
-        </button>
       </header>
       <div class="panel-body task-body" id="task"></div>
     </section>
@@ -109,6 +99,34 @@
       <summary>WCP trace</summary>
       <div id="trace" data-paused="0"></div>
     </details>
+
+    </div>
+
+    <div class="view" id="view-storage" hidden>
+      <section class="panel storage" id="storage">
+        <header class="panel-head">
+          <span class="panel-title">Storage</span>
+          <span class="sep">|</span>
+          <button class="tab is-active" data-kind="timelapses" title="Time-lapses">
+            <img src="icons/videoCall.svg" alt="Time-lapses">
+        </button>
+          <button class="tab" data-kind="prints" title="Prints">
+            <img src="icons/printHistory.svg" alt="Prints">
+        </button>
+          <button class="tab" data-kind="gcodes" title="Print files">
+            <img src="icons/iconFile.svg" alt="Print files">
+        </button>
+          <button class="tab" data-kind="logs" title="Logs and other files">
+            <img src="icons/iconModelFileFolder.svg" alt="Logs and other files">
+        </button>
+          <span class="spacer"></span>
+          <button class="icon-btn" id="storage-refresh" title="Re-read this folder">
+            <img src="icons/refresh.svg" alt="Refresh">
+        </button>
+        </header>
+        <div class="panel-body storage-body" id="storage-body"></div>
+      </section>
+    </div>
 
   </main>
 </div>
