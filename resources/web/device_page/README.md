@@ -55,9 +55,11 @@ inside `.content` is built from it.
 | `js/pending.js` | What was asked for and not yet confirmed. Neither state nor store |
 | `js/render.js` | The one update discipline: rebuild on a signature, reconcile by key |
 | `js/dom.js` | `$`, `el`, `icon` — the three primitives panels build with |
-| `js/app.js` | Startup, the session, and the control handlers |
+| `js/session.js` | Having a printer on the other end: connect, staleness, retry, the stream |
+| `js/connection.js` | The connect path itself: pairing, mTLS, the MQTT engine |
+| `js/diag.js` | The `?diag=1` beacon |
+| `js/app.js` | Startup, and the control handlers |
 | `js/ui.js` | Rendering (plain DOM). Being emptied into `js/panels/` a panel at a time |
-| `js/connection.js` | The connect path: pairing, mTLS, the MQTT engine |
 | `js/overlay.js` | Menus, dialogs and popovers |
 | `js/mock.js` | Installs the shared simulator, so the page runs with no hardware |
 | `css/device.css` | Styling |

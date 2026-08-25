@@ -397,6 +397,10 @@ pending_src = open(os.path.join(WEB, "device_page", "js", "pending.js"),
                    encoding="utf-8").read()
 render_src = open(os.path.join(WEB, "device_page", "js", "render.js"),
                   encoding="utf-8").read()
+# Having a printer on the other end of the bridge - the connect path, staleness, retry,
+# the heartbeat and the state stream - left app.js for its own module.
+session_src = open(os.path.join(WEB, "device_page", "js", "session.js"),
+                   encoding="utf-8").read()
 app_src = open(os.path.join(WEB, "device_page", "js", "app.js"), encoding="utf-8").read()
 proto_src = open(PROTO, encoding="utf-8").read()
 # Was: `handlers.selectTool` must not appear in ui.js - which was true while the
@@ -616,31 +620,31 @@ check("the transport commands are NOT mapped to a printer method",
 
 # A printer that has gone away stops sending, so nothing repaints to say so.
 check("connected is a question about now, not about ever",
-      "function isLive" in app_src and "state.age(" in app_src
-      and "state.lastUpdate > 0 &&" not in app_src,
+      "function isLive" in session_src and "state.age(" in session_src
+      and "state.lastUpdate > 0 &&" not in session_src,
       "lastUpdate > 0 means the machine spoke once; it left a rebooting printer "
       "showing as connected with its last snapshot presented as current")
 check("and something asks it on a clock of its own",
-      "superviseConnection" in app_src and "setInterval" in app_src,
+      "function superviseConnection" in session_src and "setInterval" in session_src,
       "every other repaint is triggered by something arriving, which is exactly what "
       "stops")
 check("the heartbeat's answer is used rather than discarded",
-      "lastPong" in app_src,
+      "lastPong" in session_src,
       "it is the only evidence a machine with nothing to report is still there")
 
 check("a printer that is not there yet is retried, not given up on",
-      "RETRY_MS" in app_src and "function reconnect" in app_src
-      and "retryAt" in app_src,
+      "RETRY_MS" in session_src and "function reconnect" in session_src
+      and "retryAt" in session_src,
       "one attempt at boot meant starting the app before the printer left it dark "
       "until a reload, and a rebooted printer never came back")
 check("the retry backs off instead of polling",
-      re.search(r"RETRY_MS\s*=\s*\[[^\]]+\]", app_src) is not None
-      and "Math.min(retryStep + 1" in app_src)
+      re.search(r"RETRY_MS\s*=\s*\[[^\]]+\]", session_src) is not None
+      and "Math.min(retryStep + 1" in session_src)
 check("a dead engine is dropped before a new one is made",
-      re.search(r"function reconnect\(\)[^}]*disconnectDevice", app_src, re.S) is not None,
+      re.search(r"function reconnect\(\)[^}]*disconnectDevice", session_src, re.S) is not None,
       "the old socket outlives the session that owned it")
 check("Connect is offered on live evidence, not on the persisted flag",
-      "engineId && isLive()" in app_src,
+      "session.engineId && session.isLive()" in app_src,
       "DeviceInfo.connected is force-cleared on every config save, so it answers "
       "neither 'is it there' nor 'do we have a session'")
 
@@ -867,7 +871,7 @@ check("idle_timeout counts as busy, having been measured bracketing the operatio
       "excluded before on a lingering read; the capture shows it Printing at 0.7s and "
       "Ready at 32.7s, and every wait has its own done() besides")
 check("the wait polls the fields that actually move",
-      "activating_move" in app_src and "homed_axes" in app_src,
+      "activating_move" in session_src and "homed_axes" in session_src,
       "neither is on the subscribed stream with the fields the page asks for")
 
 # The bed is the Z axis and Z measures the nozzle-to-bed gap, so raising the bed is a

@@ -776,8 +776,34 @@ testing the nothing-there path.
 Both are verified now: **26 objects and live telemetry** against the U1, and a clean
 `No route to host` down the unroutable path.
 
-**Where this leaves `app.js`.** Still 1,574 lines, and still three jobs: the session
-(connect, retry, heartbeat, staleness, the state stream), the 40-function `handlers` bag,
-and startup. Splitting it is the next pass, and `handlers` is the interesting half —
-it is the last thing handed whole to every panel, and the only record of who uses what is
-each panel's own `sends` declaration.
+### Structure, pass four: the session is its own thing (2026-08-25)
+
+Having a printer on the other end of the bridge — the connect path, whether the machine
+is still there, the retry ladder, the heartbeat and the state stream — is 319 lines that
+no panel reads, which is exactly why it could leave `app.js`. It is
+[`session.js`](../../resources/web/device_page/js/session.js) now, plus a 37-line
+`diag.js` for the `?diag=1` beacon.
+
+Dependencies are **injected rather than imported**, because they run the other way: the
+session asks the page to repaint and to say things, and a module that imported `app.js`
+to do it would be a cycle. It owns four things nothing outside it reads — `engineId`,
+`subscription`, `connecting`, `heartbeat` — because a socket, a subscription id and two
+timer handles are not state a panel can have an opinion about.
+
+Verified where it matters: **26 objects and live telemetry** against the U1, and down the
+unroutable path the retry ladder visibly makes its second attempt on a new client id.
+149/149 conformance, 109/109 `unit_jsc`, 17/17 `run_webkit`, DOM unchanged.
+
+Eight conformance checks moved with the code. They grep source text for a decision, so
+they name a file — the same repointing pass one needed. Worth noting as a property of
+this suite rather than a nuisance: it pins *decisions* to *places*, so moving a decision
+is meant to be a visible edit.
+
+**Where this leaves `app.js`.** 1,272 lines, and one job left that is really two: the
+40-function `handlers` bag, and startup. `handlers` is the interesting half — it is the
+last thing handed whole to every panel, and the only record of who uses what is each
+panel's own hand-written `sends` declaration. Splitting it per domain would let a panel
+receive only its own commands, which would make `sends` **derivable** instead of
+declared — the check that found the dead `abortBedMesh` handler would then be checking a
+fact rather than a promise. That is a design decision worth taking deliberately, not as a
+side effect of a move.
