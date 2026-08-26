@@ -270,6 +270,20 @@
     await wait(1400);
     say('a menu costs the panel body nothing', fits(), true);
 
+    /* ---- the ACE's own icons, at the standard's sizes ------------------- */
+    // The square glyph is the form for an icon slot the 44x26 cabinet cannot go in, and
+    // 24x24 is its nominal size - which a menu row can take, so it is drawn at it.
+    $$('#filament .ace-more')[3].click(); await wait(30);
+    const sq = $('.menu .ace-glyph-sq');
+    say('a menu row gets the square glyph at its nominal 24x24',
+        sq ? `${Math.round(sq.getBoundingClientRect().width)}x`
+           + `${Math.round(sq.getBoundingClientRect().height)}` : 'none', '24x24');
+    say('and it is the front face - body and four bays, no hood',
+        sq.querySelectorAll('rect').length, 5);
+    say('nothing in the menu wraps now that a glyph and a macro share the row',
+        $$('.menu .menu-item').filter((e) => e.getBoundingClientRect().height > 46).length, 0);
+    document.body.click(); await wait(30);
+
     /* ---- the settings that ARE reported back ---------------------------- */
     // These were written as write-only on the assumption that none of them was readable.
     // Three of the four are right there in the object.

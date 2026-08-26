@@ -563,9 +563,22 @@ body {
   height: 17px; padding: 0 4px; margin-bottom: 2px; min-width: 0;
 }
 .ace-strip .spacer { flex: 1; }
+/* The ACE unit, in the three forms docs/ace-mmu/16-ace-visuals.md settles - the same
+   standard the C++ Prepare page draws from, lifted from Orca's own AMSItem.hpp geometry.
+   An ACE had been drawn four different ways across the app and this panel had made it
+   five; the geometry is in shared/js/multiACE.js so there is one drawing of it.
+
+   The badge is 44x26 NOMINAL and takes the unit row's height here: the row is 17 because
+   the panel's body is 456, which is measured and immovable, and zooming the nominal
+   drawing is the standard's own mechanism rather than a second set of proportions. */
 .ace-badge { flex: 0 0 auto; display: block; }
-/* The ACE's badge is 44x26 because a cabinet is wide. The feeder module is not a cabinet,
-   and a wide badge for it only ever read as a squashed ACE. */
+/* The two line forms at their nominal sizes, in the slots the standard names for them:
+   the square in a menu row, the wide one in a label. */
+.menu-item .ace-glyph-sq { width: 24px; height: 24px; flex: 0 0 24px; }
+.ace-glyph-wide { display: block; width: 44px; height: 26px; color: var(--ink-dim); }
+.ms-note .ace-glyph-wide { float: left; margin: 0 10px 4px 0; }
+/* The feeder module is not a cabinet, and the ACE's wide badge for it only ever read as a
+   squashed ACE. */
 .ace-modbadge { width: 17px; height: 17px; }
 .ace-unit {
   font: 11px/1.3 var(--mono); color: var(--ink-dim);
@@ -730,6 +743,10 @@ body {
   font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
   color: #9AA3AF; padding: 5px 16px 6px; font-weight: 600;
 }
+/* A label wraps to three lines rather than widening the menu once a glyph and a macro
+   name share its row. The menu has no fixed width - only a minimum - so letting the
+   label refuse to break is what makes it grow instead. */
+.menu-item > span:not(.mcmd) { white-space: nowrap; }
 .menu-item .mcmd {
   margin-left: auto; font: 10px/1 var(--mono); color: #B9BFC8; padding-left: 10px;
 }

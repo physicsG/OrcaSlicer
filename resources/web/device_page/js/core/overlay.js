@@ -33,7 +33,9 @@ document.addEventListener('keydown', (e) => {
 /**
  * Open a menu under `anchor`.
  *
- * items: [{label, icon, onClick, muted, cmd, title}] - a null entry draws a divider.
+ * items: [{label, icon, glyph, onClick, muted, cmd, title}] - a null entry draws a
+ * divider. `glyph` is a node built by the caller, for a drawing that has no icon file -
+ * the ACE's own, which is geometry from a visual standard rather than an asset.
  * `cmd` prints the macro or object behind the item, right-aligned; `title` is the
  * hover text, and defaults to `cmd`.
  *
@@ -53,7 +55,9 @@ export function openMenu(anchor, items, { head = null } = {}) {
   items.forEach((it) => {
     if (!it) { m.appendChild(el('div', 'menu-sep')); return; }
     const row = el('button', 'menu-item' + (it.muted ? ' is-muted' : ''));
-    if (it.icon) {
+    if (it.glyph) {
+      row.appendChild(it.glyph);
+    } else if (it.icon) {
       const i = el('img');
       i.src = `icons/${it.icon}.svg`;
       i.alt = '';

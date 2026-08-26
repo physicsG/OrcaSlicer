@@ -31,10 +31,11 @@
 import { CMD, TASK_CONFIG, cssColor } from '../../../../../shared/js/protocol.js';
 // Everything about the ACE comes from one module - see shared/js/multiACE.js for why.
 import { ACE, DRY_MINUTES_PER_HOUR, aceUnitId, aceLine, aceOverridesUrl,
-         parseAceOverrides }
+         parseAceOverrides, aceGlyph }
   from '../../../../../shared/js/multiACE.js';
 import { openDialog, numberField, toggleField } from '../../../core/overlay.js';
 import { el } from '../../../core/dom.js';
+
 
 /**
  * When to look again after asking the ACE for something.
@@ -350,6 +351,9 @@ export function create(deps) {
           + (a.apiVersion ? ` (api_version ${a.apiVersion})` : '')
           + '. A U1 without it reports no ACE at all and gets the four filament slots '
           + 'instead.';
+        // The wide glyph in the slot the visual standard names for it: beside a label.
+        // After the text, because assigning textContent replaces every child.
+        p.insertBefore(aceGlyph(), p.firstChild);
         b.appendChild(p);
         const q = el('p', 'ms-note');
         q.textContent = 'Each card is one of the U1\u2019s four toolheads and its header '

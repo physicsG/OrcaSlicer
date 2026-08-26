@@ -43,13 +43,15 @@ import { cssColor, isDarkColor } from '../../../../../shared/js/protocol.js';
 // Everything about the ACE comes from one module - see shared/js/multiACE.js for why.
 import { ACE, ACE_MODES, ACE_MODE_LABELS, DRY_TEMPS, DRY_HOURS, DRY_LIMITS,
          DRY_MINUTES_PER_HOUR, AUTO_DRY_THRESHOLDS,
-         aceBayAddr, humidityLevel, mergeAceBays }
+         aceBadge, aceGlyphSquare, aceBayAddr, humidityLevel, mergeAceBays }
   from '../../../../../shared/js/multiACE.js';
 import { keyedList, rebuildOn } from '../../../core/render.js';
 import { openDialog, openMenu } from '../../../core/overlay.js';
 
 /** The toolhead artwork, at half. 64x140 becomes 32x70, which is what fits twice over. */
 const HEAD_SCALE = 0.5;
+
+
 
 /**
  * What the head's own sensor says, and the field it says it with.
@@ -606,7 +608,7 @@ function openHeadMenu(anchor, ace, ctx, i, unit) {
       onClick: () => { if (loaded) ctx.handlers.unloadHead(i); } },
   ];
   if (unit) {
-    items.push({ label: 'Swap to another bay…', icon: 'iconFilamentEdit',
+    items.push({ label: 'Swap to another bay…', glyph: aceGlyphSquare(),
                  cmd: `${ACE.SWAP_HEAD} HEAD=${i} ACE=${unit.index} SLOT=<n>`,
                  title: 'Click the bay you want, in the cabinet on this card',
                  muted: true });
@@ -630,15 +632,15 @@ function openHeadMenu(anchor, ace, ctx, i, unit) {
  */
 export function openAceSettings(anchor, ctx) {
   if (!ctx.state.ace().present) {
-    openMenu(anchor, [{ label: 'This printer reports no ACE', icon: 'settings',
-                        muted: true,
+    openMenu(anchor, [{ label: 'multiACE is not installed on this printer',
+                        glyph: aceGlyphSquare(), muted: true,
                         title: '`ace` is absent from machine state, so there is no unit '
                              + 'to configure and no macro to send' }],
              { head: 'This printer' });
     return;
   }
   openMenu(anchor, [
-    { label: 'Unload every toolhead', icon: 'iconFilamentCheck', cmd: ACE.UNLOAD_ALL,
+    { label: 'Unload every toolhead', glyph: aceGlyphSquare(), cmd: ACE.UNLOAD_ALL,
       onClick: () => ctx.handlers.unloadAllHeads() },
     null,
     { label: 'Flush length…', icon: 'settings',
@@ -667,7 +669,7 @@ export function openAceModeMenu(anchor, ctx) {
   const now = ctx.pending.resolve('ace-mode', ace.mode).value;
   openMenu(anchor, ACE_MODES.map((m) => ({
     label: ACE_MODE_LABELS[m] + (m === now ? '  ✓' : ''),
-    icon: 'settings',
+    glyph: aceGlyphSquare(),
     cmd: `${ACE.SET_MODE} MODE=${m}`,
     muted: m === now,
     onClick: () => { if (m !== now) ctx.handlers.setAceMode(m); },
@@ -930,21 +932,6 @@ function droplet(humidity) {
 /* ---------------------------------------------------------------- *
  * the two badges
  * ---------------------------------------------------------------- */
-
-/**
- * The ACE badge, filled with that unit's own bays, so the thing in the header is a
- * picture of the thing in the card. Geometry from docs/ace-mmu/16-ace-visuals.md.
- */
-function aceBadge(bays) {
-  const s = svg('svg', { width: 26, height: 16, viewBox: '0 0 44 26',
-                         'aria-hidden': 'true', class: 'ace-badge' });
-  s.appendChild(svg('rect', { x: 2, y: 1, width: 40, height: 20, rx: 3, fill: '#EEEEEE' }));
-  bays.forEach((b, i) => s.appendChild(svg('rect', {
-    x: 6 + i * 9, y: 4, width: 5, height: 14, rx: 2.5,
-    fill: (b.occupied && cssColor(b.color)) || (b.occupied ? '#B7BDC6' : '#FFFFFF') })));
-  s.appendChild(svg('rect', { x: 0, y: 20, width: 44, height: 5, rx: 1.5, fill: '#CECECE' }));
-  return s;
-}
 
 /**
  * The feeder module's badge: the frame at badge size, white over black, on a rounded

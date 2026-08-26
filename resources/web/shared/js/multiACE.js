@@ -35,7 +35,7 @@
  */
 'use strict';
 
-import { TOOLHEADS, DEVICE, MOONRAKER_HTTP_PORT } from './protocol.js';
+import { TOOLHEADS, DEVICE, MOONRAKER_HTTP_PORT, cssColor } from './protocol.js';
 
 /**
  * The multiACE this was written against, and verified on.
@@ -50,6 +50,64 @@ export const MULTIACE_VERIFIED = { web: '0.99.8b', apiVersion: 1, bgSwap: 'v0.9'
 
 /** Every ACE has four bays, whatever it is: multiACE's own SLOT_COUNT. */
 const ACE_SLOTS = 4;
+
+/**
+ * How an ACE unit is drawn, in the three forms the visual standard defines.
+ *
+ * Lifted verbatim from `docs/ace-mmu/16-ace-visuals.md` and its interactive sheet, which
+ * settled these against Orca's own `AMSItem.hpp` geometry rather than inventing them —
+ * and which the C++ Prepare page draws from too. An ACE had been drawn four different
+ * ways across the app; this panel had quietly made it five, with a badge of its own
+ * shape. Geometry only, no DOM: a view builds the nodes, and there is one place that
+ * says what an ACE looks like.
+ *
+ *   badge   44x26 fill  — a head box. Hood, four bays, base drawn OVER them; the base is
+ *                         wider than the hood, which is what makes it read as a cabinet
+ *                         rather than a bar chart. Carries colour and emptiness only.
+ *   glyph   44x26 line  — a popover row, a label. The badge's own silhouette in one
+ *                         stepped path, bays filled.
+ *   square  24x24 line  — a tab, a menu, a button: where the wide cabinet cannot go.
+ *                         Deliberately NOT the same silhouette (body and bays, no hood),
+ *                         because a third of the width has to say the same thing.
+ *
+ * Four bays is not a variable — multiACE's `SLOT_COUNT` is 4 and `slots[]` is always
+ * four long — so the bay positions are a constant and not a computation.
+ */
+export const ACE_ART = {
+  /** x of each bay, in the wide forms: padding 4 == gap 4, Bambu's own proportions. */
+  bayX: [6, 15, 24, 33],
+  badge: {
+    w: 44, h: 26,
+    hood: 'M2 9a7 7 0 0 1 7-7h26a7 7 0 0 1 7 7v17H2Z',
+    bay: { y: 4.5, w: 5, h: 14, rx: 2.5 },
+    base: { x: 0, y: 16, w: 44, h: 10, rx: 1.5 },
+  },
+  glyph: {
+    w: 44, h: 26, stroke: 1.6,
+    cab: 'M1 17H4V9a6 6 0 0 1 6-6h24a6 6 0 0 1 6 6v8h3v8H1Z',
+    bay: { y: 6.4, w: 5, h: 10.6, rx: 2.5 },
+  },
+  square: {
+    w: 24, h: 24, stroke: 1.6,
+    body: { x: 1.8, y: 4.4, w: 20.4, h: 15.2, rx: 3.2 },
+    bay: { x0: 4.2, dx: 4.2, y: 7.4, w: 3.2, h: 9.2, rx: 1.6 },
+  },
+  /*
+   * The badge's own neutrals, and they are the standard's own.
+   *
+   * These were bound to the drawn cabinet's #EEEEEE / #CECECE first, on the reasoning
+   * that a badge which is a picture of the thing in the card should be the same two
+   * greys. Wrong, and visibly: the cabinet sits on a white card body and the badge sits
+   * on the header's #F5F6FA, where #EEEEEE all but disappears and the badge reads as four
+   * bars on a plinth. The standard declares badge-specific values for exactly that
+   * reason - it is 26 px tall and lands on chrome.
+   */
+  hood: '#E8E8E8',
+  base: '#CFCFCF',
+  emptyBay: '#FFFFFF',
+  /** AMS_CONTROL_DISABLE_COLOUR: a unit that is configured and not answering. */
+  disabled: '#CECECE',
+};
 
 /* ------------------------------------------------------------------ *
  * multiACE
@@ -175,6 +233,108 @@ export function aceLine(macro, args) {
       .map(([k, v]) => `${k}=${v}`)).join(' ');
 }
 
+
+/* ------------------------------------------------------------------ *
+ * Drawing one
+ *
+ * The only part of this module that touches a document. It is here rather than in the
+ * panel because an ACE is drawn on more than one surface and had been drawn four
+ * different ways across the app - the standard exists to allow one, and one place to
+ * call is what makes that hold. Nothing below runs at module scope, so the pure half
+ * still evaluates in JavaScriptCore for unit_jsc.py.
+ * ------------------------------------------------------------------ */
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs) {
+  const n = document.createElementNS(SVG_NS, tag);
+  Object.entries(attrs || {}).forEach(([k, v]) => n.setAttribute(k, v));
+  return n;
+}
+const r1 = (v) => Math.round(v * 10) / 10;
+
+/**
+ * What a badge is drawn at when nobody says.
+ *
+ * The forms are nominal - badge and glyph 44x26, square 24x24 - and the standard's own
+ * builders take a zoom, which is how one drawing serves a 26 px row and a 17 px one
+ * rather than two sets of proportions. 17 is what the Device page's unit row is, because
+ * that panel's body is 456: measured, and the one number on it that cannot move. A
+ * surface with room passes `1`.
+ */
+export const BADGE_ROW = 17;
+const BADGE_Z = BADGE_ROW / 26;
+
+/*
+ * The three forms an ACE is drawn in, from ACE_ART - which is the visual standard the
+ * C++ Prepare page draws from. This panel had a badge of its own shape before, which
+ * made five drawings of one object across the app where the standard exists to allow
+ * one.
+ *
+ * `z` zooms the wide forms. That is the standard's own mechanism - its builders take a
+ * zoom and multiply the nominal 44x26 - and it is how a 26px-tall unit row gets the same
+ * drawing as a 44px one rather than a different one.
+ */
+
+/**
+ * Badge: hood, four bays, base drawn OVER them.
+ *
+ * Filled with that unit's own bays, so the thing in the header is a picture of the thing
+ * in the card. Colour and emptiness are all that survive at this size, which is why it
+ * carries no outline, no address and no state.
+ */
+export function aceBadge(bays, z = BADGE_Z) {
+  const A = ACE_ART.badge;
+  // Sized here rather than in CSS: an SVG carrying only a viewBox has no intrinsic ratio
+  // to give `width: auto`, and it came out square - 17x17 for a 44x26 drawing.
+  const s = svgEl('svg', { width: r1(A.w * z), height: r1(A.h * z),
+                         viewBox: `0 0 ${A.w} ${A.h}`,
+                         'aria-hidden': 'true', class: 'ace-badge' });
+  s.appendChild(svgEl('path', { d: A.hood, fill: ACE_ART.hood }));
+  bays.forEach((b, i) => s.appendChild(svgEl('rect', {
+    x: ACE_ART.bayX[i], y: A.bay.y, width: A.bay.w, height: A.bay.h, rx: A.bay.rx,
+    fill: (b.occupied && cssColor(b.color)) || (b.occupied ? '#B7BDC6' : ACE_ART.emptyBay),
+  })));
+  s.appendChild(svgEl('rect', { x: A.base.x, y: A.base.y, width: A.base.w,
+                              height: A.base.h, rx: A.base.rx, fill: ACE_ART.base }));
+  return s;
+}
+
+/** Glyph: the badge's silhouette in line, bays filled. Takes the ink from `currentColor`. */
+export function aceGlyph(z = 1) {
+  const A = ACE_ART.glyph;
+  const s = svgEl('svg', { width: A.w * z, height: A.h * z, viewBox: `0 0 ${A.w} ${A.h}`,
+                         fill: 'none', stroke: 'currentColor', 'stroke-width': A.stroke,
+                         'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+                         'aria-hidden': 'true', class: 'ace-glyph-wide' });
+  s.appendChild(svgEl('path', { d: A.cab }));
+  ACE_ART.bayX.forEach((x) => s.appendChild(svgEl('rect', {
+    x, y: A.bay.y, width: A.bay.w, height: A.bay.h, rx: A.bay.rx,
+    fill: 'currentColor', stroke: 'none' })));
+  return s;
+}
+
+/**
+ * Glyph, square: body and four bays, no hood.
+ *
+ * For an icon slot the wide cabinet cannot go in — a menu row, a pill. Not the same
+ * silhouette on purpose: the family is carried by the bay treatment and the stroke,
+ * because a third of the width has to say the same thing.
+ */
+export function aceGlyphSquare(px = ACE_ART.square.w) {
+  const A = ACE_ART.square;
+  const s = svgEl('svg', { width: px, height: px, viewBox: `0 0 ${A.w} ${A.h}`,
+                         fill: 'none', stroke: 'currentColor', 'stroke-width': A.stroke,
+                         'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+                         'aria-hidden': 'true', class: 'ace-glyph-sq' });
+  s.appendChild(svgEl('rect', { x: A.body.x, y: A.body.y, width: A.body.w,
+                              height: A.body.h, rx: A.body.rx }));
+  for (let i = 0; i < 4; i += 1) {
+    s.appendChild(svgEl('rect', { x: A.bay.x0 + i * A.bay.dx, y: A.bay.y, width: A.bay.w,
+                                height: A.bay.h, rx: A.bay.rx,
+                                fill: 'currentColor', stroke: 'none' }));
+  }
+  return s;
+}
 
 /**
  * The `ace` Klipper object, unpacked.

@@ -16,6 +16,17 @@ is pre-1.0 and versioned, so the integration carries what it was verified agains
 than assuming: **`0.99.8b+9ba137e1` on a U1 running 1.5.2, `api_version: 1`,
 `ace_bg_swap v0.9`** — in `MULTIACE_VERIFIED`, and shown in the panel's own help.
 
+**The ACE is drawn from the visual standard now, not from a shape of its own.**
+[`docs/ace-mmu/16-ace-visuals.md`](../../ace-mmu/16-ace-visuals.md) settles three forms —
+**badge** 44×26 fill, **glyph** 44×26 line, **glyph square** 24×24 line — lifted from
+Orca's own `AMSItem.hpp` geometry, and the C++ Prepare page draws from the same sheet. An
+ACE had been drawn four different ways across the app and this panel had quietly made it
+five. All three are in the module now (`ACE_ART` plus the builders): the badge in each
+unit row, the square in a menu row, the wide glyph beside a label. The sizes are nominal
+and the builders take a **zoom**, which is what lets a 17 px unit row carry the same
+drawing as a 26 px one — the row is 17 because the body is 456, and that number cannot
+move.
+
 **It is one module.** [`shared/js/multiACE.js`](../../../resources/web/shared/js/multiACE.js)
 owns all of it — macro names and the line builder, the unit letters, the dryer presets and
 limits, Orca's humidity buckets, the override-store URL, the state model, and the merge.

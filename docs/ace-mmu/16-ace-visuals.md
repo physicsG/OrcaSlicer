@@ -21,9 +21,19 @@ spool, an ACE never does.
 
 | Form | Size | Where | Function |
 |------|------|-------|----------|
-| **Badge** | 44×26 fill | a head box | `ace_badge()` |
-| **Glyph** | 44×26 line, stroke 1.6 | a popover row, a label | `ace_glyph()` |
-| **Glyph, square** | 24×24 line, stroke 1.6 | a tab, a menu, a `ScalableButton` | `ace_glyph_square()` |
+| **Badge** | 44×26 fill | a head box | `ace_badge()` · JS `aceBadge()` |
+| **Glyph** | 44×26 line, stroke 1.6 | a popover row, a label | `ace_glyph()` · JS `aceGlyph()` |
+| **Glyph, square** | 24×24 line, stroke 1.6 | a tab, a menu, a `ScalableButton` | `ace_glyph_square()` · JS `aceGlyphSquare()` |
+
+The JS half is [`resources/web/shared/js/multiACE.js`](../../resources/web/shared/js/multiACE.js),
+where the geometry is `ACE_ART` and the three builders sit beside it. The Device page's
+Filament panel draws all three: the badge in each unit row, the square in a menu row, the
+wide glyph beside a label.
+
+**The sizes are nominal, and the builders take a zoom** — the wide forms are 44×26 *at
+z = 1*. That matters where a slot is smaller than the drawing: the Device page's unit row
+is 17 px, because that panel's body is 456 and measured, so its badge is the same drawing
+at `17/26`. A zoom is not a second set of proportions; redrawing it would have been.
 
 **Badge** — hood, four bays, base drawn *over* them; the base is slightly wider than the
 hood, which is what makes it read as a cabinet rather than a bar chart. Bays are 5×14
@@ -103,6 +113,7 @@ prerequisite for the column meaning anything.
 | Printer panel (`Plater.cpp` sidebar) | 7×15 px bars in an ad-hoc strip | **Badge** in the head box |
 | Assignment dialog (`resources/web/aceplan`) | 96 px `.pos` cards in a teal `.acebox` | **Spool box** + `AMSLib` columns; keep the drag targets |
 | U1 + multiACE page (`resources/web/multiace`) | 60 px circular spools; 36 px circular swatches | **Spool box** + `AMSLib` columns. The circles are the biggest departure and the one worth losing — nothing else in Orca draws filament round |
+| Rebuilt Device page (`resources/web/device_page`) | **Done, 2026-08-26.** All three forms, from `shared/js/multiACE.js` | — |
 
 **Note on `AMSPreview`.** The 82×27 strip of 14×14 cubes is real, shipping code, but it
 has only two call sites — `AMSControl.cpp:1173` (the unit selector) and

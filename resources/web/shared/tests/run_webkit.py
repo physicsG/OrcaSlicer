@@ -354,6 +354,22 @@ CHECKS = r"""
     // other window size rather than here.
     say('a card is the height that lets two rows fit the body',
         Math.round(cards[0].getBoundingClientRect().height), 215);
+    // The ACE had been drawn four ways across the app and this panel made it five, with
+    // a badge of its own shape. These hold it to docs/ace-mmu/16-ace-visuals.md - the
+    // same standard the C++ Prepare page draws from - by asking for the nominal
+    // proportions rather than the rendered size, since the unit row is 17 px and the
+    // standard's own mechanism for that is a zoom.
+    const badge = document.querySelector('#filament .ace-card.is-ace .ace-badge:not(.ace-modbadge)');
+    say('the ACE badge is the standard`s 44x26, whatever it is drawn at',
+        badge.getAttribute('viewBox'), '0 0 44 26');
+    say('and keeps that ratio on screen',
+        Math.abs(badge.getBoundingClientRect().width
+                 / badge.getBoundingClientRect().height - 44 / 26) < 0.02, true);
+    say('its base is drawn wider than its hood, which is what makes it a cabinet',
+        Number(badge.querySelector('rect:last-of-type').getAttribute('width')) === 44
+        && badge.querySelector('path').getAttribute('d').startsWith('M2 9'), true);
+    say('and it carries one bay per slot, colour only',
+        badge.querySelectorAll('rect').length, 5);   // four bays plus the base
     say('the ACE mode pill reports the mode rather than the one it was built with',
         document.getElementById('filament-mode').textContent.trim(), 'ACE mode · Head');
   }

@@ -142,8 +142,10 @@ and none of that applies.
 deployed onto a U1; the `ace` object, the macros and the override store are all its, and a
 stock U1 has none of them. **Everything about it lives in one module,
 [`shared/js/multiACE.js`](resources/web/shared/js/multiACE.js)** — macros and the line
-builder, constants, the state model and the bay merge — named for the plugin rather than
-the hardware. `MachineState.ace()` calls into it. It was spread over three files, and that
+builder, constants, the state model, the bay merge, **and the three forms an ACE is
+drawn in** (`ACE_ART` and its builders, from `docs/ace-mmu/16-ace-visuals.md` — the same
+standard the C++ Prepare page draws from) — named for the plugin rather than the
+hardware. `MachineState.ace()` calls into it. It was spread over three files, and that
 is how the panel came to read bay identity from a source that does not carry it.
 
 **The Filament panel has two shapes and the machine picks.** A printer that reports no
