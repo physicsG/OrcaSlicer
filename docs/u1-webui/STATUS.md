@@ -616,7 +616,7 @@ and there is no pycairo here.
 |---|---|---|
 | **Layout** | L3 + H1 | **built** — two unequal columns, no C++ |
 | **Camera** | S2 + view grid + M-A | **built** — 9.5 fps against 0.5, no C++ |
-| **multiACE** | P1 | **not started** — deferred |
+| **multiACE** | ~~P1~~ ~~F4~~ **I1** | **designed, not built** — see below |
 
 ### The layout: two columns, not a 2x2 grid
 
@@ -754,20 +754,185 @@ R=resources/web/shared/tests
 python3 $R/run_webkit.py --size 1920x1080                       # 37 checks, layout included
 python3 $R/run_webkit.py --size 1920x1080 --drive $R/drive/camera.js
 python3 $R/run_webkit.py --real --size 1920x1080 --drive $R/drive/camera-real.js
-python3 docs/u1-webui/tools/check_mockup.py <a mockup>          # 82 checks, both themes
+python3 docs/u1-webui/tools/check_mockup.py <a mockup>          # per-file checks, both themes
+python3 docs/u1-webui/tools/bake_mockup.py  <a mockup>          # re-render its no-script copies
 ```
 
-### Still open, from the study
+### The multiACE panel: designed, and P1 was upside down
 
-The multiACE panel (part 03), which needs no new bridge command for most of it: `ace` is a
-Klipper object and `sw_GetMachineState {objects:{ace:null}}` answers in **277 ms**. Every
-control is a documented G-code macro. What it cannot do without Orca is name the filament
-in an *unloaded* bay — the raw slots carry no identity and `/multiace/api/state` is
-CORS-refused. And `head_ace` reads `{0:0, 1:1, 2:2, 3:0}` on a machine with
-`device_count: 1`, so heads 2 and 3 name units that **do not exist**: resolve a head's
-source as `head_manual`, then `head_feeder`, and `head_ace` only for the remainder.
+**Start at [02-device-page/11-multiace-handover.md](02-device-page/11-multiace-handover.md)**
+— the settled design in one table, the build order, and every trap this pass turned up.
+The reasoning is [02-device-page/10-multiace-filament.md](02-device-page/10-multiace-filament.md),
+with the studies as the specification:
+[multiace-filament-mockup.html](02-device-page/multiace-filament-mockup.html) — seven
+shapes and five machine states, static — and
+[multiace-f2-iterations.html](02-device-page/multiace-f2-iterations.html), which **runs**:
+a subpanel per toolhead, its header choosing the source, driven by mode, unit count and
+Sync — and
+[multiace-toolhead-card.html](02-device-page/multiace-toolhead-card.html), which iterates
+what goes *under* that header, and
+[multiace-cabinet.html](02-device-page/multiace-cabinet.html), where the card is settled
+and the cabinet is drawn as the badge. All three carry pre-rendered copies so they also
+read with no script. **I1, bands**, is the one to build; **F4, the bus**, becomes a second view behind
+the overflow.
 
-Then, in rough order of value:
+It needs no new bridge command for most of it: `ace` is a Klipper object and
+`sw_GetMachineState {objects:{ace:null}}` answers in **277 ms**, and every control is a
+documented G-code macro. What it cannot do without Orca is name the filament in an
+*unloaded* bay — the raw slots carry no identity and `/multiace/api/state` is CORS-refused.
+
+Three things the drawing settled that reading could not:
+
+- **The shipped artwork says which way up the picture goes.** `extruderBackground.svg`
+  draws its inlet as two stubs at the *top* edge and its nozzle pointing *down*, so the
+  earlier study's **P1 — heads above, units below — draws filament climbing into a
+  nozzle**. F4 is P1 turned over. This was invisible until the real 64×140 artwork
+  replaced a placeholder rectangle, which is the argument for drawing mockups out of the
+  page's own parts rather than out of boxes.
+- **456 px is the whole argument.** That is `.filament-body` at 1920×1080, measured. A
+  toolhead is 140 of it and a unit box 130, so four open units plus the bus and the head
+  row is **815** — the picture holds one or two units and folds to a rack at three. F4 and
+  F6 are therefore one design at two densities, not rivals.
+- **A bay is drawn as a head**: the same 36 px disc and 58×19 name pill, without the
+  extruder body. Not `AMSLib`'s fill-from-the-bottom tube — that assumes a level, and
+  `spool_binding` is `{}`, so no bay has one.
+- **A subpanel per toolhead never folds.** The follow-on measured 417 px at zero, one, two
+  *and four* units — 16 bays — because a subpanel draws only its own source. F4 has to
+  collapse to a rack at three. Head-major pays for *sharing*, unit-major pays for
+  *counting*, and four units on a four-head machine is the common shape.
+- **The duplication objection was half wrong.** Four copies of one cabinet bound to one
+  state object cannot disagree; that was an objection to drawing. What survives is the
+  reading risk, answered by a dashed card edge and a `⇄` in the unit's pill.
+- **The toolhead stops carrying filament.** No colour, no material name, no pencil on the
+  artwork — filament belongs to the source, and the head's copy was the one that could go
+  stale. What the head gets instead is a **sensor marker**, and it is not a binary:
+  `filament_feed` reports `in_ace` → `in_toolhead` → `at_extruder` plus `channel_error`,
+  four readings already parsed in `feedChannels()` and shown nowhere until now.
+- **The cabinet is two halves, and each half has a job.** Spools in the upper one, their
+  materials named in the lower one, the seam running through the roll. Both greys are
+  Orca's own AMS neutrals — `#EEEEEE` over `#CECECE`. The box hugs its spools with 16 px of
+  shoulder, which is what makes it an object in the card rather than the card's ground.
+- **Splitting the bay across the halves bought the shipped bay.** A bay is now `.slot`'s
+  own 36 px disc over its 58×19 name pill, 6 px apart — the same drawing a toolhead gets,
+  at the same size, which was the point of drawing a bay as a head.
+- **The stock feeder is Snapmaker's own module, and it is black where the ACE is grey.**
+  The Automatic Filament Feeder Module is 159 g of plastic and metal with a front carrying
+  **two label strips for filament channels** — one module serves two of the four toolheads.
+  Drawn in the cabinet's own two-half shape in `#FFFFFF` over `#1F1F1F`: same seam rule,
+  same proportions, different palette. Its badge is that frame at badge size, so the tiny
+  logo and the drawing are one idea. (From the product page's text; its photography was not
+  readable.) The material chip goes **white** there — the shipped `#6E6E6E` pill vanishes
+  on black, and the chip is the only thing on the card that names the filament.
+- **The dryer is a dialog, and it is Bambu's shape in the page's chrome.** A droplet
+  filled to the reading answers *how wet* as a quantity, which is why the original works.
+  Temperature and duration are `ACE_DRY`'s own arguments, and each offers **four presets
+  and one empty field in the same row** — a preset *or* a typed value, never both. Typing
+  un-lights the preset (it is no longer what would be sent), clearing re-lights it, a
+  preset click empties the field, and an out-of-range value is clamped rather than refused.
+  The command line under the dialog updates as you type. **Automatic above a humidity**
+  (`ACE_SET_AUTO_DRY`) is the one control Bambu's has not got. It paints over the panel on
+  its own scrim, so it costs the 456 px body nothing.
+- **The feeder's badge is square; the ACE's is wide.** A cabinet is wide and a module is
+  not, so a 44×26 badge for the feeder only ever read as a squashed ACE. It is the frame at
+  badge size — white over black on a 17 px rounded square — and the frame itself carries no
+  cutouts, because two strips flanking a centred spool read as asymmetric on a card where
+  everything else sits on one line.
+- **`value` is not a reflected attribute, and neither is `selected`.** Both bit this set of
+  studies: setting the property leaves nothing in the serialised markup, so a pre-rendered
+  copy loses whatever the control held. `bake_mockup.py` checks for the `selected` case and
+  `check_mockup.py` now checks the input's `value` too.
+- **Two `...` on the panel are two different scopes, and each menu says which.** The
+  panel's holds the six ACE settings a person sets once — flush length, confirmations,
+  Spoolman, `ACE_CLEAR_HEADS`, unload-everything — because on the face of the panel they
+  would bury the four things that change daily. A subpanel's holds that one toolhead's
+  load / unload / swap, with Swap absent on a stock feeder (no other bay) and Unload greyed
+  on an empty head. Drawn in `device.css`'s own `.menu`.
+- **A filament shows an eye or a pencil, depending on who wrote it.** An RFID tag carries
+  vendor, type, colour and temperatures and none of it is ours to overwrite — read only. A
+  typed value, or an occupied bay nobody has named, is editable. The mark goes **on the
+  roll, bottom-right**: `.slot`'s own placement (under the chip) is the only one of five
+  that costs height, and it costs 33 px more than the panel has.
+- **The dryer dialog is settled** (confirmed against the drawing, 2026-08-26): the droplet
+  filled to the reading with *Idle* / *Drying* under it, Humidity and Temperature named as
+  Bambu names them, and each of `ACE_DRY`'s two arguments offered as four presets plus one
+  empty field in the same row. Automatic-above-a-humidity is the control Bambu's has not
+  got. The macro line sits under the settings and updates as you type.
+- **A bay wears nothing at rest.** Anything drawn round the roll and its chip permanently
+  either hides the seam that runs through the roll or fights it, so the shape appears only
+  **under the pointer**, as a 1.5 px `#0C63E2` border with no fill — the blue the rail
+  already uses for the selected destination. Drawn as a backing behind the bay and inset
+  negatively, so it costs no layout and moves nothing.
+- **The dryer dialog is opened by the Dry chip and by nothing else.** While the layout was
+  being chosen the study had a rig switch that forced it open; once settled, that switch
+  went. A rig control that outlives its decision is a way to reach a state no user has, and
+  the baked copies are now driven by clicking the chip rather than by setting a flag.
+- **A running dryer reports elapsed of total, not just time left.** `dryer_status` carries
+  target, duration and remaining, so elapsed is derivable — `1 h 19 m / 4 h` says where you
+  are *and* how long it was set for, in 8 px more than `2 h 41 m left`, and it costs the
+  panel nothing.
+- **Pointing at a filament shows an accent edge and nothing else.** A card listing the
+  tag's record was tried and taken back out: it covered the cabinet above it, appeared on a
+  movement rather than a decision, and duplicated what the bay's own sheet will hold. The
+  record lives in the bay's title until that sheet exists.
+- **Baking copies of a live document duplicates every id in it.** The droplet's fill is a
+  rect clipped to the droplet's outline; two baked states each carried a
+  `clipPath id="dropclip"`, a clip id resolves *document-wide*, and the second resolved to
+  the first — which sits in a `display:none` block and therefore clips nothing, so the fill
+  drew as the bare rectangle it is. Clips are numbered per instance now and
+  `bake_mockup.py` namespaces each copy's ids on the way in; `check_mockup.py` asserts no
+  two elements share an id and every `clip-path` resolves inside its own copy. Anything
+  resolved by id — `mask`, gradients, `filter`, `use href`, `aria-labelledby` — has the
+  same exposure in any mockup that bakes itself.
+- **The running dryer dialog is the same dialog.** Same width, same humidity-blue droplet,
+  same state and button styling; the state line stays one word and one plain line below it
+  reads `1 h 19 m of 4 h, at 55 °C`. An amber droplet, an amber Stop and a progress bar
+  were tried and taken out — the droplet worst of all, because it made the reading you came
+  for change meaning at the moment you came for it. So was a two-line state, which wrapped
+  in the 158 px column and grew the block under the droplet: that, and not the droplet, was
+  what made the running dialog look like a different one.
+- **"A running dryer refuses loads" was never true.** It entered this record as prose in the
+  first study's drying state and was carried into three files and a dialog before anyone
+  checked it: `/printer/gcode/help` says nothing of the kind and it was never seen on the
+  machine. Removed from all of them, and `check_mockup.py` now asserts the panel claims
+  nothing of the sort. It is worth knowing how it spread — an unverified sentence in a
+  caption is quoted by the next document as if the caption were the source.
+- ~~**Pointing at a filament shows the record its tag carries.**~~
+  `filament_detect.info[i]` holds vendor, series, nozzle range, bed temperature, drying
+  schedule and SKU — six fields `state.js` has parsed for months and that appeared nowhere
+  but a dialog. A hover card is where they fit; a typed spool shows the two it knows. None
+  of the five hover treatments costs the body a pixel, so it is decided on what it should
+  say and what it may cover.
+- **The unit row carries what the header had no room for** — which ACE it is, its humidity
+  and temperature, and the dryer. A card with no ACE names its module instead of holding an
+  empty spacer, which alignment required anyway.
+- **The humidity pill is tinted by Orca's own `hum_level1..5` buckets** (≤20, ≤35, ≤50,
+  ≤65, >65) — the same thresholds `AMSinfo` uses to pick its droplet, so the pill and the
+  C++ widget cannot disagree about the same number.
+- **The sensor dot is centred on the artwork's body.** `extruderBackground.svg` draws that
+  body `y=17.4..127.6` of its 64×140, so the middle is `(32, 72.5)` at any scale.
+- **The tube layer paints behind the cabinet.** The manifold bar sits below the box, so a
+  drop has to cross the box to reach it — and filament inside a machine is not drawn over
+  the machine. Which bay is feeding stays legible because the coloured core starts at that
+  bay's x on the bar.
+- **Everything on one centred axis.** The bays, the merge and the toolhead's inlet share
+  the card's centre line in every source, so the tube that matters is vertical — and the
+  checks assert *vertical*, not just *lands correctly*, which is how an inherited
+  `align-items: flex-start` that left-aligned every card was caught.
+- **I4 is not available.** A full-scale 140 px toolhead below its box, twice over, is
+  **595–611** against 456. At 0.40 it is 427–443 and fits; beside the box at full scale it
+  is 417. Only the frame costs height — box, tube and marker are all free.
+- **A mockup that renders itself can arrive empty.** The interactive study first shipped
+  drawing everything from its state object and landed **blank** in a viewer that strips
+  script tags — and `<noscript>` did not fire, because a *removed* tag is not the same as
+  scripting being *disabled*. It now bakes 16 pre-rendered copies into the file with
+  [`tools/bake_mockup.py`](tools/bake_mockup.py), and `check_mockup.py` fails when one goes
+  stale or when a script-looking string appears outside a real script tag. That last one is
+  not hypothetical: one in a CSS comment let a regex sanitiser swallow every copy.
+
+`head_ace` reads `{0:0, 1:1, 2:2, 3:0}` on a machine with `device_count: 1`, so heads 2
+and 3 name units that **do not exist**: resolve a head's source as `head_manual`, then
+`head_feeder`, and `head_ace` only for the remainder.
+
 Then, in rough order of value:
 
 1. **Drive the rebuilt page from inside Orca.** Narrower than it was: the whole page runs
