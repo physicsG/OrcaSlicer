@@ -40,6 +40,13 @@ import sys
 import threading
 import time
 
+# WebKit's accelerated compositor is what makes a screenshot blank here: EGL finds no
+# driver under WSL, so the window it composites into stays empty and every PNG comes out
+# byte-identical whatever changed. Rendering on the CPU instead costs nothing on a page
+# this size and is what makes --shots evidence rather than decoration. Set before Gtk is
+# imported, because WebKit reads it once.
+os.environ.setdefault("WEBKIT_DISABLE_COMPOSITING_MODE", "1")
+
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("WebKit2", "4.1")
@@ -240,6 +247,117 @@ CHECKS = r"""
         el.scrollHeight <= el.clientHeight + 1, true);
   });
 
+  // ---- the multiACE filament card ---------------------------------------
+  // Every one of these is a difference between two numbers, because that is the only
+  // thing that catches them: an inherited `align-items: flex-start` left every card in
+  // the study silently left-aligned, a `flex: 0 0 64px` collapsed the 140px toolhead to
+  // 64, and neither was visible in a picture. Screenshots here are real again, and still
+  // would not have shown either.
+  {
+    const cards = [...document.querySelectorAll('#filament .ace-card')];
+    say('the ACE panel draws one card per toolhead', cards.length, 4);
+    const mid = (e) => { const r = e.getBoundingClientRect(); return r.left + r.width / 2; };
+    const round = (v) => Math.round(v * 10) / 10;
+
+    // The machine reports head_ace {0:0, 1:1, 2:2, 3:0} with ONE unit attached, so heads
+    // 2 and 3 name units that are not there. Trusting it draws three cabinets that do
+    // not exist; head_manual and head_feeder have to be read first.
+    say('a head`s source resolves manual, then feeder, then ace',
+        cards.map((c) => c.querySelector('.ace-src').value).join(','),
+        'feeder,feeder,feeder,ace:0');
+    say('and head_ace naming a unit that is not attached draws no cabinet',
+        document.querySelectorAll('#filament .ace-cab').length, 1);
+    say('the source is a list that can name WHICH ace, not an icon triple',
+        [...cards[0].querySelectorAll('.ace-src option')].map((o) => o.textContent).join(' · '),
+        'Default feeder · ACE A · Manual');
+
+    // One centred axis: the bays, the merge and the inlet share the card's centre line,
+    // so the tube that matters is vertical.
+    const off = cards.map((c) => round(Math.abs(mid(c.querySelector('.ace-tool'))
+                                              - mid(c.querySelector('.ace-box')))));
+    say('the box and the toolhead sit on one axis on every card',
+        off.filter((d) => d > 1).length, 0);
+
+    // A bay is drawn as a head, and a stock feeder wears whatever a bay wears - or the
+    // four cards' spools stop sitting on the same two lines.
+    const at = (c, sel) => {
+      const b = c.querySelector('.ace-box').getBoundingClientRect();
+      const e = c.querySelector(sel);
+      return e ? Math.round(e.getBoundingClientRect().top - b.top) : null;
+    };
+    say('a feeder spool sits at an ACE bay`s exact height',
+        [...new Set(cards.map((c) => at(c, '.ace-disc')))].length
+        + ':' + [...new Set(cards.map((c) => at(c, '.ace-chip')))].length, '1:1');
+
+    // The seam runs THROUGH the roll as a hard stop, so half of every spool is in each
+    // half. Disc-relative, which is why widening the gap under the roll moves the chip
+    // and not the seam.
+    const cab = document.querySelector('#filament .ace-cab-top');
+    const disc = cab.querySelector('.ace-disc').getBoundingClientRect();
+    // Read off what is PAINTED, not off the custom property: an unregistered custom
+    // property computes to its own token string - `calc(5px + 36px / 2)` - so parsing it
+    // would be checking the arithmetic against itself. The computed background-image has
+    // the stop resolved to a real length.
+    const stop = parseFloat((getComputedStyle(cab).backgroundImage.match(/[\d.]+px/g) || [])
+                            .map(parseFloat).find((v) => v > 0));
+    say('the seam falls on the roll`s own centre line',
+        round(cab.getBoundingClientRect().top + stop - (disc.top + disc.height / 2)), 0);
+    // 16px of shoulder either side: the box hugs its four spools rather than filling the
+    // card, which is what makes it an object sitting IN the card rather than the card's
+    // own ground.
+    say('and the cabinet hugs its four spools',
+        Math.round(cab.getBoundingClientRect().width
+                   - cab.querySelector('.ace-bays').getBoundingClientRect().width), 32);
+
+    // The sensor dot is centred on the artwork's BODY, which extruderBackground.svg
+    // draws y=17.4..127.6 of its 64x140 - so the middle is (32, 72.5) at any scale.
+    const tool = cards[0].querySelector('.ace-tool');
+    const s = parseFloat(getComputedStyle(tool).getPropertyValue('--s'));
+    const tr = tool.getBoundingClientRect();
+    const dot = cards[0].querySelector('.ace-sensor').getBoundingClientRect();
+    say('the sensor dot is centred on the artwork`s body',
+        round(dot.left + dot.width / 2 - (tr.left + 32 * s)) + ','
+        + round(dot.top + dot.height / 2 - (tr.top + 72.5 * s)), '0,0');
+
+    // The tube is checked by arithmetic and not by looking: each coloured path is asked
+    // for its own endpoints and compared with the inlet it claims to enter.
+    let bad = 0, drawn = 0;
+    cards.forEach((c) => {
+      const p = [...c.querySelectorAll('.ace-wire path')].pop();
+      if (!p) return;
+      drawn += 1;
+      const m = p.getScreenCTM();
+      const at2 = (l) => { const q = p.getPointAtLength(l);
+                           return { x: q.x * m.a + q.y * m.c + m.e,
+                                    y: q.x * m.b + q.y * m.d + m.f }; };
+      const t = c.querySelector('.ace-tool').getBoundingClientRect();
+      const e = at2(p.getTotalLength());
+      if (Math.abs(e.x - (t.left + 32 * s)) > 1.5 || Math.abs(e.y - t.top) > 1.5
+          || Math.abs(at2(0).x - e.x) > 1.5) bad += 1;
+    });
+    say('every tube is vertical and lands on the inlet', `${drawn - bad}/${drawn}`, '4/4');
+
+    // `.panel-body` hides its overflow, so a card that outgrows its cell is clipped in
+    // silence - which is what the whole 456px budget is about.
+    say('nothing inside a card overflows its cell',
+        [...document.querySelectorAll('#filament .ace-card,#filament .ace-head,'
+                                    + '#filament .ace-hrow,#filament .ace-strip')]
+          .filter((e) => e.scrollWidth > e.clientWidth + 1).length, 0);
+    // At rest a bay wears nothing at all: anything permanent round it either hides the
+    // seam that runs through the roll or fights it.
+    const rest = getComputedStyle(document.querySelector('#filament .ace-bay'), '::before');
+    say('at rest a bay wears nothing at all',
+        rest.boxShadow + '|' + rest.backgroundColor, 'none|rgba(0, 0, 0, 0)');
+    // 215 is the whole budget: two rows plus an 8px gap plus 17 of padding is 455 in a
+    // body that measures 456 at 1920x1080. A header that grows a line costs 20 of that,
+    // and `.panel-body` is `overflow: hidden` - so it would be clipped in silence at some
+    // other window size rather than here.
+    say('a card is the height that lets two rows fit the body',
+        Math.round(cards[0].getBoundingClientRect().height), 215);
+    say('the ACE mode pill reports the mode rather than the one it was built with',
+        document.getElementById('filament-mode').textContent.trim(), 'ACE mode · Head');
+  }
+
   say('the page never scrolls sideways',
       document.documentElement.scrollWidth <= window.innerWidth + 1, true);
 
@@ -390,7 +508,13 @@ def main():
                 WebKit2.UserScriptInjectionTime.START, None, None))
         ucm.register_script_message_handler("wx")
 
-    win = Gtk.Window()
+    # An UNATTENDED run that wants pictures gets an offscreen window, because that is
+    # the one thing here that can be read back: `Gtk.OffscreenWindow.get_pixbuf()` renders
+    # the widget tree through cairo, while `Gdk.pixbuf_get_from_window` reads an X window
+    # that WebKit never drew into. A watched run keeps the real window - being able to
+    # click the page is the whole point of --watch - and takes the blank PNGs with it.
+    offscreen = bool(args.shots) and args.watch is None
+    win = Gtk.OffscreenWindow() if offscreen else Gtk.Window()
     # The Device page is responsive and its breakpoint is now load-bearing - the two
     # column layout only engages above it - so a suite that can only ever look at one
     # width can only ever check one of the two layouts.
@@ -498,8 +622,11 @@ def main():
         if not args.shots:
             return
         os.makedirs(args.shots, exist_ok=True)
-        gw = win.get_window()
-        pb = Gdk.pixbuf_get_from_window(gw, 0, 0, gw.get_width(), gw.get_height())
+        if offscreen:
+            pb = win.get_pixbuf()
+        else:
+            gw = win.get_window()
+            pb = Gdk.pixbuf_get_from_window(gw, 0, 0, gw.get_width(), gw.get_height())
         if pb is None:
             print(f"  (no pixbuf for {name})")
             return

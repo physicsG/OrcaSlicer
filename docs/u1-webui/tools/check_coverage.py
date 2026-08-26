@@ -26,6 +26,11 @@ promise: nothing stopped a panel claiming a command it never issued, and one did
 handed - js/views/<destination>/<panel>/<panel>-commands.js - so the attribution is a
 fact about the imports instead.
 
+Two surfaces, because the page has two ways to ask the printer for something. The
+bridge commands are the first; the ACE's G-code macros are the second, and the Filament
+panel is built almost entirely out of them - so a macro deliberately not offered would
+be invisible here rather than merely unbuilt. Both are held to the same rule.
+
 Sources of truth:
   data/wcp-commands.json    which commands the bundle references and the host dispatches
   resources/web/**.js       which commands the reconstruction can issue
@@ -226,6 +231,141 @@ def owned_by_panels():
     return owner
 
 
+# ---------------------------------------------------------------------------
+# The second surface: the ACE's G-code macros.
+#
+# The Filament panel's controls are not bridge commands at all - every one of them is a
+# plain macro over sw_SendGCodes - so the accounting above cannot see them, and a macro
+# that is deliberately not offered would be invisible rather than merely unbuilt. This
+# is the same discipline applied to that surface: every entry either issued by a command
+# module or excluded with a written reason, and cross-checked for existence against
+# data/ace-macros.json - which tools/ace_macros.py reads off a real printer, because
+# writing this table down is how it came to name an argument the machine ignores.
+#
+# The dangerous ones are the [EXPERIMENTAL] block. Their own help carries preconditions -
+# "requires head mode, 1:1 wiring, an OPEN dock below the head (purges ~60 mm!)" - and a
+# panel that offers them without enforcing those is a panel that purges filament onto a
+# bed.
+ACE_MACROS = {
+    "SET_ACE_MODE": None,
+    "ACE_SET_HEAD_FEEDER": None,
+    "ACE_SET_HEAD_ACE": None,
+    "ACE_SET_HEAD_MANUAL": None,
+    "ACE_LOAD_HEAD": None,
+    "ACE_UNLOAD_HEAD": None,
+    "ACE_SWAP_HEAD": None,
+    "ACE_UNLOAD_ALL_HEADS": None,
+    "ACE_DRY": None,
+    "ACE_STOP_DRYING": None,
+    "ACE_SET_AUTO_DRY": None,
+
+    "ACED__DRY_STOP":
+        "NOT BUILT  its own help says it stops \"the current ACE\" - on a machine with "
+        "two units that is whichever one is active, not the one whose chip was pressed. "
+        "ACE_STOP_DRYING takes ACE=n and is what the panel sends.",
+    "ACE_SET_PURGE": None,
+    "ACE_SET_CONFIRM_COMMANDS": None,
+    "ACE_SET_SPOOLMAN": None,
+    "ACE_CLEAR_HEADS": None,
+
+    "ACE_UNLOAD_ALL_CANCEL":
+        "NOT BUILT  the panel does not await the unload it cancels, so there is no "
+        "moment on screen at which a cancel is the obvious thing to press. It belongs "
+        "with a progress surface for the unload, which does not exist yet.",
+    "ACE_SWITCH":
+        "NOT BUILT  switches the ACTIVE unit, which only matters in multi mode. The "
+        "panel is head-major: every card names its own unit, so there is no such thing "
+        "as the active one on it.",
+    "ACE_CALIBRATION_START":
+        "not in v1  bowden calibration is a guided physical procedure - feed, mark, "
+        "return - and a panel that starts it without walking someone through it is worse "
+        "than no button.",
+    "ACE_BG_SWAP":
+        "[EXPERIMENTAL]  its own help requires head mode, 1:1 wiring and an OPEN dock "
+        "below the head, and purges ~60 mm. Offering it without enforcing those purges "
+        "filament onto a bed.",
+    "ACE_BG_UNLOAD":
+        "[EXPERIMENTAL]  same preconditions, and its own help says ~3 min.",
+    "ACE_BG_MOVE":
+        "[EXPERIMENTAL]  same preconditions.",
+}
+
+
+def macros_used():
+    """Which macros a command module can actually send.
+
+    Read the same way the bridge commands are: through the `ACE` table in protocol.js,
+    from the module a panel is handed. Referencing one IS the claim.
+    """
+    proto = open(os.path.join(WEB, "shared", "js", "protocol.js"), encoding="utf-8").read()
+    block = re.search(r"export const ACE = \{(.*?)\n\};", proto, re.S)
+    table = dict(re.findall(r"([A-Z][A-Z0-9_]*):\s*'([A-Za-z0-9_]+)'",
+                            block.group(1) if block else ""))
+    src = ""
+    js = os.path.join(WEB, "device_page", "js")
+    for root, _dirs, fs in os.walk(js):
+        for f in sorted(fs):
+            if f.endswith("-commands.js"):
+                # Comments stripped first, or the sentence explaining why ACE_BG_UNLOAD
+                # is withheld counts as a control that sends it. It did.
+                src += re.sub(r"//[^\n]*|/\*.*?\*/", "",
+                              open(os.path.join(root, f), encoding="utf-8").read(),
+                              flags=re.S)
+    used = {table[n] for n in re.findall(r"\bACE\.([A-Z][A-Z0-9_]*)", src) if n in table}
+    used |= {m for m in re.findall(r"\b(ACE[A-Z]*_[A-Z0-9_]+)\b", src) if m in ACE_MACROS}
+    return used
+
+
+def machine_macros():
+    """What the printer actually has, from data/ace-macros.json.
+
+    Written down is how this table came to name `ACE_SET_AUTO_DRY THRESHOLD=`, an
+    argument the printer accepts, answers `ok` to, and ignores. Existence is the half
+    that CAN be checked from here, so it is - see tools/ace_macros.py for where the file
+    comes from. Absent file means the cross-check is skipped rather than failed: not
+    everyone has a printer with multiACE on it.
+    """
+    path = os.path.join(DATA, "ace-macros.json")
+    if not os.path.exists(path):
+        return None
+    return set(json.load(open(path, encoding="utf-8")).get("macros") or {})
+
+
+def check_macros(quiet):
+    used = macros_used()
+    have = machine_macros()
+    offered = sorted(m for m in ACE_MACROS if m in used)
+    withheld = sorted(m for m in ACE_MACROS if m not in used and ACE_MACROS[m])
+    silent = sorted(m for m in ACE_MACROS if m not in used and not ACE_MACROS[m])
+    unknown = sorted(used - set(ACE_MACROS))
+
+    if not quiet:
+        print(f"\nACE macro surface (classified here): {len(ACE_MACROS)}")
+        print(f"  offered by the Filament panel     : {len(offered)}")
+        print(f"  withheld, with reason             : {len(withheld)}")
+        print(f"  UNACCOUNTED                       : {len(silent) + len(unknown)}")
+        for m in withheld:
+            print(f"  {m:26} {ACE_MACROS[m]}")
+    ghosts = sorted(set(ACE_MACROS) - have) if have is not None else []
+    if not quiet and have is not None:
+        print(f"  cross-checked against {len(have)} on the machine")
+    if silent:
+        print("\nUNACCOUNTED - no control sends it and no reason is written down:")
+        for m in silent:
+            print(f"  {m}")
+    if unknown:
+        print("\nUNLISTED - a command module sends a macro this table does not name:")
+        for m in unknown:
+            print(f"  {m}")
+    if ghosts:
+        print("\nNOT ON THE MACHINE - this table names a macro printer.gcode.help does")
+        print("  not have. Either the firmware dropped it or the name was written down")
+        print("  wrong; re-run tools/ace_macros.py and fix the table:")
+        for m in ghosts:
+            print(f"  {m}")
+    return 1 if (silent or unknown or ghosts) else 0
+
+
 def main():
     quiet = "--quiet" in sys.argv
     cmds = json.load(open(os.path.join(DATA, "wcp-commands.json"), encoding="utf-8"))
@@ -281,7 +421,8 @@ def main():
         print(f"\nstale exclusions - now implemented, remove from EXCLUDED:")
         for c in stale:
             print(f"  {c}")
-    return 1 if (unclassified or stale or unreachable) else 0
+    bad_macros = check_macros(quiet)
+    return 1 if (unclassified or stale or unreachable or bad_macros) else 0
 
 
 if __name__ == "__main__":

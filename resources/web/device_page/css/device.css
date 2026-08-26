@@ -463,6 +463,12 @@ body {
 }
 .status-line .mode { color: var(--accent); }
 
+/* shell.js's `status` header kind, at its default class. It had no rule until the
+   Filament panel used the default - the job card passes `job-badge` - so this is the
+   plain live label the vocabulary always promised: the panel's own dim ink, beside its
+   title, saying what the machine is. */
+.head-status { font-size: 13px; color: var(--ink-dim); }
+
 /* ---- filament panel -------------------------------------------------- */
 .icon-only {
   border: 0; background: none; cursor: pointer;
@@ -472,11 +478,317 @@ body {
 .icon-only img { width: 20px; height: 20px; }
 
 .filament-body {
-  display: flex; align-items: center; justify-content: center;
+  /* The panel has two shapes and the MACHINE picks: `.slot-row` when the printer
+     reports no `ace` object, `.ace-grid` when it does. The body itself is only the
+     padding they share. */
+  padding: 8px 20px 9px;
   min-height: 260px;
+}
+
+.slot-row {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; min-height: 243px;
   /* cards are 64 wide and the measured pitch is 174; let the gap shrink
      rather than overflow once a grid track gets narrow */
   gap: clamp(24px, 8%, 110px);
+}
+
+/* ---- the multiACE card ----------------------------------------------
+   Settled across five studies; the reasoning is in
+   docs/u1-webui/02-device-page/10-multiace-filament.md and the drawing it is settled
+   as is 02-device-page/multiace-cabinet.html.
+
+   Every number here was measured in WebKitGTK at 1920x1080, where this panel's body is
+   456px - and `.panel-body` is `overflow: hidden`, so a body past it is clipped in
+   silence. Two rows of card at 215 plus an 8px gap plus 17 of padding is 455.
+
+   Four toolheads, two by two: a subpanel per head, its header choosing what feeds it.
+   Head-major pays for SHARING a unit (one cabinet drawn once per head it feeds) and
+   unit-major pays for COUNTING them (four open unit boxes plus a bus is 815 against
+   456) - and four units on a four-head machine is the common shape, so head-major pays
+   in the cheaper currency. It also never folds: four units is sixteen bays drawn in the
+   same height as none, because a card shows only its OWN source. */
+.ace-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.ace-card {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); overflow: hidden; min-width: 0;
+}
+.ace-card.is-ace { border-color: rgba(12, 99, 226, .35); }
+/* One unit may feed several heads - ACE_SET_HEAD_ACE says nothing about the reverse -
+   so the same cabinet is drawn on more than one card. Four copies bound to one state
+   object cannot disagree; what survives is the READING risk, and this is where it is
+   answered: a dashed edge, a mark in the unit's own pill, and the sentence in its
+   title. */
+.ace-card.is-shared { border-style: dashed; }
+
+/* The card's own header is the panel header's language one step down: the same rule
+   under it, the same ink, a smaller height because it is subordinate. Two lines,
+   because the first has no room for the three things that are not optional
+   information - which ACE it is, how wet it is, and whether it is drying. */
+.ace-head {
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px;
+  padding: 2px 10px 3px;
+  background: var(--pill); border-bottom: 1px solid var(--line);
+}
+.ace-hrow { display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; }
+.ace-hrow .spacer { flex: 1; }
+.ace-name { font-size: 12.5px; color: var(--ink); white-space: nowrap; }
+
+/* A list, not an icon switch. The icon triple was 102px wide and could not name WHICH
+   ACE; with four units the question has six answers. */
+.ace-src {
+  height: 22px; max-width: 140px; min-width: 0;
+  border: 0; border-radius: 4px; padding: 0 22px 0 7px;
+  background-color: var(--pill); color: var(--ink);
+  font: 12px/1 var(--sans); cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%23666' stroke-width='1.3'/></svg>");
+  background-repeat: no-repeat; background-position: right 6px center;
+}
+.ace-src:hover:not(:disabled) { color: var(--accent); }
+.ace-src:disabled { opacity: .42; cursor: not-allowed; }
+.ace-src:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Held on screen until the machine agrees it happened - see core/pending.js. */
+.ace-src[data-pend="sent"] { box-shadow: inset 0 0 0 1px var(--accent); }
+.ace-src[data-pend="lost"] { box-shadow: inset 0 0 0 1px var(--warn); }
+
+.ace-more { height: 22px; font-size: 13px; color: var(--ink-dim); line-height: 1; }
+.ace-more:hover { color: var(--accent); }
+
+/* The unit's own line. A card with no ACE names its module here rather than holding an
+   empty spacer, which alignment required anyway. */
+.ace-strip {
+  display: flex; align-items: center; gap: 7px;
+  height: 17px; padding: 0 4px; margin-bottom: 2px; min-width: 0;
+}
+.ace-strip .spacer { flex: 1; }
+.ace-badge { flex: 0 0 auto; display: block; }
+/* The ACE's badge is 44x26 because a cabinet is wide. The feeder module is not a cabinet,
+   and a wide badge for it only ever read as a squashed ACE. */
+.ace-modbadge { width: 17px; height: 17px; }
+.ace-unit {
+  font: 11px/1.3 var(--mono); color: var(--ink-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.ace-unit b { color: var(--ink); font-weight: 600; }
+
+/* AMSHumidity's own shape: two readings and one divider, on the block grey. Untinted -
+   the tinted variant said what the number already said and made a reading that is
+   usually fine look like a warning. */
+.ace-hum {
+  height: 17px; display: inline-flex; align-items: center; gap: 4px; padding: 0 7px;
+  border-radius: 10px; font: 11px/1 var(--sans); white-space: nowrap;
+  background: #EEEEEE; color: var(--ink); box-shadow: inset 0 0 0 1px #DEDEDE;
+}
+.ace-sep { width: 1px; height: 11px; background: #C2C2C2; }
+.ace-share { opacity: .75; }
+
+/* The chip offers `Dry` while it is idle and reports elapsed OF TOTAL while it runs -
+   where you are and how long it was set for, in 8px more than "2 h 41 m left". Clicking
+   it is the only thing that opens the dryer dialog. */
+.ace-dry {
+  height: 17px; flex: 0 0 auto;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--panel); color: var(--ink-dim); font: 11px/1 var(--sans);
+  padding: 0 8px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+}
+.ace-dry:hover { border-color: var(--accent); color: var(--accent); }
+.ace-dry.is-running { background: #FDF1E3; border-color: #E3B57A; color: #8A5A12; }
+
+.ace-body {
+  position: relative; min-width: 0;
+  padding: 4px 9px 5px;
+  display: flex; flex-direction: column; gap: 2px; align-items: stretch;
+}
+/* The manifold sits below the cabinet, so the drop from a bay has to cross the box to
+   reach it - and filament inside a machine is not drawn over the machine. The lane is
+   the room the bar needs. */
+.ace-lane { position: relative; height: 9px; }
+.ace-wire {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  overflow: visible; pointer-events: none; z-index: 0;
+}
+
+/* `.slot`'s own geometry, at `.slot`'s own size: a 36px disc over a 58x19 name pill,
+   6px apart. Splitting the bay across the cabinet's two halves is what made that
+   affordable - with both in the upper half the box was 71px and a bay had to shrink to
+   26/52, which would have been a second language for the same substance. */
+.ace-box { --disc: 36px; --pillw: 58px; --pillh: 19px; --bay-gap: 6px; }
+/* The seam runs through the MIDDLE of the spool, as a hard colour stop, so half of
+   every roll is in each half. Disc-relative, which is why widening the gap under the
+   roll moves the chip without moving the seam. */
+.ace-cab, .ace-feed { position: relative; --seam: calc(5px + var(--disc) / 2); }
+.ace-cab-top, .ace-feed-top {
+  position: relative; z-index: 2;
+  width: fit-content; margin: 0 auto;
+  padding: 5px 16px; border-radius: 9px;
+}
+/* Orca's own AMS neutrals: AMS_CONTROL_DEF_BLOCK_BK_COLOUR over
+   AMS_CONTROL_DISABLE_COLOUR. The box hugs its four spools rather than filling the
+   card - at four bays, full width was mostly empty grey. */
+.ace-cab-top {
+  background: linear-gradient(180deg, #EEEEEE 0 var(--seam), #CECECE var(--seam) 100%);
+}
+/* The stock feeder is the same drawing in the module's own black and white: Snapmaker's
+   Automatic Filament Feeder Module is a different device and one glance should say so.
+   A frame may change HORIZONTAL padding and nothing else, or a feeder's spool stops
+   sitting at an ACE bay's exact height. */
+.ace-feed-top {
+  background: linear-gradient(180deg, #FFFFFF 0 var(--seam), #1F1F1F var(--seam) 100%);
+  box-shadow: inset 0 0 0 1px #D9DDE3;
+}
+.ace-bays, .ace-feed-row {
+  display: flex; gap: 10px; justify-content: center; align-items: flex-start;
+  position: relative;
+}
+
+.ace-bay {
+  position: relative; display: block; cursor: pointer;
+  border: 0; background: none; padding: 0;
+  width: calc(var(--pillw) + 4px); flex: 0 0 calc(var(--pillw) + 4px);
+}
+/* Nothing is drawn round a bay at rest: anything permanent there either hides the seam
+   that runs through the roll or fights it. The shape appears only under the pointer, as
+   a 1.5px border with no fill - the blue the rail already uses for the selected
+   destination - drawn as a backing BEHIND the bay and inset negatively, so it costs no
+   layout and the bays keep their exact positions whether it is there or not. */
+.ace-bay::before {
+  content: ""; position: absolute; inset: -4px; border-radius: 11px;
+  z-index: 0; pointer-events: none; transition: box-shadow .1s;
+}
+.ace-bay:hover::before, .ace-bay.is-hover::before {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.ace-disc {
+  position: relative; z-index: 1; margin: 0 auto;
+  width: var(--disc); height: var(--disc); border-radius: 50%;
+  display: grid; place-items: center;
+  font: 500 calc(var(--disc) * .33) / 1 var(--mono); color: #333;
+  box-shadow: 0 0 0 3px #FFFFFF;
+  /* the checkerboard is this page's word for EMPTY, exactly as the shipped page draws
+     it - which is why an occupied-but-unnamed bay must never wear it */
+  background-image:
+    linear-gradient(45deg, #C4C4C4 25%, transparent 25%, transparent 75%, #C4C4C4 75%),
+    linear-gradient(45deg, #C4C4C4 25%, transparent 25%, transparent 75%, #C4C4C4 75%);
+  background-size: 8px 8px; background-position: 0 0, 4px 4px; background-color: #E4E4E4;
+}
+.ace-disc[data-loaded="1"] { background-image: none; }
+.ace-bay.is-fed .ace-disc { box-shadow: 0 0 0 2px var(--ok), 0 0 0 5px #FFFFFF; }
+.ace-chip {
+  position: relative; z-index: 1; display: block;
+  margin: var(--bay-gap) auto 0;
+  width: var(--pillw); height: var(--pillh); line-height: var(--pillh);
+  border-radius: calc(var(--pillh) / 2);
+  background: #6E6E6E; color: #fff;
+  font-size: calc(var(--pillh) * .66); text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ace-bay.is-unknown .ace-chip { background: #B7BDC6; }
+
+/* An RFID tag carries vendor, type, colour and temperatures and none of it is ours to
+   overwrite, so it gets an eye where a typed value gets a pencil. On the roll,
+   bottom-right: `.slot`'s own placement under the chip is the only one of five that
+   costs height, and it costs 33px more than the panel has. */
+.ace-prov {
+  position: absolute; z-index: 3; pointer-events: none;
+  left: calc(50% + var(--disc) / 2 - 13px); top: calc(var(--disc) - 12px);
+  width: 17px; height: 17px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: #4A5563; background: #fff; box-shadow: 0 1px 2px rgba(16, 24, 40, .22);
+}
+.ace-bay:hover .ace-prov { color: var(--accent); }
+.ace-glyph { display: block; }
+
+/* The head carries no filament identity any more - no colour, no material, no pencil.
+   What it has of its own is a SENSOR, and the printer reports that properly. */
+.ace-toolwrap { display: flex; justify-content: center; align-items: flex-end; }
+.ace-tool {
+  position: relative; --s: .5;
+  width: calc(64px * var(--s)); height: calc(140px * var(--s));
+  background: url("../icons/extruderBackground.svg") no-repeat center / 100% 100%;
+}
+/* Centred on the artwork's BODY: extruderBackground.svg draws that body y=17.4..127.6
+   of its 64x140, so the middle is (32, 72.5) at whatever scale. */
+.ace-sensor {
+  position: absolute; box-sizing: content-box;
+  left: calc(32px * var(--s) - 7.5px); top: calc(72.5px * var(--s) - 7.5px);
+  width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--panel);
+}
+.ace-sensor.is-at { background: var(--ok); }
+.ace-sensor.is-tube { background: #E8A33D; }
+.ace-sensor.is-none {
+  background: var(--panel); border-color: #B7BDC6; box-shadow: inset 0 0 0 1px #B7BDC6;
+}
+.ace-sensor.is-err { background: var(--err); }
+
+/* Two `...` a few pixels apart mean two different scopes - the panel's is the printer,
+   a card's is one toolhead - so each menu names its own on the way open, and each item
+   names the macro behind it. */
+.menu-head {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+  color: #9AA3AF; padding: 5px 16px 6px; font-weight: 600;
+}
+.menu-item .mcmd {
+  margin-left: auto; font: 10px/1 var(--mono); color: #B9BFC8; padding-left: 10px;
+}
+
+/* ---- the dryer dialog -----------------------------------------------
+   Bambu's AMS Dryness Control, in this page's own dialog chrome. It answers four
+   questions - how wet is it, is it drying, how hard, for how long - and it answers the
+   first AS A QUANTITY, which is most of why it works. The running dialog is the SAME
+   dialog: an amber droplet was tried and taken out, because it made the reading you
+   came for change meaning at the moment you came for it. */
+.dry-sub { margin: 0 0 10px; font: 11px/1.4 var(--mono); color: var(--ink-dim); }
+.dry-cols { display: flex; gap: 18px; }
+.dry-c1 { width: 158px; flex: 0 0 158px; }
+.dry-c2 { flex: 1; min-width: 0; }
+.dry-drop { width: 88px; height: 104px; position: relative; margin: 2px auto 0; }
+.dry-drop svg { display: block; }
+/* One word, whatever the state: a two-line state wraps in this column and grows the
+   block under the droplet, which reads as the droplet having moved. */
+.dry-state {
+  text-align: center; font-size: 13px; font-weight: 600; color: var(--ink); margin-top: 6px;
+}
+.dry-reads { display: flex; justify-content: center; margin-top: 10px; }
+.dry-read { flex: 1; text-align: center; padding: 0 8px; }
+.dry-read + .dry-read { border-left: 1px solid var(--line); }
+.dry-k { display: block; font-size: 11px; color: var(--ink-dim); }
+.dry-v { display: block; font-size: 16px; color: var(--ink); margin-top: 1px; }
+.dry-field { margin-bottom: 10px; }
+.dry-field .dry-k { margin-bottom: 4px; }
+/* A preset OR a typed value, never both, and in ONE row because it is one choice: the
+   macro takes a number and not a menu, and a spool whose tag says 65 °C for 8 h should
+   not have to be rounded to the nearest chip. */
+.dry-seg {
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px;
+  background: var(--pill); border-radius: 6px; padding: 3px;
+}
+.dry-opt {
+  padding: 4px 9px; border-radius: 4px; font-size: 12px; color: var(--ink-dim);
+  cursor: pointer; line-height: 1.3;
+}
+.dry-opt.is-on {
+  background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(16, 24, 40, .10);
+}
+.dry-custom {
+  width: 62px; height: 24px; margin-left: 3px;
+  border: 1px solid var(--line); border-radius: 4px; padding: 0 6px;
+  font: 12px/1 var(--sans); color: var(--ink); background: #fff;
+  -moz-appearance: textfield;
+}
+.dry-custom::-webkit-inner-spin-button,
+.dry-custom::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.dry-custom::placeholder { color: #9AA3AF; }
+.dry-custom:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.dry-custom.is-on { border-color: var(--accent); font-weight: 600; }
+.dry-note { margin: 6px 0 0; font-size: 11.5px; color: var(--ink-dim); line-height: 1.5; }
+/* What would be sent, updating as you type. An ACE macro is slow and physical; being
+   able to read it before pressing the button is worth a line. */
+.dry-cmd {
+  margin-top: 8px; padding-top: 7px; border-top: 1px dashed var(--line);
+  font: 10.5px/1.6 var(--mono); color: #9AA3AF; word-break: break-word;
 }
 
 /* Each slot is the bundle's own 64x140 extruder artwork with the live values

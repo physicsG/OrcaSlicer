@@ -259,6 +259,10 @@ export function createSession({ bridge, state, store, setStatus, render, refresh
         .then(() => { lastPong = Date.now(); })
         .catch(() => { /* the staleness window decides; nothing to record */ })
         .then(() => render());
+      // `ace` is not on the stream, and humidity and a running dryer both move without
+      // anyone asking. One 277 ms read per heartbeat is what keeps them from going stale
+      // on screen; everything that CHANGES the ACE re-reads it for itself.
+      refreshAce();
     }, 30000);
   }
   /**
@@ -312,6 +316,28 @@ export function createSession({ bridge, state, store, setStatus, render, refresh
       /* a wait must not fail because a status read did; it just learns nothing */
     }
   }
+  /**
+   * Fetch `ace` once, outside the subscription.
+   *
+   * The multiACE state - which unit feeds which head, what is in every bay, humidity,
+   * the dryer - is a Klipper object, and it is not in SUBSCRIBE_OBJECTS: that list is
+   * pinned to the shipped bundle's and the conformance suite holds it there. So it is
+   * asked for, the same way `toolhead` is. Measured at 277 ms against the printer, so
+   * it is cheap enough to re-read on the heartbeat and after every ACE command rather
+   * than to poll on a clock of its own.
+   *
+   * A machine with no multiACE plugin answers with nothing for it, which is the honest
+   * signal that there is no ACE here: `state.ace().present` is false and the Filament
+   * panel draws the four slots it always did.
+   */
+  async function refreshAce() {
+    try {
+      const snap = await bridge().request(CMD.GET_MACHINE_STATE, { objects: { ace: null } });
+      state.applyPayload(snap);
+    } catch (e) {
+      /* no multiACE, or no printer; either way the panel degrades rather than fails */
+    }
+  }
   async function startStateStream(reason) {
     // The three calls are independent and must not be chained. sw_SetSubscribeFilter
     // forwards `printer.objects.setSubscribeFilter` to the printer and waits for a
@@ -329,6 +355,7 @@ export function createSession({ bridge, state, store, setStatus, render, refresh
       hostLog(`snapshot ok (${reason}): ${Object.keys(state.objects).length} objects`);
       ok = Object.keys(state.objects).length > 0;
       refreshToolhead();          // homed_axes is not in the subscribed set
+      refreshAce();               // nor is `ace`; see refreshAce above
     } catch (e) {
       hostLog(`snapshot failed (${reason}): ${e.message}`, 'error');
     }
@@ -357,6 +384,7 @@ export function createSession({ bridge, state, store, setStatus, render, refresh
     startHeartbeat,
     refreshToolhead,
     refreshWaitState,
+    refreshAce,
     /** Whether this page brought the session up, and can therefore take it down. */
     get engineId() { return engineId; },
   };

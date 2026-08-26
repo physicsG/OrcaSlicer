@@ -17,6 +17,8 @@ nobody runs.
 | `no-printer.js` | The not-connected branch, forced with `--device-ip 192.0.2.1`. Camera discovery reads the device record, so anything touching it belongs here. |
 | `popover-live.js` | That an open popover follows the state it draws. The camera's settings shipped built-once: every control worked and none of them moved its own tick until the panel was reopened. Also checks the Control panel's sliders are *not* rebuilt, which is the other half. |
 | `job-band.js` | The job card's shape: the thumbnail anchoring, the metadata on the name's line, the buttons riding the bar's line, and the status word living in the panel header and following the machine rather than a click. 27 checks. |
+| `ace-panel.js` | The multiACE Filament card, through the states the synchronous checks cannot reach: no `ace` object at all, four units, one unit feeding every head, a source switched and held until the machine agrees, the dryer run and stopped, both menus and their two scopes, and a bay click that asks before it purges. 51 checks. |
+| `ace-real.js` | The same panel against a **real printer**, and **read-only on purpose** — it dumps the raw `ace` object and checks the panel drew it, and sends nothing. `ace-panel.js` switches sources, loads bays and starts the dryer; a suite should not be able to purge a nozzle. Needs `--real`, and Orca closed. 26 checks. |
 | `task-card.js` | That the Printing Task panel is as tall as its card. It was pinned at 150 px against a 304 px card, and `.panel-body` hides its overflow — so the progress bar and both job buttons were cut off with nothing to say they had been. |
 
 ```bash
@@ -24,12 +26,19 @@ R=resources/web/shared/tests
 python3 $R/run_webkit.py --size 1920x1080 --drive $R/drive/camera.js
 python3 $R/run_webkit.py --size 1920x1080 --drive $R/drive/dom-dump.js > /tmp/before.txt
 python3 $R/run_webkit.py --real --size 1920x1080 --drive $R/drive/camera-real.js
+python3 $R/run_webkit.py --size 1920x1080 --drive $R/drive/ace-panel.js
+python3 $R/run_webkit.py --real --size 1920x1080 --drive $R/drive/ace-real.js
 python3 $R/run_webkit.py --real --device-ip 192.0.2.1 --drive $R/drive/no-printer.js
 ```
 
 **`--size` matters.** The Device page's two-column layout only engages at 1600 and above;
 below it the page is one centred column and half of what these check does not apply.
 `run_webkit.py`'s own checks branch on the same number.
+
+**A drive script can pose a state for a picture.** `--shots` fires after the script
+reports, so a script that ends in the state you want to look at gives you a screenshot of
+it — and `--shots` produces real PNGs now, because an unattended run renders offscreen
+through cairo rather than reading back a window WebKit never composited into.
 
 **`--real` needs Orca closed** — it authenticates with the same saved `clientId`, and a
 broker evicts the older holder.

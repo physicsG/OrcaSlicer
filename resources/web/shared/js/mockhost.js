@@ -119,8 +119,14 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
         case 'sw_SetSubscribeFilter':
           filter = params.objects || null;
           return ok({ accepted: Object.keys(filter || SUBSCRIBE_OBJECTS).length });
-        case 'sw_GetMachineState':
-          return ok(statusEnvelope(printer.snapshot(), 'query'));
+        case 'sw_GetMachineState': {
+          const objs = printer.snapshot();
+          // `ace` is not in the subscription - the shipped bundle does not subscribe it
+          // and the page asks for it by name - so it comes back only when it is asked
+          // for, which is also what makes "no multiACE here" a state a test can reach.
+          if (params.objects && 'ace' in params.objects && printer.ace) objs.ace = printer.ace;
+          return ok(statusEnvelope(objs, 'query'));
+        }
         case 'sw_SubscribeMachineState': {
           if (!eventId) return fail('sw_SubscribeMachineState requires an event_id');
           subs.set(eventId, true);
@@ -161,7 +167,11 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
         case 'sw_ControlPurifier':
           if (params.mode != null) printer.purifierMode = params.mode; return ok({});
         case 'sw_SendGCodes':
-          printer.gcodeLog.push(params.script); return ok({ executed: params.script });
+          printer.gcodeLog.push(params.script);
+          // The macros the Filament panel sends actually move the simulated ACE, so a
+          // control that waits to be told it happened has something to be told.
+          if (printer.gcode) String(params.script).split('\n').forEach((l) => printer.gcode(l));
+          return ok({ executed: params.script });
 
         /* ---- bringing a session up ------------------------------------- */
         // Mirrors the real sequence: the printer shows a PIN, the page hands it
@@ -404,6 +414,90 @@ function clamp01(v) { return Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0)
  * A small but honest U1 simulation: four toolheads, one active at a
  * time, heaters that ramp toward target, a job that progresses.
  * ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ *
+ * The ACE, as the printer reports it
+ *
+ * Copied field for field off 811002511261022618B3 on 2026-08-25: one ACE 2 Pro on
+ * `protocol: "v2"`, head mode, feeding Toolhead 4 from bay 3, four PETG spools, 38 % RH
+ * at 31 C. Including the two things about it that are easy to get wrong, because a
+ * simulator that smooths them over is a simulator that lets the bug through:
+ *
+ *   `head_ace` reads {0:0, 1:1, 2:2, 3:0} with ONE unit attached, so heads 2 and 3 name
+ *   units that are not there. A page that trusts it draws three cabinets that do not
+ *   exist. The resolver has to reach for head_manual and head_feeder first, and this is
+ *   the state that proves it does.
+ *
+ *   Every raw slot reads {material:"", brand:"", rfid:0}. The hardware carries no
+ *   per-bay identity at all - these spools have no tags and their names live in
+ *   multiACE's own store, behind CORS - so the panel's job is to draw
+ *   occupied-and-unnamed as exactly that. Only the bay that is LOADED has a name, and it
+ *   comes from head_source.
+ *
+ * A drive script that wants a tagged spool, a second unit or a running dryer sets them
+ * on `mock.printer.ace` directly. Invented state belongs in the test that wants it, not
+ * in the record of what the machine said.
+ * ------------------------------------------------------------------ */
+function mockAce() {
+  const slot = (i) => ({ index: i, status: 'unknown', sku: '', material: '', subtype: '',
+                         rfid: 0, brand: '', color: [0, 0, 0] });
+  return {
+    api_version: 1,
+    mode: 'head',
+    status: 'ready',
+    temp: 30,
+    device_count: 1,
+    active_device: 0,
+    ace_head: 3,
+    ace_heads: [3],
+    swap_in_progress: false,
+    swap_phase: 'idle',
+    last_swap_result: null,
+    event_seq: 0,
+    gate_status: [1, 1, 1, 1],
+    // The settings a person sets once - all reported, which is what makes the panel's
+    // dialogs able to open on the machine's own values instead of on a default.
+    confirm_commands: false,
+    spoolman_url: 'http://192.168.2.30:7912',
+    spoolman_auto: false,
+    purge_matrix: true,
+    spool_mode: 'spoolman',
+    spool_binding: {},
+    spools: {},
+    dryer_status: { status: 'stop', target_temp: 0, duration: 0, remain_time: 0 },
+    auto_dry_masters: [0],
+    head_manual: { 0: false, 1: false, 2: false, 3: false },
+    head_feeder: { 0: true, 1: true, 2: true, 3: false },
+    head_ace: { 0: 0, 1: 1, 2: 2, 3: 0 },
+    head_reader_spool: { 0: 0, 1: 0, 2: 0, 3: 0 },
+    head_tag_seen: {},
+    head_source: {
+      0: null, 1: null, 2: null,
+      3: { ace_index: 0, slot: 2, type: 'PETG', subtype: 'Basic',
+           color: '632C2C', brand: 'Generic' },
+    },
+    aces: [{
+      idx: 0, connected: true, protocol: 'v2', model: 'ACE 2 Pro', firmware: 'V1.1.26',
+      status: 'ready', temp: 30, humidity: 38, feed_assist: -1, fw_hold: false,
+      auto_dry: { enabled: false, rh_start: 45, rh_end: 35, temp: 50,
+                  master: -1, add_time: 60 },
+      auto_dry_running: false,
+      dryer_status: { status: 'stop', target_temp: 0, duration: 0, remain_time: 0 },
+      gate_status: [1, 1, 1, 1],
+      slots: [slot(0), slot(1), slot(2), slot(3)],
+    }],
+  };
+}
+
+/** `ACE_DRY TEMP=55 DURATION=4` -> {TEMP: '55', DURATION: '4'}. */
+function gcodeArgs(script) {
+  const out = {};
+  String(script).trim().split(/\s+/).slice(1).forEach((tok) => {
+    const m = /^([A-Za-z_]+)=(.*)$/.exec(tok);
+    if (m) out[m[1].toUpperCase()] = m[2];
+  });
+  return out;
+}
+
 export function makePrinter() {
   const p = {
     sn: 'U1MOCK0000000001',
@@ -470,6 +564,9 @@ export function makePrinter() {
         total_duration: 12.7, filament_used: 0.0, user: 'No User' },
     ],
     defect: { enable: true, sensitivity: 1 },
+    // The multiACE state, as the machine reports it - see mockAce() above. Null is a
+    // machine with no multiACE plugin, which is the other half the panel has to draw.
+    ace: mockAce(),
     // A real 16-hex fault so the banner can be exercised: toolhead subsystem
     // 0523, unit 1 -> "Toolhead 2".
     fault: null,
@@ -498,6 +595,126 @@ export function makePrinter() {
   p.filamentUsed = 4831.5;
   p.fanMain = 0.85;
   p.fanCavity = 0.4;
+
+  /**
+   * What an ACE macro does to the simulated machine.
+   *
+   * The page never awaits one of these - an instant `ok` is indistinguishable from
+   * success, and ACE_BG_UNLOAD's own help says ~3 min - so it confirms what it asked for
+   * against machine state instead. That only means anything if the state actually moves,
+   * which is what this is for: the simulator answers `ok` AND changes, so
+   * core/pending.js has something to resolve against.
+   *
+   * Deliberately instant. Modelling the three minutes belongs in a test that wants to
+   * watch a wait time out, not in the default path.
+   */
+  p.gcode = (script) => {
+    const line = String(script || '').trim();
+    const name = line.split(/\s+/)[0].toUpperCase();
+    const a = gcodeArgs(line);
+    const ace = p.ace;
+    if (!ace) return;
+    const head = Number(a.HEAD);
+    const unit = Number(a.ACE);
+    const slot = Number(a.SLOT);
+    switch (name) {
+      case 'SET_ACE_MODE':
+        if (a.MODE) ace.mode = String(a.MODE).toLowerCase();
+        break;
+      case 'ACE_SET_HEAD_MANUAL':
+        if (Number.isInteger(head)) {
+          ace.head_manual[head] = a.ENABLE !== '0';
+          if (ace.head_manual[head]) ace.head_feeder[head] = false;
+        }
+        break;
+      case 'ACE_SET_HEAD_FEEDER':
+        if (Number.isInteger(head)) {
+          ace.head_feeder[head] = a.ENABLE !== '0';
+          if (ace.head_feeder[head]) ace.head_manual[head] = false;
+        }
+        break;
+      case 'ACE_SET_HEAD_ACE':
+        // Binding a head to a unit is the one that has to clear the other two, because
+        // head_feeder is what the resolver reads FIRST.
+        if (Number.isInteger(head) && Number.isInteger(unit)) {
+          ace.head_ace[head] = unit;
+          ace.head_feeder[head] = false;
+          ace.head_manual[head] = false;
+        }
+        break;
+      case 'ACE_LOAD_HEAD':
+      case 'ACE_SWAP_HEAD': {
+        if (!Number.isInteger(head)) break;
+        const u = Number.isInteger(unit) ? unit : ace.active_device;
+        const s = Number.isInteger(slot) ? slot : 0;
+        const bay = (ace.aces[u] || {}).slots ? ace.aces[u].slots[s] : null;
+        ace.head_source[head] = {
+          ace_index: u, slot: s,
+          type: (bay && bay.material) || 'PETG',
+          subtype: (bay && bay.subtype) || '',
+          color: (bay && bay.color) || [99, 44, 44],
+          brand: (bay && bay.brand) || 'Generic',
+        };
+        break;
+      }
+      case 'ACE_UNLOAD_HEAD':
+        delete ace.head_source[head];
+        break;
+      case 'ACE_UNLOAD_ALL_HEADS':
+        ace.head_source = {};
+        break;
+      case 'ACE_CLEAR_HEADS':
+        if (Number.isInteger(head)) delete ace.head_source[head];
+        else ace.head_source = {};
+        break;
+      case 'ACE_DRY': {
+        // As measured: DURATION is MINUTES on the wire, and the object reports seconds.
+        // `status` is `keeping` while it runs and `stop` when it does not.
+        const d = ace.aces[Number.isInteger(unit) ? unit : 0];
+        if (!d) break;
+        const secs = (Number(a.DURATION) || 240) * 60;
+        d.dryer_status = { status: 'keeping', target_temp: Number(a.TEMP) || 55,
+                           duration: secs, remain_time: secs };
+        ace.dryer_status = d.dryer_status;
+        break;
+      }
+      case 'ACE_STOP_DRYING':
+      case 'ACED__DRY_STOP': {
+        // ACE_STOP_DRYING takes the unit; ACED__DRY_STOP stops the active one. The
+        // simulator answers both, because both exist on the machine.
+        const only = name === 'ACE_STOP_DRYING' && Number.isInteger(unit) ? unit : null;
+        ace.aces.forEach((d, k) => {
+          if (only !== null && k !== only) return;
+          d.dryer_status = { status: 'stop', target_temp: 0, duration: 0, remain_time: 0 };
+        });
+        ace.dryer_status = { status: 'stop', target_temp: 0, duration: 0, remain_time: 0 };
+        break;
+      }
+      case 'ACE_SET_AUTO_DRY': {
+        // ENABLE and RH_START, both settled against the machine. THRESHOLD= was the
+        // guess before that: the printer answered `ok` and changed nothing, so the
+        // simulator ignores it exactly as the printer does.
+        const d = ace.aces[Number.isInteger(unit) ? unit : 0];
+        if (!d) break;
+        if (a.ENABLE !== undefined) d.auto_dry.enabled = a.ENABLE !== '0';
+        if (a.RH_START !== undefined) d.auto_dry.rh_start = Number(a.RH_START);
+        if (a.RH_END !== undefined) d.auto_dry.rh_end = Number(a.RH_END);
+        break;
+      }
+      case 'ACE_SET_CONFIRM_COMMANDS':
+        if (a.ENABLE !== undefined) ace.confirm_commands = a.ENABLE !== '0';
+        break;
+      case 'ACE_SET_SPOOLMAN':
+        if (a.URL !== undefined) ace.spoolman_url = a.URL;
+        if (a.AUTO !== undefined) ace.spoolman_auto = a.AUTO !== '0';
+        break;
+      case 'ACE_SET_PURGE':
+        if (a.MATRIX !== undefined) ace.purge_matrix = a.MATRIX !== '0';
+        break;
+      default:
+        break;                                    // any other script is just logged
+    }
+  };
 
   p.pause  = () => { p.printState = 'paused';   p.mainState = 'paused'; };
   p.resume = () => { p.printState = 'printing'; p.mainState = 'printing'; };
@@ -532,6 +749,14 @@ export function makePrinter() {
     } else if (p.printState !== 'complete') {
       p.totalDuration += 1;
     }
+
+    // A running dryer counts down. Nothing pushes `ace` - it is not on the stream - so
+    // this is only seen when the page next asks for it, which is exactly how the real
+    // one behaves.
+    (p.ace ? p.ace.aces : []).forEach((d) => {
+      const st = d.dryer_status;
+      if (st && st.status === 'keeping' && st.remain_time > 0) st.remain_time -= 1;
+    });
     return p.snapshot();
   };
 

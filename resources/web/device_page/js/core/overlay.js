@@ -32,15 +32,24 @@ document.addEventListener('keydown', (e) => {
 
 /**
  * Open a menu under `anchor`.
- * items: [{label, icon, onClick, muted}] - a null entry draws a divider.
+ *
+ * items: [{label, icon, onClick, muted, cmd, title}] - a null entry draws a divider.
+ * `cmd` prints the macro or object behind the item, right-aligned; `title` is the
+ * hover text, and defaults to `cmd`.
+ *
+ * `head` names the menu's scope. The Filament panel has two `...` a few pixels apart -
+ * one about the printer, one about a single toolhead - and two identical glyphs meaning
+ * two different things is a real ambiguity. Saying which costs a line that was going to
+ * be there anyway, so it is worth having wherever a page grows a second menu.
  */
-export function openMenu(anchor, items) {
+export function openMenu(anchor, items, { head = null } = {}) {
   closeMenu();
   const r = anchor.getBoundingClientRect();
   const m = el('div', 'menu');
   m.style.left = `${Math.round(r.left + 16)}px`;
   m.style.top = `${Math.round(r.bottom - 8)}px`;
 
+  if (head) m.appendChild(el('div', 'menu-head', head));
   items.forEach((it) => {
     if (!it) { m.appendChild(el('div', 'menu-sep')); return; }
     const row = el('button', 'menu-item' + (it.muted ? ' is-muted' : ''));
@@ -51,12 +60,29 @@ export function openMenu(anchor, items) {
       row.appendChild(i);
     }
     row.appendChild(el('span', null, it.label));
+    if (it.cmd) row.appendChild(el('span', 'mcmd', String(it.cmd).split(' ')[0]));
+    if (it.title || it.cmd) row.title = it.title || it.cmd;
     row.onclick = (ev) => { ev.stopPropagation(); closeMenu(); it.onClick && it.onClick(); };
     m.appendChild(row);
   });
 
   document.body.appendChild(m);
   openMenuEl = m;
+  // A control that opened a menu IS a menu anchor, and the document listener above needs
+  // to know: without this the click that opened the menu goes on bubbling to document,
+  // which closes it again in the same tick. Only the device selector had the attribute
+  // written on it by hand, so every menu added since would have opened and shut.
+  anchor.setAttribute('data-menu-anchor', '');
+
+  // A menu opened from the right-hand edge of a panel would otherwise hang off the
+  // window; the anchor is often 20px from it.
+  const box = m.getBoundingClientRect();
+  if (box.right > window.innerWidth - 8) {
+    m.style.left = `${Math.round(Math.max(8, window.innerWidth - box.width - 8))}px`;
+  }
+  if (box.bottom > window.innerHeight - 8) {
+    m.style.top = `${Math.round(Math.max(8, window.innerHeight - box.height - 8))}px`;
+  }
   return m;
 }
 

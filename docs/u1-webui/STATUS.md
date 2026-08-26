@@ -608,7 +608,9 @@ and there is no pycairo here.
 
 ## What to pick up next
 
-**Two of three design changes are built and driven against the machine.** The study is
+**All three design changes are built.** Two are driven against the machine; the third —
+multiACE — is driven against the simulator, seeded from the machine's own payload, and
+has not yet had an ACE in front of it. The study is
 [02-device-page/camera-layout-ace-mockup.html](02-device-page/camera-layout-ace-mockup.html)
 — the versions that were weighed, with the ones not chosen still switchable in it.
 
@@ -616,7 +618,7 @@ and there is no pycairo here.
 |---|---|---|
 | **Layout** | L3 + H1 | **built** — two unequal columns, no C++ |
 | **Camera** | S2 + view grid + M-A | **built** — 9.5 fps against 0.5, no C++ |
-| **multiACE** | ~~P1~~ ~~F4~~ **I1** | **designed, not built** — see below |
+| **multiACE** | ~~P1~~ ~~F4~~ **I1** | **built** — the Filament panel, no C++ |
 
 ### The layout: two columns, not a 2x2 grid
 
@@ -758,10 +760,11 @@ python3 docs/u1-webui/tools/check_mockup.py <a mockup>          # per-file check
 python3 docs/u1-webui/tools/bake_mockup.py  <a mockup>          # re-render its no-script copies
 ```
 
-### The multiACE panel: designed, and P1 was upside down
+### The multiACE panel: built, and P1 was upside down
 
 **Start at [02-device-page/11-multiace-handover.md](02-device-page/11-multiace-handover.md)**
-— the settled design in one table, the build order, and every trap this pass turned up.
+— the settled design in one table, what landed, what changed on the way in, and every trap
+this pass turned up.
 The reasoning is [02-device-page/10-multiace-filament.md](02-device-page/10-multiace-filament.md),
 with the studies as the specification:
 [multiace-filament-mockup.html](02-device-page/multiace-filament-mockup.html) — seven
@@ -776,10 +779,13 @@ and the cabinet is drawn as the badge. All three carry pre-rendered copies so th
 read with no script. **I1, bands**, is the one to build; **F4, the bus**, becomes a second view behind
 the overflow.
 
-It needs no new bridge command for most of it: `ace` is a Klipper object and
+It needs no new bridge command: `ace` is a Klipper object and
 `sw_GetMachineState {objects:{ace:null}}` answers in **277 ms**, and every control is a
-documented G-code macro. What it cannot do without Orca is name the filament in an
-*unloaded* bay — the raw slots carry no identity and `/multiace/api/state` is CORS-refused.
+documented G-code macro. Naming the filament in an *unloaded* bay was written down as the
+one thing that needed Orca — the raw slots carry no identity and `/multiace/api/state` is
+CORS-refused — and that turned out to be wrong in the useful direction:
+`ACE_SPOOL_ASSIGN ACE=n SLOT=n [ID=n]` binds one of `ace.spools`' entries to a bay, so it
+needs a bay sheet and one macro rather than a piece of C++.
 
 Three things the drawing settled that reading could not:
 
@@ -932,6 +938,71 @@ Three things the drawing settled that reading could not:
 `head_ace` reads `{0:0, 1:1, 2:2, 3:0}` on a machine with `device_count: 1`, so heads 2
 and 3 name units that **do not exist**: resolve a head's source as `head_manual`, then
 `head_feeder`, and `head_ace` only for the remainder.
+
+#### And then it was built, and met the machine (2026-08-26)
+
+The panel is in `device_page/js/views/device-control/filament/`, and `ace()` — the
+topology unpacked, with both traps in it — is in `shared/js/state.js`. Nine things worth
+carrying:
+
+- **The Filament panel has two shapes and the machine picks.** No `ace` object means no
+  ACE to describe and no macro to send, so the printer gets the four slots the page always
+  drew. That is not a fallback bolted on: it is the state every stock U1 is in, and
+  `ace-panel.js` reaches it deliberately.
+- **`ace` is read on its own, and re-read by anything that changes it.** It is not in
+  `SUBSCRIBE_OBJECTS` — that list is pinned to the shipped bundle's and the conformance
+  suite holds it there — so `session.refreshAce()` asks for it at 277 ms a time, on the
+  heartbeat and after every macro. Without that last part a pending value would sit until
+  it timed out and reported itself lost, because nothing pushes the object that would
+  confirm it.
+- **Fifteen macros, none awaited.** `ACE_BG_UNLOAD`'s own help says ~3 min, so every one
+  goes through `core/pending.js` and is confirmed against machine state.
+- **`check_coverage.py` now has a second surface.** The panel's controls are not bridge
+  commands at all, so the old accounting could not see them and a macro deliberately not
+  offered would have been silent rather than merely unbuilt. All 21 ACE macros are now
+  either issued by a command module or withheld with a written reason — the three
+  `[EXPERIMENTAL]` ones because their own help requires an OPEN dock and purges ~60 mm.
+- **The tool caught its own first bug.** The macro scan counted `ACE_BG_UNLOAD` as
+  offered, because the sentence explaining why it is withheld mentions it. Comments are
+  stripped now, the same way the bridge-command scan already did.
+- **A menu that opened and shut in the same tick.** `overlay.js` closes a menu on any
+  document click outside `[data-menu-anchor]`, and only the device selector had that
+  attribute written on it by hand — so the click that opened either new menu closed it
+  again immediately. `openMenu` sets it on whatever anchor it was handed now, which is
+  what it always meant.
+- **Screenshots work here again**, and it took one environment variable and one widget:
+  `WEBKIT_DISABLE_COMPOSITING_MODE=1` and a `Gtk.OffscreenWindow`, whose `get_pixbuf()`
+  renders through cairo instead of reading back an X window WebKit never drew into. Every
+  `--shots` PNG in this project's history was blank. They are still the weaker half — the
+  seam through a spool looked three pixels out of true and measured exactly right.
+- **A drive script can pose a state for a picture.** `--shots` fires after the script
+  reports, so ending in the state you want to look at is how you photograph it.
+- **Then it was run against the real ACE, and four guesses were wrong** — each of which
+  the printer had answered `ok` to. `ACE_DRY DURATION=` is **minutes**, not hours, so the
+  dialog asking for 4 hours would have dried for four minutes; `ACE_SET_AUTO_DRY` takes
+  `ENABLE=0|1 RH_START=%` and accepts the guessed `THRESHOLD=` while ignoring it;
+  `ACED__DRY_STOP` stops *the current* unit rather than the one whose chip was pressed
+  (`ACE_STOP_DRYING ACE=n` is the right one); and `dryer_status` is
+  `{status, target_temp, duration, remain_time}` in **seconds**, with `keeping` as the
+  running word. Settled by sending each and reading the object back — including running
+  the dryer for ten seconds, which is the only way to see any of it — and everything was
+  put back. **An `ok` is not a yes.**
+- **Three of the four "write-only" settings are reported.** `confirm_commands`,
+  `spoolman_url`, `spoolman_auto` and `purge_matrix` are all in the object, so those
+  dialogs open on the machine's own values instead of on a default. Only the flush
+  *length* really is absent.
+- **The macro surface is evidence now, not a table.**
+  [`tools/ace_macros.py`](tools/ace_macros.py) reads `printer.gcode.help` off the printer
+  into [`data/ace-macros.json`](data/ace-macros.json) — 92 ACE macros of 336 — and
+  `check_coverage.py` fails if its table names one the machine does not have. Writing the
+  table down by hand is exactly how it came to name an argument the machine ignores.
+- **`drive/ace-real.js` is the read-only half**, and permanently so: `ace-panel.js`
+  switches sources, loads bays and starts the dryer, and a suite should not be able to
+  purge a nozzle. 26 checks against the printer, including a dump of the raw object.
+- **What is still unproven:** what a *second* unit's payload looks like (this machine has
+  one), and which heads are background-swap capable — `bg_swap` is in multiACE's FastAPI
+  state and **not** in the Klipper object, so the page cannot tell. That gates the next
+  iteration; see the handover.
 
 Then, in rough order of value:
 

@@ -128,8 +128,11 @@ python3 resources/web/shared/tests/unit_jsc.py
 python3 docs/u1-webui/tools/check_coverage.py
 ```
 
-`run_webkit.py --shots DIR` also writes PNGs, but on a machine with no working EGL
-driver they come out blank — the DOM assertions are the evidence, not the images.
+`run_webkit.py --shots DIR` writes real PNGs: an unattended run renders into a
+`Gtk.OffscreenWindow` with the accelerated compositor off, which needs no EGL driver.
+(A `--watch` run keeps its real window, and on a machine with no working EGL that
+window still reads back blank.) The images are worth having and are still the weaker
+half — the DOM assertions are what catch a seam three pixels out of true.
 
 `conformance_test.py` re-derives the constant tables from `docs/u1-webui/data/`
 and fails if `protocol.js` has drifted — it is the regression guard tying this code to

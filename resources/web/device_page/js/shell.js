@@ -13,7 +13,9 @@
  *   { kind: 'spacer' }                          push what follows to the right edge
  *   { kind: 'sep' }                             the vertical rule
  *   { kind: 'icon',  id, cls, icon, title, on } an icon button
- *   { kind: 'pill',  id, cls, label, chev, on } the Print Preferences pill
+ *   { kind: 'pill',  id, cls, label, chev, on, enabled?, title? }  the Print
+ *                                               Preferences pill. `label` may be a
+ *                                               function, and is then kept in sync
  *   { kind: 'tabs',  group, cls, items, active, on }   one-of-N picker
  *   { kind: 'status', id, cls, text, state, title }    a live label, no click
  *
@@ -39,12 +41,33 @@ function iconBtn(spec, ctx) {
   return b;
 }
 
+/**
+ * The Print Preferences pill.
+ *
+ * `label` may be a string or a function of the context. A function is synced through
+ * `headerSync` for the same reason a tab is: a header has no renderer, so a pill that
+ * reports something - the ACE mode - would otherwise draw the value it was built with
+ * for ever. `enabled` is synced alongside it, because a control for hardware that is
+ * not attached should say so rather than send a macro the machine would refuse.
+ */
 function pillBtn(spec, ctx) {
   const b = el('button', spec.cls || 'pref-pill');
   if (spec.id) b.id = spec.id;
-  b.appendChild(document.createTextNode(spec.label + ' '));
+  const label = document.createTextNode('');
+  b.appendChild(label);
   if (spec.chev) b.appendChild(icon(spec.chev, 'chev'));
   b.onclick = () => spec.on(ctx);
+  if (typeof spec.label === 'function' || spec.enabled || spec.title) {
+    const sync = () => {
+      label.nodeValue = `${typeof spec.label === 'function' ? spec.label(ctx) : spec.label} `;
+      if (spec.enabled) b.disabled = !spec.enabled(ctx);
+      if (spec.title) b.title = spec.title(ctx);
+    };
+    sync();
+    headerSync.push(sync);
+  } else {
+    label.nodeValue = `${spec.label} `;
+  }
   return b;
 }
 

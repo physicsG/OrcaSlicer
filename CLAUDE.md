@@ -137,6 +137,25 @@ Filament. A panel names its own column in its declaration (`column`, `grow`); th
 destination names them in `registry.js`. Below a 1600px window it is one centred column
 and none of that applies.
 
+**The Filament panel has two shapes and the machine picks.** A printer that reports no
+`ace` Klipper object gets the four slots the page always drew; one that reports it gets
+four toolhead cards, two by two, each with its own header choosing what feeds that head -
+stock feeder, one of up to four ACE units, or hand-fed - the source drawn under it as a
+cabinet or a feeder module, and a tube into the head's inlet. `ace` is **not** on the
+subscription (that list is pinned to the shipped bundle's), so it is read on its own by
+`session.refreshAce()` and re-read after anything that changes it. Three things that are in
+the code because hardware said so: **`head_ace` does not answer "what feeds this head"**
+(resolve `head_manual` → `head_feeder` → `head_ace`, in that order); **no bay has a
+level** — `spool_binding` is empty, so a disc is a colour and not a gauge; and **an `ok` is
+not a yes** — `ACE_SET_AUTO_DRY THRESHOLD=` returns `ok` and changes nothing, and
+`ACE_DRY DURATION=` is in **minutes**, so a dialog offering hours would have dried for
+four. Every macro argument was settled by sending it and reading the object back. The macro
+surface is evidence too: `tools/ace_macros.py` reads `printer.gcode.help` into
+`data/ace-macros.json` and `check_coverage.py` holds its table to it. The reasoning is
+[docs/u1-webui/02-device-page/10-multiace-filament.md](docs/u1-webui/02-device-page/10-multiace-filament.md);
+what to build next is
+[11-multiace-handover.md](docs/u1-webui/02-device-page/11-multiace-handover.md).
+
 with `js/core/` for what every view needs (`dom`, `render`, `pending`, `store`,
 `session`, `connection`, `overlay`, `diag`, `mock`, `thumbs`) and `js/widgets/` for the
 rail, the trace pane and shared art. A panel is handed **its own commands and nothing
@@ -167,8 +186,9 @@ python3 resources/web/shared/tests/run_webkit.py --original --sn <SN> --watch
   trace of what each click sends.
 - `--size WxH` sets the window, which the Device page's layout depends on - see above.
 - Committed drive scripts live in `resources/web/shared/tests/drive/`: the DOM walker,
-  the camera panel against the simulator and against a printer, and the no-printer
-  branch. See its README - they were re-written from scratch every time before.
+  the camera panel against the simulator and against a printer, the multiACE filament
+  card, and the no-printer branch. See its README - they were re-written from scratch
+  every time before.
 - `--drive FILE` runs JavaScript in the live page; the script reports by setting
   `window.__report`. This is how hardware behaviour gets measured rather than assumed.
 - `--device-ip` points the saved device somewhere unroutable, to exercise the page with
@@ -199,8 +219,14 @@ which the mock never takes. Two habits follow:
 - **`--real --device-ip 192.0.2.1`** forces the not-connected branch with no printer
   involved. Run it on anything touching the device record.
 
-**`--shots` writes blank PNGs here** — EGL finds no driver under WSL, so the files are
-byte-identical before and after any change. The DOM assertions are the evidence.
+**`--shots` works again, and is real evidence.** It used to write blank PNGs — EGL finds
+no driver under WSL, so WebKit's accelerated compositor never put anything in the window
+`GdkPixbuf` was reading back, and every file was byte-identical whatever changed. An
+unattended `--shots` run now renders into a `Gtk.OffscreenWindow` with
+`WEBKIT_DISABLE_COMPOSITING_MODE=1`, which goes through cairo on the CPU. A `--watch` run
+still gets a real window, and still gets blank PNGs with it. Pictures are worth having,
+but they are still the weaker half: **the seam through a spool was 3 px out to the eye and
+exactly right when measured.** Subtract two numbers.
 
 The other suites:
 

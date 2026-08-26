@@ -385,4 +385,8 @@ window.__devicePage = { get state() { return state; }, get bridge() { return bri
                         get device() { return store.device; },
                         get devices() { return store.devices; },
                         store, pending, render: renderPrims,
+                        // `ace` is not on the stream, so a script that changes the
+                        // simulated ACE has to ask the page to look again - which is what
+                        // every control that changes it does too.
+                        session,
                         handlers: all, byModule, mock: null };

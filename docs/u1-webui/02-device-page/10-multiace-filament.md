@@ -14,7 +14,8 @@ five mixable axes for the filament, the box, the tube and the head's own marker 
 as the badge and everything on one centred axis. All three carry pre-rendered copies of
 every option so they read with no script at all.
 
-> **Design only. No code has landed.** The build order is at the end.
+> **This is the reasoning. The panel is built** — see the handover for what landed,
+> what changed on the way in, and what is still unproven against hardware.
 
 The panel shows one slot per toolhead and knows nothing about an ACE. This is the design
 for the version that does: **several ACE units, each able to feed a toolhead in place of
@@ -275,7 +276,14 @@ temperature, the dryer, occupancy, and the full identity of what is *loaded* in 
 What it cannot do is name the filament in an **unloaded** bay: every raw slot reads
 `{material:"", brand:"", rfid:0}`, and `/multiace/api/state` — which has it — is
 CORS-refused. So the panel draws an occupied-but-unidentified bay as exactly that, and
-tier 2 is one `sw_` proxy that fills in pills which already exist.
+tier 2 fills in pills which already exist.
+
+> **Corrected against hardware, 2026-08-26.** Tier 2 does *not* need an `sw_` proxy. The
+> machine has `ACE_SPOOL_ASSIGN ACE=n SLOT=n [ID=n]` and a local spool table in
+> `ace.spools` — 19 entries, each with material, vendor, colour, weight and SKU — so a
+> bay is named with one macro the page can already send. What is missing is the bay's own
+> sheet, not a piece of C++. See
+> [11-multiace-handover.md](11-multiace-handover.md).
 
 Every control is a documented G-code macro and the page already owns `sw_SendGCodes`; the
 full table is in the study. Two rules apply without amendment: the settings that are set
@@ -291,7 +299,11 @@ list with that reason, so "not built" stays visible.
 
 ## Build order
 
-Each step is useful alone and none needs the one after it.
+**Steps 1-5 are built** (`resources/web/device_page/js/views/device-control/filament/`);
+step 6 is tier 2, which needs a bay sheet rather than the C++ it was written down as
+needing. The list is kept as written, because what each step *was*
+is the record of why the panel is shaped the way it is — and step 4 is the one that turned
+out not to be needed, since a head-major panel never folds.
 
 1. **Four toolhead subpanels**, each with a header carrying its name and a **source
    selector** resolved `head_manual` → `head_feeder` → `head_ace` *in that order*, and the
@@ -303,7 +315,8 @@ Each step is useful alone and none needs the one after it.
    and the head's sensor marker from `feedChannels()`.
 4. **The collapsed row and the rack** — states **N2** and **N4**.
 5. **The sheets** — load, unload, swap, dry, and the overflow's settings list.
-6. **Tier 2** — an `sw_` proxy for `/multiace/api/state`.
+6. **Tier 2** — naming an unloaded bay. Written down as an `sw_` proxy for
+   `/multiace/api/state`; measured as `ACE_SPOOL_ASSIGN` plus a bay sheet.
 
 ## Checking it
 
