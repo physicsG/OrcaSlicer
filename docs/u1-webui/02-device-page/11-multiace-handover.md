@@ -14,7 +14,7 @@ U1 has none of them and gets the four filament slots the page always drew — wh
 a fallback bolted on, it is the state every printer without the plugin is in. The plugin
 is pre-1.0 and versioned, so the integration carries what it was verified against rather
 than assuming: **`0.99.8b+9ba137e1` on a U1 running 1.5.2, `api_version: 1`,
-`ace_bg_swap v0.9`** — in `MULTIACE_VERIFIED`, and shown in the panel's own help.
+`ace_bg_swap v0.9`** — in `MULTIACE_VERIFIED`, and on the panel header's own title.
 
 **The ACE is drawn from the visual standard now, not from a shape of its own.**
 [`docs/ace-mmu/16-ace-visuals.md`](../../ace-mmu/16-ace-visuals.md) settles three forms —
@@ -45,6 +45,11 @@ ACE 2 Pro on firmware V1.1.26. Steps 1-5 of the build order below are in
 `resources/web/device_page/`; step 6 turned out not to need the C++ it was waiting for
 (see *Tier 2 was wrong*).
 
+**The one to read first is *The bay identity the panel was missing***: the panel drew
+three of four bays as `?` on a machine that knew all four, because the `ace` object does
+not carry per-bay identity and multiACE's override store does. Found by comparing against
+what Orca's own Prepare page syncs.
+
 **Four things the machine disagreed with, and every one answered `ok` first.** They are
 listed in full further down; the short version is that a macro accepting an argument
 proves nothing, and neither does a field name that reads plausibly:
@@ -58,21 +63,22 @@ proves nothing, and neither does a field name that reads plausibly:
 
 | | where |
 |---|---|
-| **The whole multiACE surface** — macros, constants, the state model, the override merge | [`shared/js/multiACE.js`](../../../resources/web/shared/js/multiACE.js) |
+| **The whole multiACE surface** — macros and the line builder, constants, the state model, the override merge, and the three forms an ACE is drawn in | [`shared/js/multiACE.js`](../../../resources/web/shared/js/multiACE.js) |
 | `MachineState.ace()`, which is a call into it | [`shared/js/state.js`](../../../resources/web/shared/js/state.js) |
 | The panel: the card, the cabinet, the feeder, the tube, the dryer dialog, both menus | [`filament-view.js`](../../../resources/web/device_page/js/views/device-control/filament/filament-view.js) |
 | Fifteen macros, none awaited, each confirmed against machine state | [`filament-commands.js`](../../../resources/web/device_page/js/views/device-control/filament/filament-commands.js) |
 | The one-shot read, because `ace` is not on the subscription | `refreshAce()` in [`core/session.js`](../../../resources/web/device_page/js/core/session.js) |
 | The `ace` object as the machine reports it, macros included | [`shared/js/mockhost.js`](../../../resources/web/shared/js/mockhost.js) |
-| 14 geometric checks, 60 driven against the simulator, 26 against the printer | `run_webkit.py` · [`drive/ace-panel.js`](../../../resources/web/shared/tests/drive/ace-panel.js) · [`drive/ace-real.js`](../../../resources/web/shared/tests/drive/ace-real.js) |
+| 18 geometric checks, 70 driven against the simulator, 30 against the printer | `run_webkit.py` · [`drive/ace-panel.js`](../../../resources/web/shared/tests/drive/ace-panel.js) · [`drive/ace-real.js`](../../../resources/web/shared/tests/drive/ace-real.js) |
 | The macro surface as the machine reports it | [`tools/ace_macros.py`](../tools/ace_macros.py) → [`data/ace-macros.json`](../data/ace-macros.json) |
 | The precedence rule, held to account as pure logic | `unit_jsc.py` — 9 checks, no DOM |
 
 ```bash
 R=resources/web/shared/tests
-python3 $R/run_webkit.py --size 1920x1080                      # 54, incl. the card's geometry
-python3 $R/run_webkit.py --size 1920x1080 --drive $R/drive/ace-panel.js   # 60, simulator
-python3 $R/run_webkit.py --real --size 1920x1080 --drive $R/drive/ace-real.js   # 26, printer
+python3 $R/run_webkit.py --size 1920x1080                      # 58, incl. the card's geometry
+python3 $R/run_webkit.py                                      # 51, the single-column layout
+python3 $R/run_webkit.py --size 1920x1080 --drive $R/drive/ace-panel.js   # 70, simulator
+python3 $R/run_webkit.py --real --size 1920x1080 --drive $R/drive/ace-real.js   # 30, printer
 python3 $R/run_webkit.py --real --device-ip 192.0.2.1 --drive $R/drive/no-printer.js
 python3 docs/u1-webui/tools/check_coverage.py                  # both surfaces
 ```
@@ -151,7 +157,8 @@ is **clipped in silence**. Every study asserts its own height against it.
 | 3 | **The tube** — manifold below, drawn behind, coloured from `head_source`; the head's sensor dot from `feedChannels()` | built |
 | 4 | **The feeder and its module badge** | built |
 | 5 | **The sheets and menus** — load / unload / swap, the dryer dialog, the panel overflow | built |
-| 6 | **Tier 2** — naming an unloaded bay | **not built**, and it no longer needs the C++ it was waiting for: `ACE_SPOOL_ASSIGN` and `ace.spools` do it. See *Tier 2 was wrong* |
+| 6a | **Tier 2, reading** — what is in each bay, from multiACE's override store | built. Not the `sw_` proxy it was written down as needing; see *The bay identity the panel was missing* |
+| 6b | **Tier 2, writing** — naming a bay *from the panel* | **not built.** `ACE_SPOOL_ASSIGN` is the reachable route, and it wants the bay sheet — see *The next iteration* |
 
 **The collapsed unit row is not in the list any more, because head-major does not need
 one.** That was step 4 of the *unit-major* plan, where three units forces a fold to the
@@ -181,6 +188,13 @@ height as none — asserted in `ace-panel.js`, not assumed.
   pixels apart, each naming its scope. Both menus still name their scope — that was the
   point — but the panel-level one is `settings.svg`, because the ambiguity the naming was
   compensating for is cheaper to just not create. A card's is still `⋯`.
+- **UI copy says what a control is, and stops.** Explanations of what multiACE is had got
+  into the help dialog, the header's title, a menu item and three settings sheets. Someone
+  reading a hover has not asked for a lesson, and the explanation is already in this
+  directory. A macro name is fine — it says what will be sent. A paragraph is not. The
+  rule is in `CLAUDE.md`, and `openDialog` grew `cancel: false` on the way, because a
+  sheet that only tells you something should offer Close alone rather than Close *and*
+  Cancel.
 - **`hm()` prints `4 h`, not `4 h 0 m`.** The dryer chip shares a 391 px cell with the
   unit's name, its model and a humidity pill, and those 26 px were the difference between
   `ACE 2 Pro` and `ACE 2 …`.
@@ -365,17 +379,17 @@ Read off `printer.gcode.help` on the machine — the whole ACE surface is in
 | **BG swap** | `ACE_BG_SWAP HEAD=0-3 SLOT=0-3 [ACE=n] [TEMP=] [ANTI_OOZE=] [QUIET=1] [FORCE=1]` | a bay on a head that has been **declared capable** |
 | **BG unload** | `ACE_BG_UNLOAD HEAD=0-3 [TEMP=]` | the same |
 
-**BG swap is gated, and the gate is not in the state object.** `ACE_BG_SET_HEAD HEAD=n
+**BG swap is gated, and the gate is reachable.** `ACE_BG_SET_HEAD HEAD=n
 ENABLE=0|1` is what declares a head background-capable — its help spells out what that
 claim means physically: *its dock is OPEN below, the cold-pull purges through it* — and it
 writes the `[ace_bg_swap] heads` config line. `ACE_BG_UNLOAD` restates the whole list:
 **head mode, 1:1 wiring, an OPEN dock below the head (purges ~60 mm!), and the head stays
 docked for the whole ~3 min sequence.**
 
-So the panel must offer these **only for a head multiACE says is enabled** — and the gate
-is reachable. It is not in the `ace` object (all 38 of its top-level keys are listed above
-and there is no `bg_swap` among them), but **`ace_bg_swap` is a Klipper object of its
-own**, and `sw_GetMachineState {objects:{ace_bg_swap:null}}` answers with it. Measured on
+So the panel must offer these **only for a head multiACE says is enabled**. That is not
+in the `ace` object — all 38 of its top-level keys are listed above and there is no
+`bg_swap` among them — but **`ace_bg_swap` is a Klipper object of its own**, and
+`sw_GetMachineState {objects:{ace_bg_swap:null}}` answers with it. Measured on
 2026-08-26, and asserted in `ace-real.js`:
 
 ```json
