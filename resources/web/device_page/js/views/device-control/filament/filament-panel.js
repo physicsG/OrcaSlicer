@@ -35,21 +35,15 @@ export default {
       label: aceModeLabel,
       enabled: (ctx) => ctx.state.ace().present,
       title: (ctx) => (ctx.state.ace().present
-        ? 'SET_ACE_MODE MODE=normal|multi|head — head mode is the one that wires a '
-          + 'toolhead to a unit'
-        : 'This printer reports no ACE'),
+        ? 'SET_ACE_MODE MODE=normal|multi|head' : 'No ACE on this printer'),
       on: (ctx) => openAceModeMenu(document.getElementById('filament-mode'), ctx) },
     { kind: 'spacer' },
     { kind: 'status', id: 'filament-ace', text: aceStatus,
+      // Which multiACE, and nothing more: a version is a fact, an explanation is not.
       title: (ctx) => {
         const a = ctx.state.ace();
-        // multiACE is a plugin someone installs on the U1, not firmware. Naming it, and
-        // the contract version it claims, is what makes "why is this panel different on
-        // my machine" answerable.
-        return a.present
-          ? `multiACE${a.apiVersion ? ` (api_version ${a.apiVersion})` : ''} — read from `
-            + 'the `ace` Klipper object, on its own rather than on the stream'
-          : 'No `ace` object in machine state — multiACE is not installed on this printer';
+        return a.present ? `multiACE${a.apiVersion ? ` api_version ${a.apiVersion}` : ''}`
+                         : 'multiACE not installed';
       } },
     { kind: 'gap' },
     { kind: 'icon', id: 'filament-settings', cls: 'icon-only', icon: 'settings',

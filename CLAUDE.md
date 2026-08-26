@@ -148,6 +148,11 @@ standard the C++ Prepare page draws from) — named for the plugin rather than t
 hardware. `MachineState.ace()` calls into it. It was spread over three files, and that
 is how the panel came to read bay identity from a source that does not carry it.
 
+**UI copy says what a control is or what state it is in — and stops there.** No
+explaining what multiACE is in a tooltip, no reasoning in a dialog. A macro name is fine
+(it says what will be sent); a paragraph about why is not. The explanations belong in
+`docs/u1-webui/`, and a reader of a hover has not asked for one.
+
 **The Filament panel has two shapes and the machine picks.** A printer that reports no
 `ace` Klipper object gets the four slots the page always drew; one that reports it gets
 four toolhead cards, two by two, each with its own header choosing what feeds that head -

@@ -66,7 +66,7 @@
         '?,?,PETG,?');
     say('and the one that IS named got there from head_source, which is weaker',
         $$('#filament .ace-cab .ace-prov')
-          .map((e) => (/loaded in the head/.test(e.title) ? 'd' : '-')).join(''), '--d-');
+          .map((e) => (/loaded filament/.test(e.title) ? 'd' : '-')).join(''), '--d-');
 
     // multiACE's own precedence, kept: a tag beats a name someone typed.
     const tagged = JSON.parse(JSON.stringify(measured));

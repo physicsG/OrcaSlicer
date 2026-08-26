@@ -103,8 +103,12 @@ export function closeDialog() {
 /**
  * Modal sheet. `build(body)` fills the body; `onConfirm()` returning false
  * keeps it open (so a validator can reject).
+ *
+ * `cancel: false` drops the Cancel button, for a sheet that only tells you something:
+ * offering both Cancel and Close for one dismissal is a choice that is not one.
  */
-export function openDialog({ title, build, confirmLabel = 'OK', onConfirm, wide = false }) {
+export function openDialog({ title, build, confirmLabel = 'OK', onConfirm, wide = false,
+                             cancel = true }) {
   closeDialog();
   const scrim = el('div', 'scrim');
   const box = el('div', 'dialog' + (wide ? ' wide' : ''));
@@ -121,11 +125,13 @@ export function openDialog({ title, build, confirmLabel = 'OK', onConfirm, wide 
   box.appendChild(body);
 
   const foot = el('div', 'dialog-foot');
-  const cancel = el('button', 'btn', 'Cancel');
-  cancel.onclick = closeDialog;
+  if (cancel) {
+    const no = el('button', 'btn', 'Cancel');
+    no.onclick = closeDialog;
+    foot.appendChild(no);
+  }
   const ok = el('button', 'btn primary', confirmLabel);
   ok.onclick = () => { if (onConfirm() !== false) closeDialog(); };
-  foot.appendChild(cancel);
   foot.appendChild(ok);
   box.appendChild(foot);
 

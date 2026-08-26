@@ -76,11 +76,11 @@ const SENSOR = {
  * distinction on its own slots and `.slot` already ships the pencil.
  */
 const PROV = {
-  rfid:     { glyph: 'eye',    word: 'from the spool tag — read only' },
-  override: { glyph: 'pencil', word: 'named in multiACE — edit it there' },
-  derived:  { glyph: 'pencil', word: 'from what is loaded in the head — name it' },
-  typed:    { glyph: 'pencil', word: 'typed in — edit' },
-  unknown:  { glyph: 'pencil', word: 'occupied, not named — name it' },
+  rfid:     { glyph: 'eye',    word: 'spool tag · read only' },
+  override: { glyph: 'pencil', word: 'named in multiACE' },
+  derived:  { glyph: 'pencil', word: 'from the loaded filament' },
+  typed:    { glyph: 'pencil', word: 'typed in' },
+  unknown:  { glyph: 'pencil', word: 'not named' },
 };
 
 /* ---------------------------------------------------------------- *
@@ -278,11 +278,9 @@ function sourceSelect(ace, ctx, i, src) {
   // control that vanishes leaves no way to find out why it is not there.
   const off = ace.mode !== 'head';
   sel.disabled = off;
-  sel.title = off
-    ? `${ACE.SET_HEAD_FEEDER} and ${ACE.SET_HEAD_ACE} are documented "head mode only". `
-      + `The machine is in ${ace.mode} mode.`
-    : (src.state === 'sent' ? `Waiting for the machine to confirm ${src.asked}`
-                            : 'What feeds this toolhead');
+  sel.title = off ? `Head mode only — the machine is in ${ace.mode} mode`
+          : src.state === 'sent' ? 'Waiting for the machine'
+          : 'What feeds this toolhead';
   if (src.state) sel.dataset.pend = src.state;
   sel.setAttribute('aria-label', `Source for Toolhead ${i + 1}`);
   sel.onchange = () => ctx.handlers.setSource(i, sel.value);
@@ -296,7 +294,7 @@ function unitStrip(ctx, u, shared, bays) {
   n.appendChild(el('b', null, `ACE ${u.id}`));
   n.appendChild(document.createTextNode(` · ${u.model}`));
   n.title = [u.model, u.firmware].filter(Boolean).join(' ')
-    + (u.connected ? '' : ' — not answering')
+    + (u.connected ? '' : ' · not answering')
     + (shared.length ? ` · also feeds ${shared.map((x) => `Toolhead ${x + 1}`).join(', ')}`
                      : '');
   r.appendChild(n);
@@ -314,9 +312,7 @@ function unitStrip(ctx, u, shared, bays) {
  */
 function humidityPill(u, shared) {
   const p = el('span', 'ace-hum');
-  const lvl = humidityLevel(u.humidity);
-  p.title = `ACE ${u.id} · ${num(u.humidity, '%')} RH · ${num(u.temperature, '°C')} inside`
-    + (lvl ? ` · hum_level${lvl}` : '')
+  p.title = `${num(u.humidity, '%')} RH · ${num(u.temperature, '°C')} inside ACE ${u.id}`
     + (shared.length ? ` · shared with ${shared.length} other head${shared.length > 1 ? 's' : ''}`
                      : '');
   if (shared.length) {
@@ -344,11 +340,9 @@ function dryChip(ctx, u) {
   b.title = running
     ? `Drying${d.target ? ` to ${d.target} °C` : ''}`
       + (d.remainingMin != null ? ` · ${hm(d.remainingMin)} left` : '')
-      + (d.status ? ` · status ${d.status}` : '')
-      + `. Stop with ${ACE.DRY_STOP} ACE=${u.index}`
-    : `${ACE.DRY} ACE=${u.index} TEMP= DURATION= (minutes) — automatic above a humidity `
-      + `is ${ACE.SET_AUTO_DRY}`
-      + (u.autoDry.enabled ? `, on above ${u.autoDry.rhStart} %` : '');
+      + ` · ${ACE.DRY_STOP} ACE=${u.index}`
+    : `${ACE.DRY} ACE=${u.index}`
+      + (u.autoDry.enabled ? ` · automatic above ${u.autoDry.rhStart} %` : '');
   b.onclick = (e) => { e.stopPropagation(); openDryer(ctx, u); };
   return b;
 }
@@ -364,10 +358,8 @@ function feederStrip(i, source) {
   const manual = source === 'manual';
   n.appendChild(el('b', null, manual ? 'Hand-fed' : 'Feeder'));
   n.appendChild(document.createTextNode(manual ? ' · bypass' : ` · channel ${(i % 2) + 1}`));
-  n.title = manual
-    ? `${ACE.SET_HEAD_MANUAL} — no ACE feed, retract, assist or RFID`
-    : 'Automatic Filament Feeder Module — two channels per module. '
-      + `${ACE.SET_HEAD_FEEDER} HEAD=${i} ENABLE=1`;
+  n.title = manual ? 'Hand-fed — no ACE feed, retract, assist or RFID'
+                   : 'Automatic Filament Feeder Module';
   r.appendChild(n);
   r.appendChild(el('span', 'spacer'));
   return r;
@@ -411,9 +403,8 @@ function bay(ctx, i, u, b, fed) {
         ? `${b.addr}: ${[b.material, b.subType].filter(Boolean).join(' ')}`
           + (b.vendor ? ` · ${b.vendor}` : '')
           + (b.sku ? ` · ${b.sku}` : '')
-          + ` — ${(PROV[b.source] || PROV.unknown).word}`
-        : `${b.addr}: occupied, filament not known — the raw slot carries no material, `
-          + 'brand or tag')
+          + ` · ${(PROV[b.source] || PROV.unknown).word}`
+        : `${b.addr}: occupied, not named`)
     : `${b.addr}: empty`;
   node.setAttribute('aria-label', node.title);
 
@@ -440,7 +431,7 @@ function provMark(b) {
   const p = PROV[b.source] || PROV.typed;
   const w = el('span', 'ace-prov');
   w.appendChild(glyph(p.glyph));
-  w.title = `${[b.material, b.vendor].filter(Boolean).join(' · ') || b.addr || ''} — ${p.word}`;
+  w.title = `${[b.material, b.vendor].filter(Boolean).join(' · ') || b.addr || ''} · ${p.word}`;
   return w;
 }
 
@@ -610,14 +601,14 @@ function openHeadMenu(anchor, ace, ctx, i, unit) {
   if (unit) {
     items.push({ label: 'Swap to another bay…', glyph: aceGlyphSquare(),
                  cmd: `${ACE.SWAP_HEAD} HEAD=${i} ACE=${unit.index} SLOT=<n>`,
-                 title: 'Click the bay you want, in the cabinet on this card',
+                 title: 'Click the bay you want, above',
                  muted: true });
   }
   items.push(null);
   items.push({
     label: tagged ? 'View this filament' : 'Edit this filament…',
     icon: 'iconFilamentEdit',
-    title: tagged ? 'from the spool tag — read only' : 'print_task_config',
+    title: tagged ? 'spool tag · read only' : 'print_task_config',
     onClick: () => editSlot(i, ctx.state.filaments()[i], ctx.handlers),
   });
   openMenu(anchor, items, { head: `Toolhead ${i + 1}` });
@@ -632,10 +623,8 @@ function openHeadMenu(anchor, ace, ctx, i, unit) {
  */
 export function openAceSettings(anchor, ctx) {
   if (!ctx.state.ace().present) {
-    openMenu(anchor, [{ label: 'multiACE is not installed on this printer',
-                        glyph: aceGlyphSquare(), muted: true,
-                        title: '`ace` is absent from machine state, so there is no unit '
-                             + 'to configure and no macro to send' }],
+    openMenu(anchor, [{ label: 'No ACE on this printer',
+                        glyph: aceGlyphSquare(), muted: true }],
              { head: 'This printer' });
     return;
   }
@@ -709,9 +698,9 @@ function confirmLoad(ctx, i, u, b) {
   if (!b.occupied) {
     openDialog({
       title: `${b.addr} is empty`,
-      build: (bd) => bd.appendChild(el('p', 'ms-note',
-        'The gate sensor reports nothing in this bay, so there is nothing to load.')),
+      build: (bd) => bd.appendChild(el('p', 'ms-note', 'Nothing to load.')),
       confirmLabel: 'Close',
+      cancel: false,
       onConfirm: () => true,
     });
     return;
@@ -720,12 +709,11 @@ function confirmLoad(ctx, i, u, b) {
     title: `Load ${b.addr} into Toolhead ${i + 1}?`,
     build: (bd) => {
       bd.appendChild(el('p', 'ms-note',
-        `${b.known ? [b.material, b.subType, b.vendor].filter(Boolean).join(' · ')
-                   : 'This bay is occupied and the machine does not name what is in it'}.`));
+        b.known ? [b.material, b.subType, b.vendor].filter(Boolean).join(' · ')
+                : 'Occupied, not named.'));
+      // Short, but it stays: a swap unloads the head and purges, and it is minutes long.
       bd.appendChild(el('p', 'ms-note',
-        'The machine unloads whatever is at the head first and purges into the dock. '
-        + 'It takes minutes, and the panel will keep showing what was asked for until '
-        + 'the machine reports the change.'));
+        'Unloads the head first and purges. Takes minutes.'));
       bd.appendChild(el('div', 'dry-cmd',
         `${ACE.SWAP_HEAD} HEAD=${i} ACE=${u.index} SLOT=${b.index}`));
     },
@@ -793,8 +781,7 @@ function openDryer(ctx, u) {
       // grows the block under the droplet, which reads as the droplet having moved.
       c1.appendChild(el('div', 'dry-state', running ? 'Drying' : 'Idle'));
       const reads = el('div', 'dry-reads');
-      reads.title = `${num(u.humidity, '%')} RH and ${num(u.temperature, '°C')} inside `
-        + `ACE ${u.id} — not the room`;
+      reads.title = `Inside ACE ${u.id}, not the room`;
       [['Humidity', num(u.humidity, '%')],
        ['Temperature', num(u.temperature, '°C')]].forEach(([k, v]) => {
         const r = el('div', 'dry-read');
@@ -862,8 +849,7 @@ function openDryer(ctx, u) {
         inp.max = String(max);
         inp.placeholder = 'Custom';
         inp.setAttribute('aria-label', `${label}, custom value, ${min} to ${max}`);
-        inp.title = `${min}–${max}${suffix}. Anything typed here is what gets sent, and `
-          + 'the preset stops being highlighted.';
+        inp.title = `${min}–${max}${suffix}`;
         // Repainted without rebuilding, so the field does not lose focus mid-keystroke -
         // the same reason core/render.js exists on the rest of the page.
         inp.oninput = () => { set[`${key}Custom`] = inp.value.trim(); paint(); };

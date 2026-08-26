@@ -233,12 +233,9 @@ export function create(deps) {
     openDialog({
       title: 'Flush length',
       build: (b) => {
-        note(b, 'How much filament the next swap or load purges. This one the machine '
-              + 'does not report back — only whether the slicer’s per-pair stamps are '
-              + 'honoured, below — so the length sets rather than shows. 0 means the '
-              + 'stock default of 80 mm.');
-        mm = numberField(b, { label: 'Length', value: 0, min: 0, max: 400, unit: 'mm',
-                              hint: 'ACE_SET_PURGE LENGTH=<mm>' });
+        note(b, 'Flush for the next swap or load. 0 uses the stock 80 mm. '
+              + 'Not reported back by the machine.');
+        mm = numberField(b, { label: 'Length', value: 0, min: 0, max: 400, unit: 'mm' });
         matrix = toggleField(b, { label: 'Honour the slicer’s flush matrix',
                                   checked: now.purgeMatrix });
       },
@@ -255,8 +252,7 @@ export function create(deps) {
     openDialog({
       title: 'Confirmations',
       build: (b) => {
-        note(b, 'Whether the printer asks on its own screen before it loads or unloads. '
-              + 'This is the machine’s current setting, read from `confirm_commands`.');
+        note(b, 'The printer asks on its own screen before a load or unload.');
         on = toggleField(b, { label: 'Confirm before load and unload',
                               checked: now.confirmCommands });
       },
@@ -272,11 +268,9 @@ export function create(deps) {
     openDialog({
       title: 'Spoolman',
       build: (b) => {
-        note(b, now.bound
-          ? `Where the ACE looks up spool weights. ${now.bound} slot`
-            + `${now.bound > 1 ? 's are' : ' is'} bound to a spool.`
-          : 'Where the ACE looks up spool weights. Nothing is bound to a slot on this '
-            + 'machine, which is why no bay on the panel shows a level.');
+        note(b, 'Where the ACE looks up spool weights. '
+              + (now.bound ? `${now.bound} bay${now.bound > 1 ? 's' : ''} bound.`
+                           : 'No bay is bound.'));
         const row = el('label', 'field');
         row.appendChild(el('span', 'field-label', 'URL'));
         const wrap = el('div', 'field-row');
@@ -342,36 +336,18 @@ export function create(deps) {
     filamentHelp: () => openDialog({
       title: 'Filament sources',
       build: (b) => {
-        const a = state.ace();
+        // UI copy stays to the point: what a control is, not what multiACE is. The
+        // reasoning lives in docs/u1-webui/02-device-page/.
         const p = el('p', 'ms-note');
-        // multiACE is a plugin someone installs on the printer, not Snapmaker firmware,
-        // and saying so is what makes "why does my U1 not look like this" answerable.
-        p.textContent = 'This panel talks to multiACE, a Klipper plugin installed on the '
-          + 'printer rather than part of Snapmaker\u2019s firmware'
-          + (a.apiVersion ? ` (api_version ${a.apiVersion})` : '')
-          + '. A U1 without it reports no ACE at all and gets the four filament slots '
-          + 'instead.';
-        // The wide glyph in the slot the visual standard names for it: beside a label.
-        // After the text, because assigning textContent replaces every child.
+        p.textContent = 'One card per toolhead. Its header chooses the source: stock '
+          + 'feeder, an ACE unit, or hand-fed.';
         p.insertBefore(aceGlyph(), p.firstChild);
         b.appendChild(p);
-        const q = el('p', 'ms-note');
-        q.textContent = 'Each card is one of the U1\u2019s four toolheads and its header '
-          + 'chooses what feeds it: its own stock feeder, one of the ACE units, or '
-          + 'hand-fed. What a head IS fed resolves head_manual, then head_feeder, then '
-          + 'head_ace \u2014 in that order, because head_ace answers for every head '
-          + 'whether or not that head is on an ACE.';
-        b.appendChild(q);
-        const r = el('p', 'ms-note');
-        r.textContent = 'What is in each bay is not in the machine\u2019s own state: the '
-          + 'raw slots carry no material, brand or tag, so the names come from '
-          + 'multiACE\u2019s override store, read off the printer\u2019s file server. A '
-          + 'bay drawn grey with no name is one nothing has named. No bay has a level '
-          + '\u2014 nothing is bound in Spoolman \u2014 so a disc is a colour and not a '
-          + 'gauge.';
-        b.appendChild(r);
+        b.appendChild(el('p', 'ms-note',
+          'A grey bay with no name is occupied and unidentified. No bay has a level.'));
       },
       confirmLabel: 'Close',
+      cancel: false,
       onConfirm: () => true,
     }),
   };
