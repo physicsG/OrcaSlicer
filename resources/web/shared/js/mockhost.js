@@ -405,7 +405,15 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
     for (const eventId of subs.keys()) push(eventId, delta);
   }, TICK_MS);
 
-  return { printer, webcams: mockWebcams, stop() { clearInterval(timer); } };
+  return {
+    printer,
+    webcams: mockWebcams,
+    // Not a bridge command: the page fetches this off the printer's own file server over
+    // HTTP, so with no printer there is nothing to answer it. Same seam as the camera's
+    // frames.
+    aceOverrides: () => printer.aceOverrides,
+    stop() { clearInterval(timer); },
+  };
 }
 
 function clamp01(v) { return Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0)); }
@@ -488,6 +496,30 @@ function mockAce() {
   };
 }
 
+/**
+ * What multiACE says is in each bay — and the reason it is a separate thing.
+ *
+ * The `ace` object above reports four blank slots, because that is what the hardware
+ * reports: no tags, no identity. multiACE keeps the names its own web UI shows in this
+ * store and merges them in `_parse_state()`. Copied from the printer on 2026-08-26,
+ * where three of these four bays were being drawn as `?` while Orca's Prepare page —
+ * which polls the merged endpoint from C++ — showed them named.
+ *
+ * Keeping both halves in the simulator is the point: the blank slots AND the store that
+ * fills them. A simulator that only had the merged answer would never have shown the
+ * gap.
+ */
+function mockAceOverrides() {
+  const bay = (slot, brand, color) => ({ ace: 0, slot, material: 'PETG', brand,
+                                         subtype: 'Basic', color });
+  return {
+    '0_0': bay(0, 'Kingroon', '#83AFFF'),
+    '0_1': bay(1, 'Kingroon', '#8FA7C8'),
+    '0_2': bay(2, 'Generic', '#632c2c'),
+    '0_3': bay(3, 'Kingroon', '#C47053'),
+  };
+}
+
 /** `ACE_DRY TEMP=55 DURATION=4` -> {TEMP: '55', DURATION: '4'}. */
 function gcodeArgs(script) {
   const out = {};
@@ -532,6 +564,11 @@ export function makePrinter() {
       state: i === 0 ? 'ready' : 'idle', nozzle_diameter: 0.4,
     })),
     active: 0,
+    // Which slots have filament in them. State rather than a literal in snapshot(),
+    // because a test that wants an empty head has to be able to say so: setting it on
+    // the mirror instead was overwritten by the next tick, which made the check pass or
+    // fail on how long the script before it took.
+    filamentExist: [true, true, true, true],
     fanMain: 0, fanCavity: 0, ledWhite: 1, speedFactor: 1,
     purifierMode: 'inner',
     printState: 'printing',
@@ -567,6 +604,9 @@ export function makePrinter() {
     // The multiACE state, as the machine reports it - see mockAce() above. Null is a
     // machine with no multiACE plugin, which is the other half the panel has to draw.
     ace: mockAce(),
+    // And what is IN each bay, which the ace object does not carry. Null is a printer
+    // with no override store, where every occupied bay stays unnamed.
+    aceOverrides: mockAceOverrides(),
     // A real 16-hex fault so the banner can be exercised: toolhead subsystem
     // 0523, unit 1 -> "Toolhead 2".
     fault: null,
@@ -795,7 +835,7 @@ export function makePrinter() {
         // filament_color_rgba is hex with NO leading '#'. Measured on a U1.
         filament_color: [0xFFE03131, 0xFF1971C2, 0xFF2F9E44, 0xFFF08C00],
         filament_color_rgba: ['E03131FF', '1971C2FF', '2F9E44FF', 'F08C00FF'],
-        filament_exist: [true, true, true, true],
+        filament_exist: p.filamentExist.slice(),
         extruders_used: [0, 1, 2, 3],
         extruder_map_table: { 0: 0, 1: 1, 2: 2, 3: 3 },
         flow_calibrate: true,

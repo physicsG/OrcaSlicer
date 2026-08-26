@@ -140,6 +140,21 @@ the reverse-engineering evidence. `selftest.html` exercises the real modules aga
 the simulator: envelope shape, subscription ack-then-push, partial-state merging,
 control round-trips, error decoding, and failure handling.
 
+### multiACE
+
+The Filament panel integrates with **multiACE**
+([decay71/multiACE](https://github.com/decay71/multiACE)), a third-party Klipper plugin
+deployed onto a U1 — not with Snapmaker's own firmware. A printer without it reports no
+`ace` object and gets the four filament slots this page always drew.
+
+Everything about it is in [`../shared/js/multiACE.js`](../shared/js/multiACE.js): the
+macro names and the line builder, the unit letters, the dryer presets, the override-store
+URL, the state model and the bay merge. `MachineState.ace()` calls into it. Two sources
+feed that model and they do not carry the same thing — the `ace` Klipper object has the
+topology and what is *loaded*, and multiACE's override store has what is in each *bay* —
+so the precedence (**rfid → override → derived**) lives there too, as pure logic
+`unit_jsc.py` can test.
+
 ## What it does not do
 
 The shipped page is much larger in scope. Deliberately out of scope here: device

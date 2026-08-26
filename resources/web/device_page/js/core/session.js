@@ -356,6 +356,11 @@ export function createSession({ bridge, state, store, setStatus, render, refresh
       ok = Object.keys(state.objects).length > 0;
       refreshToolhead();          // homed_axes is not in the subscribed set
       refreshAce();               // nor is `ace`; see refreshAce above
+      // And what is IN each bay is not machine state at all - the Klipper object carries
+      // no per-bay identity, so multiACE's own record of it is fetched off the printer's
+      // file server. Same shape as queryException(): a cross-cutting read the session
+      // starts and a panel owns.
+      if (handlers.syncBays) handlers.syncBays();
     } catch (e) {
       hostLog(`snapshot failed (${reason}): ${e.message}`, 'error');
     }

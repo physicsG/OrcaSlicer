@@ -6,6 +6,25 @@ bite you.
 Design record: [10-multiace-filament.md](10-multiace-filament.md) · Status:
 [../STATUS.md](../STATUS.md)
 
+**What this integrates with.** Not "ACE support". **multiACE**
+([decay71/multiACE](https://github.com/decay71/multiACE)) is a third-party Klipper plugin
+someone chooses to **deploy onto** a U1, and everything this panel reads and sends belongs
+to it: the `ace` Klipper object, the macros, the override store, the web service. A stock
+U1 has none of them and gets the four filament slots the page always drew — which is not
+a fallback bolted on, it is the state every printer without the plugin is in. The plugin
+is pre-1.0 and versioned, so the integration carries what it was verified against rather
+than assuming: **`0.99.8b+9ba137e1` on a U1 running 1.5.2, `api_version: 1`,
+`ace_bg_swap v0.9`** — in `MULTIACE_VERIFIED`, and shown in the panel's own help.
+
+**It is one module.** [`shared/js/multiACE.js`](../../../resources/web/shared/js/multiACE.js)
+owns all of it — macro names and the line builder, the unit letters, the dryer presets and
+limits, Orca's humidity buckets, the override-store URL, the state model, and the merge.
+It is named for the plugin and not for the hardware because they are not the same thing.
+`MachineState.ace()` is a call into it, `protocol.js` keeps only what is not multiACE's,
+and the panel imports from it — so "where is this defined" has one answer. It was three
+before, and that is how the panel came to read bay identity from a source that does not
+carry it.
+
 ---
 
 ## Where this stands
@@ -28,14 +47,15 @@ proves nothing, and neither does a field name that reads plausibly:
 
 | | where |
 |---|---|
-| `ace()` — the topology, unpacked, with the two traps in it | [`shared/js/state.js`](../../../resources/web/shared/js/state.js) |
-| The macro names, the unit letters, the dryer's presets and limits, Orca's humidity buckets | [`shared/js/protocol.js`](../../../resources/web/shared/js/protocol.js) |
+| **The whole multiACE surface** — macros, constants, the state model, the override merge | [`shared/js/multiACE.js`](../../../resources/web/shared/js/multiACE.js) |
+| `MachineState.ace()`, which is a call into it | [`shared/js/state.js`](../../../resources/web/shared/js/state.js) |
 | The panel: the card, the cabinet, the feeder, the tube, the dryer dialog, both menus | [`filament-view.js`](../../../resources/web/device_page/js/views/device-control/filament/filament-view.js) |
 | Fifteen macros, none awaited, each confirmed against machine state | [`filament-commands.js`](../../../resources/web/device_page/js/views/device-control/filament/filament-commands.js) |
 | The one-shot read, because `ace` is not on the subscription | `refreshAce()` in [`core/session.js`](../../../resources/web/device_page/js/core/session.js) |
 | The `ace` object as the machine reports it, macros included | [`shared/js/mockhost.js`](../../../resources/web/shared/js/mockhost.js) |
 | 14 geometric checks, 60 driven against the simulator, 26 against the printer | `run_webkit.py` · [`drive/ace-panel.js`](../../../resources/web/shared/tests/drive/ace-panel.js) · [`drive/ace-real.js`](../../../resources/web/shared/tests/drive/ace-real.js) |
 | The macro surface as the machine reports it | [`tools/ace_macros.py`](../tools/ace_macros.py) → [`data/ace-macros.json`](../data/ace-macros.json) |
+| The precedence rule, held to account as pure logic | `unit_jsc.py` — 9 checks, no DOM |
 
 ```bash
 R=resources/web/shared/tests
@@ -211,12 +231,61 @@ spoolman_url spools status swap_in_progress swap_phase temp
   ticked down one per second. That is minutes in, seconds out, and it is what proved the
   dialog's `DURATION=4` was asking for four minutes.
 
-**Tier 2 was wrong, and in the useful direction.** Naming an unloaded bay does **not**
-need an `sw_` proxy past CORS. The machine has `ACE_SPOOL_ASSIGN ACE=n SLOT=n [ID=n]` and
-a whole local spool table in `ace.spools` — 19 entries here, each with material, vendor,
-colour, label, `weight_g`, density and SKU — plus `ACE_SPOOL_ADD` / `_SET` / `_DELETE` /
-`_LIST` to maintain it. So the "tier 2 needs C++" line in the design record is obsolete:
-it needs a bay sheet and one macro.
+---
+
+## The bay identity the panel was missing
+
+**The panel shipped drawing three of four bays as `?` on a machine that knew all four.**
+The report was "filament is not correctly read from multiACE", and it was right. What
+found it was the comparison the reporter suggested: **look at how the Prepare page syncs.**
+
+Orca's own `AceMmuProvider` (on `feat/ace-mmu-slicing`) polls
+`http://<host>/multiace/api/state` from C++, and that endpoint answers with all four bays
+named — `source: "override"`. The Device page reads the `ace` Klipper object, and that
+object carries **no per-bay identity at all**: every raw slot is
+`{material:"", brand:"", rfid:0}` because these spools have no tags. multiACE keeps the
+names its own web UI shows in an **override store** and merges them in `_parse_state()`.
+So both were reading correctly, from two sources that do not carry the same thing — and
+C++ has no CORS to stop it.
+
+**The route the page can use, measured:**
+
+| | |
+|---|---|
+| `http://<ip>/multiace/api/state` | **no CORS header at all** (nginx). The original claim holds — a browser cannot read it |
+| `http://<ip>:7125/…` | **reflects the Origin.** Moonraker sends `Access-Control-Allow-Origin`, and this page already fetches camera frames and job thumbnails from it |
+| the store itself | `config/extended/multiace/slot_overrides.json`, **under Moonraker's `config` root** — 565 bytes, keyed `"<ace>_<slot>"` → `{ace, slot, material, brand, subtype, color}` |
+
+So reading it needs **no proxy, no C++ and no new bridge command** — one HTTP GET, the
+pattern `cameraFrameUrl()` already uses. It is `syncBays()` in the panel's commands, it
+lands in `store.aceBays` (the page's knowledge, not the machine's), and the session starts
+it the same way it starts `queryException()`.
+
+**multiACE's precedence is kept verbatim: `rfid` → `override` → `derived`.** A tag is the
+hardware's own answer and beats a name someone typed; both beat an identity inferred from
+what happens to be loaded in the head. Those are multiACE's own words for it and the panel
+uses the same ones rather than inventing a second vocabulary — the mark's title says which.
+
+**It fails quietly, and that is the correct behaviour.** No file, no multiACE, no route, or
+a Moonraker with auth on all mean the same thing: nothing to merge, and a bay nobody has
+named goes on being drawn as a bay nobody has named. `ace-panel.js` reaches that state
+deliberately.
+
+Two things checked and ruled out on the way: **`save_variables`** carries only
+`ace__mode`, `ace__head_ace`, `ace__head_feeder`, `ace__head_manual`, `ace__head_source`,
+`ace__auto_dry` and `ace__revision` — the head mapping, not the bays; and
+**`spool_binding` is `{}`**, so the Spoolman table is not where these names are either.
+
+**Writing one is still open.** Reading is done; naming a bay *from the panel* needs either
+`ACE_SPOOL_ASSIGN ACE=n SLOT=n [ID=n]` (binds an entry of `ace.spools` — 19 here, each
+with material, vendor, colour, `weight_g`, density and SKU — maintained by
+`ACE_SPOOL_ADD` / `_SET` / `_DELETE` / `_LIST`) or multiACE's own
+`POST /api/slot-override`, which is behind the same missing CORS header. **The macro is
+the reachable one**, and that decides where the bay sheet's Save button points.
+
+**Tier 2 was wrong, and in the useful direction.** The design record says it needs an
+`sw_` proxy past CORS and a piece of C++. It needs neither: a file read the page can
+already do, and one macro to write.
 
 `spool_binding` is still `{}`, so no bay is bound to an entry and **no bay has a level**.
 That part of the design survives, with a sharper reason: when a bay *is* bound the entry
@@ -292,26 +361,30 @@ writes the `[ace_bg_swap] heads` config line. `ACE_BG_UNLOAD` restates the whole
 **head mode, 1:1 wiring, an OPEN dock below the head (purges ~60 mm!), and the head stays
 docked for the whole ~3 min sequence.**
 
-So the panel must offer these **only for a head multiACE says is enabled**, and here is
-the problem to solve first: **the `ace` Klipper object does not carry that.** All 38
-top-level keys are listed above and there is no `bg_swap` among them — the FastAPI
-`/api/state` has `bg_swap: {available, version, enabled_heads, busy}` and the Klipper
-object does not. Three ways out, in order of preference:
+So the panel must offer these **only for a head multiACE says is enabled** — and the gate
+is reachable. It is not in the `ace` object (all 38 of its top-level keys are listed above
+and there is no `bg_swap` among them), but **`ace_bg_swap` is a Klipper object of its
+own**, and `sw_GetMachineState {objects:{ace_bg_swap:null}}` answers with it. Measured on
+2026-08-26, and asserted in `ace-real.js`:
 
-1. **Ask multiACE to publish it** in the `ace` object. It is already computing it for its
-   own web UI; this is a one-line addition upstream and it makes every consumer honest.
-2. **`ACE_BG_STATUS`** exists but answers as console text, which this transport does not
-   give the page.
-3. **Infer nothing.** Until one of the above, draw BG swap as unavailable and say why —
-   never as available-and-it-might-refuse. A control that offers a ~60 mm purge on a
-   closed dock is the one mistake on this panel that costs filament and a bed.
+```json
+{"version": "v0.9", "enabled_heads": [], "busy": [], "state": {}}
+```
+
+`enabled_heads` is the list `ACE_BG_SET_HEAD HEAD=n ENABLE=1` writes, and `busy` is what a
+progress state would read. **No head is enabled on this machine**, so the next iteration
+gets to design the disabled case first — which is the right way round: a control that
+offers a ~60 mm purge on a closed dock is the one mistake on this panel that costs
+filament and a bed. Draw it unavailable, say why, and point at `ACE_BG_SET_HEAD`.
 
 ### And the rest of it
 
-- **The bay sheet, and tier 2 with it.** `ACE_SPOOL_ASSIGN ACE=n SLOT=n [ID=n]` binds one
-  of `ace.spools`' entries to a bay, which is how an occupied-and-unnamed bay finally gets
-  a name — no CORS proxy and no C++, which is what the design record still says it needs.
-  `ACE_SPOOL_ADD` / `_SET` maintain the table. The bay sheet is where both live.
+- **The bay sheet, which is now only the WRITE half.** Reading what is in a bay is done —
+  the override store is fetched and merged, see above. What a bay sheet adds is naming one
+  *from the panel*, and the reachable route for that is `ACE_SPOOL_ASSIGN ACE=n SLOT=n
+  [ID=n]` binding an entry of `ace.spools` (`ACE_SPOOL_ADD` / `_SET` maintain the table).
+  multiACE's own `POST /api/slot-override` is behind the same missing CORS header that
+  stops the page reading `/api/state`, so it is not an option from here.
 - **Confirmations belong to the machine too.** `confirm_commands` is reported and the
   printer asks on its own screen; a panel that also asks would ask twice. Read it and
   decide once, in the mockup.

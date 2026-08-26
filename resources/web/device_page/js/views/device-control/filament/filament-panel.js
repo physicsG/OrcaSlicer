@@ -41,9 +41,16 @@ export default {
       on: (ctx) => openAceModeMenu(document.getElementById('filament-mode'), ctx) },
     { kind: 'spacer' },
     { kind: 'status', id: 'filament-ace', text: aceStatus,
-      title: (ctx) => (ctx.state.ace().present
-        ? 'From the `ace` Klipper object, read on its own rather than on the stream'
-        : 'No `ace` object in machine state — no multiACE on this printer') },
+      title: (ctx) => {
+        const a = ctx.state.ace();
+        // multiACE is a plugin someone installs on the U1, not firmware. Naming it, and
+        // the contract version it claims, is what makes "why is this panel different on
+        // my machine" answerable.
+        return a.present
+          ? `multiACE${a.apiVersion ? ` (api_version ${a.apiVersion})` : ''} — read from `
+            + 'the `ace` Klipper object, on its own rather than on the stream'
+          : 'No `ace` object in machine state — multiACE is not installed on this printer';
+      } },
     { kind: 'gap' },
     { kind: 'icon', id: 'filament-settings', cls: 'icon-only', icon: 'settings',
       title: 'Unload all, flush length, confirmations, Spoolman',

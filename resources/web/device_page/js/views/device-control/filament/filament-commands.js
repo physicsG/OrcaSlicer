@@ -28,8 +28,11 @@
  */
 'use strict';
 
-import { CMD, TASK_CONFIG, ACE, DRY_MINUTES_PER_HOUR, cssColor, aceUnitId }
-  from '../../../../../shared/js/protocol.js';
+import { CMD, TASK_CONFIG, cssColor } from '../../../../../shared/js/protocol.js';
+// Everything about the ACE comes from one module - see shared/js/multiACE.js for why.
+import { ACE, DRY_MINUTES_PER_HOUR, aceUnitId, aceLine, aceOverridesUrl,
+         parseAceOverrides }
+  from '../../../../../shared/js/multiACE.js';
 import { openDialog, numberField, toggleField } from '../../../core/overlay.js';
 import { el } from '../../../core/dom.js';
 
@@ -46,13 +49,9 @@ export function create(deps) {
   // `bridge` is deliberately NOT destructured: it does not exist yet when these are
   // built - boot() decides between the real host and the simulator - so it is reached
   // through deps each time rather than captured as null once.
-  const { state, pending, session, send, setStatus, render } = deps;
+  const { state, store, pending, session, send, setStatus, render } = deps;
 
-  /** `ACE_DRY` + {ACE:'A', TEMP:55} -> `ACE_DRY ACE=A TEMP=55`. */
-  const line = (macro, args) => [macro].concat(
-    Object.entries(args || {})
-      .filter(([, v]) => v !== undefined && v !== null && v !== '')
-      .map(([k, v]) => `${k}=${v}`)).join(' ');
+  const line = aceLine;
 
   /** Look at the ACE again, a few times, because nothing pushes it. */
   function confirmAce() {
@@ -72,6 +71,47 @@ export function create(deps) {
     else sent.then((ok) => { if (ok) setStatus(label); });
     confirmAce();
     return sent;
+  }
+
+  /* ---- what is IN each bay ----------------------------------------- */
+
+  /**
+   * Read multiACE's own record of what is in each bay.
+   *
+   * The `ace` Klipper object does not carry it. Every raw slot on the measured machine
+   * reads `{material:"", brand:"", rfid:0}` — these spools have no tags — while
+   * multiACE's web UI names all four, because it keeps them in an override store and
+   * merges them into `/multiace/api/state`. Orca's own AceMmuProvider polls that
+   * endpoint from C++ and therefore sees filament this panel drew as `?`.
+   *
+   * `/multiace/api/state` is not reachable from a browser: nginx serves `/multiace/`
+   * with no CORS header. The STORE is: it is a file under Moonraker's `config` root, and
+   * Moonraker on :7125 reflects the Origin — the same server this page already fetches
+   * camera frames and job thumbnails from.
+   *
+   * Fails quietly on purpose. No file, no multiACE, no route to the printer, or a
+   * Moonraker with auth turned on all mean the same thing to the panel: nothing to merge,
+   * and a bay nobody has named goes on being drawn as a bay nobody has named.
+   */
+  async function syncBays() {
+    // With no printer there is nothing to answer an HTTP GET, so the simulator does -
+    // the same seam the camera's frames use.
+    if (deps.mock && deps.mock.aceOverrides) {
+      store.aceBays = deps.mock.aceOverrides();
+      render();
+      return store.aceBays;
+    }
+    const url = aceOverridesUrl(store.device);
+    if (!url) return null;
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      store.aceBays = parseAceOverrides(await r.json());
+    } catch (e) {
+      store.aceBays = null;
+    }
+    render();
+    return store.aceBays;
   }
 
   /* ---- what feeds a head ------------------------------------------- */
@@ -283,6 +323,7 @@ export function create(deps) {
       send(CMD.UPDATE_MACHINE_FILAMENT_INFO, patch, 'set filament');
     },
 
+    syncBays: () => syncBays(),
     setSource: (i, source) => setSource(i, source),
     setAceMode: (m) => setAceMode(m),
     loadBay: (i, unit, slot) => loadBay(i, unit, slot),
@@ -300,20 +341,31 @@ export function create(deps) {
     filamentHelp: () => openDialog({
       title: 'Filament sources',
       build: (b) => {
+        const a = state.ace();
         const p = el('p', 'ms-note');
-        p.textContent = 'Each card is one of the U1’s four toolheads and its header '
-          + 'chooses what feeds it: its own stock feeder, one of the ACE units, or '
-          + 'hand-fed. What a head IS fed resolves head_manual, then head_feeder, then '
-          + 'head_ace — in that order, because head_ace answers for every head '
-          + 'whether or not that head is on an ACE.';
+        // multiACE is a plugin someone installs on the printer, not Snapmaker firmware,
+        // and saying so is what makes "why does my U1 not look like this" answerable.
+        p.textContent = 'This panel talks to multiACE, a Klipper plugin installed on the '
+          + 'printer rather than part of Snapmaker\u2019s firmware'
+          + (a.apiVersion ? ` (api_version ${a.apiVersion})` : '')
+          + '. A U1 without it reports no ACE at all and gets the four filament slots '
+          + 'instead.';
         b.appendChild(p);
         const q = el('p', 'ms-note');
-        q.textContent = 'A bay drawn grey with no name is occupied and unidentified, '
-          + 'which is what the machine reports: the raw slots carry no material, brand '
-          + 'or tag. Only the bay a head is loaded from is named, from head_source. No '
-          + 'bay has a level — nothing is bound in Spoolman — so a disc is a '
-          + 'colour and not a gauge.';
+        q.textContent = 'Each card is one of the U1\u2019s four toolheads and its header '
+          + 'chooses what feeds it: its own stock feeder, one of the ACE units, or '
+          + 'hand-fed. What a head IS fed resolves head_manual, then head_feeder, then '
+          + 'head_ace \u2014 in that order, because head_ace answers for every head '
+          + 'whether or not that head is on an ACE.';
         b.appendChild(q);
+        const r = el('p', 'ms-note');
+        r.textContent = 'What is in each bay is not in the machine\u2019s own state: the '
+          + 'raw slots carry no material, brand or tag, so the names come from '
+          + 'multiACE\u2019s override store, read off the printer\u2019s file server. A '
+          + 'bay drawn grey with no name is one nothing has named. No bay has a level '
+          + '\u2014 nothing is bound in Spoolman \u2014 so a disc is a colour and not a '
+          + 'gauge.';
+        b.appendChild(r);
       },
       confirmLabel: 'Close',
       onConfirm: () => true,

@@ -564,7 +564,10 @@ check("anything hidden from JS opts out of its own display rule",
 # idle job card". check_coverage found the first because it named a command; the second
 # names none, so nothing could. This asks the question directly instead.
 _uncalled = []
-_callers = ui_src + shell_src + app_src + panels_all + cmds_all
+# session.js counts: it is where cross-cutting reads are started - queryException() on
+# connect, and syncBays() when the state stream comes up - and leaving it out reported a
+# command that IS reached as unreachable.
+_callers = ui_src + shell_src + app_src + panels_all + cmds_all + session_src
 for _mod, _src in sorted(cmd_src.items()):
     if _mod == "util":
         continue

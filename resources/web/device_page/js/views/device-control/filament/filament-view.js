@@ -39,10 +39,12 @@
 'use strict';
 
 import { el, icon } from '../../../core/dom.js';
-import { cssColor, isDarkColor, humidityLevel, aceBayAddr,
-         ACE, ACE_MODES, ACE_MODE_LABELS,
-         DRY_TEMPS, DRY_HOURS, DRY_LIMITS, DRY_MINUTES_PER_HOUR, AUTO_DRY_THRESHOLDS }
-  from '../../../../../shared/js/protocol.js';
+import { cssColor, isDarkColor } from '../../../../../shared/js/protocol.js';
+// Everything about the ACE comes from one module - see shared/js/multiACE.js for why.
+import { ACE, ACE_MODES, ACE_MODE_LABELS, DRY_TEMPS, DRY_HOURS, DRY_LIMITS,
+         DRY_MINUTES_PER_HOUR, AUTO_DRY_THRESHOLDS,
+         aceBayAddr, humidityLevel, mergeAceBays }
+  from '../../../../../shared/js/multiACE.js';
 import { keyedList, rebuildOn } from '../../../core/render.js';
 import { openDialog, openMenu } from '../../../core/overlay.js';
 
@@ -72,9 +74,11 @@ const SENSOR = {
  * distinction on its own slots and `.slot` already ships the pencil.
  */
 const PROV = {
-  rfid:    { glyph: 'eye',    word: 'from the spool tag — read only' },
-  typed:   { glyph: 'pencil', word: 'typed in — edit' },
-  unknown: { glyph: 'pencil', word: 'occupied, not named — name it' },
+  rfid:     { glyph: 'eye',    word: 'from the spool tag — read only' },
+  override: { glyph: 'pencil', word: 'named in multiACE — edit it there' },
+  derived:  { glyph: 'pencil', word: 'from what is loaded in the head — name it' },
+  typed:    { glyph: 'pencil', word: 'typed in — edit' },
+  unknown:  { glyph: 'pencil', word: 'occupied, not named — name it' },
 };
 
 /* ---------------------------------------------------------------- *
@@ -156,7 +160,7 @@ const usersOf = (ace, u) =>
 function renderCards(grid, ace, slots, ctx) {
   keyedList(grid, ace.heads, {
     key: (h) => h.index,
-    sig: (h) => cardSig(ace, slots, ctx.pending, h.index),
+    sig: (h) => cardSig(ace, slots, ctx.pending, h.index, ctx.store.aceBays),
     create: (h) => card(ace, slots, ctx, h.index),
   });
   drawTubes(grid);
@@ -168,7 +172,7 @@ function renderCards(grid, ace, slots, ctx) {
  * It has to include the resolved source rather than the machine's, or a switch flipped
  * by the user would not repaint until the printer agreed - which for a load is minutes.
  */
-function cardSig(ace, slots, pending, i) {
+function cardSig(ace, slots, pending, i, overrides) {
   const src = askedSource(ace, pending, i);
   const h = ace.heads[i];
   const u = h.source === 'ace' ? ace.units[h.unitIndex] : null;
@@ -180,7 +184,8 @@ function cardSig(ace, slots, pending, i) {
     sp ? [sp.material || sp.type, sp.subType, sp.vendor, sp.color].join(',') : '-',
     u ? [u.id, u.model, u.humidity, u.temperature, u.dryer.running,
          u.dryer.doneMin, u.dryer.totalMin,
-         u.bays.map((b) => [b.occupied ? 1 : 0, b.material, b.color, b.source].join('')).join('/'),
+         mergeAceBays(u, overrides)
+           .map((b) => [b.occupied ? 1 : 0, b.material, b.color, b.source].join('')).join('/'),
         ].join(':') : '-',
     pending.resolve(`ace-load-${i}`, h.bay == null ? '' : aceBayAddr(h.unitIndex, h.bay)).state,
   ].join('|');
@@ -202,14 +207,16 @@ function card(ace, slots, ctx, i) {
   const unit = onAce ? ace.units[Number(String(src.value).slice(4))] : null;
   const shared = unit ? usersOf(ace, unit.index).filter((x) => x !== i) : [];
 
+  const bays = unit ? mergeAceBays(unit, ctx.store.aceBays) : null;
+
   const c = el('div', 'ace-card');
   if (unit) c.classList.add('is-ace');
   if (shared.length) c.classList.add('is-shared');
-  c.appendChild(cardHead(ace, ctx, i, src, unit, shared));
+  c.appendChild(cardHead(ace, ctx, i, src, unit, shared, bays));
 
   const body = el('div', 'ace-body');
   const spool = unit ? h.loaded : slots[i];
-  body.appendChild(unit ? cabinet(ace, ctx, i, unit, h.bay) : feeder(ctx, i, src.value, spool));
+  body.appendChild(unit ? cabinet(ctx, i, unit, bays, h.bay) : feeder(ctx, i, src.value, spool));
   body.appendChild(el('div', 'ace-lane'));
   body.appendChild(head(slots[i], i));
 
@@ -232,7 +239,7 @@ function card(ace, slots, ctx, i) {
  * and a card with no ACE names its module there instead of holding an empty spacer,
  * which alignment required anyway.
  */
-function cardHead(ace, ctx, i, src, unit, shared) {
+function cardHead(ace, ctx, i, src, unit, shared, bays) {
   const hd = el('div', 'ace-head');
   const r1 = el('div', 'ace-hrow');
   r1.appendChild(el('span', 'ace-name', `Toolhead ${i + 1}`));
@@ -244,7 +251,7 @@ function cardHead(ace, ctx, i, src, unit, shared) {
   more.onclick = (e) => { e.stopPropagation(); openHeadMenu(more, ace, ctx, i, unit); };
   r1.appendChild(more);
   hd.appendChild(r1);
-  hd.appendChild(unit ? unitStrip(ctx, unit, shared) : feederStrip(i, src.value));
+  hd.appendChild(unit ? unitStrip(ctx, unit, shared, bays) : feederStrip(i, src.value));
   return hd;
 }
 
@@ -280,9 +287,9 @@ function sourceSelect(ace, ctx, i, src) {
   return sel;
 }
 
-function unitStrip(ctx, u, shared) {
+function unitStrip(ctx, u, shared, bays) {
   const r = el('div', 'ace-strip');
-  r.appendChild(aceBadge(u));
+  r.appendChild(aceBadge(bays || u.bays));
   const n = el('span', 'ace-unit');
   n.appendChild(el('b', null, `ACE ${u.id}`));
   n.appendChild(document.createTextNode(` · ${u.model}`));
@@ -374,12 +381,12 @@ function feederStrip(i, source) {
  * bays, full width was mostly empty grey, and the base drawn wider than the hood is what
  * makes it read as furniture.
  */
-function cabinet(ace, ctx, i, u, fedBay) {
+function cabinet(ctx, i, u, unitBays, fedBay) {
   const box = el('div', 'ace-box');
   const cab = el('div', 'ace-cab');
   const top = el('div', 'ace-cab-top');
   const bays = el('div', 'ace-bays');
-  u.bays.forEach((b) => bays.appendChild(bay(ctx, i, u, b, b.index === fedBay)));
+  unitBays.forEach((b) => bays.appendChild(bay(ctx, i, u, b, b.index === fedBay)));
   top.appendChild(bays);
   cab.appendChild(top);
   box.appendChild(cab);
@@ -402,7 +409,7 @@ function bay(ctx, i, u, b, fed) {
         ? `${b.addr}: ${[b.material, b.subType].filter(Boolean).join(' ')}`
           + (b.vendor ? ` · ${b.vendor}` : '')
           + (b.sku ? ` · ${b.sku}` : '')
-          + ` — ${PROV[b.source].word}`
+          + ` — ${(PROV[b.source] || PROV.unknown).word}`
         : `${b.addr}: occupied, filament not known — the raw slot carries no material, `
           + 'brand or tag')
     : `${b.addr}: empty`;
@@ -928,11 +935,11 @@ function droplet(humidity) {
  * The ACE badge, filled with that unit's own bays, so the thing in the header is a
  * picture of the thing in the card. Geometry from docs/ace-mmu/16-ace-visuals.md.
  */
-function aceBadge(u) {
+function aceBadge(bays) {
   const s = svg('svg', { width: 26, height: 16, viewBox: '0 0 44 26',
                          'aria-hidden': 'true', class: 'ace-badge' });
   s.appendChild(svg('rect', { x: 2, y: 1, width: 40, height: 20, rx: 3, fill: '#EEEEEE' }));
-  u.bays.forEach((b, i) => s.appendChild(svg('rect', {
+  bays.forEach((b, i) => s.appendChild(svg('rect', {
     x: 6 + i * 9, y: 4, width: 5, height: 14, rx: 2.5,
     fill: (b.occupied && cssColor(b.color)) || (b.occupied ? '#B7BDC6' : '#FFFFFF') })));
   s.appendChild(svg('rect', { x: 0, y: 20, width: 44, height: 5, rx: 1.5, fill: '#CECECE' }));

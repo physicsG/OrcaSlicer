@@ -999,10 +999,32 @@ carrying:
 - **`drive/ace-real.js` is the read-only half**, and permanently so: `ace-panel.js`
   switches sources, loads bays and starts the dryer, and a suite should not be able to
   purge a nozzle. 26 checks against the printer, including a dump of the raw object.
-- **What is still unproven:** what a *second* unit's payload looks like (this machine has
-  one), and which heads are background-swap capable — `bg_swap` is in multiACE's FastAPI
-  state and **not** in the Klipper object, so the page cannot tell. That gates the next
-  iteration; see the handover.
+- **The panel was reading bay identity from a source that does not carry it**, reported as
+  "filament is not correctly read from multiACE" and found by the comparison the reporter
+  suggested — *look at how the Prepare page syncs*. Orca's `AceMmuProvider` polls
+  `/multiace/api/state` from C++ and gets four named bays; the `ace` Klipper object has
+  **no per-bay identity at all** (`{material:"", brand:"", rfid:0}` on every raw slot),
+  because multiACE keeps the names in an override store and merges them in its own
+  `_parse_state()`. Both were reading correctly, from two different things.
+- **And the store is reachable, measured.** nginx serves `/multiace/` with **no CORS
+  header** — that claim holds — but **Moonraker on :7125 reflects the Origin**, and the
+  store is a file under its `config` root
+  (`config/extended/multiace/slot_overrides.json`). One HTTP GET, the same pattern the
+  camera frames already use: no proxy, no C++, no new bridge command. multiACE's own
+  precedence is kept — **rfid → override → derived** — and it fails quietly, because a
+  printer without the plugin must go on drawing an unnamed bay as unnamed. Ruled out on
+  the way: `save_variables` carries only the head mapping, and `spool_binding` is `{}`.
+- **It is one module now.** `shared/js/multiACE.js` owns the macros, the constants, the
+  state model and the merge — named for the **plugin**, not the hardware, because this
+  integrates with something deployed onto a U1 rather than with Snapmaker firmware. It was
+  spread over `protocol.js`, `state.js` and a view, which is how the reading gap survived.
+  The precedence rule is pure logic now, so `unit_jsc.py` holds it to account with no DOM.
+- **The background-swap gate IS reachable**, contrary to what was written here first:
+  `ace_bg_swap` is its own Klipper object — `{version, enabled_heads, busy, state}` — and
+  `sw_GetMachineState` answers with it. No head is enabled on this machine, so the next
+  iteration gets to design the disabled case first.
+- **What is still unproven:** what a *second* unit's payload looks like — this machine has
+  one — and everything about a background swap, since no head is declared capable.
 
 Then, in rough order of value:
 

@@ -59,6 +59,17 @@ export function createStore() {
     /** Every machine Orca has saved, connected or not. */
     devices: [],
 
+    /**
+     * What multiACE says is in each ACE bay, keyed `"<ace>_<slot>"`.
+     *
+     * Here rather than in `MachineState` because it is not machine state: the `ace`
+     * Klipper object carries no per-bay identity at all, and this is a file the PAGE
+     * fetched off the printer's own file server. Null until it has been asked for, and
+     * null again if the printer has no such file - which is a real answer, not a
+     * failure: a bay nobody has named stays drawn as a bay nobody has named.
+     */
+    aceBays: null,
+
     /** Machines LAN discovery has turned up. */
     found: [],
 

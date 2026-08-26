@@ -41,6 +41,9 @@ export function create(deps) {
     await session.startStateStream('refresh');     // filter + snapshot + subscription, and it
                                            // re-reads homed_axes on its own way out
     cmd.queryException();
+    // `startStateStream` above re-reads the ACE and its bays on its own way out, so
+    // there is nothing to ask for here - two triggers for one read is how a subsystem
+    // ends up defined in more than one place.
     deps.bridge.request(CMD.GET_MACHINE_SYSTEM_INFO, {}).catch(() => {});
     deps.bridge.request(CMD.FILE_STATUS, {}).catch(() => {});
     deps.bridge.request(CMD.FILES_ROOTS, {}).catch(() => {});

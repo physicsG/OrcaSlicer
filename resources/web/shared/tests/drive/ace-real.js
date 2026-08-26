@@ -90,6 +90,49 @@
     info(`settings: confirm=${st.confirmCommands} spoolman=${st.spoolmanUrl || '(none)'} `
        + `auto=${st.spoolmanAuto} matrix=${st.purgeMatrix} bound=${st.bound}`);
 
+    /* ---- what is IN each bay, which the ace object does not say -------- */
+    // The discrepancy this file exists to catch: Orca's Prepare page polls
+    // /multiace/api/state from C++ and sees four named bays, while the Klipper object
+    // reports four blanks. The names live in multiACE's override store, and the store is
+    // a file under Moonraker's config root - which the page CAN fetch, because Moonraker
+    // reflects the Origin where nginx's /multiace/ sends no CORS header at all.
+    await P.handlers.syncBays();
+    await wait(150);
+    const bays = P.store.aceBays;
+    info(`override store: ${bays ? Object.keys(bays).sort().join(' ') : '(none)'}`);
+    const rawNamed = (a0.slots || []).filter((s2) => (s2.material || '').trim()).length;
+    info(`raw slots with a material: ${rawNamed} of ${(a0.slots || []).length}`);
+    if (bays) {
+      const occupied = P.state.ace().units[0].bays.filter((b) => b.occupied);
+      const named = $$('#filament .ace-cab .ace-chip')
+        .map((e) => e.textContent).filter((t) => t && t !== '?' && t !== '/');
+      say('every occupied bay the store names is drawn with that name',
+          named.length, occupied.length);
+      say('and the mark says the name came from multiACE, not from a tag',
+          $$('#filament .ace-cab .ace-prov')
+            .some((e) => /multiACE/.test(e.title)), true);
+      say('so no occupied bay is left reading `?`',
+          $$('#filament .ace-cab .ace-chip').filter((e) => e.textContent === '?').length, 0);
+    } else {
+      info('no override store on this printer - occupied bays stay unnamed, correctly');
+    }
+
+    /* ---- the background-swap gate -------------------------------------- */
+    // Written down as unavailable: `bg_swap` is in multiACE's FastAPI state and not in
+    // the `ace` object. It IS its own Klipper object, so the page can ask for it.
+    try {
+      const snap = await P.bridge.request('sw_GetMachineState',
+                                          { objects: { ace_bg_swap: null } });
+      P.state.applyPayload(snap);
+      const bg = P.state.get('ace_bg_swap');
+      info(`ace_bg_swap: ${JSON.stringify(bg)}`);
+      say('the background-swap gate is a Klipper object, and it answers',
+          !!bg && Array.isArray(bg.enabled_heads), true);
+    } catch (e) {
+      say('the background-swap gate is a Klipper object, and it answers',
+          `threw: ${e.message}`, true);
+    }
+
     say('the unit count matches device_count',
         ace.unitCount, Math.min(4, Number(raw.device_count) || 0));
     say('a humidity reading is a percentage, not a 1-5 bucket',

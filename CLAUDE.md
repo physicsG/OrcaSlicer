@@ -137,13 +137,28 @@ Filament. A panel names its own column in its declaration (`column`, `grow`); th
 destination names them in `registry.js`. Below a 1600px window it is one centred column
 and none of that applies.
 
+**The Filament panel integrates with multiACE, a plugin — not with "the ACE".**
+[decay71/multiACE](https://github.com/decay71/multiACE) is a third-party Klipper plugin
+deployed onto a U1; the `ace` object, the macros and the override store are all its, and a
+stock U1 has none of them. **Everything about it lives in one module,
+[`shared/js/multiACE.js`](resources/web/shared/js/multiACE.js)** — macros and the line
+builder, constants, the state model and the bay merge — named for the plugin rather than
+the hardware. `MachineState.ace()` calls into it. It was spread over three files, and that
+is how the panel came to read bay identity from a source that does not carry it.
+
 **The Filament panel has two shapes and the machine picks.** A printer that reports no
 `ace` Klipper object gets the four slots the page always drew; one that reports it gets
 four toolhead cards, two by two, each with its own header choosing what feeds that head -
 stock feeder, one of up to four ACE units, or hand-fed - the source drawn under it as a
 cabinet or a feeder module, and a tube into the head's inlet. `ace` is **not** on the
 subscription (that list is pinned to the shipped bundle's), so it is read on its own by
-`session.refreshAce()` and re-read after anything that changes it. Three things that are in
+`session.refreshAce()` and re-read after anything that changes it. **What is in each BAY is not machine state.** The `ace` object carries no per-bay
+identity — the raw slots read `{material:"", brand:"", rfid:0}` — and multiACE keeps the
+names in an override store. Orca's Prepare page polls the merged `/multiace/api/state`
+from C++ and saw filament the panel drew as `?`. nginx serves `/multiace/` with no CORS
+header, but Moonraker on :7125 reflects the Origin and the store is a file under its
+`config` root, so the page reads it directly: `syncBays()` → `store.aceBays`, merged with
+multiACE's own precedence **rfid → override → derived**. Four things that are in
 the code because hardware said so: **`head_ace` does not answer "what feeds this head"**
 (resolve `head_manual` → `head_feeder` → `head_ace`, in that order); **no bay has a
 level** — `spool_binding` is empty, so a disc is a colour and not a gauge; and **an `ok` is

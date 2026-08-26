@@ -557,81 +557,15 @@ export function isDarkColor(v) {
   return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) < 140;
 }
 
-/* ------------------------------------------------------------------ *
- * multiACE
+/*
+ * multiACE has a module of its own: shared/js/multiACE.js.
  *
- * Every control on the Filament panel is a plain G-code macro with documented
- * arguments, read out of `printer.gcode.help` on the machine on 2026-08-25, and the
- * page already owns sw_SendGCodes - so none of this needs a new bridge command.
- *
- * Names only. What each one takes lives beside the call in filament-commands.js,
- * because an argument list written twice is an argument list that drifts.
- * ------------------------------------------------------------------ */
-export const ACE = {
-  SET_MODE:        'SET_ACE_MODE',            // MODE=normal|multi|head [HEAD=n]
-  SET_HEAD_FEEDER: 'ACE_SET_HEAD_FEEDER',     // HEAD=n ENABLE=0|1   (head mode only)
-  SET_HEAD_ACE:    'ACE_SET_HEAD_ACE',        // HEAD=n ACE=a        (head mode only)
-  SET_HEAD_MANUAL: 'ACE_SET_HEAD_MANUAL',     // HEAD=n ENABLE=0|1
-  LOAD_HEAD:       'ACE_LOAD_HEAD',           // HEAD=n [ACE=a] [SLOT=s]
-  UNLOAD_HEAD:     'ACE_UNLOAD_HEAD',         // HEAD=n [RETRACT_LENGTH=] [KEEP_HEAT=]
-  SWAP_HEAD:       'ACE_SWAP_HEAD',           // HEAD=n ACE=a [SLOT=s]
-  DRY:             'ACE_DRY',                 // ACE=a [TEMP=C] [DURATION=MINUTES]
-  // NOT ACED__DRY_STOP, which stops "the current ACE" - on a machine with two units that
-  // is whichever one is active, and not necessarily the one whose chip was pressed.
-  DRY_STOP:        'ACE_STOP_DRYING',         // [ACE=a]
-  SET_AUTO_DRY:    'ACE_SET_AUTO_DRY',        // ACE=a ENABLE=0|1 [RH_START=%]
-  UNLOAD_ALL:      'ACE_UNLOAD_ALL_HEADS',    // no arguments
-  SET_PURGE:       'ACE_SET_PURGE',           // LENGTH=<mm> | RESET=1
-  SET_CONFIRM:     'ACE_SET_CONFIRM_COMMANDS',// ENABLE=0|1
-  SET_SPOOLMAN:    'ACE_SET_SPOOLMAN',        // URL= AUTO=0|1
-  CLEAR_HEADS:     'ACE_CLEAR_HEADS',         // [HEAD=n]
-};
-
-/**
- * Units are addressed by index on the wire and by letter on screen, the way Bambu
- * addresses an AMS - so a bay is A1..D4 and the address fits inside its own disc.
+ * Its macro names, unit letters, dryer presets, humidity buckets, override-store URL and
+ * state model were here and in state.js and in a view, which is three places to look for
+ * one subsystem - and is how the panel came to read bay identity from a source that does
+ * not carry it. Everything about the ACE is in that one file now, and it is what every
+ * part that touches an ACE calls.
  */
-export const ACE_UNIT_IDS = ['A', 'B', 'C', 'D'];
-export const aceUnitId = (i) => ACE_UNIT_IDS[i] || String((i | 0) + 1);
-export const aceBayAddr = (unit, slot) => `${aceUnitId(unit)}${(slot | 0) + 1}`;
-
-/** SET_ACE_MODE's three, in the order the macro help lists them. */
-export const ACE_MODES = ['normal', 'multi', 'head'];
-export const ACE_MODE_LABELS = { normal: 'Normal', multi: 'Multi', head: 'Head' };
-
-/**
- * What the dryer dialog offers, and what the macro will take.
- *
- * The presets are the common answers; the limits are there because ACE_DRY takes a
- * number and not a menu, and a spool whose tag says 65 C for 8 h should not have to be
- * rounded to the nearest chip.
- */
-export const DRY_TEMPS = [45, 55, 65, 70];
-export const DRY_HOURS = [2, 4, 6, 12];
-export const DRY_LIMITS = { temp: [35, 80], hours: [1, 24] };
-export const AUTO_DRY_THRESHOLDS = [45, 55, 65];
-
-/**
- * ACE_DRY's DURATION is in MINUTES, and the panel offers hours.
- *
- * Measured, because it had to be: `DURATION=3` came back as `duration: 180` and
- * `DURATION=240` as `14400`, both in seconds. Sending the panel's `4` unconverted asked
- * for four MINUTES of drying and the machine answered `ok`, which is the whole reason
- * this constant exists rather than a bare multiplication somewhere.
- */
-export const DRY_MINUTES_PER_HOUR = 60;
-
-/**
- * Orca's own humidity buckets - `hum_level1..5` at <=20, <=35, <=50, <=65, >65.
- *
- * The same thresholds AMSinfo uses to pick its droplet, so a tinted pill on this page
- * and the C++ widget cannot disagree about the same number.
- */
-export function humidityLevel(h) {
-  const n = Number(h);
-  if (!Number.isFinite(n)) return 0;
-  return n <= 20 ? 1 : n <= 35 ? 2 : n <= 50 ? 3 : n <= 65 ? 4 : 5;
-}
 
 /**
  * purifier.mode is an INTEGER on the wire, not the 'inner'/'exhaust' strings the page

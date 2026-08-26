@@ -263,6 +263,83 @@ def main():
           active({"toolhead": {"extruder": "extruder2"}}) == "null",
           "a wrong answer here is worse than none: it drives a park that cannot work")
 
+    # --- multiACE: two sources, one precedence ----------------------------
+    # The panel drew three of four bays as `?` on a machine that knew all four, because
+    # the `ace` object carries no per-bay identity and the names live in multiACE's own
+    # override store. The merge is pure and lives in one module now, so the rule that
+    # decides which of the two wins is testable here rather than only on a page.
+    print("\n== multiACE: where a bay's identity comes from ==")
+    ctxA = new_ctx(os.path.join(SHARED, "js", "protocol.js"),
+                   os.path.join(SHARED, "js", "multiACE.js"))
+
+    # As measured: one unit, four occupied bays, every raw slot blank, head 3 fed from
+    # bay 2 - so bay 2 is the only one the object itself can name.
+    RAW = json.dumps({"ace": {
+        "mode": "head", "device_count": 1, "api_version": 1,
+        "head_manual": {"0": False, "1": False, "2": False, "3": False},
+        "head_feeder": {"0": True, "1": True, "2": True, "3": False},
+        "head_ace": {"0": 0, "1": 1, "2": 2, "3": 0},
+        "head_source": {"3": {"ace_index": 0, "slot": 2, "type": "PETG",
+                              "subtype": "Basic", "color": "632C2C", "brand": "Generic"}},
+        "aces": [{"idx": 0, "connected": True, "protocol": "v2", "model": "ACE 2 Pro",
+                  "humidity": 38, "temp": 30, "gate_status": [1, 1, 1, 1],
+                  "dryer_status": {"status": "stop", "target_temp": 0,
+                                   "duration": 0, "remain_time": 0},
+                  "slots": [{"index": i, "status": "unknown", "material": "",
+                             "brand": "", "subtype": "", "rfid": 0,
+                             "color": [0, 0, 0]} for i in range(4)]}]}})
+    OVERRIDES = json.dumps({
+        "0_0": {"ace": 0, "slot": 0, "material": "PETG", "brand": "Kingroon",
+                "subtype": "Basic", "color": "#83AFFF"},
+        "0_1": {"ace": 0, "slot": 1, "material": "PLA", "brand": "Jayo",
+                "subtype": "", "color": "#1f8a4c"}})
+
+    def bays(overrides="null", raw=RAW):
+        return js(ctxA, f"JSON.stringify(mergeAceBays(parseAce({raw}).units[0], "
+                        f"{overrides}).map(b => b.source + ':' + (b.material || '-')))"
+                  ).to_string()
+
+    check("the ace object alone names only the bay a head is loaded from",
+          bays() == '["unknown:-","unknown:-","derived:PETG","unknown:-"]',
+          "every raw slot reads material:'' - these spools have no tags")
+    check("multiACE's store names the rest",
+          bays(OVERRIDES) == '["override:PETG","override:PLA","derived:PETG","unknown:-"]',
+          "this is the read the panel was missing, and what Orca's Prepare page already had")
+    check("a bay nothing names stays unnamed rather than borrowing a neighbour",
+          '"unknown:-"' in bays(OVERRIDES).split(",")[-1],
+          "occupied-and-unnamed is true; blank is a lie in the other direction")
+
+    # multiACE's own precedence: a tag beats a name someone typed against the bay.
+    tagged = json.loads(RAW)
+    tagged["ace"]["aces"][0]["slots"][0] = {"index": 0, "status": "ready", "rfid": 2,
+                                           "material": "ABS", "brand": "Snapmaker",
+                                           "subtype": "", "color": [15, 111, 209]}
+    check("a tag beats the override store",
+          bays(OVERRIDES, json.dumps(tagged)).startswith('["rfid:ABS"'),
+          "the hardware's own answer outranks a name typed against the bay")
+    check("and with no store at all the merge is the identity function",
+          bays("null", json.dumps(tagged)).startswith('["rfid:ABS"'),
+          "no multiACE web service must mean 'nothing to merge', not an error")
+
+    # The two guesses the printer disagreed with, held to the reading.
+    dry = js(ctxA, f"JSON.stringify(parseAce({RAW}).units[0].dryer)").to_string()
+    check("an idle dryer is not running and shows no countdown",
+          '"running":false' in dry, dry)
+    running = json.loads(RAW)
+    running["ace"]["aces"][0]["dryer_status"] = {"status": "keeping", "target_temp": 55,
+                                                "duration": 14400, "remain_time": 4740}
+    d2 = json.loads(js(ctxA, f"JSON.stringify(parseAce({json.dumps(running)})"
+                             f".units[0].dryer)").to_string())
+    check("`keeping` is the running word, not `running`", d2["running"] is True,
+          "measured by running the dryer for ten seconds; it was guessed as 'running'")
+    check("and its times are seconds on the wire, minutes on the panel",
+          (d2["totalMin"], d2["remainingMin"], d2["doneMin"]) == (240, 79, 161),
+          f"got {d2}")
+
+    check("the module says which multiACE it was verified against",
+          js(ctxA, "MULTIACE_VERIFIED.apiVersion").to_int32() == 1,
+          "a plugin, not firmware - the contract version is part of the evidence")
+
     # --- what the machine says it is doing --------------------------------
     print("\n== activity, at both granularities ==")
     ctx4 = new_ctx(os.path.join(SHARED, "js", "activity.js"))

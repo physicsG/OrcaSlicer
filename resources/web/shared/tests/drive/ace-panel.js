@@ -43,14 +43,50 @@
     say('its humidity and temperature are the machine`s',
         $$('#filament .ace-hum span').map((e) => e.textContent).filter(Boolean).join('/'),
         '38 %/30 °C');
-    // Every raw slot reads {material:"", brand:"", rfid:0}. Only the bay that is LOADED
-    // has a name, and it comes from head_source - so three bays are occupied and unnamed,
-    // which is what the panel has to be able to say.
-    say('an occupied bay nobody has named says so, rather than reading empty',
+    /* ---- where a bay's identity comes from ------------------------------ */
+    // Every raw slot reads {material:"", brand:"", rfid:0} - these spools have no tags -
+    // and multiACE keeps the names its own web UI shows in an override store. Orca's
+    // Prepare page polls the MERGED endpoint from C++ and saw filament this panel drew
+    // as `?`, which is what turned this up.
+    say('a bay is named from multiACE`s own store',
+        $$('#filament .ace-cab .ace-chip').map((e) => e.textContent).join(','),
+        'PETG,PETG,PETG,PETG');
+    say('and the mark says where the name came from',
+        $$('#filament .ace-cab .ace-prov')
+          .map((e) => (/multiACE/.test(e.title) ? 'o' : /read only/.test(e.title) ? 'r' : 'd'))
+          .join(''), 'oooo');
+
+    // Without the store there is nothing to merge, and the panel has to say so rather
+    // than invent. This is also every printer that has no multiACE web service.
+    const store = P.store.aceBays;
+    P.store.aceBays = null;
+    P.state.apply({ ace: JSON.parse(JSON.stringify(measured)) }); await wait(80);
+    say('with no override store an occupied bay says it is not named',
         $$('#filament .ace-cab .ace-chip').map((e) => e.textContent).join(','),
         '?,?,PETG,?');
+    say('and the one that IS named got there from head_source, which is weaker',
+        $$('#filament .ace-cab .ace-prov')
+          .map((e) => (/loaded in the head/.test(e.title) ? 'd' : '-')).join(''), '--d-');
+
+    // multiACE's own precedence, kept: a tag beats a name someone typed.
+    const tagged = JSON.parse(JSON.stringify(measured));
+    tagged.aces[0].slots[0] = { index: 0, status: 'ready', rfid: 2, material: 'PLA',
+                                brand: 'Jayo', subtype: '', sku: '', color: [244, 67, 54] };
+    P.store.aceBays = store;
+    await setAce(tagged);
+    say('a tagged bay keeps the tag`s answer, not the override`s',
+        $$('#filament .ace-cab .ace-chip')[0].textContent, 'PLA');
+    say('and it reads rather than edits',
+        /read only/.test($$('#filament .ace-cab .ace-prov')[0].title), true);
+    await setAce(JSON.parse(JSON.stringify(measured)));
+    say('the rest are the store`s again',
+        $$('#filament .ace-cab .ace-chip').map((e) => e.textContent).join(','),
+        'PETG,PETG,PETG,PETG');
     say('and it is never drawn with the checkerboard, which is this page`s word for empty',
         $$('#filament .ace-cab .ace-disc').filter((e) => !e.dataset.loaded).length, 0);
+    say('a named bay is drawn in its own colour rather than in the unknown grey',
+        $$('#filament .ace-cab .ace-disc')
+          .filter((e) => e.style.background === 'rgb(183, 189, 198)').length, 0);
     say('the bay the head is loaded from is the marked one',
         $$('#filament .ace-cab .ace-bay').findIndex((e) => e.classList.contains('is-fed')), 2);
 
@@ -220,15 +256,18 @@
     // `filaments()` returns a record per slot whether or not anything is in it, so the
     // object is always truthy and `loaded` is the field that answers. Reading the object
     // left Unload offered on an empty head.
-    P.state.apply({ print_task_config: { filament_exist: [true, false, true, true] } });
-    await wait(80);
+    // On the printer, not on the mirror: the simulator pushes a full snapshot every tick,
+    // so a value written into the mirror survives only until the next one - which made
+    // this check pass or fail on how long the script before it took.
+    P.mock.printer.filamentExist[1] = false;
+    await wait(1400);
     $$('#filament .ace-more')[1].click(); await wait(30);
     say('an empty head greys Unload rather than offering it',
         $$('.menu .menu-item.is-muted').length, 1);
     say('and offers Load, not Reload', $('.menu .menu-item span').textContent, 'Load');
     document.body.click(); await wait(30);
-    P.state.apply({ print_task_config: { filament_exist: [true, true, true, true] } });
-    await wait(80);
+    P.mock.printer.filamentExist[1] = true;
+    await wait(1400);
     say('a menu costs the panel body nothing', fits(), true);
 
     /* ---- the settings that ARE reported back ---------------------------- */

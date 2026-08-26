@@ -297,8 +297,10 @@ def macros_used():
     Read the same way the bridge commands are: through the `ACE` table in protocol.js,
     from the module a panel is handed. Referencing one IS the claim.
     """
-    proto = open(os.path.join(WEB, "shared", "js", "protocol.js"), encoding="utf-8").read()
-    block = re.search(r"export const ACE = \{(.*?)\n\};", proto, re.S)
+    # shared/js/multiACE.js is the one module the whole subsystem lives in - macros,
+    # constants, the state model and the override merge - so it is where the table is.
+    mod = open(os.path.join(WEB, "shared", "js", "multiACE.js"), encoding="utf-8").read()
+    block = re.search(r"export const ACE = \{(.*?)\n\};", mod, re.S)
     table = dict(re.findall(r"([A-Z][A-Z0-9_]*):\s*'([A-Za-z0-9_]+)'",
                             block.group(1) if block else ""))
     src = ""
