@@ -95,7 +95,7 @@ renders into a `Gtk.OffscreenWindow` with the compositor off, through cairo, on 
 It is still the weaker half: the seam through a spool looked three pixels out and measured
 exactly right.
 
-Five interactive studies in this directory hold every decision, each one checked in
+Six interactive studies in this directory hold every decision, each one checked in
 WebKitGTK.
 
 | study | answers | checks |
@@ -104,6 +104,7 @@ WebKitGTK.
 | [multiace-f2-iterations.html](multiace-f2-iterations.html) | Four arrangements of a per-toolhead subpanel | 74 |
 | [multiace-toolhead-card.html](multiace-toolhead-card.html) | What goes under the header: filament, box, tube, marker | 81 |
 | [multiace-cabinet.html](multiace-cabinet.html) | **The settled card**, and its five states | 104 |
+| [multiace-actions.html](multiace-actions.html) | **What can be done to a filament**, and the card at any width you drag it to | 103 |
 | [camera-layout-ace-mockup.html](camera-layout-ace-mockup.html) | The earlier layout/camera study, incl. the first ACE pass | 94 |
 
 ```bash
@@ -335,6 +336,12 @@ way. A disc stays a colour.
 **load, unload, swap and background swap**, and the work starts with a **responsive
 mockup**, not with code.
 
+> **The mockup is built and every question below is answered in it.**
+> [multiace-actions.html](multiace-actions.html) — 103 checks, 19 pre-rendered copies, and
+> a panel that behaves: its menus open, its sheets open, and a verb sent from one runs.
+> What it settled is in *[What the mockup answered](#what-the-mockup-answered)*
+> at the end of this section; what is left is putting it in the panel.
+
 ### Why a responsive mockup first, and not a patch
 
 The card that exists was designed against two fixed numbers, 830 × 456, and it is exact at
@@ -417,6 +424,450 @@ filament and a bed. Draw it unavailable, say why, and point at `ACE_BG_SET_HEAD`
   provenance mark and opens Materials Setting. Load and unload apply to it unchanged; swap
   and BG swap do not, because there is no second bay to swap to — and that asymmetry is
   the thing the mockup has to make obvious rather than annoying.
+
+---
+
+## What the mockup answered
+
+[multiace-actions.html](multiace-actions.html) — the fifth study, and the first with
+**width** as a variable, and the first whose panel actually *behaves*: the `⋯` menus open,
+**ACE mode** opens its list, **?** opens the help, the **Dry** chip opens the dryer, a bay
+opens its sheet, and a verb sent from a sheet runs a swap you can watch. `check_mockup.py`
+holds all 103 numbers and drives it the way a person does — pointer and key events on the
+same controls; `bake_mockup.py` writes its 19 pre-rendered copies for the no-script path.
+Everything below was measured in WebKitGTK, not judged.
+
+**Two kinds of control, and the line between them is the point.** Above the panel are the
+three questions still open — where a verb is chosen, where a running swap is reported, and
+how wide the panel is. Everything else is on the panel, because a mockup whose menus are
+pictures cannot answer the first of those: *where a verb should live* is a question about
+how many clicks it takes to get to one, and you can only count those by making them.
+
+**A switch is also the wrong instrument for a continuous axis.** The first cut of the width
+question was a deck of five, and *neither* of the two widths that matter was among them.
+Dragging the edge found both.
+
+### The card has two floors, at 708 and 655, and both were found by dragging
+
+The cabinet does not resize. A bay is `flex: 0 0` on `.slot`'s own 62 px, so four bays plus
+three 10 px gaps plus 16 px of shoulder is **310 px at every width there is** — which makes
+the whole question arithmetic:
+
+| panel | card | room in it | cabinet | |
+|---|---|---|---|---|
+| 902 | 427 | 407 | 310 | 97 spare |
+| **830** | **391** | 371 | 310 | the Device page's own `--col-w`: 61 spare |
+| 782 | 367 | 347 | 310 | 37 spare |
+| **708** | **330** | **310** | 310 | **the floor — exactly none** |
+| 662 | 307 | 287 | 310 | 23 px past the room; nothing cut yet |
+| **655** | 303 | 283 | 310 | **the second floor — below this the fourth bay is cut** |
+| 560 | 256 | 236 | 310 | **the fourth bay is 14 px of 62** |
+
+`.ace-card` is `overflow: hidden`, so past the floor a bay is not squeezed and does not
+scroll — it is **gone, and nothing says so**. 560 is what the single-column layout below a
+1600 px window hands the panel, so this is reachable rather than theoretical.
+
+**655 is the one arithmetic got wrong.** It was computed as 668 — the width at which the
+cabinet is wider than the card — and that is not when a bay is cut: the overflow has to eat
+the 16 px shoulder *and* the card's own 10 px of padding and border first. The page measures
+both boundaries itself at boot by walking its own width, and the check walks it a second
+time, 1 px at a time, by a different method; they agree to the pixel. Two methods agreeing
+is worth more than one method run twice.
+
+### A verb is only offered where it is a verb
+
+The list is **not fixed**. The first cut showed all five always and greyed whatever did
+not apply; that is right for a verb the *machine* is refusing and wrong for one that does
+not exist in this state:
+
+| | |
+|---|---|
+| **not applicable here** | left out — there is no reason to show for a verb that is not a thing |
+| **applicable, machine refuses** | listed, greyed, and naming the macro that lifts the refusal |
+
+| where | state | what it offers |
+|---|---|---|
+| **Stock feeder** | empty | **Load**, alone |
+| | loaded | **Unload**, alone. No second bay, so swap and both background verbs are not operations it has |
+| **An ACE bay** | head empty | **Load** from that bay |
+| | head loaded, another bay | **Swap** / **Background swap** — the same gesture, and the head is emptied first |
+| | head loaded, *this* bay | nothing. It is already feeding, and a swap to it is a three-minute no-op |
+| **A loaded ACE head** | — | **Unload and retract**, and **Background unload** behind the gate |
+
+**An ACE unload is not a feeder unload.** The unit can pull the filament all the way back
+into its bay, which is what `RETRACT_LENGTH` is for and what a stock feeder cannot do — so
+the verb is `Unload and retract` on an ACE head and plain `Unload` on a feeder.
+
+### Where a verb lives is decided by whether it takes a SLOT
+
+Four placements are drawn, and the answer is a split along exactly the line the macros
+draw:
+
+| | |
+|---|---|
+| `ACE_LOAD_HEAD`, `ACE_UNLOAD_HEAD`, `ACE_BG_UNLOAD` | address a **head**. Nothing to choose, so they stay in the card's `⋯`, where two of them already are |
+| `ACE_SWAP_HEAD`, `ACE_BG_SWAP` | take a **`SLOT=`**. The bay *is* the argument, so clicking the bay opens its own sheet and the sheet lists the verbs |
+| **the toolhead** | every macro addresses `HEAD=n`, and the head is the one target that is the same size at every panel width where a bay is 62 px and shrinking. It works, and it is drawn: the bays come **to** the sheet, one button each, saying what clicking them would do in this state. Under the pointer the head wears the bay's own 1.5 px traced accent edge, because two things you can click on one card should not answer differently |
+| a row of verbs under the cabinet | **rejected on measurement** — it puts the body at **480** against 456, and `.panel-body` is `overflow: hidden`, so it would have been clipped rather than seen |
+
+The bay sheet is also the only placement with room for the macro line under each verb,
+which is what makes an unavailable verb legible rather than merely grey.
+
+### A swap in flight costs no height, because there is none to spend
+
+An always-there status row under the box measured **503 against 456**. What this card has
+spare is not vertical but **horizontal**: the toolhead artwork is 32 px wide in a 371 px
+cell, so the head band is two wide empty gutters with a picture between them. The in-flight
+line lives in the left one — free, and pointing at the head the filament is going to.
+
+It is said in **four places at once**, because any one of them can be off screen: the bay
+it is leaving (the accent ring, held rather than hovered), the head it is going to (a halo
+on the sensor mark), the line beside the head (`A3 → Toolhead 4` and the phase word), and
+the panel header (`swapping`). Asserted at 455 px in every busy state and at every width.
+
+**The words are not multiACE's — they are the U1's, and HelixScreen already had them.**
+The study first drew `swap_phase` with invented placeholder words, and that was the wrong
+field. [HelixScreen](https://github.com/356C/HelixScreen) drives a U1 touchscreen and its
+Snapmaker backend classifies the firmware's own **`channel_state`**, which has a documented
+vocabulary per direction:
+
+| direction | `channel_state` | step |
+|---|---|---|
+| **unload** | `unload_prepare`, `unload_homing` | Home |
+| | `unload_picking` | Select |
+| | `unload_heating`, `unload_heat_finish` | Heat nozzle — **live reading** |
+| | `unload_doing` | Retract filament |
+| **load** | `load_prepare`, `load_homing` | Home |
+| | `load_picking` | Select |
+| | `load_heating` | Heat nozzle — live |
+| | `load_feeding`, `load_extruding` | Feed filament |
+| | `load_flushing` | Purge |
+| **either** | `*_finish` · `*_fail` | the end, or the state it stopped in |
+
+**A swap on an ACE-fed head is ONE bar with two halves** — Home, Select, Heat nozzle,
+Retract filament, Feed filament, Purge. The load half's own Home / Select / Heat are
+deliberately absent: the head is mounted and already hot by then.
+
+**There is no step for the ACE fetching the bay, and that is a hardware finding.** The
+design assumed a long blind window between the halves. Measured on a live U1 it is a **~4 s
+blip in a ~100 s operation**, because the bay is already staged at its gate — so the bar
+holds on *Retract filament* across it, which is honest.
+
+**So the bar is determinate, and this handover said the opposite.** `channel_state` names
+*which of a known list* the printer is in, so **step 4 of 6** is a real quantity and one
+tick per step is the right drawing. What is still not derivable is a percentage *within* a
+step, and none is drawn. `swap_phase` remains a word; it is simply not the field to read.
+
+**The heat step reads the nozzle** — `Heat nozzle 178/240 °C`, because "it is heating" and
+"here is how far" are different answers. One more rule worth taking from HelixScreen: when
+the temperature feed freezes, a fixed `225/230` reads as **stuck** rather than **busy**, so
+it swaps the reading for `Working…` until the feed returns. Not built here; noted.
+
+**A failure is a state, not a sentence.** `unload_fail` is what the firmware reports and
+what the row shows, beside the step it stopped on. It stays until something else happens:
+a failure that clears itself is a failure nobody saw.
+
+### The background verbs are drawn unavailable first
+
+`ace_bg_swap.enabled_heads` is `[]` on the measured machine, so both background verbs are
+off and each says `ACE_BG_SET_HEAD HEAD=n ENABLE=1` — a macro name, not a paragraph about
+open docks. The study asserts that neither ever renders more than eight words. The enabled
+case is drawn too, and labelled invented.
+
+### The feeder's two missing verbs are greyed, not hidden
+
+Both were drawn. Greyed with the reason wins, because it is the rule the source selector
+already follows — *disabled with the reason showing, never hidden; a control that vanishes
+leaves no way to find out why it is not there* — and because a feeder card that silently
+has two fewer verbs than its neighbour reads as a card that is missing something.
+
+### It is built
+
+| | where |
+|---|---|
+| `aceVerbs()` — which verbs are verbs in this state — and `channelStep()` — the U1's own `channel_state`, classified | [`shared/js/multiACE.js`](../../../resources/web/shared/js/multiACE.js), pure, so `unit_jsc.py` holds both to account with no DOM |
+| The toolhead's sheet, the bay's sheet, the card menu — all three from the same list — and the step bar beside the toolhead | [`filament-view.js`](../../../resources/web/device_page/js/views/device-control/filament/filament-view.js) |
+| `runVerb()`, `declareBgHead()`, and the allow-list of macros a verb may send | [`filament-commands.js`](../../../resources/web/device_page/js/views/device-control/filament/filament-commands.js) |
+| `ace_bg_swap`, read as a second key in the same `sw_GetMachineState` call | `refreshAce()` in [`core/session.js`](../../../resources/web/device_page/js/core/session.js) |
+| 15 driven against the simulator | [`drive/ace-verbs.js`](../../../resources/web/shared/tests/drive/ace-verbs.js) |
+| 19 more as pure logic | `unit_jsc.py` |
+
+**Three surfaces, one list, and that is why having all three costs nothing.** The study
+weighed four placements and the answer is not one of them:
+
+| | |
+|---|---|
+| **the toolhead** | everything that can be done to that head. Every macro addresses `HEAD=n`, and it is the only target that does not shrink with the panel — a bay is 62 px. Two of the verbs take a `SLOT=` and a head is not one, so the bays come **to** the sheet, one button each, saying what clicking them would do in this state: `A1 Swap · A2 Swap · A3 feeding (off) · A4 Swap` |
+| **the bay** | the shortcut for the filament you are already pointing at. The bay *is* the argument, so clicking it is a shorter sentence than picking a verb and being asked for one |
+| **the card `⋯`** | the verbs that take no slot, where two of them already were |
+| ~~a row under the box~~ | lost, on measurement: 479 against a 456 budget |
+
+Under the pointer the toolhead wears the bay's own edge — a 1.5 px traced accent, no fill,
+drawn as a backing behind the artwork so nothing moves — because two things you can click
+on one card should not answer differently. Tight to the drawing: the element's top ~9 px is
+the two inlet hairlines, so the box is trimmed there.
+
+**The step bar needed no new request.** `channel_state` is the U1's own field, on
+`filament_feed left|right` → `extruder<n>`, already on the subscription and already parsed
+by `feedChannels()` — it had simply never been drawn. `swap_phase` is multiACE's and has
+never been captured on hardware; it is not what this reads.
+
+**Whether a head is loaded is asked of the SENSOR.** `filaments()[i].loaded` is
+`print_task_config` — what the slicer assigned to the slot — and a physical unload does not
+clear it, so an emptied head offered `Unload` again instead of `Load`. Measured on the
+machine, the two disagree: *sensor says empty · print_task_config says loaded*.
+`headLoaded()` decides it once, from `filament_at_extruder`, with the job record as a
+fallback only where a printer reports no feed channel. The same trap was one level down —
+`head_source` does not stop naming a bay because the filament came out — so `loaded` is the
+single authority and `fed` only says where it came from. Round nine of
+[08-function-gap-analysis.md](08-function-gap-analysis.md).
+
+**Three things the tools caught that reading would not have.**
+
+- **A card does not repaint for something its signature omits.** The step bar drew
+  nothing until `channelState` went into `cardSig()`. The sensor mark could not stand in
+  for it: that buckets four positions into one word, so a whole swap runs with
+  `filament_at_extruder` unchanged.
+- **`check_coverage.py` said UNACCOUNTED for both background verbs, and was right.**
+  `runVerb()` sends the line the verb carries, so the macro name appeared nowhere in the
+  command module — the panel could send it and nothing claimed it. The fix is an
+  allow-list `runVerb()` actually checks, which makes the claim true rather than merely
+  greppable, and is a real gate on a macro that purges ~60 mm.
+- **The conformance suite named three dead commands the moment their last caller went.**
+  `loadBay`, `loadHead`, `unloadHead` are gone: the verb list decides which macro applies,
+  so a caller that picks the function has already made that decision somewhere else.
+
+**The simulator grew `filament_feed` and `ace_bg_swap`,** both shaped as the machine
+reports them. It had neither, so the head's sensor marker was undrivable too. Which side
+carries which head has never been measured and `feedChannels()` does not depend on it, so
+everything is on one side rather than a split being invented.
+
+`check_coverage.py` now classifies `ACE_BG_SWAP`, `ACE_BG_UNLOAD` and `ACE_BG_SET_HEAD` as
+offered. `ACE_BG_MOVE` stays withheld: nothing on the panel needs a bare move.
+
+### What is left
+
+**A verb has no progress of its own until the machine gives it one.** The bar reports
+`channel_state`, which is the U1's answer for the head — it says nothing about the ACE
+side of a swap, and `swap_in_progress` / `swap_phase` / `last_swap_result` are still
+unread. Whether they add anything is a question for a machine that is actually swapping.
+
+### Verified against the machine, 2026-08-28
+
+`811002511261022618B3`, one ACE 2 Pro on V1.1.26, 43 % RH at 27 °C.
+[`drive/ace-verbs-real.js`](../../../resources/web/shared/tests/drive/ace-verbs-real.js) is
+the companion to `ace-real.js` and is **read-only for the same reason**: every verb here is
+minutes of physical work, and `ACE_BG_SWAP` purges ~60 mm through an open dock. It opens
+sheets and menus, reads what they offer, prints what the machine says, and sends nothing.
+
+```
+ace-real.js        30/30      ace-verbs-real.js  20/20      the page itself  5/5
+```
+
+What hardware settled that the simulator could not:
+
+**`ace_bg_swap` answers in the same call as `ace`** — `{"version":"v0.9",
+"enabled_heads":[],"busy":[],"state":{}}` — so the second key costs nothing and the gate
+is real. `enabled_heads` is empty on this machine, which makes the *refusal* the state the
+panel is actually in, and therefore the one most worth drawing well. The sheet offers
+`Swap` live and `Background swap` refused, naming
+`ACE_BG_SET_HEAD HEAD=3 ENABLE=1` with a control that would send exactly that.
+
+**An idle head does not say `none`, and the guess was wrong.** Read with everything
+settled:
+
+```
+channel_state per head: 0=load_finish  1=load_finish  2=wait_insert  3=wait_insert
+feed sensors:           ace/tube/ext   ace/tube/ext   ace/-/-       ace/-/ext
+```
+
+A **terminal state is the resting state**: the field holds the last operation's ending
+rather than returning to a neutral word. Both draw nothing, so an idle panel is quiet —
+but the simulator had been sitting at `none`, and now sits where the machine does.
+
+**`wait_insert` is not a reliable "this head is empty".** Toolhead 4 reads it while being
+fed from bay 2 with `filament_at_extruder` true. The step bar does not care, because
+terminal states draw nothing — but nothing else should read this field for occupancy, and
+the fix that came out of it is a lookup that means it: the table maps idle words to `null`
+deliberately, and `||` was sending them to the prefix heuristic instead of honouring it.
+
+### Verified again, 2026-08-28, after two reports from ordinary use
+
+Same machine. Three fixes and one that had to be made twice.
+
+**A non-background verb blocks, and names the step it is on.** `sw_SendGCodes` does not
+return until Klipper finishes and the bridge gives up at 15 s; a load **homes** first
+(14.7 s to `xy`, 31 s cold), so `Toolhead 1: load failed: sw_SendGCodes timed out after
+15000ms` was reported for a load that was running. The request is no longer awaited and
+`isTimeout()` is no longer a refusal — the Control panel's round-four answer, which the
+filament commands had never adopted. The wait is a **blocking dialog** rather than a
+cancellable queue, because a second verb started under the first is a collision and there
+is nothing to cancel once filament is moving. It labels from `channel_state` through the
+same six-step bar the card draws — `Heat nozzle  (3/6)` — so it says where the machine is
+and not merely that it is busy.
+
+**An activity code is not a fault code.** `Printer fault · code 0000000000000240 · not in
+the shipped catalogue` was `0x240` = 576 = `action_code` **"Auto Loading"**, padded into a
+16-digit fault code that could never match because it never was one. The banner now reads
+`server.exception.query` and nothing else. `shared/js/activity.js`'s own header warns
+about the overlap; decoding one table against the other is that warning one level up.
+
+**And occupancy, which was wrong twice.** *A toolhead unloaded, and then offered `Unload`
+again* was reported, fixed by reading `filament_at_extruder` instead of the job record,
+and **reported again**. Measured with toolhead 1 unloaded by hand:
+
+```
+head  channel_state   channel_action_state  detected inAce inTool atExt exist  TRUTH
+0     unload_finish   unload_finish         T        T     T      T     T      empty
+1     wait_insert     unload_finish         F        T     F      T     T      empty
+2     wait_insert     none                  F        T     F      F     F      empty
+3     wait_insert     none                  T        T     F      T     T      LOADED
+```
+
+`filament_in_ace` is true on all four including the empty one — a **module** is there.
+`filament_at_extruder` is true on three, two of them empty, and does not go false when a
+head is emptied. `filament_in_toolhead` is true on the head just emptied and false on the
+loaded one. `channel_state` is `wait_insert` on both an empty head and a loaded one, which
+was already written down above and is what should have prompted the second look.
+
+**`channel_action_state`** — the last operation the channel *finished* — is the only field
+that separates them, and it is not a sensor. `headOccupied()` asks it, then `channel_state`
+where nothing has finished since boot, then the topology. That order is **by what each
+field is for, not by which is fresher.**
+
+The simulator was green through both, and round nine had already done the right thing by
+separating the sensor from the job record so they *could* disagree. It proved nothing,
+because the sensor it invented was computed from the belief the panel held. **A simulator
+can only be wrong in the ways it was written to be wrong** — so `mockhost.js` now reports
+`filament_at_extruder` the way the machine does, toolhead 4 sits at `wait_insert`/`none`
+with only the *topology* saying it is loaded, and `drive/ace-verbs-real.js` asserts **on
+the printer** that the three fields disagree and the panel follows the right one.
+
+### The stock feeder is not an ACE, and was being sent ACE macros
+
+`ACE_LOAD_HEAD HEAD=n` at a head with no ACE is nothing — the macro's own help says it
+loads a toolhead **from ACE**. The U1's own verb is `AUTO_FEEDING EXTRUDER=n`, read out of
+the printer's config over **Moonraker's HTTP API**, which needs no `clientId` and so can be
+read while someone else is driving the machine:
+
+```bash
+curl -s "http://<ip>:7125/printer/gcode/help"                       # all 336, not the 92
+curl -s "http://<ip>:7125/printer/objects/query?configfile=settings" # macro bodies
+```
+
+The unload pair is the machine's own, out of `SM_PRINT_END_AUTO_UNLOAD_FILAMENT`. **The
+load pair is inferred** and is the one macro argument on this page that was not settled by
+sending it and reading the object back — `LOAD=1` from `SM_PRINT_AUTO_FEED`, the stages
+from the unload. It is the first thing to confirm at a printer.
+
+### What is left
+
+**One real swap, watched.** Everything above is a machine at rest. What `channel_state`
+does *between* the halves — and whether the ~4 s ACE-fetch blip HelixScreen measured on
+firmware 20260722 holds here — needs a swap actually running, which is three minutes of
+physical work and a purge. That is a deliberate act on someone's printer, not something a
+suite should do: the script for it should be separate, named for what it costs, and run by
+a person who means it.
+
+**`swap_in_progress`, `swap_phase` and `last_swap_result` are read now, and a failure is
+what captured them.** A swap on an unhomed machine set
+`last_swap_result = {head:3, ace:0, slot:1, status:"error", ts:9893.3}` within a second
+while `channel_state` never moved at all — so they say something `channel_state` does not,
+and the blocking wait watches them. What they do during a swap that *succeeds* is still
+unmeasured; that still needs one real swap.
+
+---
+
+## Open, as of 2026-08-28
+
+Nothing below is a bug in the sense of "the page is wrong about something it knows". Each
+is a thing the panel does not yet know, or a decision deliberately left to a person.
+
+### 1. A swap needs a homed Z, and the panel only says so afterwards
+
+`ACE_SWAP_HEAD` parks and picks a head; it does not home first, because it is written for
+mid-print swaps where the machine already is. On a machine sitting at `homed_axes: "xy"`
+it fails instantly, and the dialog now reports the printer's own sentence:
+
+> The printer stopped: Must home Z axis first: 229.300 250.000 277.000 [0.000]
+
+That is a good failure and it is still a failure. **The choice not yet made** is whether
+the verb should be refused *before* it is sent — greyed with `the axes are not homed`,
+the way a background verb is greyed with `not enabled for this toolhead` — and whether
+anything should offer to home.
+
+Three things bear on it, and none of them settles it:
+
+- **Which verbs actually need Z is not known.** Swap does, measured. An unload ran fine on
+  `"xy"` in the same console. A load through the ACE has never been tried unhomed. Gating
+  all of them would be a guess in the other direction.
+- **Homing is the Control panel's command**, and a panel is handed its own commands and
+  nothing else. A Home button in a filament dialog reaches across that line. The remedy is
+  already on screen in the same view, one panel over.
+- **The U1's own feeder verbs home themselves**, so a stock-feeder load and an ACE swap
+  behave differently for a reason the reader has no way to see.
+
+### 2. `AUTO_FEEDING … LOAD=1` is the one inferred macro on this page
+
+The unload pair is the machine's own, out of `SM_PRINT_END_AUTO_UNLOAD_FILAMENT`:
+
+```
+AUTO_FEEDING EXTRUDER={i} UNLOAD=1 STAGE=prepare
+AUTO_FEEDING EXTRUDER={i} UNLOAD=1 STAGE=doing
+```
+
+The load pair is assembled from two evidenced halves — `LOAD=1` from `SM_PRINT_AUTO_FEED`
+(`FEED_AUTO … LOAD=1 PRINTING=1`), the two stages from the unload above. **Every other
+macro argument on this page was settled by sending it and reading the object back.** This
+one has not been, and the shipped Flutter bundle has no feeder-load command at all to
+compare against — the stock feeder auto-feeds on insert, which is what `wait_insert` means.
+
+Worth knowing before trusting it: `MANUAL_FEEDING EXTRUDER=n` is the same wrapper over
+`FEED_MANUAL`, and there is a whole `INNER_MANUAL_FEED_STAGE_*` family
+(`PREPARE`/`EXTRUDE`/`FLUSH`/`FINISH`/`CANCEL`) that nothing here has looked at.
+
+### 3. One real swap, watched — still
+
+Everything measured is a machine at rest or a machine refusing. What `channel_state` does
+*between* the halves, whether `swap_phase` says anything `channel_state` does not, and
+whether the ~4 s ACE-fetch blip HelixScreen measured on firmware 20260722 holds here, all
+need a swap actually running: three minutes of physical work and a purge. That is a
+deliberate act on someone's printer, not something a suite should do. The script for it
+should be separate, named for what it costs, and run by a person who means it.
+
+`swap_in_progress`, `swap_phase` and `last_swap_result` are read now, and it took a
+**failure** to capture the first value any of them has ever had.
+
+### 4. `ACE_UNLOAD_ALL_CANCEL` has a home now and no evidence
+
+Its exclusion reason used to be that nothing on screen waits for an unload. The blocking
+dialog ended that. What the macro does to a head mid-retract has never been measured, and
+a cancel that leaves filament somewhere unnamed is worse than finishing — so it stays out
+until someone watches one.
+
+### 5. Not yet re-checked against hardware
+
+The occupancy fix was verified on `811002511261022618B3` (7/7), and the blocking dialog's
+new failure text was confirmed from a real swap refusal. Not yet run on the machine:
+
+- `drive/ace-verbs-real.js`'s new read-only section — the page's own cross-origin fetch of
+  Moonraker's console. The header was checked with `curl`
+  (`Access-Control-Allow-Origin: http://127.0.0.1:13619`) and the fetch is exercised in
+  the simulator, but the two together have not run on hardware.
+- The copy pass: nothing in it changes what is sent, but nothing in it has been read on a
+  real machine either.
+
+`--real` needs Orca **and** any other harness closed — it authenticates with the same
+saved `clientId` and a broker evicts the older holder.
+
+### 6. The panel still cannot say what a bay holds when nothing named it
+
+`PROV.unknown` draws `occupied, not named`, which is honest and is where it stops. RFID
+answers it, the override store answers it, and a bay with neither has no third source.
+Spoolman is the obvious candidate — `ACE_SET_SPOOLMAN URL= AUTO=0|1` exists and the
+settings menu opens a dialog for it — and nothing has been built on top of a configured
+Spoolman yet. The visual standard already carries the weights-driven bay levels that would
+go with it.
 
 ---
 

@@ -912,3 +912,544 @@ Two things worth carrying forward from building it:
 Both grids collapsed to strips of thumbnail first, twice, for the same reason: grid rows
 default to `auto` and shared the bounded panel height between them. `grid-auto-rows:
 max-content`.
+
+## Round seven — the page was blank in Orca, and the page was not the problem
+
+Reported as "make sure the Device page is properly loaded in snorca". It was not. In the
+app the Device tab drew the rail and **nothing else**: `.content` empty, no panels, no
+error dialog. Every suite was green — 51 browser checks, 153 conformance, 144 unit — and
+the same files served by any other HTTP server rendered correctly. This is the failure
+mode `STATUS.md` warns about, in its purest form: **all the evidence said the page was
+fine, and the page was fine.**
+
+### What it looked like, measured rather than guessed
+
+Loading the very same files **from Orca's own page server** in WebKitGTK:
+
+```
+readyState        "interactive"      (never reaches "complete")
+window.__devicePage undefined        (app.js never evaluated)
+.content children  0
+console            silent
+resources         48 started, 47 finished, 1 PENDING — forever
+```
+
+Served by anything else: 73 started, 73 finished, 0 pending, `complete`. The stall is one
+resource per load, and the ES module graph has no partial success — one module that never
+arrives is a page that never runs.
+
+### The defect
+
+`session::read_next_line()` in `src/slic3r/GUI/HttpServer.cpp` read a header line with
+`async_read_until(socket, buff, '\r')` and then consumed the `\n` with a **second**
+`getline`. asio reads in **512-byte chunks**, so a read can stop with a `\r` as its last
+buffered byte. The `\n` is not there yet, the second `getline` consumes nothing, and every
+line after it arrives carrying a leading `\n`. The end of the headers is recognised by
+`line.length() == 0`, which then never matches — so the session asks for one more line
+forever and the request is never answered. No error, no close, no log line: the server had
+already printed `request for resource:` and simply never printed `Request received:`.
+
+Counted in one run's server log: **810 request lines read, 785 answered.**
+
+### Why it worked until 2026-08-25
+
+The trigger is arithmetic, not chance. WebKit's header block for a same-origin module
+fetch is constant, so a request's length is decided by its **URL** length, and the hang
+needs a `\r` on **byte 512**. Of the 71 requests this page makes, exactly two do:
+
+```
+GET /web/device_page/js/views/device-control/filament/filament-panel.js   <- byte 512 is CR
+GET /web/device_page/icons/printPreferenceArrow.svg                       <- byte 512 is CR
+```
+
+That module was `js/panels/filament.js` until `28fdd0feae` (*one panel, one directory*)
+moved it to `js/views/device-control/filament/filament-panel.js`: **534 bytes on the wire
+became 563**, and put a CR on the boundary. The restructure did not break the page; it
+moved a file 29 characters to the right, and a latent server bug did the rest.
+
+The proof is reproducible in either direction — sweep every place a request can be split
+and count the ones that never answer:
+
+```
+before:  515 splits tested, 2 failures  (split 1, split 513)
+after:   515 splits tested, 0 failures
+```
+
+### The fix, and a second bug found on the way
+
+Header lines are read on **`'\n'`** now — the terminator that cannot be orphaned — and a
+trailing `'\r'` is stripped from the line. One read, one line, and a blank line that is
+actually empty.
+
+The second one was found with a logging proxy in front of the server: WebKit was writing
+requests into sockets the server **had already closed**. Every response is HTTP/1.1 with
+no `Connection` header, which means *persistent* — while `session::read_next_line()`
+writes the response and then calls `server.stop(self)`, which shuts the socket down. The
+client pools a connection that is already gone. Every response says `Connection: close`
+now, because that is what the server does.
+
+Both are in `HttpServer.cpp` and neither is specific to this page: any client fetching
+enough URLs from Orca's page server was exposed to both. The Flutter bundle survives it
+because it is one large script rather than a graph of fifty modules — a lost request there
+costs an icon.
+
+### What it looks like now
+
+The Device tab in Orca, on `811002511261022618B3` over the LAN: camera, control with five
+live temperatures, printing task, and the multiACE card reporting **1 ACE unit**, head
+mode, Toolhead 4 fed from ACE A with all four bays named (`A1`–`A4`, PETG — the override
+store merged), 38 % RH at 31 °C. Five consecutive loads: `complete`, 0 pending.
+
+**Two habits this pays for.** `run_webkit.py` serves the page from Python, so it could
+never have seen this — the harness proves the page agrees with the printer, not that it
+agrees with *Orca's own server*. Loading the page from `http://127.0.0.1:13619` and
+asking for `readyState` plus the count of unfinished resources is now the cheapest check
+that the app can render it at all, and it is worth running before believing a green suite.
+
+
+## Round eight — an unreachable printer took the whole application down
+
+Found while checking the panel after a drawing change: Orca would not start. The printer
+was switched off, and that was the whole of it:
+
+```
+terminate called after throwing an instance of 'mqtt::exception'
+  what():  MQTT error [-1]: TCP/TLS connect failure
+```
+
+**Paho reports a failed operation by throwing.** `token::wait_for()` calls `check_ret()`,
+which throws `mqtt::exception` whenever the return code is not success, and
+`async_client`'s own calls check the C return the same way. `MqttClient::Connect()` is
+documented *"true if connection successful, false otherwise"* and had **no handler at
+all** — so the throw went straight past it, out of the thread it was on, and into
+`std::terminate`.
+
+Nothing else needed to change. Both callers in `MoonRaker.cpp` — `ask_for_tls_info()` and
+the MQTTS connect — already branch on the `false`; the contract was right and simply was
+not kept.
+
+**Three more methods had the same hole**, each with the same `bool` contract and each
+waiting on a token that throws: `Subscribe`, `Unsubscribe`, `Publish`. `Disconnect` was
+the only one guarded, which is why the fix reads as *one* guard applied five times rather
+than five separate decisions — a file-local `mqtt_failed()` logs the operation, the server
+and the message, and returns false. `Publish` is worth its own line: `CheckConnected()` is
+a snapshot, not a lock, so the link can drop between that answer and the call, and
+`publish()` then throws `MQTTASYNC_DISCONNECTED` on a client that was connected a
+microsecond earlier. `CheckConnected()` itself calls `.get()` on a future that rethrows,
+and now answers false instead.
+
+**What it looks like now**, with the printer off and the app running:
+
+```
+[MQTT_INFO] connect failed: MQTT error [-1]: TCP/TLS connect failure,
+            Server: mqtt://192.168.2.242:1884
+```
+
+and on the page, at the bottom of the Device tab:
+
+```
+U1 G — not connected (connect pairing client: sw_mqtt_connect failed (code -1):
+connect failed: MQTT error [-1]: TCP/TLS connect failure) — trying again in 27s
+```
+
+That second line is the reconnect supervisor from round four doing exactly what it was
+written to do. It could never do it before: the application died first, so the retry it
+scheduled had nothing to run in.
+
+**The lesson generalises past MQTT.** A function whose signature says it reports failure
+by returning has to be *made* to, and a library that reports by throwing will not do it
+for you. The four methods here all said `bool`, all documented "false otherwise", and
+three of them could not deliver on it.
+
+
+## Round nine — unload a head, and it offers to unload it again
+
+Reported from ordinary use: *"the unload functionality of a toolhead with single filament
+sort of works, but after I can unload again instead of load."*
+
+**The panel was asking the job what the hardware knows.** `filaments()[i].loaded` is built
+from `print_task_config` — `filament_exist[i]` and `filament_type[i]` — which is what the
+**slicer assigned to that slot**. A physical unload does not clear it, so the head went on
+reading as loaded and the verb list went on offering `Unload`.
+
+Measured on the machine after the unload, and printed by
+[`drive/ace-verbs-real.js`](../../../resources/web/shared/tests/drive/ace-verbs-real.js):
+
+```
+toolhead 1 is a stock feeder · sensor says empty · print_task_config says loaded  <- they disagree
+```
+
+**The head's own sensor answers the question actually being asked.** `filament_feed
+left|right` → `extruder<n>.filament_at_extruder` is what is *in* the head; it is on the
+subscription, and it is already what the marker on the artwork draws. It is now the
+authority, with the job record as a fallback only where a printer reports no feed channel
+at all.
+
+**The same trap was one level down, and would have bitten next.** `aceVerbs()` computed
+`empty = fed == null && !loaded`, where `fed` is `head_source[n]` — multiACE's record of
+the last feed. It does not stop naming a bay because the filament came out, so an emptied
+ACE head was never empty however the sensor answered, and offered `Swap` where `Load` was
+the truth. `loaded` is the single authority now, and `fed` only says where it came from —
+which is meaningful only while something is there.
+
+**Three places were deciding it, and one had forgotten the feeder case.** The bay sheet,
+the toolhead sheet and the card menu each computed `loaded` their own way. `headLoaded()`
+decides it once; deciding it once is most of the fix.
+
+**What it cost to find, and what it should have cost.** The simulator derived the sensor
+*from* `filament_exist`, so the two could never disagree and no test could have caught
+this. They are separate fields on the printer and they are separate in the simulator now —
+which is what let the reported bug be reproduced in a drive script before it was fixed, and
+asserted after.
+
+**Two checks moved to the truer answer while this was done**, both in `drive/ace-panel.js`,
+and it is worth noting that neither was wrong when written:
+
+- *"clicking a bay names the macro it would send"* had been `ACE_SWAP_HEAD` (the panel sent
+  it for everything), then `ACE_LOAD_HEAD` (because `head_source` was empty), and is now
+  `ACE_SWAP_HEAD` again — because the head still physically holds what its stock feeder
+  put there, and getting the ACE's filament in means taking that out first.
+- *"an empty one offers Load"* emptied the head by setting `filament_exist`, which only
+  worked because the panel was reading the wrong field. It sets the sensor now.
+
+**The bug class, stated once more.** Every round of this has had one: `toolhead.extruder`
+naming a parked head, `head_ace` naming a unit that is not attached, `DeviceInfo.connected`
+answering about the past, `wait_insert` not meaning empty — and now `filament_exist`
+answering about the job. *The field reads plausibly and answers a different question.*
+
+
+## Round ten — three faults from one load
+
+Reported from ordinary use, and all three are the same load:
+
+```
+Toolhead 1: load failed: sw_SendGCodes timed out after 15000ms
+Printer fault · code 0000000000000240 · not in the shipped catalogue
+```
+
+### An activity code is not a fault code
+
+`0000000000000240` is `0x240` = **576**, and 576 is `action_code` for **"Auto Loading"**.
+The fault banner read
+
+```js
+const code = (exception && …) || activity.actionCode;
+```
+
+on the stated belief that *"`machine_state_manager.action_code` carries the active fault"*.
+It does not: it is the **fine-grained activity** code, and `shared/js/activity.js` is
+generated from the same bundle with its own table for it — 576 "Auto Loading", 640
+"Unloading", 832 "Homing Calibration…". `lookupFault()` padded the integer into a 16-digit
+code that could never match, and the banner said so in the most alarming way available.
+
+activity.js's own header warns about exactly this: *"their case spaces overlap, so 1 is
+'Working' in one and 'Homing' in the other. Merging them would be wrong wherever it is
+ambiguous."* Decoding one against the other catalogue is that mistake one level up.
+**A fault comes from `server.exception.query` and from nothing else.**
+
+### A load homes first, and homing outlives the request
+
+`sw_SendGCodes` does not return until Klipper has finished, and the bridge gives up at
+15 s. A load **homes** — measured 14.7 s to `xy` and 31 s from cold — so the request
+rejects while the printer is working, and the panel reported a failure for an operation
+that was running.
+
+The Control panel solved this in round four and the filament commands never adopted it:
+don't await the request, treat `isTimeout()` as *not a refusal*, and confirm against
+machine state. That is what they do now.
+
+### So it blocks, and blocking is the point
+
+A non-background swap is about **three minutes** during which the machine can do nothing
+else. Offered the choice between a cancellable queue and a blocking dialog, a blocking
+dialog is the honest one: a second verb started underneath the first is not a queue, it is
+a collision, and there is nothing to cancel once the filament is moving.
+
+`runFilamentAction()` is `runToolAction()`'s shape for this domain, with one improvement
+the Control panel could not have: **it names the step rather than the operation.**
+`action_code` says "Auto Loading"; `channel_state` says `unload_heating`, which the step
+model turns into **Heat nozzle (3/6)** on the same six-step bar the card draws. It closes
+on `*_finish`, reports `*_fail` verbatim, and gives up loudly rather than silently.
+
+**A background verb does not block** — not blocking is its entire purpose.
+
+### One ordering bug found on the way
+
+The sheet's verb rows ran `runVerb(v)` and *then* `closeDialog()`, which closed the
+blocking dialog `runVerb` had just opened. They close first now.
+
+
+## Round eleven — the same bug, and the fix that only fixed the simulator
+
+Round nine's report was *a toolhead unloaded, and then offered `Unload` again*. The cause
+was that occupancy came from `print_task_config.filament_exist` — the slicer's assignment
+to the slot, which no physical unload clears. The fix read `filament_at_extruder` instead,
+on the stated ground that it *"is what is IN the head"*. Every suite went green.
+
+**It was reported again**, from the same machine, doing the same thing.
+
+### Measuring instead of reasoning
+
+Toolhead 1 unloaded by hand a moment before, on `811002511261022618B3`, is the one head in
+a row whose true state is known. Read alongside the other three:
+
+```
+head  channel_state   channel_action_state  detected inAce inTool atExt exist  TRUTH
+0     unload_finish   unload_finish         T        T     T      T     T      empty
+1     wait_insert     unload_finish         F        T     F      T     T      empty
+2     wait_insert     none                  F        T     F      F     F      empty
+3     wait_insert     none                  T        T     F      T     T      LOADED
+```
+
+Four fields read like presence and not one of them is:
+
+| field | why not |
+|---|---|
+| `filament_in_ace` | true on all four, the empty one included — **a module is there**, not filament |
+| `filament_at_extruder` | true on three, **two of them empty**; tracks the path having filament available, and does not go false when a head is emptied |
+| `filament_in_toolhead` | **true on the head just emptied and false on the loaded one** |
+| `channel_state` | `wait_insert` on an empty head *and* on a loaded one — already recorded in round eight, and the reason this needed a second look |
+
+`channel_action_state` separates them, and it is the only one that does, because it is not
+a sensor: it is **the last operation the channel finished**. `unload_finish` on both heads
+that had been unloaded; `none` on the two untouched since boot.
+
+So `headOccupied()` asks the sticky field, then the live one, then the topology — and that
+order is by **what each field is for, not by which is fresher.** `channel_state` is the
+more recent value and is also the one that decays to a word carrying no occupancy at all.
+
+### What the simulator could not have caught
+
+The simulator was green through both bugs, and it was not carelessly written — round nine
+went to the trouble of *separating* the sensor from the job record so they could disagree,
+which is exactly the right instinct. It still proved nothing, because the sensor it added
+was computed from the same belief the panel held. **A simulator can only be wrong in the
+ways it was written to be wrong.**
+
+Two changes follow from that, and they matter more than the one-line fix:
+
+- `mockhost.js` now reports `filament_at_extruder` **the way the machine does** — true on
+  emptied heads included — so anything reading occupancy from it fails here as it failed
+  there. Toolhead 4 is `wait_insert`/`none`/`at:true`, exactly as measured: **nothing in
+  its feed channel says it is loaded**, only the topology does, and that fallback was
+  never exercised before. The channels also sit on the left and right objects the way the
+  machine splits them, rather than all four on the left.
+- `drive/ace-verbs-real.js` now asserts **on the printer** that the three fields disagree
+  and that the panel follows the right one. The class of bug is *"the page and the machine
+  hold different beliefs"*, and only the machine can referee it.
+
+### And it is asked in one place
+
+This is the third field this question has been asked of and the second that was wrong.
+Round nine's own note — *"three places decided this independently, and one had forgotten
+the feeder case"* — is why the second wrong answer cost one line: `headOccupied()` lives
+in `multiACE.js` beside the state table, `state.headLoaded(i)` is the convenience form,
+and the panel's marker now reads it too. It had been drawing *"filament at the extruder"*
+on a head the same card was offering `Load`.
+
+
+## Round twelve — an ACE macro at a toolhead with no ACE
+
+Reported while testing round eleven: `Load — Toolhead 2` opened the blocking dialog and
+sat on **"Asking the printer…"**, and then, plainly: *doing an ace load is weird when no
+ace is connected to that toolhead*.
+
+It is, and the macro's own help says so. A stock feeder head was sending
+
+```
+ACE_LOAD_HEAD HEAD=1
+```
+
+with no `ACE=` and no `SLOT=`, and `printer.gcode.help` describes that macro as
+**"[multiACE] Load a toolhead *from ACE*"**. There is no ACE behind head 1 — `head_feeder`
+says so, and the panel had drawn it as a stock feeder all along. The command was accepted
+and nothing happened, which is this machine's usual way of saying no: `ACE_SET_AUTO_DRY
+THRESHOLD=` answers `ok` and changes nothing either.
+
+### Read out of the printer's own config
+
+`docs/u1-webui/tools/ace_macros.py` keeps 92 ACE macros of the **336** on the machine, and
+the answer was in the other 244. Moonraker's HTTP API serves both the help and the parsed
+config — and it needs no `clientId`, so it can be read **while someone else is driving the
+printer**, which the MQTT path cannot:
+
+```bash
+curl -s "http://<ip>:7125/printer/gcode/help"
+curl -s "http://<ip>:7125/printer/objects/query?configfile=settings"
+```
+
+`AUTO_FEEDING EXTRUDER=n` is the U1's own wrapper: it maps the extruder to a
+`(module, channel)` pair through `_FILAMENT_FEED_VARIABLE` and calls `FEED_AUTO`. And the
+**unload form did not have to be guessed** — the machine runs it at the end of every
+print, in `SM_PRINT_END_AUTO_UNLOAD_FILAMENT`:
+
+```
+AUTO_FEEDING EXTRUDER={i} UNLOAD=1 STAGE=prepare
+AUTO_FEEDING EXTRUDER={i} UNLOAD=1 STAGE=doing
+```
+
+`STAGE` is the same vocabulary `channel_state` reports back in — `unload_prepare`,
+`unload_doing` — so the step bar follows a feeder verb without being taught anything.
+
+**The load form is inferred, and it is the only thing on this page that is.** `LOAD=1`
+comes from `SM_PRINT_AUTO_FEED` (`FEED_AUTO … LOAD=1 PRINTING=1`) and the two stages from
+the unload above. Every other macro argument here was settled by sending it and reading
+the object back; this one has not been.
+
+The shipped Flutter bundle turns out to contain **no feeder load command at all** — no
+`AUTO_FEEDING`, no `sw_` command for it. The stock feeder auto-feeds when filament is
+inserted, which is what `wait_insert` has been saying all along.
+
+### A silent dialog is a bug of its own
+
+The verb doing nothing was one fault; the panel spending ninety seconds not saying so was
+another. Three changes, and none of them depend on the macro being right:
+
+- **The machine's own word, when neither table has a name for the state.** A dialog
+  reading `Printer says: wait_insert` says which state nothing is moving in. "Asking the
+  printer…" says only that the panel has stopped talking.
+- **Twenty-five seconds to start, not ninety.** A load homes first and homing is the slow
+  part — but homing is *reported*: `action_code` reaches 832 within a second or two. So
+  nothing busy and nothing on the channel after 25 s means nothing started, and the
+  failure names both the channel state and what `sw_SendGCodes` actually replied. An `ok`
+  is reported rather than trusted.
+- **`EXTRUDER=` is a toolhead too.** `runVerb` read `v.args.HEAD` only, so the first verb
+  addressed in the U1's vocabulary went out with no head at all: an untitled dialog with
+  no channel to follow. That is exactly what a bare `Load` with a permanent "Asking the
+  printer…" was.
+
+
+## Round thirteen — the panel was talking to itself
+
+An audit of every user-facing string in the Device page, and three faults found by reading
+the screen rather than the code.
+
+### Ten pieces of copy that were about the page, not the printer
+
+| where | was | now |
+|---|---|---|
+| the no-start dialog | `Nothing started. The printer is wait_insert and answered {"result":"ok"}. Nothing was sent twice.` | `Nothing started. The toolhead is waiting for filament.` |
+| the quiet dialog | `…it may have finished; **the panel will catch up**.` | `…It may have finished.` |
+| the verb guard | `Load: not a verb this panel sends` | `Load is not available` |
+| the head marker | `channel_action_state: load_finish` | `Filament loaded` |
+| the step bar | `channel_state load_flushing — step 6 of 6` | `Step 6 of 6` |
+| a failed step | `unload_fail` | `Unload failed` |
+| the edit row | `print_task_config` | *(nothing, or `Read only — the spool carries its own record`)* |
+| the job status | `print_stats.state: printing` | *(the state, in words)* |
+| the humidity drop | `43 % RH — hum_level2` | `43 % RH` |
+| the fault banner | `not in the shipped catalogue` | `unrecognised` |
+
+Plus four that were reasoning rather than state: `Hand-fed — no ACE feed, retract, assist
+or RFID`, `Its verbs are in the card menu.`, `Click for what can be done to it.`, and
+`Printer says: wait_insert` — which was added the same afternoon, and is the same mistake
+in a newer coat.
+
+`channelWord()` is the fix that makes the rest possible: a word table for `channel_state`,
+exactly as `shared/js/activity.js` is one for `action_code`. **A caller with no word for a
+state says nothing** rather than falling back to the enum.
+
+### A macro name is an implementation detail after all
+
+The rule in CLAUDE.md said a macro name was fine, *because it says what will be sent*. That
+held while a macro appeared beside one refused control. It stopped holding once every verb
+on the toolhead sheet carried one under its name: a dialog for moving filament read as a
+G-code console, and a muted row saying `ACE_BG_SET_HEAD` explained a refusal in a language
+the reader has to already know. The gate button was the macro line itself.
+
+So the toolhead's verbs are names, the refusals are reasons, and the gate says **Enable
+for this toolhead**. The wire has not gone anywhere — the trace pane carries every packet,
+and `drive/ace-verbs.js` now asserts what was sent by reading `printer.gcodeLog`, which is
+a better check than reading it off the screen ever was.
+
+### A swap is not something you do to a spool
+
+Offered on a bay, `Swap` reads as an operation on the filament — *swap this one*. What it
+does is move a **toolhead** from one bay to another, and `ACE_SWAP_HEAD HEAD=n` says which
+end it addresses. The bay sheet now says what is in the bay and what state the head is in;
+the toolhead's sheet brings every bay to it labelled with what each would do, which is the
+same choice made where the target is named. **Load stays on the bay** — there the bay is
+the whole argument and there is no other end to it.
+
+### The mark disagreed with the click
+
+`View this filament` sat beside the edit **pencil**, and every slot on the four-slot form
+wore the pencil whether its spool carried a tag or not. A tagged spool opens read-only —
+that is the whole reason the row says *View* — so it wears the **eye**, the same pair the
+bay marks have carried all along. The eye branch had never been exercised: the simulator
+ships four untagged spools, so the check that covers it now sets `filament_detect.info`
+first.
+
+
+## Round fourteen — the printer answered in one second and the page waited twenty-five
+
+Reported with a screenshot: `Swap A4 → Toolhead 4` sat, then
+
+> Nothing started. The toolhead is waiting for filament.
+
+That message is true and useless. The printer had answered almost immediately, and
+**Moonraker's console history had the answer all along**:
+
+```
+[com] ACE_SWAP_HEAD HEAD=3 ACE=0 SLOT=3
+[res] [multiACE] === Mid-print swap: HEAD 4 -> ACE 1 / Slot 4 (temp=270) ===
+[res] // multiace_event swap_imminent head=3 ace=0 slot=3 from_ace=0 from_slot=2 seq=1
+[res] // park extruder1 !!!
+[res] // pick extruder3 !!!
+[res] // multiace_event swap_failed head=3 ace=0 slot=3 status=error seq=2
+[res] !! Must home Z axis first: 229.300 250.000 277.000 [0.000]
+```
+
+`toolhead.homed_axes` was `"xy"`. **`ACE_SWAP_HEAD` parks and picks a head and does not
+home first** — it is written for mid-print swaps, where the machine already is homed. The
+U1's own feeder verbs home themselves, which is why round ten went looking for a homing
+allowance and found the opposite problem here.
+
+### Three sources, and the page was reading none of them
+
+| source | said | the page |
+|---|---|---|
+| the `sw_SendGCodes` reply | `ok` | awaited it, then ignored it — correctly, since **an `ok` is not a yes** here |
+| `ace.last_swap_result` | `{head:3, ace:0, slot:1, status:"error", ts:9893.3}` | **parsed since round eight and never read** |
+| Klipper's `!!` channel | `Must home Z axis first` | not reachable, it was assumed |
+
+The second was the embarrassing one: `swapping`, `swapPhase` and `lastSwap` have been in
+`parseAce()` the whole time, listed in the handover as *"still unread — no value for them
+has ever been captured"*. A value was captured the moment something went wrong.
+
+So the wait now watches `last_swap_result` against the one that was there when it started,
+and multiACE's own verdict ends it **in a second rather than in twenty-five**.
+
+### And the reason comes from the printer, not from a guess
+
+`GET /server/gcode_store` on Moonraker's HTTP port carries the console, and Moonraker
+reflects the Origin there exactly as it does for the override store this page already
+reads — checked: `Access-Control-Allow-Origin: http://127.0.0.1:13619`. So a failed verb
+reports **the printer's own sentence**:
+
+> The printer stopped: Must home Z axis first: 229.300 250.000 277.000 [0.000]
+
+`lastPrinterError()` takes the last `!!` line and nothing else: `//` is Klipper's *note*
+channel, and `// multiace_event swap_failed status=error` reads like an error while being
+one of those. An unreachable Moonraker returns null and the panel falls back rather than
+reporting the fetch as the fault.
+
+**No Home button in that dialog.** Homing is the Control panel's, a panel is handed its
+own commands and nothing else, and the remedy is a control already on screen in the same
+view. Guessing which verbs need a homed Z would also have been guessing — the unload in
+the same console ran fine on `"xy"`.
+
+### The rest of the macro lines
+
+Round thirteen stopped at the toolhead actions and left the dryer and the settings menus
+showing G-code. They do not now. The dryer's preview used to print
+
+```
+ACE_DRY ACE=0 TEMP=45 DURATION=240  ·  ACE_SET_AUTO_DRY ACE=0 ENABLE=0
+```
+
+and says **"Dries at 45 °C for 4 h, and not automatically."** The macro line was honest
+while the numbers and the wire disagreed — the dialog offers HOURS and `ACE_DRY` takes
+MINUTES, and one offering 4 would have dried for four minutes. That is a reason to get the
+conversion right, which it is, and not a reason to make the reader check the arithmetic in
+G-code. **Both of those facts are still asserted** — moved from the preview text onto
+`printer.gcodeLog`, which is where they were always really about.

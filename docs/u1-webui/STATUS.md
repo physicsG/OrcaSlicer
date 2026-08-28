@@ -2,7 +2,7 @@
 
 Where this work stands, what is proven and what is not, and what to pick up next.
 
-Last verified against hardware: **2026-08-25**, a Snapmaker U1 (`811002511261022618B3`)
+Last verified against hardware: **2026-08-28**, a Snapmaker U1 (`811002511261022618B3`)
 on the LAN at `192.168.2.242`, through Orca 2.3.6 built from this branch and through
 `run_webkit.py --real`, which reaches the printer with no Orca at all.
 
@@ -199,9 +199,28 @@ So two habits are worth keeping:
 - **`--real --device-ip 192.0.2.1`** forces the not-connected branch with no printer
   involved. Run it on anything touching the device record, not only when testing the
   nothing-there path.
+- **Start the app with the printer switched off.** An unreachable printer used to abort
+  Orca at launch — `terminate called after throwing an instance of 'mqtt::exception'` —
+  because Paho reports failure by throwing and `MqttClient::Connect()` had no handler
+  despite being documented to return `false`. Fixed, with the same guard on `Subscribe`,
+  `Unsubscribe`, `Publish` and `CheckConnected`; round eight of
+  [08-function-gap-analysis.md](02-device-page/08-function-gap-analysis.md). It stays worth
+  running, because it is the one startup path nothing else exercises.
+- **Load the page from Orca's own server, not only from the harness.** `run_webkit.py`
+  serves the tree from Python, so it cannot see anything the *app's* HTTP server does —
+  and on 2026-08-26 the app's server was silently losing one module request per load,
+  which left the Device tab blank in Orca while all three suites were green. With Orca
+  running, point WebKitGTK at `http://127.0.0.1:13619/web/device_page/index.html` and
+  read two numbers: `document.readyState` must reach **`complete`**, and no resource may
+  still be pending. Round seven of
+  [08-function-gap-analysis.md](02-device-page/08-function-gap-analysis.md) has the whole
+  story; the short version is that the trigger was a URL 29 characters longer than it
+  used to be.
 
 `paint()` catches per panel now, so a throwing panel says so on the page and the others
-still paint — but it will not tell you a panel is *missing*, only that one failed.
+still paint — but it will not tell you a panel is *missing*, only that one failed. It
+will not tell you the *document* never ran, either: that shows up as a shell with an
+empty `.content` and a silent console.
 
 **`--shots` writes blank PNGs here.** EGL finds no driver under WSL, so the snapshot
 surface paints nothing and the files compare byte-identical before and after any change.
@@ -1060,6 +1079,21 @@ Then, in rough order of value:
 `views/storage/storage/` is a destination folder holding a same-named panel folder,
 because that destination has exactly one panel. If a second joins it, rename then — the
 structure is one directory per panel and the registry is the only place that names them.
+
+## What is open
+
+[02-device-page/11-multiace-handover.md](02-device-page/11-multiace-handover.md) ends with
+the list, and it is six things. The short form:
+
+- **A swap needs a homed Z** and the panel only says so after the fact. Whether to refuse
+  it up front is a decision, not a bug — which verbs need Z is measured for exactly one of
+  them.
+- **`AUTO_FEEDING … LOAD=1` is inferred**, and is the only macro argument on this page that
+  was not settled by sending it and reading the object back.
+- **One real swap, watched.** Three minutes and a purge, so it is a person's decision.
+- **`ACE_UNLOAD_ALL_CANCEL`** now has a surface to live on and still no evidence.
+- **The cross-origin console read and the copy pass** have not run on hardware.
+- **A bay nothing named stays unnamed.** Spoolman is the missing third source.
 
 ## Keeping it honest
 
