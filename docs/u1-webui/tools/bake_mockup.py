@@ -139,7 +139,70 @@ BAKERS["multiace-cabinet.html"] = r"""
 """
 
 EXPECT = {"multiace-f2-iterations.html": 16, "multiace-toolhead-card.html": 18,
-          "multiace-cabinet.html": 5}
+          "multiace-cabinet.html": 5, "multiace-actions.html": 19}
+
+# The actions study has an axis the others had not: WIDTH. One copy per option with the
+# others at rest - and the two sheet copies are opened the way a person opens them, by
+# clicking a bay, because a dialog nobody clicked is a dialog that proves nothing.
+BAKERS["multiace-actions.html"] = r"""
+(function(){
+  // No rig to drive: this study is dragged and clicked, so the baker drags and clicks
+  // it. What is baked is the STATES the panel can be in, not a set of design options.
+  const grip=document.getElementById('grip');
+  const width=(w)=>{ grip.focus();
+    // the control's own keyboard step, walked to the target - the same path a person
+    // takes with the arrow keys, and no private API
+    let guard=0;
+    while(Math.round(document.querySelector('#app .u1').getBoundingClientRect().width)!==w
+          && guard++ < 400){
+      const now=Math.round(document.querySelector('#app .u1').getBoundingClientRect().width);
+      grip.dispatchEvent(new KeyboardEvent('keydown',
+        {key: now<w ? 'ArrowRight':'ArrowLeft', shiftKey: Math.abs(now-w)>=10, bubbles:true}));
+    }
+  };
+  const grab=()=>({html:document.getElementById('app').innerHTML,
+    h:Math.round(document.querySelector('#app .fbody').getBoundingClientRect().height),
+    cap:document.getElementById('cap').innerHTML});
+  const shut=()=>{const x=document.querySelector('#app .dlg .dlgx'); if(x) x.click();};
+  const bay=(n)=>document.querySelectorAll('#app .tp.viaace .bay')[n];
+  const verbs=()=>[...document.querySelectorAll('#app .verb')];
+  // By NAME, never by index: what a bay offers now depends on the state the head is in -
+  // a loaded head offers Swap where an empty one offers Load - so position means nothing.
+  const verb=(n)=>verbs().find(v=>v.querySelector('.vname').textContent.indexOf(n)===0);
+  const machine=(label)=>[...document.querySelectorAll('#machine button')]
+    .find(b=>b.textContent===label);
+  const seg=(g,v)=>document.querySelector(`#seg-${g} button[data-v="${v}"]`).click();
+  const out={};
+  width(830);
+  [902,830,782,708,662,560].forEach(w=>{ width(w); out['w'+w]=grab(); });
+  width(830);
+  // the two open questions, each drawn rather than described
+  ['sheet','head','menu','row'].forEach(v=>{ seg('place',v); out['place-'+v]=grab(); });
+  seg('place','sheet');
+  bay(0).click(); verb('Swap').click();        // a swap, so there is something to report
+  ['beside','row'].forEach(v=>{ seg('flight',v); out['flight-'+v]=grab(); });
+  seg('flight','beside');
+  // a swap is running, so the printer's line offers finish/fail rather than reset
+  machine('finish it').click();
+  machine('reset').click();
+  out['busy-idle']=grab();
+  bay(0).click(); verb('Swap').click();                 // Swap: a real one, from the sheet
+  out['busy-swapping']=grab();
+  machine('make it fail').click();
+  out['busy-failed']=grab();
+  machine('reset').click();
+  out['bg-off']=grab();
+  bay(0).click();
+  document.querySelector('#app .verb .venable').click();   // ACE_BG_SET_HEAD, as sent
+  out['bg-on']=grab();
+  shut();
+  bay(2).click(); out['sheet-bay']=grab(); shut();
+  document.querySelector('#app .tp:not(.viaace) .bay').click();
+  out['sheet-feeder']=grab(); shut();
+  machine('reset').click();
+  window.__report=JSON.stringify(out);
+})();
+"""
 
 DUMP = BAKERS.get(os.path.basename(PATH))
 if DUMP is None:

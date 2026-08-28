@@ -1337,6 +1337,549 @@ CHECKS["multiace-cabinet.html"] = r"""
 })();
 """
 
+CHECKS["multiace-actions.html"] = r"""
+(function(){
+  const out=[];
+  try{
+  const say=(n,g,w)=>out.push(`${g===w?'PASS':'FAIL'}  ${n}`+(g===w?'':`   got ${JSON.stringify(g)} want ${JSON.stringify(w)}`));
+  const R=(e)=>e?e.getBoundingClientRect():null;
+  const H=()=>Math.round(R(document.querySelector('#app .fbody')).height);
+  const lum=(c)=>{const m=c.match(/\d+/g);if(!m)return -1;const [r,g,b]=m.map(Number);
+    return (0.2126*r+0.7152*g+0.0722*b)/255;};
+  const BUDGET=456, CAB=310;
+  const panel=()=>document.querySelector('#app .u1');
+  const W=()=>Math.round(R(panel()).width);
+  const aceCard=()=>document.querySelector('#app .tp.viaace');
+  const feedCard=()=>document.querySelector('#app .tp:not(.viaace)');
+  const bay=(n)=>aceCard().querySelectorAll('.bay')[n];
+  const verbs=()=>[...document.querySelectorAll('#app .verb')];
+  // By NAME, never by index: what a bay offers depends on the state the head is in.
+  const verb=(n)=>verbs().find(v=>v.querySelector('.vname').textContent.indexOf(n)===0);
+  const vnames=()=>verbs().map(v=>v.querySelector('.vname').textContent.split(' — ')[0]);
+  const sheet=()=>document.querySelector('#app .dlg');
+  const shut=()=>{const x=document.querySelector('#app .dlg .dlgx'); if(x) x.click();};
+  const machine=(t)=>[...document.querySelectorAll('#machine button')].find(b=>b.textContent===t);
+  // Rounded for reporting, and NOT rounded for the boundary: at 707 the card is 329.5
+  // and the room 309.5, so the cabinet is over by half a pixel. Rounding that away moves
+  // the answer by one and makes the two methods disagree about which width is the floor.
+  const innerWf=(card)=>{const b=card.querySelector('.tpb'), cs=getComputedStyle(b);
+    return R(b).width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);};
+  const innerW=(card)=>Math.round(innerWf(card));
+  const cabW=(card)=>Math.round(R(card.querySelector('.cab .top')).width);
+  const seen=(el,card)=>{const r=R(el), c=R(card);
+    return Math.round(Math.max(0, Math.min(r.right,c.right)-Math.max(r.left,c.left)));};
+  // The panel is DRAGGED, not switched, so the check drags it. Nothing here reaches past
+  // the controls a person has - which is the point of driving the real thing.
+  const q=(sel)=>document.querySelector(sel);
+  const qa=(sel)=>[...document.querySelectorAll(sel)];
+  // the option rows above the panel - the three questions that are still open
+  const seg=(g,v)=>{const b=q(`#seg-${g} button[data-v="${v}"]`);
+                    if(!b) throw new Error('no option '+g+'/'+v); b.click();};
+  const grip=document.getElementById('grip');
+  const drag=(dx)=>{const r=R(grip), x=r.left+r.width/2, y=r.top+10;
+    grip.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:x,clientY:y}));
+    document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:x+dx,clientY:y}));
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,clientX:x+dx,clientY:y}));};
+  const key=(k,shift)=>grip.dispatchEvent(new KeyboardEvent('keydown',{key:k,shiftKey:!!shift,bubbles:true}));
+  const width=(w)=>{ let guard=0;
+    while(W()!==w && guard++<600) key(W()<w?'ArrowRight':'ArrowLeft', Math.abs(W()-w)>=10);
+    return W(); };
+
+  say('title', document.title, 'Every Filament, and What Can Be Done To It');
+  say('no horizontal page scroll', document.documentElement.scrollWidth <= window.innerWidth+1, true);
+  const f = getComputedStyle(document.body).fontFamily;
+  say('body font names Plex', /Plex/.test(f), true);
+  // Two kinds of control, and the line between them is the point. ABOVE: the questions
+  // still open - where a verb is chosen, where a swap is reported, how wide the panel is.
+  // ON THE PANEL: everything else, which behaves the way the page behaves.
+  say('the rows above are the open questions and nothing else',
+      qa('#rig .grp .k').map(e=>e.textContent.replace(/ — or drag the edge/,'')).join(' / '),
+      'Where a verb is chosen / Where a running swap is reported / Panel width');
+  say('the panel opens at the Device page own 830', W(), 830);
+  say('four cards, one per toolhead', document.querySelectorAll('#app .tp').length, 4);
+
+  // ---- the edge really is draggable ---------------------------------------------
+  drag(-120);
+  say('dragging the edge left narrows the panel by what the pointer moved', W(), 710);
+  say('and the readout follows it',
+      /panel 710/.test(document.getElementById('readout').textContent), true);
+  drag(+120);
+  say('dragging it back restores it', W(), 830);
+  key('ArrowLeft'); key('ArrowLeft');
+  say('the same control takes the arrow keys, one pixel at a time', W(), 828);
+  key('ArrowRight',true);
+  say('and a shift-step is ten of them', W(), 838);
+  width(830);
+
+  // ---- the two widths that matter, FOUND rather than listed ----------------------
+  // Walk the edge in one step at a time and record where the drawing stops fitting.
+  // Nothing below is a number typed into this check: they are read off the panel.
+  // A linear 1px walk, deliberately not the page's own binary search: two different
+  // methods agreeing is worth more than one method run twice.
+  let floor=null, cuts=null;
+  for(let w=730; w>=600; w-=1){
+    width(w);
+    const card=aceCard(), room=innerWf(card);
+    if(floor===null && room < CAB) floor = w+1;              // last width with room
+    if(cuts===null && seen(card.querySelectorAll('.bay')[3], card) < 62) cuts = w+1;
+    if(floor!==null && cuts!==null) break;
+  }
+  out.push(`    measured by dragging: room runs out below ${floor}, a bay is cut below ${cuts}`);
+  say('the cabinet has exactly the card at 708', floor, 708);
+  say('and a bay starts being cut at 655', cuts, 655);
+  // and the page found the same two, by its own method, and says so on the ruler
+  const marks=[...document.querySelectorAll('#ruler .tlab')].map(e=>e.textContent);
+  // 655 and 708 are 53 px apart on the axis, so the labels were on top of each other
+  // and unreadable in the first cut of this. Nothing on a ruler may overlap.
+  width(830);
+  const lb=[...document.querySelectorAll('#ruler .tlab')].map(e=>R(e));
+  let clash=0;
+  for(let i=0;i<lb.length;i++) for(let j=i+1;j<lb.length;j++)
+    if(Math.abs(lb[i].top-lb[j].top)<2 && lb[i].left<lb[j].right && lb[j].left<lb[i].right) clash++;
+  say('no two marks on the ruler sit on each other', clash, 0);
+  const axis=R(document.getElementById('ruler')).width;
+  drag(-150);
+  say('and the axis does not move when the panel does',
+      Math.round(R(document.getElementById('ruler')).width), Math.round(axis));
+  width(830);
+  say('the ruler marks the width where the room runs out',
+      marks.some(t=>t.indexOf(String(floor))===0), true);
+  say('and the width where a bay starts being cut',
+      marks.some(t=>t.indexOf(String(cuts))===0), true);
+  width(708);
+  say('at the floor the room is the cabinet, to the pixel',
+      [Math.round(R(aceCard()).width), innerW(aceCard()), cabW(aceCard())].join(','), '330,310,310');
+  width(560);
+  say('at the single-column width the fourth bay is 14 px of 62',
+      seen(aceCard().querySelectorAll('.bay')[3], aceCard()), 14);
+  say('it is cut rather than scrolled, which is why nothing says so',
+      getComputedStyle(aceCard()).overflow, 'hidden');
+  say('and the readout says so in words',
+      /fourth bay is cut/.test(document.getElementById('readout').textContent), true);
+
+  // ---- the body never goes over, at any width -----------------------------------
+  const over=[];
+  for(let w=560; w<=1000; w+=20){ width(w); if(H()>BUDGET) over.push(w+':'+H()); }
+  say('the body fits 456 at every width the panel can be dragged to',
+      over.join(',')||'none','none');
+  width(830);
+  // ---- every control on the panel opens the thing it owns -------------------------
+  // A mockup whose menus are pictures cannot answer the question it exists for: where a
+  // verb should live is a question about how many clicks it takes to get to one.
+  const head=()=>qa('#app .panel-head .icon-only');
+  const pills=()=>qa('#app .panel-head .prefpill');
+  const dlgTitle=()=>{const d=q('#app .dlg'); return d?d.querySelector('h3').textContent:'none';};
+  head()[1].click();
+  say('the ? opens the help', dlgTitle(), 'Filament sources');
+  shut();
+  pills()[1].click();
+  say('ACE mode opens a list rather than cycling', qa('#app .menu .menu-item').length, 3);
+  qa('#app .menu .menu-item')[0].click();
+  say('and picking one sets the mode', /Normal/.test(pills()[1].textContent), true);
+  pills()[1].click(); qa('#app .menu .menu-item')[2].click();
+  head()[0].click();
+  say('the panel overflow opens the machine settings menu',
+      qa('#app .menu .menu-item').length, 5);
+  qa('#app .menu .menu-item')[1].click();
+  say('and Flush length opens its own sheet', dlgTitle(), 'Flush length');
+  shut();
+  head()[0].click(); qa('#app .menu .menu-item')[3].click();
+  say('and Spoolman opens its own', dlgTitle(), 'Spoolman');
+  shut();
+  q('#app .tp .icon-only').click();
+  say('a card overflow is about that toolhead', q('#app .menu .menu-head').textContent, 'Toolhead 1');
+  const card=qa('#app .menu .menu-item');
+  card[card.length-1].click();
+  say('and its last item opens the filament record', /filament/i.test(dlgTitle()), true);
+  shut();
+  q('#app .drybtn').click();
+  say('the Dry chip opens the dryer', dlgTitle(), 'Filament drying');
+  shut();
+
+  // ---- clicking a bay, and sending a verb ---------------------------------------
+  // From a known machine. Every group below leaves the panel somewhere, and a state
+  // rule asserted against the previous group's leavings is not asserted at all.
+  machine('reset').click();
+  bay(2).click();
+  say('clicking a bay opens its own sheet', !!sheet(), true);
+  say('the sheet names the bay', sheet().querySelector('h3').textContent, 'A3');
+  say('every verb names the macro it would send',
+      verbs().length>0 && verbs().every(v=>/^ACE_/.test(v.querySelector('.vcmd').textContent)), true);
+
+  // ---- what a filament can have done to it, in the state it is actually in ---------
+  // The list is not fixed. A verb that is not a thing in this state is LEFT OUT, because
+  // there is no reason to show for a verb that does not exist; a verb the MACHINE is
+  // refusing is listed and greyed, because its reason names a macro you can send.
+  say('the bay already feeding the head offers no load and no swap',
+      vnames().join('|'), 'Unload and retract|Background unload');
+  shut(); bay(0).click();
+  say('a different bay offers a swap rather than a load',
+      vnames().join('|'), 'Swap|Background swap|Unload and retract|Background unload');
+  say('and an ACE unload is an unload AND a retract, which a feeder cannot do',
+      /RETRACT_LENGTH/.test(verb('Unload and retract').querySelector('.vcmd').textContent), true);
+  shut();
+  feedCard().querySelector('.bay').click();
+  say('a loaded stock feeder offers unload, and only unload', vnames().join('|'), 'Unload');
+  shut();
+  qa('#app .tp:not(.viaace)')[2].querySelector('.bay').click();
+  say('and an empty one offers load, and only load', vnames().join('|'), 'Load');
+  shut();
+  say('no verb explains itself in prose',
+      verbs().every(v=>v.querySelector('.vcmd').textContent.split(/\s+/).length<=8), true);
+  machine('reset').click();
+  bay(0).click();
+  // the gate, opened the way the machine opens it
+  const offBg=()=>verbs().filter(v=>v.classList.contains('is-off')
+                                 && /Background/.test(v.querySelector('.vname').textContent));
+  say('with enabled_heads [] both background verbs are unavailable', offBg().length, 2);
+  say('and each names ACE_BG_SET_HEAD and nothing else',
+      offBg().every(v=>/^ACE_BG_SET_HEAD HEAD=\d ENABLE=1$/.test(v.querySelector('.vcmd').textContent)), true);
+  say('the macro they name is a thing you can send from there',
+      !!document.querySelector('#app .verb .venable'), true);
+  document.querySelector('#app .verb .venable').click();
+  // A1 rather than A3: A3 is the bay already feeding this head, so its sheet has no swap
+  // in it to be gated - which is the state rule above doing its job.
+  bay(0).click();
+  say('sending it opens the gate', verbs().filter(v=>v.classList.contains('is-off')).length, 0);
+  say('and background swap then sends ACE_BG_SWAP',
+      /^ACE_BG_SWAP HEAD=3 SLOT=0 ACE=A$/.test(verb('Background swap').querySelector('.vcmd').textContent), true);
+  shut(); machine('reset').click();
+
+  // ---- the toolhead as the thing you click ---------------------------------------
+  machine('reset').click();
+  seg('place','head');
+  say('every toolhead becomes a target', qa('#app .slot.is-target').length, 4);
+  const sl=qa('#app .slot')[0];
+  say('and wears nothing at rest', getComputedStyle(sl,'::before').boxShadow, 'none');
+  sl.classList.add('is-hover');
+  say('the pointer lights a 1.5 px traced edge in the accent, with no fill',
+      getComputedStyle(sl,'::before').boxShadow, 'rgb(12, 99, 226) 0px 0px 0px 1.5px inset');
+  sl.classList.remove('is-hover');
+  qa('#app .slot')[3].click();
+  say('clicking one opens that toolhead sheet',
+      dlgTitle(), 'Toolhead 4');
+  say('and the bays come to it, because two of the verbs take a slot',
+      qa('#app .pickbay').length, 4);
+  say('each saying what it would do in this state',
+      qa('#app .pickbay .picklab').map(e=>e.textContent).join('|'), 'Swap|Swap|loaded|Swap');
+  say('and the one already feeding is not offered',
+      qa('#app .pickbay')[2].disabled, true);
+  say('the head verbs are the ones that take no slot',
+      vnames().join('|'), 'Unload and retract|Background unload');
+  verb('Unload and retract').click();
+  // An unload is an OPERATION now, not an assignment: it runs the unload direction and
+  // the head is empty when it finishes. Waiting for the printer is the point.
+  say('and sending one starts the unload direction, four steps', qa('#app .steps i').length, 4);
+  machine('finish it').click();
+  qa('#app .slot')[3].click();
+  say('with the head emptied every bay offers a load instead',
+      qa('#app .pickbay .picklab').map(e=>e.textContent).join('|'), 'Load|Load|Load|Load');
+  say('and there is nothing left to unload', vnames().length, 0);
+  shut();
+  seg('place','sheet'); machine('reset').click();
+
+  // ---- a swap that actually runs --------------------------------------------------
+  machine('reset').click();
+  const idleH=H();
+  bay(0).click(); verb('Swap').click();          // Swap, from the sheet
+  say('sending a verb closes the sheet', !!sheet(), false);
+  say('and starts a swap the panel header reports',
+      /swapping/.test(document.querySelector('#app .status').textContent), true);
+  say('the bay it is leaving says so', document.querySelectorAll('#app .bay.is-moving').length, 1);
+  say('and it is the bay that was clicked', bay(0).classList.contains('is-moving'), true);
+  say('the head it is going to says so', document.querySelectorAll('#app .slot.is-moving').length, 1);
+  const line=document.querySelector('#app .actrow.beside');
+  say('the line beside the head names both ends',
+      line.textContent.replace(/\s+/g,' ').trim().indexOf('A1 → Toolhead 4'), 0);
+  // The steps are the U1's own `channel_state`, taken from HelixScreen's Snapmaker
+  // backend rather than invented: a swap on an ACE head is ONE bar with two halves.
+  say('a swap is six steps, not a percentage', qa('#app .steps i').length, 6);
+  say('and it starts on the first of them', line.querySelector('.phase').textContent, 'Home');
+  say('nothing draws a fraction of a swap', line.querySelectorAll('progress').length, 0);
+  say('every tick names the firmware state behind it',
+      qa('#app .steps i').every(e=>/channel_state \w+/.test(e.title)), true);
+  // step 3 carries a live nozzle reading, which is what turns "heating" into "how far"
+  // Positioned rather than waited for: the steps advance on a 1.5 s timer and this
+  // checker is synchronous. Reaching into the study's own state is fair here - it is
+  // the study's state, not the page's - and the alternative is a nine-second sleep.
+  S.swap.at = 2; S.swap.nozzle = 178; render();
+  say('the heat step reads the nozzle rather than captioning it',
+      q('#app .actrow .phase').textContent, 'Heat nozzle 178/240 °C');
+  say('and the ticks behind it are done', qa('#app .steps i.done').length, 2);
+  S.swap.at = 3; render();
+  say('the ACE half is one step, not a row for the fetch',
+      q('#app .actrow .phase').textContent, 'Retract filament');
+  say('a swap costs the body nothing', H(), idleH);
+  say('the four cards are still the same height',
+      new Set([...document.querySelectorAll('#app .tp')].map(t=>Math.round(R(t).height))).size, 1);
+  // it lives in a band the card clips, so "it fits" is measured at every width
+  const fits={};
+  [900,830,760,700,640,580].forEach(w=>{ width(w);
+    const card=aceCard(), l=card.querySelector('.actrow.beside'), art=R(card.querySelector('.slot'));
+    fits[w]={over:Math.round(Math.max(0, R(l).bottom - R(card).bottom)),
+             art:R(l).right > art.left ? 1 : 0, body:H()}; });
+  out.push('    measured: '+JSON.stringify(fits));
+  say('the in-flight line never overflows its card, at any width',
+      Object.keys(fits).filter(k=>fits[k].over>0).join(',')||'none','none');
+  say('and never reaches the artwork it sits beside',
+      Object.keys(fits).filter(k=>fits[k].art).join(',')||'none','none');
+  say('and the body stays inside its budget throughout',
+      Object.keys(fits).filter(k=>fits[k].body>BUDGET).join(',')||'none','none');
+  width(830);
+  machine('make it fail').click();
+  say('a failed swap shows the firmware state, not a sentence about it',
+      document.querySelector('#app .actrow.is-fail .atext').textContent,
+      'unload_fail');
+  say('and names the step it stopped on',
+      q('#app .actrow.is-fail .phase').textContent, 'Retract filament');
+  say('and leaves the head where it was',
+      aceCard().querySelectorAll('.bay')[2].classList.contains('fed'), true);
+  say('a failure costs no height either', H(), idleH);
+  machine('reset').click();
+  say('reset puts the machine back', document.querySelectorAll('#app .actrow.beside').length, 0);
+
+  // ---- the two open questions, each drawn rather than described --------------------
+  machine('reset').click();
+  const idle2=H();
+  seg('place','menu');
+  bay(0).click();
+  say('with the verbs in the menu a bay opens nothing', !!q('#app .dlg'), false);
+  q('#app .tp.viaace .icon-only').click();
+  const mv=qa('#app .menu .menu-item').map(b=>b.querySelectorAll('span')[1].textContent);
+  say('and the menu carries the two that take a slot',
+      mv.filter(t=>/^Swap|^Background swap/.test(t)).length, 2);
+  qa('#app .menu .menu-item').find(b=>/^Swap/.test(b.querySelectorAll('span')[1].textContent)).click();
+  say('which opens a bay picker, because the slot still has to come from somewhere',
+      /^Swap into Toolhead/.test(dlgTitle()), true);
+  say('with one button per bay', qa('#app .pickbay').length, 4);
+  qa('#app .pickbay')[1].click();
+  say('and picking one starts the swap', qa('#app .bay.is-moving').length, 1);
+  say('the menu placement costs no height', H(), idle2);
+  machine('make it fail').click(); machine('reset').click();
+  seg('place','row');
+  const rowH=H();
+  say('a row of verbs under the box costs height the body has not got', rowH > BUDGET, true);
+  out.push(`    measured: the row placement puts the body at ${rowH} against ${BUDGET}`);
+  seg('place','sheet');
+  bay(0).click(); verb('Swap').click();
+  seg('flight','row');
+  const fr=H();
+  say('reporting a swap in a row costs the same', fr > BUDGET, true);
+  seg('flight','beside');
+  say('and beside the toolhead costs nothing at all', H(), idle2);
+  out.push(`    measured: flight in a row ${fr}, beside the head ${H()}`);
+  machine('make it fail').click(); machine('reset').click();
+
+  // ---- the pre-rendered copies ------------------------------------------------------
+  const clipRefs=[...document.querySelectorAll('[clip-path]')].map(e=>{
+    const m=/url\(#([^)]+)\)/.exec(e.getAttribute('clip-path'));
+    return m ? {el:e, id:m[1], owner:document.getElementById(m[1])} : null;}).filter(Boolean);
+  say('every clip-path resolves to something that exists',
+      clipRefs.filter(r=>!r.owner).map(r=>r.id).join(',') || 'none', 'none');
+  const src=document.documentElement.outerHTML;
+  say('no script-looking string outside a real script tag',
+      (src.match(/<script\b/g)||[]).length, document.querySelectorAll('script').length);
+  document.documentElement.classList.remove('js-on');
+  const vis=()=>[...document.querySelectorAll('.sblk')]
+                  .filter(e=>getComputedStyle(e).display!=='none');
+  say('without script the picker appears and the panel does not',
+      getComputedStyle(document.querySelector('.spicker')).display !== 'none'
+      && getComputedStyle(document.getElementById('rig')).display === 'none', true);
+  say('and exactly one copy is visible', vis().length, 1);
+  document.getElementById('o-w560').checked=true;
+  say('the narrow copy really is the narrow one',
+      !!vis()[0] && vis()[0].classList.contains('sb-w560'), true);
+  document.getElementById('o-busy-swapping').checked=true;
+  say('and the swapping copy was baked with a swap in flight',
+      !!vis()[0].querySelector('.actrow.beside'), true);
+  document.getElementById('o-w830').checked=true;
+  document.documentElement.classList.add('js-on');
+
+  // ---- themes -----------------------------------------------------------------------
+  const probe=()=>({body:lum(getComputedStyle(document.body).backgroundColor),
+                    ink:lum(getComputedStyle(document.body).color),
+                    panel:lum(getComputedStyle(document.querySelector('#app .panel-body')).backgroundColor)});
+  document.documentElement.setAttribute('data-theme','light'); const L=probe();
+  say('light: ground is light', L.body>0.8, true);
+  document.documentElement.setAttribute('data-theme','dark'); const D=probe();
+  say('dark: ground is dark', D.body<0.15, true);
+  say('dark: ink is light', D.ink>0.7, true);
+  say('the panel stays white in both themes', L.panel>0.95 && D.panel>0.95, true);
+  document.documentElement.removeAttribute('data-theme');
+  let bad=0; document.querySelectorAll('table').forEach(t=>{
+    if(t.scrollWidth > t.parentElement.clientWidth+1 &&
+       getComputedStyle(t.parentElement).overflowX!=='auto') bad++; });
+  say('no table overflows unscrollably', bad, 0);
+  }catch(e){ out.push('FAIL  check threw: '+(e&&e.message||e)); }
+  window.__report = out.join('\n');
+})();
+"""
+
+# The visual standard now carries the Device page's own drawings at the Device page's own
+# size, and the point of that is that one derives from the other. A claim like that is worth
+# exactly what checks it: these assert the rendered numbers, so a cabinet that stops being
+# 310 or a head that stops being 64x140 fails here rather than drifting quietly apart from
+# `resources/web/device_page/css/device.css`.
+CHECKS["ace-visual-standard.html"] = r"""
+(function(){
+  const out=[];
+  try{
+  const say=(n,g,w)=>out.push(`${g===w?'PASS':'FAIL'}  ${n}`+(g===w?'':`   got ${JSON.stringify(g)} want ${JSON.stringify(w)}`));
+  const q=(s)=>document.querySelector(s);
+  const qa=(s)=>[...document.querySelectorAll(s)];
+  const box=(e)=>{const r=e.getBoundingClientRect();return [Math.round(r.width),Math.round(r.height)];};
+  const wh=(s)=>{const e=q(s); return e?box(e).join('x'):'missing';};
+
+  say('title', document.title, 'The ACE visual standard');
+  say('no horizontal page scroll', document.documentElement.scrollWidth <= window.innerWidth+1, true);
+
+  // ---- the six badges, and the sixth one's reason for existing --------------------
+  // G and O5 are the standard now, so the settled row states those two and the deck
+  // opens on them. A and O2 stay on the sheet as what they are corrections of.
+  say('the settled row names G and O5',
+      qa('#settled .spec .cap').slice(0,2).map(e=>e.textContent.split(' ')[0]).join(','),
+      'G,O5');
+  say('and the deck opens on them',
+      [q('#segBadge button[aria-pressed="true"]').dataset.v,
+       q('#segLine button[aria-pressed="true"]').dataset.v].join(','), 'g,o5');
+  say('G carries the CHOSEN mark, and A does not',
+      [/CHOSEN/.test(q('#badgeOpts [data-badge="g"] .why').textContent),
+       /CHOSEN/.test(q('#badgeOpts [data-badge="a"] .why').textContent)].join(','), 'true,false');
+  say('and O5 has it rather than O2',
+      [/CHOSEN/.test(q('#lineOpts [data-line="o5"] .why').textContent),
+       /CHOSEN/.test(q('#lineOpts [data-line="o2"] .why').textContent)].join(','), 'true,false');
+  say('seven badge candidates are drawn', qa('#badgeOpts .opt').length, 7);
+  say('and the deck offers all seven', qa('#segBadge button').length, 7);
+  say('five outline candidates', qa('#lineOpts .opt').length, 5);
+  const f=q('#badgeOpts [data-badge="f"]');
+  say('F is on the sheet', !!f, true);
+  const fsvg=f.querySelector('.ctx svg');
+  say('F is the standard 44x26 like the rest', box(fsvg).join('x'), '44x26');
+  // A's hood is inset 2 either side over a full-width base; F's halves are both 44,
+  // which is the silhouette the Device page's cabinet actually has.
+  const a=q('#badgeOpts [data-badge="a"] .ctx svg');
+  say('A has a narrower top than its bottom',
+      /M2 9a7/.test(a.innerHTML) && /width="44"/.test(a.innerHTML), true);
+  say('F has no inset top at all', /M2 9a7/.test(fsvg.innerHTML), false);
+  say('and both of F halves span the full width',
+      (fsvg.innerHTML.match(/x="0"|M0 16/g)||[]).length >= 2, true);
+  say('F still carries one bay per slot',
+      fsvg.querySelectorAll('rect[rx="2.5"]').length, 4);
+
+  // ---- G, and the one number it is about ------------------------------------------
+  // The whole of G is that the spools are drawn last and the margin round them is ONE
+  // number. Both are geometry, so both are checked rather than described.
+  const g=q('#badgeOpts [data-badge="g"] .ctx svg');
+  say('G is on the sheet', !!g, true);
+  say('and is the standard 44x26', box(g).join('x'), '44x26');
+  const gr=[...g.querySelectorAll('rect')].map(e=>
+    ['x','y','width','height'].map(a=>Number(e.getAttribute(a))));
+  const body=gr[0], bays=gr.slice(1);
+  say('its body is the full width, like F', [body[0], body[2]].join(','), '0,44');
+  say('four spools, 6x16 rather than 5x13',
+      bays.length===4 && bays.every(b=>b[2]===6 && b[3]===16), true);
+  const m={ left: bays[0][0], right: 44 - (bays[3][0] + bays[3][2]),
+            top: bays[0][1] - body[1], bottom: (body[1]+body[3]) - (bays[0][1]+bays[0][3]) };
+  say('and one margin on all four sides', [m.left,m.right,m.top,m.bottom].join(','), '4,4,4,4');
+  say('which is the gap own number, as A states', bays[1][0] - (bays[0][0] + bays[0][2]), 4);
+  say('the height is unchanged, so the spools took the difference', body[3], 24);
+  // drawn LAST: the base path comes before them in document order, so nothing crops a spool
+  const kids=[...g.children].map(e=>e.tagName.toLowerCase());
+  say('the spools are drawn over the lower half, not under it',
+      kids.indexOf('path') < kids.lastIndexOf('rect'), true);
+
+  // ---- O5, the outlined twin of G --------------------------------------------------
+  const o5=q('#lineOpts [data-line="o5"] .ctx svg');
+  say('O5 is on the sheet', !!o5, true);
+  say('and drops the step: a plain rounded body, not CAB',
+      o5.querySelectorAll('path').length, 0);
+  const o5b=[...o5.querySelectorAll('rect')].map(e=>
+    ['x','y','width','height'].map(a=>Number(e.getAttribute(a))));
+  say('its bays are G own, to the pixel',
+      JSON.stringify(o5b.slice(1)), JSON.stringify(bays));
+  say('and its body is inset by half a stroke so 1.6 does not clip',
+      [o5b[0][0], o5b[0][2]].join(','), '0.8,42.4');
+
+  // ---- what the Device page draws, at the Device page's size ----------------------
+  // It lives in section 3 now, beside the two AMS boxes, because it is a third box for
+  // the same spools and it is the one in use.
+  const boxes=qa('.eyebrow')[2].closest('section');
+  say('the cabinet sits with the other boxes, not in a section of its own',
+      !!boxes.querySelector('#dpCabinet'), true);
+  say('and is labelled as the one in use',
+      /used today/.test(boxes.querySelector('#dpCabinet').closest('.spec').textContent), true);
+  say('the sheet is five sections, not six', qa('.eyebrow').length, 5);
+  say('the ACE cabinet is 310 wide', wh('#dpCabinet .dp-top'), '310x71');
+  say('with four bays', qa('#dpCabinet .dp-bay').length, 4);
+  say('a bay is .slot own 36 px disc', wh('#dpCabinet .dp-disc'), '36x36');
+  say('over its 58x19 name pill', wh('#dpCabinet .dp-chip'), '58x19');
+  say('and the column that fixes the width is 62', wh('#dpCabinet .dp-bay'), '62x61');
+  // the seam is disc-relative: 5 px of padding plus half a disc
+  const cab=q('#dpCabinet .dp-top');
+  say('the seam runs through the middle of the roll',
+      getComputedStyle(cab).getPropertyValue('--seam').trim(), 'calc(5px + 36px / 2)');
+  say('the cabinet is #EEEEEE over #CECECE',
+      /238, 238, 238/.test(getComputedStyle(cab).backgroundImage)
+      && /206, 206, 206/.test(getComputedStyle(cab).backgroundImage), true);
+
+  say('the feeder is the same drawing with one bay', qa('#dpFeeder .dp-bay').length, 1);
+  say('and is 94 wide because of it', wh('#dpFeeder .dp-top'), '94x71');
+  const feed=q('#dpFeeder .dp-top');
+  say('drawn in #FFFFFF over #1F1F1F',
+      /255, 255, 255/.test(getComputedStyle(feed).backgroundImage)
+      && /31, 31, 31/.test(getComputedStyle(feed).backgroundImage), true);
+  say('a feeder bay carries no address', q('#dpFeeder .dp-disc').textContent.trim(), '');
+
+  // ---- the badges of both, at true size ------------------------------------------
+  say('four badge specimens', qa('#dpBadges .spec').length, 4);
+  const arts=qa('#dpBadges .dp-stage svg').map(box);
+  say('the ACE badge is 44x26 and the feeder 17x17',
+      [arts[0].join('x'), arts[2].join('x')].join(' / '), '44x26 / 17x17');
+  say('and each is shown enlarged beside it',
+      [arts[1].join('x'), arts[3].join('x')].join(' / '), '132x78 / 51x51');
+  say('their captions line up',
+      new Set(qa('#dpBadges .cap').map(e=>Math.round(e.getBoundingClientRect().top))).size, 1);
+  say('and they sit on one baseline',
+      new Set(qa('#dpBadges .dp-stage').map(e=>Math.round(e.getBoundingClientRect().bottom))).size, 1);
+
+  // ---- the toolhead ---------------------------------------------------------------
+  const heads=qa('#dpHead .dp-head').map(box);
+  say('the toolhead is drawn at 64x140 and at half',
+      heads.map(h=>h.join('x')).join(' / '), '64x140 / 32x70');
+  // the marker is centred on the artwork's BODY (32, 72.5), not on its box (32, 70)
+  const h1=q('#dpHead .dp-head'), m1=h1.querySelector('.dp-sensor');
+  const hr=h1.getBoundingClientRect(), mr=m1.getBoundingClientRect();
+  say('the marker is centred on the artwork body, not its box',
+      [Math.round(mr.left+mr.width/2-hr.left), Math.round(mr.top+mr.height/2-hr.top)].join(','),
+      '32,73');
+  say('and it uses the shipped artwork rather than a redraw',
+      !!q('#dpHead use[href="#u1head"]'), true);
+
+  // ---- a bay that knows how much is left ------------------------------------------
+  // With Spoolman bound there IS a weight, and the disc then follows the rule the AMS
+  // column already follows: the colour from the bottom up to what is left.
+  const discs=()=>qa('#dpCabinet .dp-disc').map(e=>e.style.background);
+  const rem=(v)=>q(`#segRem button[data-v="${v}"]`).click();
+  rem('spoolman');
+  say('a bound slot draws its level bottom-up',
+      discs().filter(b=>/linear-gradient\(to top/.test(b)).length, 3);
+  say('and the one Spoolman has not bound is hatched, not empty',
+      /repeating-linear-gradient/.test(discs()[2]), true);
+  say('the weight is on the bay itself', /\d+ g/.test(qa('#dpCabinet .dp-bay')[0].title), true);
+  rem('unknown');
+  say('with no binding at all every bay is hatched',
+      discs().every(b=>/repeating-linear-gradient/.test(b)), true);
+  say('and none of them claims a level',
+      discs().some(b=>/linear-gradient\(to top/.test(b)), false);
+  rem('spoolman');
+  // the badge deliberately does not follow: at 6x16 a level is not readable
+  say('the badge stays colour-only whatever the level says',
+      q('#dpBadges .dp-stage svg').innerHTML.indexOf('gradient'), -1);
+  }catch(e){ out.push('FAIL  check threw: '+(e&&e.message||e)); }
+  window.__report = out.join('\n');
+})();
+"""
+
 CHECK = CHECKS.get(os.path.basename(PATH))
 if CHECK is None:
     print(f"no checks for {os.path.basename(PATH)}. Known: {', '.join(sorted(CHECKS))}")
@@ -1374,6 +1917,8 @@ def go(v, ev):
     GLib.timeout_add(700, run)
 
 view.connect("load-changed", go)
-GLib.timeout_add(25000, lambda: (Gtk.main_quit(), False)[1])
+# The actions study drives the panel rather than reading it - a 1 px walk of the width,
+# every popup opened from its own control - so it takes longer than a sheet of assertions.
+GLib.timeout_add(90000, lambda: (Gtk.main_quit(), False)[1])
 Gtk.main()
 sys.exit(state["rc"])
