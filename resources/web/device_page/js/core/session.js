@@ -329,10 +329,17 @@ export function createSession({ bridge, state, store, setStatus, render, refresh
    * A machine with no multiACE plugin answers with nothing for it, which is the honest
    * signal that there is no ACE here: `state.ace().present` is false and the Filament
    * panel draws the four slots it always did.
+   *
+   * `ace_bg_swap` rides along in the same call. It is a SECOND Klipper object - which
+   * head may run a background swap is not in `ace` at all, all 38 of whose top-level keys
+   * were read on the machine - and one request that asks for two objects costs what one
+   * that asks for one does. A firmware without the plugin's bg module answers with
+   * nothing for it, and every background verb stays refused, which is the safe way round.
    */
   async function refreshAce() {
     try {
-      const snap = await bridge().request(CMD.GET_MACHINE_STATE, { objects: { ace: null } });
+      const snap = await bridge().request(CMD.GET_MACHINE_STATE,
+                                          { objects: { ace: null, ace_bg_swap: null } });
       state.applyPayload(snap);
     } catch (e) {
       /* no multiACE, or no printer; either way the panel degrades rather than fails */

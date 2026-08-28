@@ -61,11 +61,11 @@ const ACE_SLOTS = 4;
  * shape. Geometry only, no DOM: a view builds the nodes, and there is one place that
  * says what an ACE looks like.
  *
- *   badge   44x26 fill  — a head box. Hood, four bays, base drawn OVER them; the base is
- *                         wider than the hood, which is what makes it read as a cabinet
- *                         rather than a bar chart. Carries colour and emptiness only.
- *   glyph   44x26 line  — a popover row, a label. The badge's own silhouette in one
- *                         stepped path, bays filled.
+ *   badge   44x26 fill  — a head box. ONE rounded body split by a hard colour stop, with
+ *                         the four spools drawn LAST so none is cropped, and 4 px of
+ *                         margin all round. Carries colour and emptiness only.
+ *   glyph   44x26 line  — a popover row, a label. The badge's own silhouette in line: the
+ *                         same body inset by half a stroke, the same bays filled.
  *   square  24x24 line  — a tab, a menu, a button: where the wide cabinet cannot go.
  *                         Deliberately NOT the same silhouette (body and bays, no hood),
  *                         because a third of the width has to say the same thing.
@@ -74,18 +74,30 @@ const ACE_SLOTS = 4;
  * four long — so the bay positions are a constant and not a computation.
  */
 export const ACE_ART = {
-  /** x of each bay, in the wide forms: padding 4 == gap 4, Bambu's own proportions. */
-  bayX: [6, 15, 24, 33],
+  /*
+   * x of each bay, in the wide forms: margin 4 == gap 4, Bambu's own proportion.
+   *
+   * It used to be [6, 15, 24, 33] with 5x14 bays, which is the drawing the standard calls
+   * A - a narrower hood over a wider base, with the base painted OVER the bays so their
+   * lower 2.5 px was cropped. The standard settled on G instead: the cabinet the Device
+   * page actually draws has parallel sides and whole spools, so its portrait should too.
+   * That left the margin unequal - 6 at the sides against 3.5 on top - and making it one
+   * number took the width back out of the box and gave it to the spools.
+   */
+  bayX: [4, 14, 24, 34],
   badge: {
     w: 44, h: 26,
-    hood: 'M2 9a7 7 0 0 1 7-7h26a7 7 0 0 1 7 7v17H2Z',
-    bay: { y: 4.5, w: 5, h: 14, rx: 2.5 },
-    base: { x: 0, y: 16, w: 44, h: 10, rx: 1.5 },
+    /** One rounded body; the colour stop below is what makes it two halves. */
+    body: { x: 0, y: 2, w: 44, h: 24, rx: 5 },
+    bay: { y: 6, w: 6, h: 16, rx: 3 },
+    /** The lower half, rounded at the bottom only - a stop, not a second box. */
+    base: 'M0 16 h44 v5 a5 5 0 0 1 -5 5 h-34 a5 5 0 0 1 -5 -5 Z',
   },
   glyph: {
     w: 44, h: 26, stroke: 1.6,
-    cab: 'M1 17H4V9a6 6 0 0 1 6-6h24a6 6 0 0 1 6 6v8h3v8H1Z',
-    bay: { y: 6.4, w: 5, h: 10.6, rx: 2.5 },
+    /** The badge's body, inset by half a stroke so 1.6 does not clip the viewBox. */
+    body: { x: 0.8, y: 2.8, w: 42.4, h: 22.4, rx: 4.6 },
+    bay: { y: 6, w: 6, h: 16, rx: 3 },
   },
   square: {
     w: 24, h: 24, stroke: 1.6,
@@ -137,7 +149,328 @@ export const ACE = {
   SET_CONFIRM:     'ACE_SET_CONFIRM_COMMANDS',// ENABLE=0|1
   SET_SPOOLMAN:    'ACE_SET_SPOOLMAN',        // URL= AUTO=0|1
   CLEAR_HEADS:     'ACE_CLEAR_HEADS',         // [HEAD=n]
+  /*
+   * The background family, and the gate in front of it.
+   *
+   * ACE_BG_SWAP's own help spells out what it needs: head mode, 1:1 wiring, an OPEN dock
+   * below the head - it purges ~60 mm through it - and the head docked for the whole ~3
+   * min sequence. None of that is in the `ace` object; `ace_bg_swap` is a Klipper object
+   * of its own, and `enabled_heads` is the list ACE_BG_SET_HEAD writes.
+   */
+  BG_SWAP:         'ACE_BG_SWAP',            // HEAD=0-3 SLOT=0-3 [ACE=n] [TEMP=] ...
+  BG_UNLOAD:       'ACE_BG_UNLOAD',          // HEAD=0-3 [TEMP=]
+  BG_SET_HEAD:     'ACE_BG_SET_HEAD',        // HEAD=n ENABLE=0|1
 };
+
+/*
+ * ------------------------------------------------------------------ *
+ * What can be done to one filament, and what the machine is doing about it
+ * ------------------------------------------------------------------ *
+ *
+ * Both settled in docs/u1-webui/02-device-page/multiace-actions.html, and both PURE, so
+ * unit_jsc.py holds them to account with no DOM - the same reason the override precedence
+ * lives here rather than in the panel.
+ */
+
+/** The one refusal that can be lifted, spelled once so a caller can match on it. */
+/*
+ * The U1's OWN feeder macro, which is not multiACE's and is here because aceVerbs() is
+ * the one place that knows a head has no ACE behind it.
+ *
+ * A stock feeder head was being offered `ACE_LOAD_HEAD HEAD=n` with no ACE= and no SLOT=,
+ * and that macro's own help says what it does: "Load a toolhead FROM ACE". There is no
+ * ACE. The load was accepted and nothing happened, which is the machine's usual way of
+ * saying no - `ACE_SET_AUTO_DRY THRESHOLD=` answers `ok` and changes nothing too.
+ *
+ * `AUTO_FEEDING EXTRUDER=n` is the wrapper the printer's own config defines: it maps the
+ * extruder to a (module, channel) through `_FILAMENT_FEED_VARIABLE` and calls `FEED_AUTO`.
+ * The UNLOAD form is the machine's own usage, read out of its config -
+ * `SM_PRINT_END_AUTO_UNLOAD_FILAMENT` runs exactly this at the end of every print:
+ *
+ *     AUTO_FEEDING EXTRUDER={i} UNLOAD=1 STAGE=prepare
+ *     AUTO_FEEDING EXTRUDER={i} UNLOAD=1 STAGE=doing
+ *
+ * `STAGE` is the same vocabulary `channel_state` reports back in - `unload_prepare`,
+ * `unload_doing` - so the step bar follows a feeder verb without being told anything new.
+ *
+ * The LOAD form is INFERRED and is the one thing here that no macro on the machine
+ * spells out: `LOAD=1` is from `SM_PRINT_AUTO_FEED` (`FEED_AUTO ... LOAD=1 PRINTING=1`)
+ * and the two stages are from the unload above. Everything else on this page was settled
+ * by sending it and reading the object back; this one is waiting for the same treatment.
+ */
+export const FEEDER = {
+  FEED: 'AUTO_FEEDING',                       // EXTRUDER=n LOAD=1|UNLOAD=1 STAGE=prepare|doing
+};
+
+export const NOT_DECLARED = 'not enabled for this toolhead';
+
+/**
+ * The verbs, in the state the machine is actually in.
+ *
+ * The first design listed all five always and greyed whatever did not apply. That is
+ * right for a verb the MACHINE is refusing - a background swap on a head nobody has
+ * declared, where the reason names a macro you can send - and wrong for a verb that is
+ * not a thing at all in this state. Loading a head that is already loaded is not a load,
+ * it is a swap; swapping to the bay you are already fed from is a three-minute no-op.
+ *
+ *   not applicable here    left out. There is no reason to show for a verb that does not
+ *                          exist.
+ *   applicable, refused    listed, with `off` set and `cmd` naming the macro that would
+ *                          lift the refusal.
+ *
+ * `slot` may be null, which asks "what could be done with SOME other bay" - what a menu
+ * needs before a bay has been picked.
+ *
+ * @param ace     parseAce()'s model
+ * @param head    toolhead index
+ * @param slot    bay index within that head's unit, or null
+ * @param loaded  whether the head holds filament. Passed in rather than read: a feeder
+ *                head's answer lives in `print_task_config`, which is not multiACE's.
+ */
+export function aceVerbs(ace, head, slot, loaded) {
+  const h = (ace.heads || [])[head];
+  if (!h) return [];
+  const unit = h.source === 'ace' ? (ace.units || [])[h.unitIndex] : null;
+  const list = [];
+
+  // A stock feeder has no second bay, so swap and both background verbs are not
+  // operations it has - and it either holds filament or it does not, never both verbs.
+  if (!unit) {
+    list.push({ name: loaded ? 'Unload' : 'Load', macro: FEEDER.FEED, slotted: false,
+                args: loaded ? { EXTRUDER: head, UNLOAD: 1 } : { EXTRUDER: head, LOAD: 1 },
+                stages: ['prepare', 'doing'] });
+    return list.map(withCmd);
+  }
+
+  /*
+   * `loaded` is the authority on whether there is filament in the head, and `fed` only on
+   * where it CAME FROM - which is meaningful only while something is there.
+   *
+   * This read `fed == null && !loaded`, so a head whose `head_source` still named a bay
+   * was never empty however the sensor answered. That is the same trap one level down
+   * from the one that started this: `head_source` is multiACE's record of the last feed
+   * and it does not stop naming a bay because the filament came out, exactly as
+   * `print_task_config.filament_exist` does not stop existing.
+   */
+  const fed = h.bay;
+  const bay = slot == null ? null : (unit.bays || [])[slot];
+  const empty = !loaded;
+  const same = loaded && slot != null && fed != null && slot === fed;
+  const there = slot == null ? true : !!(bay && bay.occupied);
+  const bgOk = (ace.bgHeads || []).indexOf(head) >= 0;
+  const gate = { macro: ACE.BG_SET_HEAD, args: { HEAD: head, ENABLE: 1 } };
+
+  if (empty) {
+    list.push({ name: 'Load', macro: ACE.LOAD_HEAD, slotted: true,
+                args: { HEAD: head, ACE: unit.index, SLOT: slot },
+                off: there ? null : 'that bay is empty' });
+  } else if (!same) {
+    list.push({ name: 'Swap', macro: ACE.SWAP_HEAD, slotted: true,
+                args: { HEAD: head, ACE: unit.index, SLOT: slot },
+                off: there ? null : 'that bay is empty' });
+    list.push({ name: 'Background swap', macro: ACE.BG_SWAP, slotted: true, bg: true,
+                args: { HEAD: head, SLOT: slot, ACE: unit.index },
+                off: !there ? 'that bay is empty' : bgOk ? null : NOT_DECLARED,
+                gate: bgOk ? null : gate });
+  }
+  if (!empty) {
+    // An ACE pulls the filament back into its bay, which a stock feeder cannot - that is
+    // what RETRACT_LENGTH is for, and why this verb is not called `Unload` here.
+    list.push({ name: 'Unload and retract', macro: ACE.UNLOAD_HEAD, slotted: false,
+                args: { HEAD: head, RETRACT_LENGTH: null } });
+    list.push({ name: 'Background unload', macro: ACE.BG_UNLOAD, slotted: false, bg: true,
+                args: { HEAD: head },
+                off: bgOk ? null : NOT_DECLARED, gate: bgOk ? null : gate });
+  }
+  return list.map(withCmd);
+}
+
+/*
+ * A verb carries the line it would send, and an unavailable one carries the line that
+ * would make it available instead - so what a control says and what it does cannot
+ * disagree. A null argument renders as a placeholder rather than being dropped: the sheet
+ * is showing the shape of the command, not sending it yet.
+ */
+function withCmd(v) {
+  const args = {};
+  Object.entries(v.args || {}).forEach(([k, x]) => {
+    args[k] = x === null ? (k === 'RETRACT_LENGTH' ? '<mm>' : '<n>') : x;
+  });
+  const gate = v.gate ? aceLine(v.gate.macro, v.gate.args) : null;
+  // A verb with stages is two lines and not one - the machine runs the feeder that way
+  // in its own config, and `sw_SendGCodes` takes a newline-separated script.
+  const cmd = v.stages
+    ? v.stages.map((st) => aceLine(v.macro, Object.assign({}, args, { STAGE: st }))).join('\n')
+    : aceLine(v.macro, args);
+  return Object.assign({}, v, { cmd: gate || cmd });
+}
+
+/**
+ * What the printer is doing, in its own words.
+ *
+ * NOT `swap_phase`, which is multiACE's and has never been captured on hardware. The U1's
+ * own `channel_state` names the step - `filament_feed left|right` -> `extruder<n>`,
+ * already on this page's subscription and already parsed by `feedChannels()`. The table
+ * below is HelixScreen's classification of that field; its Snapmaker backend drives a U1
+ * touchscreen from it, and taking it rather than re-deriving it is what stops the two
+ * disagreeing about one machine.
+ */
+export const ACE_STEPS = {
+  unload: ['Home', 'Select', 'Heat nozzle', 'Retract filament'],
+  load: ['Home', 'Select', 'Heat nozzle', 'Feed filament', 'Purge'],
+  /*
+   * A swap on an ACE-fed head is ONE bar with two halves. The load half's own Home /
+   * Select / Heat are deliberately absent: the head is mounted and already hot by then,
+   * so they pass straight through.
+   *
+   * And there is no step for the ACE fetching the new bay. Measured on a live U1 that is
+   * a ~4 s blip in a ~100 s operation, because the bay is already staged at its gate - a
+   * row complete before it is read is worse than no row, so the bar holds on `Retract
+   * filament` across it.
+   */
+  swap: ['Home', 'Select', 'Heat nozzle', 'Retract filament', 'Feed filament', 'Purge'],
+};
+
+/** Where each direction's step lands on the swap bar. `null` holds rather than jumps. */
+const SWAP_AT = { unload: [0, 1, 2, 3], load: [null, null, null, 4, 5] };
+
+const CHANNEL_STATES = {
+  /*
+   * The idle words, and an idle machine does not say `none`.
+   *
+   * Read off 811002511261022618B3 with everything settled: two heads said `load_finish`
+   * and two said `wait_insert`. So a terminal state IS the resting state - the field holds
+   * the last operation's ending rather than returning to a neutral word - and both draw
+   * nothing, which is what makes an idle panel quiet.
+   *
+   * `wait_insert` is not a reliable "this head is empty", either: the head reading it was
+   * fed from bay 2. The step bar does not care, because terminal states draw nothing -
+   * and nothing else should read this field for occupancy. `headOccupied()` below is
+   * where that question goes, and `channel_action_state` is what answers it.
+   */
+  none: null, inited: null, wait_insert: null, test: null,
+  unload_prepare: ['unload', 0], unload_homing: ['unload', 0],
+  unload_picking: ['unload', 1],
+  unload_heating: ['unload', 2], unload_heat_finish: ['unload', 2],
+  unload_doing: ['unload', 3],
+  load_prepare: ['load', 0], load_homing: ['load', 0],
+  load_picking: ['load', 1],
+  load_heating: ['load', 2],
+  load_feeding: ['load', 3], load_extruding: ['load', 3],
+  load_flushing: ['load', 4],
+  preload_prepare: ['load', 0], preload_feeding: ['load', 3],
+};
+
+/**
+ * One `channel_state` string, classified against the bar being drawn.
+ *
+ * Unknown states fall through to a prefix heuristic rather than being dropped: this is a
+ * firmware that has grown states before, and a future `unload_something` should hold the
+ * bar in the right half rather than reset it.
+ *
+ * @param kind 'swap' | 'load' | 'unload' - which bar is on screen
+ */
+/**
+ * Whether a head is HOLDING FILAMENT - and every sensor on the channel answers something
+ * else.
+ *
+ * Read off 811002511261022618B3 with toolhead 1 unloaded by hand a moment before, which
+ * is the one head in the row whose true state was known:
+ *
+ *   head  channel_state   channel_action_state  detected inAce inTool atExt exist  TRUTH
+ *   0     unload_finish   unload_finish         T        T     T      T     T      empty
+ *   1     wait_insert     unload_finish         F        T     F      T     T      empty
+ *   2     wait_insert     none                  F        T     F      F     F      empty
+ *   3     wait_insert     none                  T        T     F      T     T      LOADED
+ *
+ * Four fields read like presence and none of them is:
+ *
+ *   `filament_in_ace`      true on all four, the empty one included - a module is there,
+ *                          not filament.
+ *   `filament_at_extruder` true on three, two of them empty. It tracks the PATH having
+ *                          filament available, not the head having it, and it does not
+ *                          go false when a head is emptied.
+ *   `filament_in_toolhead` true on the head just emptied and false on the loaded one,
+ *                          which is not a sensor reading anyone should build on.
+ *   `channel_state`        `wait_insert` on an empty head AND on a loaded one - already
+ *                          recorded above, and the reason this needed a second look.
+ *
+ * `channel_action_state` separates them, because it is not a sensor: it is the last
+ * operation the channel FINISHED. `unload_finish` on the two heads that had been
+ * unloaded, `none` on the two that had not been touched since boot.
+ *
+ * So: the sticky field first, then the live one, then the topology - multiACE names the
+ * bay it fed a head from, and a stock feeder has only the job record.
+ *
+ * That order is by what each field is FOR, not by which is fresher, and the two differ.
+ * `channel_state` is the more recent value, but it is the one that goes to a word
+ * carrying no occupancy at all; `channel_action_state` is the one that exists to record
+ * the answer, and on the machine it never lags - it held `unload_finish` on both heads
+ * that had been unloaded, one of them still reading it live and one already settled. So
+ * it is asked first, and `channel_state` is read only where nothing has finished since
+ * boot and it is still holding a terminal word of its own.
+ *
+ * `*_fail` deliberately decides nothing: a load that failed may have got anywhere, and
+ * the topology is a better guess than either half of a guess.
+ *
+ * This is the third field this question has been asked of and the second that was wrong.
+ * It is asked in ONE place for that reason.
+ */
+export function headOccupied(feed, head, jobLoaded) {
+  for (const st of [feed && feed.actionState, feed && feed.channelState]) {
+    const s = String(st || '').toLowerCase();
+    if (s === 'load_finish' || s === 'preload_finish') return true;
+    if (s === 'unload_finish') return false;
+  }
+  if (head && head.source === 'ace') return !!(head.loaded || head.bay != null);
+  return !!jobLoaded;
+}
+
+/**
+ * The resting and terminal channel words, in words.
+ *
+ * `channelStep()` names the steps INSIDE an operation and answers null for everything
+ * else, which left the page with nothing to say for the states a channel actually sits in
+ * - so it said `wait_insert`, `unload_fail`, `channel_state load_flushing` in hovers and
+ * dialogs. A field name says where the page read something, which is the page's business
+ * and not the reader's. `activity.js` does exactly this for `action_code`; this is the
+ * same table for the other field.
+ *
+ * Anything not here answers null, and a caller with nothing to say says nothing.
+ */
+const CHANNEL_WORDS = {
+  none: 'Idle', inited: 'Idle', test: 'Self-test',
+  wait_insert: 'Waiting for filament',
+  load_finish: 'Loaded', preload_finish: 'Loaded', unload_finish: 'Unloaded',
+  load_fail: 'Load failed', preload_fail: 'Load failed', unload_fail: 'Unload failed',
+};
+
+export function channelWord(state) {
+  const s = String(state || '').toLowerCase();
+  return CHANNEL_WORDS[s] || null;
+}
+
+export function channelStep(state, kind) {
+  const s = String(state || '').toLowerCase();
+  if (!s) return null;
+  if (/_fail$/.test(s)) return { state: s, failed: true, at: null };
+  if (/_finish$/.test(s)) return { state: s, done: true, at: null };
+  // `in`, not truthiness: the table maps the idle words to null ON PURPOSE, and `||`
+  // sent them to the heuristic below - which happens to answer null for the ones this
+  // firmware uses, and would not for a future idle word beginning `load`.
+  const hit = s in CHANNEL_STATES ? CHANNEL_STATES[s]
+    : /^unload/.test(s) ? ['unload', 0]
+    : /^(load|preload|manual)/.test(s) ? ['load', 0] : null;
+  if (!hit) return null;
+  const [dir, at] = hit;
+  const steps = ACE_STEPS[kind] || ACE_STEPS[dir];
+  // Resolved THROUGH the list, never used as a position: on a swap the two halves carry
+  // different ids, and a step this bar does not declare must hold rather than jump back.
+  const idx = kind === 'swap' ? SWAP_AT[dir][at] : at;
+  return { state: s, dir, at: idx, total: steps.length,
+           label: idx == null ? null : steps[idx],
+           heat: idx != null && steps[idx] === 'Heat nozzle' };
+}
 
 /**
  * Units are addressed by index on the wire and by letter on screen, the way Bambu
@@ -192,6 +525,35 @@ export const DRY_MINUTES_PER_HOUR = 60;
  * Keyed `"<ace>_<slot>"` -> `{ace, slot, material, brand, subtype, color}`.
  */
 export const ACE_OVERRIDES_FILE = 'config/extended/multiace/slot_overrides.json';
+
+/**
+ * Moonraker's console history, which is where the printer says what went wrong.
+ *
+ * `sw_SendGCodes` answers `ok` for a macro that failed: multiACE printed
+ * `!! Must home Z axis first` and set `last_swap_result.status` to `error`, and the reply
+ * carried neither. The `!!` line is Klipper's error channel and it is the only place the
+ * REASON exists - so the panel reads it rather than inventing a sentence about what
+ * probably happened.
+ *
+ * Same host and same port as the override store, and Moonraker reflects the Origin here
+ * too (checked: `Access-Control-Allow-Origin: http://127.0.0.1:13619`).
+ */
+export function gcodeStoreUrl(device, count = 20) {
+  const ip = device && device[DEVICE.IP];
+  if (!ip) return null;
+  return `http://${ip}:${MOONRAKER_HTTP_PORT}/server/gcode_store?count=${count | 0}`;
+}
+
+/** The most recent `!!` line in a gcode_store answer, without its marker. */
+export function lastPrinterError(raw) {
+  const list = raw && raw.result && Array.isArray(raw.result.gcode_store)
+    ? raw.result.gcode_store : [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const m = String((list[i] || {}).message || '');
+    if (m.startsWith('!!')) return m.replace(/^!!\s*/, '').split('\n')[0].trim() || null;
+  }
+  return null;
+}
 
 export function aceOverridesUrl(device) {
   const ip = device && device[DEVICE.IP];
@@ -276,11 +638,15 @@ const BADGE_Z = BADGE_ROW / 26;
  */
 
 /**
- * Badge: hood, four bays, base drawn OVER them.
+ * Badge: one body, a colour stop, and four spools drawn OVER both.
  *
  * Filled with that unit's own bays, so the thing in the header is a picture of the thing
  * in the card. Colour and emptiness are all that survive at this size, which is why it
- * carries no outline, no address and no state.
+ * carries no outline, no address, no state - and no level, even where Spoolman has bound
+ * one: at 6x16 a level is not readable.
+ *
+ * Draw order is the whole of the change from A: the spools go on LAST, so a spool is a
+ * whole spool rather than one with its lower 2.5 px painted over by the base.
  */
 export function aceBadge(bays, z = BADGE_Z) {
   const A = ACE_ART.badge;
@@ -289,24 +655,31 @@ export function aceBadge(bays, z = BADGE_Z) {
   const s = svgEl('svg', { width: r1(A.w * z), height: r1(A.h * z),
                          viewBox: `0 0 ${A.w} ${A.h}`,
                          'aria-hidden': 'true', class: 'ace-badge' });
-  s.appendChild(svgEl('path', { d: A.hood, fill: ACE_ART.hood }));
+  s.appendChild(svgEl('rect', { x: A.body.x, y: A.body.y, width: A.body.w,
+                              height: A.body.h, rx: A.body.rx, fill: ACE_ART.hood }));
+  s.appendChild(svgEl('path', { d: A.base, fill: ACE_ART.base }));
   bays.forEach((b, i) => s.appendChild(svgEl('rect', {
     x: ACE_ART.bayX[i], y: A.bay.y, width: A.bay.w, height: A.bay.h, rx: A.bay.rx,
     fill: (b.occupied && cssColor(b.color)) || (b.occupied ? '#B7BDC6' : ACE_ART.emptyBay),
   })));
-  s.appendChild(svgEl('rect', { x: A.base.x, y: A.base.y, width: A.base.w,
-                              height: A.base.h, rx: A.base.rx, fill: ACE_ART.base }));
   return s;
 }
 
-/** Glyph: the badge's silhouette in line, bays filled. Takes the ink from `currentColor`. */
+/**
+ * Glyph: the badge's silhouette in line, bays filled. Takes the ink from `currentColor`.
+ *
+ * It used to be a stepped path - A's silhouette, hood shoulders on top and a base stepping
+ * out at the bottom. When the badge stopped stepping this had to stop too, or the pair say
+ * two different things about one object.
+ */
 export function aceGlyph(z = 1) {
   const A = ACE_ART.glyph;
   const s = svgEl('svg', { width: A.w * z, height: A.h * z, viewBox: `0 0 ${A.w} ${A.h}`,
                          fill: 'none', stroke: 'currentColor', 'stroke-width': A.stroke,
                          'stroke-linejoin': 'round', 'stroke-linecap': 'round',
                          'aria-hidden': 'true', class: 'ace-glyph-wide' });
-  s.appendChild(svgEl('path', { d: A.cab }));
+  s.appendChild(svgEl('rect', { x: A.body.x, y: A.body.y, width: A.body.w,
+                              height: A.body.h, rx: A.body.rx }));
   ACE_ART.bayX.forEach((x) => s.appendChild(svgEl('rect', {
     x, y: A.bay.y, width: A.bay.w, height: A.bay.h, rx: A.bay.rx,
     fill: 'currentColor', stroke: 'none' })));
@@ -363,7 +736,7 @@ export function parseAce(objects) {
     const present = !!o && typeof o === 'object' && !Array.isArray(o);
     if (!present) {
       return { present: false, mode: null, unitCount: 0, activeUnit: 0,
-               swapping: false, swapPhase: null, lastSwap: null,
+               swapping: false, swapPhase: null, lastSwap: null, bgHeads: [], bgVersion: null,
                units: [], heads: TOOLHEADS.map((_k, i) => ({
                  index: i, source: 'feeder', unitIndex: null, unitId: null,
                  bay: null, loaded: null })),
@@ -421,6 +794,17 @@ export function parseAce(objects) {
       swapping: !!o.swap_in_progress || (o.swap_phase && o.swap_phase !== 'idle'),
       swapPhase: nonEmpty(o.swap_phase),
       lastSwap: o.last_swap_result != null ? o.last_swap_result : null,
+      /*
+       * Which heads a background swap may run on.
+       *
+       * NOT from the `ace` object - all 38 of its top-level keys were read on the machine
+       * and there is no `bg_swap` among them. `ace_bg_swap` is a Klipper object of its
+       * own, so it is a second key in the same sw_GetMachineState call rather than a
+       * second request. Measured 2026-08-26: `{"version":"v0.9","enabled_heads":[], ...}`
+       * - no head is declared on that machine, which is why the panel's first duty is to
+       * draw the refusal well.
+       */
+      ...parseBgSwap(objects),
       units,
       heads,
       /*
@@ -457,6 +841,23 @@ export function parseAce(objects) {
  * accepted, because the two are the same data and a caller should not have to know which
  * end it came from.
  */
+/**
+ * `ace_bg_swap`, which is a different object from `ace` and answers a different question.
+ *
+ * A head is background-capable only when someone has DECLARED it with ACE_BG_SET_HEAD,
+ * and the help for that macro says what the declaration means physically: the dock below
+ * that head is open, and the cold-pull purges ~60 mm through it. So an undeclared head is
+ * not a control to grey out quietly - it is the one mistake on this panel that costs
+ * filament and a bed.
+ */
+function parseBgSwap(objects) {
+  const o = (objects || {})['ace_bg_swap'];
+  if (!o || typeof o !== 'object') return { bgHeads: [], bgVersion: null, bgBusy: [] };
+  const ints = (v) => (Array.isArray(v) ? v.map(Number).filter(Number.isInteger) : []);
+  return { bgHeads: ints(o.enabled_heads), bgVersion: nonEmpty(o.version),
+           bgBusy: ints(o.busy) };
+}
+
 export function parseAceOverrides(raw) {
   const map = (raw && typeof raw === 'object' && raw.overrides) ? raw.overrides : raw;
   return (map && typeof map === 'object' && !Array.isArray(map)) ? map : null;

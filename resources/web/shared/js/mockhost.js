@@ -125,6 +125,10 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
           // and the page asks for it by name - so it comes back only when it is asked
           // for, which is also what makes "no multiACE here" a state a test can reach.
           if (params.objects && 'ace' in params.objects && printer.ace) objs.ace = printer.ace;
+          // `ace_bg_swap` is a second object in the same call, and it answers a different
+          // question: not what the ACE is, but which head may run a background swap.
+          if (params.objects && 'ace_bg_swap' in params.objects && printer.aceBg)
+            objs.ace_bg_swap = printer.aceBg;
           return ok(statusEnvelope(objs, 'query'));
         }
         case 'sw_SubscribeMachineState': {
@@ -569,6 +573,40 @@ export function makePrinter() {
     // the mirror instead was overwritten by the next tick, which made the check pass or
     // fail on how long the script before it took.
     filamentExist: [true, true, true, true],
+    /*
+     * What each head's feed channel is doing, as the machine reports it at rest.
+     *
+     * NOT `none`, which was the guess. Read off 811002511261022618B3 with everything
+     * settled: `load_finish` on the two heads that had finished loading and `wait_insert`
+     * on the two that had not. A terminal state is the resting state here - the field
+     * holds the last operation's ending rather than returning to a neutral word.
+     *
+     * A drive script sets one of the `load_*` / `unload_*` states to exercise the step
+     * bar, which is the only way to reach it without a three-minute physical swap.
+     */
+    /*
+     * `state` and `act` are `channel_state` and `channel_action_state`, and `at` is the
+     * `filament_*` booleans - three answers that the machine gives independently and
+     * that the simulator must therefore be able to give independently too.
+     *
+     * It could not, twice. `at` was first computed from `filamentExist`, so the sensor
+     * and the job record could never disagree - and a head that had just been unloaded
+     * went on offering Unload. Splitting them fixed the simulator and not the printer,
+     * where `filament_at_extruder` stayed TRUE on both emptied heads and the field that
+     * moved was `channel_action_state`. So `at` is now what it is on the machine - the
+     * path having filament, true on empty heads included - and `act` is occupancy.
+     * Anything that reads occupancy from `at` will now fail here the way it failed there.
+     */
+    channels: [
+      { state: 'load_finish', error: 'ok', act: 'load_finish', at: true },
+      { state: 'load_finish', error: 'ok', act: 'load_finish', at: true },
+      { state: 'wait_insert', error: 'ok', act: 'none', at: false },
+      // Toolhead 4, the ACE-fed one, exactly as 811002511261022618B3 reports it: an
+      // idle word, no action since boot, and the path reading full. Nothing in the feed
+      // channel says this head is loaded - the TOPOLOGY does, and that fallback is only
+      // exercised if the simulator is allowed to be this uninformative.
+      { state: 'wait_insert', error: 'ok', act: 'none', at: true },
+    ],
     fanMain: 0, fanCavity: 0, ledWhite: 1, speedFactor: 1,
     purifierMode: 'inner',
     printState: 'printing',
@@ -604,6 +642,14 @@ export function makePrinter() {
     // The multiACE state, as the machine reports it - see mockAce() above. Null is a
     // machine with no multiACE plugin, which is the other half the panel has to draw.
     ace: mockAce(),
+    /*
+     * `ace_bg_swap`, exactly as the machine answered on 2026-08-26. A different Klipper
+     * object from `ace`, and the one that says which head may run a background swap.
+     * `enabled_heads` really is empty there: nobody has declared a head, so every
+     * background verb is refused - which is the state the panel has to draw well, and so
+     * the state the simulator opens in.
+     */
+    aceBg: { version: 'v0.9', enabled_heads: [], busy: [], state: {} },
     // And what is IN each bay, which the ace object does not carry. Null is a printer
     // with no override store, where every occupied bay stays unnamed.
     aceOverrides: mockAceOverrides(),
@@ -844,6 +890,39 @@ export function makePrinter() {
       },
     };
     TOOLHEADS.forEach((k, i) => { objs[k] = Object.assign({}, p.toolheads[i]); });
+    /*
+     * The feed channels, which the simulator did not have at all - so the head's own
+     * sensor marker had nothing to read and neither did the step bar beside it.
+     *
+     * `filament_feed left|right` -> `extruder0..3` gives four positions along the path
+     * plus a fault, and `channel_state` names the step the printer is on. WHICH side
+     * carries which head has never been measured, and `feedChannels()` does not depend on
+     * it - it scans both and indexes by the number in the key - so everything is put on
+     * one side here rather than a split being invented.
+     */
+    objs['filament_feed left'] = {};
+    objs['filament_feed right'] = {};
+    p.channels.forEach((c, i) => {
+      // Heads 0-1 on the left object and 2-3 on the right, which is where the machine
+      // puts them. Putting all four on one side worked because feedChannels() reads both
+      // and keys off the extruder number - so it proved nothing about the other side.
+      objs[i < 2 ? 'filament_feed left' : 'filament_feed right']['extruder' + i] = {
+        index: i,
+        module_exist: true,
+        filament_detected: !!c.at,
+        // The ACE side has filament whether or not the head does - measured `ace/-/-` on
+        // the one empty head, so this stays true where the other two go false.
+        filament_in_ace: true,
+        filament_in_toolhead: !!c.at,
+        filament_at_extruder: !!c.at,
+        channel_state: c.state,
+        // The last operation that FINISHED, which outlives `channel_state` settling back
+        // to `wait_insert` and is what says whether the head is holding filament.
+        channel_action_state: c.act || 'none',
+        channel_error: c.error,
+        channel_error_state: 'none',
+      };
+    });
     return objs;
   };
 

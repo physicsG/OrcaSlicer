@@ -149,9 +149,17 @@ hardware. `MachineState.ace()` calls into it. It was spread over three files, an
 is how the panel came to read bay identity from a source that does not carry it.
 
 **UI copy says what a control is or what state it is in — and stops there.** No
-explaining what multiACE is in a tooltip, no reasoning in a dialog. A macro name is fine
-(it says what will be sent); a paragraph about why is not. The explanations belong in
-`docs/u1-webui/`, and a reader of a hover has not asked for one.
+explaining what multiACE is in a tooltip, no reasoning in a dialog. The explanations
+belong in `docs/u1-webui/`, and a reader of a hover has not asked for one.
+
+**And it says it in words, not in the machine's schema.** A *field* name (`channel_state`,
+`print_task_config`, `hum_level2`) says where the page read something, which is the page's
+business; `channelWord()` and `activity.js` turn those into words the way a label should
+be written. **A macro name is not an exception** — it was one, on the ground that it says
+what will be sent, and it read as a G-code console once it was under every verb on the
+toolhead sheet. The trace pane is where the wire belongs, and it already has it. Nor does
+a dialog quote a reply: an `ok` is not a yes here, so `JSON.stringify(reply)` on screen is
+both noise and misleading.
 
 **The Filament panel has two shapes and the machine picks.** A printer that reports no
 `ace` Klipper object gets the four slots the page always drew; one that reports it gets

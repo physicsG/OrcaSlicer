@@ -41,12 +41,13 @@
 import { el, icon } from '../../../core/dom.js';
 import { cssColor, isDarkColor } from '../../../../../shared/js/protocol.js';
 // Everything about the ACE comes from one module - see shared/js/multiACE.js for why.
-import { ACE, ACE_MODES, ACE_MODE_LABELS, DRY_TEMPS, DRY_HOURS, DRY_LIMITS,
-         DRY_MINUTES_PER_HOUR, AUTO_DRY_THRESHOLDS,
-         aceBadge, aceGlyphSquare, aceBayAddr, humidityLevel, mergeAceBays }
+import { ACE_MODES, ACE_MODE_LABELS, DRY_TEMPS, DRY_HOURS, DRY_LIMITS,
+         DRY_MINUTES_PER_HOUR, AUTO_DRY_THRESHOLDS, NOT_DECLARED,
+         aceBadge, aceGlyphSquare, aceBayAddr, humidityLevel, mergeAceBays,
+         aceVerbs, channelStep, channelWord, headOccupied }
   from '../../../../../shared/js/multiACE.js';
 import { keyedList, rebuildOn } from '../../../core/render.js';
-import { openDialog, openMenu } from '../../../core/overlay.js';
+import { openDialog, closeDialog, openMenu } from '../../../core/overlay.js';
 
 /** The toolhead artwork, at half. 64x140 becomes 32x70, which is what fits twice over. */
 const HEAD_SCALE = 0.5;
@@ -54,18 +55,14 @@ const HEAD_SCALE = 0.5;
 
 
 /**
- * What the head's own sensor says, and the field it says it with.
+ * What the head is holding, in words.
  *
- * `filament_feed left|right` -> `extruder0..3` gives four positions along the path plus
- * a fault, parsed in state.js's feedChannels() and shown, until now, nowhere but a
- * dialog.
+ * It used to carry the field name alongside - `channel_action_state: load_finish` - on
+ * the reasoning that naming the source was honest. It is honest and it is ours: a field
+ * name says where the page READ something, which is not what a hover is for. Which field
+ * answers this, and the measurement that picked it, is multiACE.js's headOccupied().
  */
-const SENSOR = {
-  at:   ['Filament at the extruder', 'filament_at_extruder: true'],
-  tube: ['Filament in the tube', 'filament_in_toolhead: true, filament_at_extruder: false'],
-  none: ['No filament detected', 'filament_detected: false'],
-  err:  ['Feed error', 'channel_error'],
-};
+const SENSOR = { at: 'Filament loaded', none: 'No filament loaded', err: 'Feed error' };
 
 /**
  * Where a bay's name came from, and therefore what may be done to it.
@@ -135,9 +132,13 @@ function renderSlots(root, slots, handlers) {
       }
       slot.appendChild(dot);
       slot.appendChild(el('div', 'bar', f.loaded ? f.type : '/'));
-      // a spool that identified itself is worth distinguishing from one typed in by hand
+      // A spool that identified itself is worth distinguishing from one typed in by
+      // hand, and the mark has to agree with what the click does: a tagged spool opens
+      // read-only, so it wears the EYE. Every slot wore the pencil, tagged or not.
       if (f.tag) slot.appendChild(el('span', 'slot-tag', 'RFID'));
-      slot.appendChild(icon('iconFilamentEdit', 'pencil'));
+      const mark = f.tag ? glyph('eye') : icon('iconFilamentEdit', 'pencil');
+      mark.classList.add('pencil');
+      slot.appendChild(mark);
       slot.onclick = () => editSlot(i, f, handlers);
       return slot;
     },
@@ -182,7 +183,18 @@ function cardSig(ace, slots, pending, i, overrides) {
   return [
     ace.mode, ace.unitCount, src.value, src.state,
     usersOf(ace, h.unitIndex).join('-'),
-    h.bay, sensorOf(slots[i]),
+    h.bay, sensorOf(slots[i], headLoaded(ace, slots, i)),
+    // The field occupancy is actually decided by. It is NOT `channelState` below: that
+    // one settles back to `wait_insert` after an unload, so a signature holding only it
+    // never changed when the head emptied - which is the repaint half of the same bug.
+    (slots[i] && slots[i].feed && slots[i].feed.actionState) || '',
+    // What the machine is doing to this head. It is in the signature because the card
+    // DRAWS it - the step bar beside the toolhead - and a card whose signature omits
+    // something it draws simply never repaints for it. The sensor mark above buckets
+    // four positions into one word, so it cannot stand in for this: a whole swap runs
+    // with `filament_at_extruder` unchanged.
+    (slots[i] && slots[i].feed && slots[i].feed.channelState) || '',
+    ace.bgHeads.join(','),
     sp ? [sp.material || sp.type, sp.subType, sp.vendor, sp.color].join(',') : '-',
     u ? [u.id, u.model, u.humidity, u.temperature, u.dryer.running,
          u.dryer.doneMin, u.dryer.totalMin,
@@ -193,13 +205,36 @@ function cardSig(ace, slots, pending, i, overrides) {
   ].join('|');
 }
 
-function sensorOf(f) {
+/**
+ * Whether a head is holding filament. One question, one answer, and it lives in
+ * multiACE.js beside the state table it is read from - see headOccupied() there for the
+ * measurement that settled which field answers it.
+ *
+ * It has been wrong twice. `filaments()[i].loaded` is `print_task_config`, the slicer's
+ * ASSIGNMENT to that slot, which a physical unload does not clear - so an emptied head
+ * went on offering `Unload`. Reading `filament_at_extruder` instead fixed the simulator
+ * and not the printer: that field was still true on both heads that had been emptied.
+ *
+ * Three places decided this independently before, and one of them had forgotten the
+ * feeder case entirely. Deciding it once is most of the fix - and it is why the second
+ * wrong answer was one line to correct.
+ */
+function headLoaded(ace, slots, i) {
+  return headOccupied(slots[i] && slots[i].feed, ace.heads[i],
+                      slots[i] && slots[i].loaded);
+}
+
+/**
+ * The mark on the artwork, which says the same thing the verbs do.
+ *
+ * It used to read `filament_at_extruder` straight, so it drew "filament at the extruder"
+ * on a head the panel was simultaneously offering `Load`. A card must not contradict
+ * itself: occupancy is decided once, above, and this only picks the word for it.
+ */
+function sensorOf(f, occupied) {
   const feed = f && f.feed;
-  if (!feed) return f && f.loaded ? 'at' : 'none';
-  if (feed.error) return 'err';
-  if (feed.atExtruder) return 'at';
-  if (feed.inToolhead || feed.inAce) return 'tube';
-  return 'none';
+  if (feed && feed.error) return 'err';
+  return occupied ? 'at' : 'none';
 }
 
 function card(ace, slots, ctx, i) {
@@ -220,7 +255,7 @@ function card(ace, slots, ctx, i) {
   const spool = unit ? h.loaded : slots[i];
   body.appendChild(unit ? cabinet(ctx, i, unit, bays, h.bay) : feeder(ctx, i, src.value, spool));
   body.appendChild(el('div', 'ace-lane'));
-  body.appendChild(head(slots[i], i));
+  body.appendChild(head(slots[i], i, unit, ctx, headLoaded(ace, slots, i)));
 
   // The tube layer paints BEHIND the cabinet and is appended last, so it also paints
   // over the toolhead's inlet - which is where it is meant to land.
@@ -340,8 +375,7 @@ function dryChip(ctx, u) {
   b.title = running
     ? `Drying${d.target ? ` to ${d.target} °C` : ''}`
       + (d.remainingMin != null ? ` · ${hm(d.remainingMin)} left` : '')
-      + ` · ${ACE.DRY_STOP} ACE=${u.index}`
-    : `${ACE.DRY} ACE=${u.index}`
+    : `Dry ACE ${u.id}`
       + (u.autoDry.enabled ? ` · automatic above ${u.autoDry.rhStart} %` : '');
   b.onclick = (e) => { e.stopPropagation(); openDryer(ctx, u); };
   return b;
@@ -358,8 +392,7 @@ function feederStrip(i, source) {
   const manual = source === 'manual';
   n.appendChild(el('b', null, manual ? 'Hand-fed' : 'Feeder'));
   n.appendChild(document.createTextNode(manual ? ' · bypass' : ` · channel ${(i % 2) + 1}`));
-  n.title = manual ? 'Hand-fed — no ACE feed, retract, assist or RFID'
-                   : 'Automatic Filament Feeder Module';
+  n.title = manual ? 'Hand-fed' : 'Automatic Filament Feeder Module';
   r.appendChild(n);
   r.appendChild(el('span', 'spacer'));
   return r;
@@ -423,7 +456,7 @@ function bay(ctx, i, u, b, fed) {
   node.appendChild(disc);
   node.appendChild(el('span', 'ace-chip', b.occupied ? (b.material || '?') : '/'));
   if (b.occupied) node.appendChild(provMark(b));
-  node.onclick = () => confirmLoad(ctx, i, u, b);
+  node.onclick = () => baySheet(ctx, i, u, b);
   return node;
 }
 
@@ -485,18 +518,76 @@ function feeder(ctx, i, source, spool) {
  * The dot is centred on the artwork's BODY - extruderBackground.svg draws that body
  * y=17.4..127.6 of its 64x140, so the middle is (32, 72.5) at whatever scale.
  */
-function head(f, i) {
+function head(f, i, unit, ctx, occupied) {
   const wrap = el('div', 'ace-toolwrap');
-  const st = sensorOf(f);
-  const t = el('div', 'ace-tool');
+  const st = sensorOf(f, occupied);
+  const t = el('div', 'ace-tool is-target');
   t.style.setProperty('--s', HEAD_SCALE);
-  t.title = `Toolhead ${i + 1} — ${SENSOR[st][0]}`;
+  // Every one of these macros addresses `HEAD=n`, so the head is what they are ABOUT -
+  // and it is the one target on the card that is the same size at every panel width,
+  // where a bay is 62 px and shrinking. It wears the bay's own traced edge under the
+  // pointer, because two things you can click on one card should not answer differently.
+  t.title = `Toolhead ${i + 1} — ${SENSOR[st]}`;
   t.setAttribute('aria-label', t.title);
+  t.setAttribute('role', 'button');
+  t.tabIndex = 0;
+  t.onclick = () => headSheet(ctx, i, unit);
+  t.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t.click(); } };
   const m = el('span', `ace-sensor is-${st}`);
-  m.title = SENSOR[st][1];
+  m.title = SENSOR[st];
   t.appendChild(m);
+  const line = flightLine(f, i, unit);
+  if (line) wrap.appendChild(line);
   wrap.appendChild(t);
   return wrap;
+}
+
+/**
+ * What the machine is doing to this head, in the machine's own words.
+ *
+ * `channel_state` is the U1's, not multiACE's - `filament_feed left|right` -> the head's
+ * own record, already on the subscription and already parsed by `feedChannels()`. So this
+ * costs no request; it was simply never drawn.
+ *
+ * It lives in the GUTTER beside the artwork, and that is the whole reason it can exist:
+ * a row under the box measures 479 against a 456 budget and `.panel-body` is
+ * `overflow: hidden`, so it would have been clipped rather than seen. The head is 32 px
+ * wide in a 371 px cell, which leaves two empty columns and one of them is free.
+ *
+ * The bar is DETERMINATE, and an earlier draft argued it could not be. That was right
+ * about `swap_phase`, which is a word, and wrong about the machine: `channel_state` names
+ * which of a KNOWN list the printer is in, so step 4 of 6 is a real quantity. What is
+ * still not derivable is a fraction WITHIN a step, and none is drawn.
+ */
+function flightLine(f, i, unit) {
+  const state = f && f.feed && f.feed.channelState;
+  // A swap on an ACE-fed head is one bar with two halves; a feeder head runs one
+  // direction at a time and gets that direction's own list.
+  const step = channelStep(state, unit ? 'swap' : null);
+  if (!step) return null;
+
+  const row = el('div', 'ace-flight' + (step.failed ? ' is-fail' : ''));
+  if (step.failed) {
+    // A failure is a firmware STATE, not a sentence. Translating it would be this page's
+    // opinion of what happened, and it stays until something else happens.
+    row.appendChild(el('span', 'ace-flight-at', channelWord(step.state) || step.state));
+    return row;
+  }
+  if (step.done || step.at == null) return null;
+
+  const ticks = el('div', 'ace-steps');
+  for (let k = 0; k < step.total; k += 1) {
+    const seg = el('i', k < step.at ? 'is-done' : k === step.at ? 'is-now' : null);
+    ticks.appendChild(seg);
+  }
+  row.appendChild(ticks);
+  // The heat step reads the nozzle rather than captioning it: "heating" and "here is how
+  // far" are different answers, and only the second says whether to wait.
+  const label = el('span', 'ace-flight-at', step.label);
+  row.appendChild(label);
+  row.title = `Step ${step.at + 1} of ${step.total}`;
+  row.dataset.heat = step.heat ? '1' : '';
+  return row;
 }
 
 /* ---- the tube ------------------------------------------------------ *
@@ -587,28 +678,44 @@ function openHeadMenu(anchor, ace, ctx, i, unit) {
   // `filaments()` returns a record per slot whether or not anything is in it, so the
   // truthiness of that object says nothing - `loaded` is the field that does. Reading the
   // object left Unload offered on an empty head and every Load labelled Reload.
-  const f = ctx.state.filaments()[i];
-  const loaded = unit ? h.loaded : (f && f.loaded ? f : null);
-  const tagged = !!(loaded && (loaded.rfid || loaded.tag));
-  const items = [
-    { label: loaded ? 'Reload' : 'Load', icon: 'refresh',
-      cmd: `${ACE.LOAD_HEAD} HEAD=${i}${unit ? ` ACE=${unit.index}` : ''}`,
-      onClick: () => ctx.handlers.loadHead(i, unit ? unit.index : undefined) },
-    { label: 'Unload', icon: 'iconFilamentCheck', muted: !loaded,
-      cmd: `${ACE.UNLOAD_HEAD} HEAD=${i}`,
-      onClick: () => { if (loaded) ctx.handlers.unloadHead(i); } },
-  ];
+  const slots = ctx.state.filaments();
+  const f = slots[i];
+  const loaded = headLoaded(ace, slots, i);
+  const spool = loaded ? (unit ? h.loaded || f : f) : null;
+  const tagged = !!(spool && (spool.rfid || spool.tag));
+
+  // The same list the bay sheet reads, filtered the other way: the verbs that take no
+  // SLOT= have nothing to choose, so they belong here and the slotted ones do not.
+  const items = aceVerbs(ace, i, unit ? h.bay : null, loaded)
+    .filter((v) => !v.slotted)
+    .map((v) => ({
+      // The name in the label and the reason in the hover. Spelling the reason in the
+      // label took the menu to 532 px against a 391 px card; the macro chip that used to
+      // carry it - a muted row reading `ACE_BG_SET_HEAD` - said which refusal this was in
+      // G-code, which is a thing the reader has to already know to read.
+      label: v.name,
+      icon: /nload/.test(v.name) ? 'iconFilamentCheck' : 'refresh',
+      title: v.off ? `${v.name} — ${v.off}` : v.name,
+      muted: !!v.off,
+      onClick: v.off === NOT_DECLARED ? () => ctx.handlers.declareBgHead(i)
+             : v.off ? undefined : () => ctx.handlers.runVerb(v),
+    }));
+
   if (unit) {
+    // Where the slotted verbs went. Not a control: a sentence saying where to click,
+    // because the bay IS the argument and pointing at it is the whole design.
     items.push({ label: 'Swap to another bay…', glyph: aceGlyphSquare(),
-                 cmd: `${ACE.SWAP_HEAD} HEAD=${i} ACE=${unit.index} SLOT=<n>`,
-                 title: 'Click the bay you want, above',
+                 title: 'Click the toolhead, then the bay',
                  muted: true });
   }
   items.push(null);
   items.push({
+    // An EYE for a spool that identified itself and a PENCIL for one that did not, which
+    // is the same pair the bay marks carry. The row said "View this filament" beside the
+    // edit pencil, so the label and the icon disagreed about which of the two it was.
     label: tagged ? 'View this filament' : 'Edit this filament…',
-    icon: 'iconFilamentEdit',
-    title: tagged ? 'spool tag · read only' : 'print_task_config',
+    glyph: glyph(tagged ? 'eye' : 'pencil'),
+    title: tagged ? 'Read only — the spool carries its own record' : null,
     onClick: () => editSlot(i, ctx.state.filaments()[i], ctx.handlers),
   });
   openMenu(anchor, items, { head: `Toolhead ${i + 1}` });
@@ -629,20 +736,17 @@ export function openAceSettings(anchor, ctx) {
     return;
   }
   openMenu(anchor, [
-    { label: 'Unload every toolhead', glyph: aceGlyphSquare(), cmd: ACE.UNLOAD_ALL,
+    { label: 'Unload every toolhead', glyph: aceGlyphSquare(),
       onClick: () => ctx.handlers.unloadAllHeads() },
     null,
     { label: 'Flush length…', icon: 'settings',
-      cmd: `${ACE.SET_PURGE} LENGTH=<mm> | RESET=1`,
       onClick: () => ctx.handlers.setPurge() },
     { label: 'Confirm before load and unload', icon: 'settings',
-      cmd: `${ACE.SET_CONFIRM} ENABLE=0|1`,
       onClick: () => ctx.handlers.setConfirmCommands() },
-    { label: 'Spoolman…', icon: 'settings', cmd: `${ACE.SET_SPOOLMAN} URL= AUTO=0|1`,
+    { label: 'Spoolman…', icon: 'settings',
       onClick: () => ctx.handlers.setSpoolman() },
     null,
     { label: 'Clear the head→bay bookkeeping', icon: 'delete',
-      cmd: `${ACE.CLEAR_HEADS} [HEAD=n]`,
       onClick: () => ctx.handlers.clearHeads() },
   ], { head: 'This printer' });
 }
@@ -659,7 +763,6 @@ export function openAceModeMenu(anchor, ctx) {
   openMenu(anchor, ACE_MODES.map((m) => ({
     label: ACE_MODE_LABELS[m] + (m === now ? '  ✓' : ''),
     glyph: aceGlyphSquare(),
-    cmd: `${ACE.SET_MODE} MODE=${m}`,
     muted: m === now,
     onClick: () => { if (m !== now) ctx.handlers.setAceMode(m); },
   })), { head: 'ACE mode' });
@@ -694,32 +797,194 @@ export function aceModeLabel(ctx) {
  * bays sit under the pointer while someone is reading the card. The dialog names the
  * macro and its arguments, so what is about to happen is legible before it happens.
  */
-function confirmLoad(ctx, i, u, b) {
-  if (!b.occupied) {
-    openDialog({
-      title: `${b.addr} is empty`,
-      build: (bd) => bd.appendChild(el('p', 'ms-note', 'Nothing to load.')),
-      confirmLabel: 'Close',
-      cancel: false,
-      onConfirm: () => true,
-    });
-    return;
-  }
+/**
+ * A bay's own sheet: what can be done with this filament, and what would be sent.
+ *
+ * This is the confirmation the panel already opened, grown into the thing the study
+ * settled on. Where a verb LIVES was the open question and the answer split along the
+ * macros: `ACE_SWAP_HEAD` and `ACE_BG_SWAP` take a `SLOT=`, so the bay is the argument
+ * and clicking the argument is a shorter sentence than picking a verb and being asked
+ * for it afterwards. The head-level verbs stay in the card's menu, where they were.
+ *
+ * A swap is minutes of physical work that purges filament, and the bays sit under the
+ * pointer while someone reads the card - so nothing here fires on the click that opened
+ * it.
+ */
+/*
+ * A bay's own sheet: what is in it, and the one verb a bay is the whole argument for.
+ *
+ * A SWAP is not offered here. It reads as an operation on the filament - "swap this
+ * spool" - when what it does is move a TOOLHEAD from one bay to another, and the toolhead
+ * is the thing it addresses (`ACE_SWAP_HEAD HEAD=n`). The toolhead's own sheet brings
+ * every bay to it and labels each with what it would do, which is the same choice made
+ * where the target is named. Loading an empty head from a bay stays: the bay is the
+ * argument and there is no other end to it.
+ */
+function baySheet(ctx, i, u, b) {
+  const ace = ctx.state.ace();
+  const loaded = headLoaded(ace, ctx.state.filaments(), i);
+  const verbs = aceVerbs(ace, i, b.index, loaded)
+    .filter((v) => v.slotted && !/^(Swap|Background swap)/.test(v.name));
+
   openDialog({
-    title: `Load ${b.addr} into Toolhead ${i + 1}?`,
+    title: b.addr,
     build: (bd) => {
-      bd.appendChild(el('p', 'ms-note',
-        b.known ? [b.material, b.subType, b.vendor].filter(Boolean).join(' · ')
-                : 'Occupied, not named.'));
-      // Short, but it stays: a swap unloads the head and purges, and it is minutes long.
-      bd.appendChild(el('p', 'ms-note',
-        'Unloads the head first and purges. Takes minutes.'));
-      bd.appendChild(el('div', 'dry-cmd',
-        `${ACE.SWAP_HEAD} HEAD=${i} ACE=${u.index} SLOT=${b.index}`));
+      bd.appendChild(bayIdentity(b));
+      if (!verbs.length) {
+        // Not an error and not an empty dialog: say which state this is, because
+        // "nothing to do here" is the answer. A head already holding filament is a swap,
+        // and a swap is chosen at the toolhead.
+        bd.appendChild(el('p', 'ms-note', b.index === (ace.heads[i] || {}).bay
+          ? `Already feeding Toolhead ${i + 1}.`
+          : `Toolhead ${i + 1} is loaded.`));
+        return;
+      }
+      bd.appendChild(verbList(ctx, verbs, i));
     },
-    confirmLabel: 'Load',
-    onConfirm: () => ctx.handlers.loadBay(i, u.index, b.index),
+    confirmLabel: 'Close',
+    cancel: false,
+    onConfirm: () => true,
   });
+}
+
+/**
+ * The toolhead's own sheet: everything that can be done to THIS head.
+ *
+ * The head is what every one of these macros addresses, so it is a defensible thing to
+ * click - and it is the only target that does not shrink with the panel. What it has to
+ * solve that a bay's sheet does not is that two of the verbs take a `SLOT=` and a head is
+ * not a slot. So the bays come to the sheet, one button each, and each says what clicking
+ * it would do IN THIS STATE: load into an empty head, swap into a loaded one, and nothing
+ * at all for the bay that is already feeding.
+ */
+function headSheet(ctx, i, unit) {
+  const ace = ctx.state.ace();
+  const h = ace.heads[i];
+  const slots = ctx.state.filaments();
+  const f = slots[i];
+  const loaded = headLoaded(ace, slots, i);
+  const spool = loaded ? (unit ? h.loaded || f : f) : null;
+  const bays = unit ? mergeAceBays(unit, ctx.store.aceBays) : [];
+
+  openDialog({
+    title: `Toolhead ${i + 1}`,
+    build: (bd) => {
+      bd.appendChild(headIdentity(spool, unit, h));
+
+      if (unit) {
+        bd.appendChild(el('p', 'ms-note', h.bay == null ? 'Load from:' : 'Swap to:'));
+        const row = el('div', 'pickrow');
+        bays.forEach((b, k) => {
+          // Each bay's own answer, from the same list the bay sheet reads. A bay that is
+          // already feeding is not a verb, so its button says so and does nothing.
+          const v = aceVerbs(ace, i, k, loaded).filter((x) => x.slotted && !x.bg)[0];
+          const btn = el('button', 'pickbay');
+          btn.type = 'button';
+          const d = el('span', 'pickdisc', b.addr);
+          const col = b.occupied ? (b.known ? cssColor(b.color) : '#B7BDC6') : null;
+          if (col) { d.style.background = col; d.style.color = isDarkColor(col) ? '#fff' : '#333'; }
+          btn.appendChild(d);
+          btn.appendChild(el('span', 'picklab',
+            !b.occupied ? 'empty' : v ? v.name : 'feeding'));
+          btn.disabled = !v || !!v.off;
+          btn.title = v ? (v.off ? `${v.name} — ${v.off}` : `${v.name} from ${b.addr}`)
+                        : `${b.addr} is already feeding this toolhead`;
+          // Close FIRST: a non-background verb opens a blocking dialog of its own, and
+          // closing after would shut the one just opened.
+          if (v && !v.off) btn.onclick = () => { closeDialog(); ctx.handlers.runVerb(v); };
+          row.appendChild(btn);
+        });
+        bd.appendChild(row);
+      }
+
+      // and the verbs that address the head itself, which take no slot
+      const rest = aceVerbs(ace, i, unit ? h.bay : null, loaded).filter((v) => !v.slotted);
+      if (rest.length) bd.appendChild(verbList(ctx, rest, i));
+    },
+    confirmLabel: 'Close',
+    cancel: false,
+    onConfirm: () => true,
+  });
+}
+
+/** What the head is holding, and where it comes from. */
+function headIdentity(spool, unit, h) {
+  const row = el('div', 'verb-id');
+  const disc = el('span', 'verb-disc',
+    unit && h.bay != null ? aceBayAddr(h.unitIndex, h.bay) : '');
+  const col = spool ? cssColor(spool.color || spool.colour) : null;
+  if (col) { disc.style.background = col; disc.style.color = isDarkColor(col) ? '#fff' : '#333'; }
+  row.appendChild(disc);
+  const text = el('div', 'verb-idtext');
+  const mat = spool && (spool.material || spool.type);
+  text.appendChild(el('div', null, mat
+    ? [mat, spool.subType].filter(Boolean).join(' ') : 'Nothing loaded'));
+  text.appendChild(el('span', null, spool
+    ? [spool.vendor, unit ? `ACE ${unit.id}` : 'stock feeder'].filter(Boolean).join(' · ')
+    : (unit ? `ACE ${unit.id}` : 'stock feeder')));
+  row.appendChild(text);
+  return row;
+}
+
+/** What is in the bay, drawn the way the bay draws it. */
+function bayIdentity(b) {
+  const row = el('div', 'verb-id');
+  const disc = el('span', 'verb-disc', b.addr);
+  const col = b.occupied ? (b.known ? cssColor(b.color) : '#B7BDC6') : null;
+  if (col) { disc.style.background = col; disc.style.color = isDarkColor(col) ? '#fff' : '#333'; }
+  row.appendChild(disc);
+  const text = el('div', 'verb-idtext');
+  text.appendChild(el('div', null, b.occupied
+    ? [b.material, b.subType].filter(Boolean).join(' ') || 'Occupied, not named'
+    : 'Empty'));
+  text.appendChild(el('span', null, [b.vendor, b.sku].filter(Boolean).join(' · ')
+    || (b.occupied ? (PROV[b.source] || PROV.unknown).word : 'Nothing to load.')));
+  row.appendChild(text);
+  return row;
+}
+
+/**
+ * One row per verb: what it is, and the line it would send.
+ *
+ * The macro is not an explanation - it is the thing that will go out - which is the one
+ * piece of prose this panel's copy rule allows in a dialog. An unavailable verb names the
+ * macro that would MAKE it available instead, and offers to send it: that is how a head
+ * is declared background-capable on a machine, so it is how it is declared here.
+ */
+/*
+ * A toolhead's verbs. Each row is a name and, when it is refused, the reason.
+ *
+ * It used to carry the macro line under the name and in the hover. A macro name does say
+ * what will be sent - but on this surface it was the only thing under every row, so a
+ * dialog for moving filament read as a G-code console. The trace pane is where the wire
+ * belongs, and it already has it.
+ */
+function verbList(ctx, verbs, i) {
+  const wrap = el('div', 'verbs');
+  verbs.forEach((v) => {
+    const row = el('button', 'verb' + (v.off ? ' is-off' : ''));
+    row.type = 'button';
+    const main = el('div', 'verb-main');
+    main.appendChild(el('div', 'verb-name', v.name));
+    if (v.off) main.appendChild(el('div', 'verb-cmd', v.off));
+    row.appendChild(main);
+    row.title = v.off || v.name;
+    row.disabled = !!v.off;
+    // Close FIRST - see the note in the bay picker above.
+    if (!v.off) row.onclick = () => { closeDialog(); ctx.handlers.runVerb(v); };
+    if (v.off === NOT_DECLARED) {
+      // ACE_BG_SET_HEAD's own help says what declaring a head MEANS physically: its dock
+      // is open below, and the cold-pull purges through it. So this is not a convenience
+      // - it is the one control on this panel that can cost filament and a bed, and it
+      // asks separately rather than being folded into the verb.
+      const en = el('button', 'verb-gate', 'Enable for this toolhead');
+      en.type = 'button';
+      en.onclick = (e) => { e.stopPropagation(); ctx.handlers.declareBgHead(i); closeDialog(); };
+      main.appendChild(en);
+    }
+    wrap.appendChild(row);
+  });
+  return wrap;
 }
 
 /* ---------------------------------------------------------------- *
@@ -753,13 +1018,19 @@ function openDryer(ctx, u) {
   const running = ctx.pending.resolve(`ace-dry-${u.index}`, u.dryer.running).value;
   let cmdLine;
 
-  // What would actually go on the wire, which is not what the panel is showing: the
-  // duration is offered in hours and the macro takes minutes.
-  const script = () => (running ? `${ACE.DRY_STOP} ACE=${u.index}`
-    : `${ACE.DRY} ACE=${u.index} TEMP=${eff('temp')} `
-      + `DURATION=${Math.round(eff('hours') * DRY_MINUTES_PER_HOUR)}`
-      + (set.auto ? `  ·  ${ACE.SET_AUTO_DRY} ACE=${u.index} ENABLE=1 RH_START=${set.auto}`
-                  : `  ·  ${ACE.SET_AUTO_DRY} ACE=${u.index} ENABLE=0`));
+  /*
+   * What pressing Confirm will DO, restated as the dialog changes.
+   *
+   * It used to print the macro line, which was the honest thing while the numbers and the
+   * wire disagreed - the duration is offered in HOURS and `ACE_DRY` takes MINUTES, and a
+   * dialog offering 4 would have dried for four minutes. That is a reason to get the
+   * conversion right, which it now is, and not a reason to make the reader check the
+   * arithmetic in G-code.
+   */
+  const summary = () => (running ? 'Stops drying now.'
+    : `Dries at ${eff('temp')} °C for ${hm(Math.round(eff('hours') * DRY_MINUTES_PER_HOUR))}`
+      + (set.auto ? `, and again automatically above ${set.auto} % RH.`
+                  : ', and not automatically.'));
 
   openDialog({
     title: 'Filament drying',
@@ -775,7 +1046,7 @@ function openDryer(ctx, u) {
       const drop = el('div', 'dry-drop');
       drop.appendChild(droplet(u.humidity));
       const lvl = humidityLevel(u.humidity);
-      drop.title = `${num(u.humidity, '%')} RH${lvl ? ` — hum_level${lvl}` : ''}`;
+      drop.title = `${num(u.humidity, '%')} RH`;
       c1.appendChild(drop);
       // One word, whatever the state. "Drying · 1 h 19 m / 4 h" wraps in this column and
       // grows the block under the droplet, which reads as the droplet having moved.
@@ -828,7 +1099,7 @@ function openDryer(ctx, u) {
 
       function paint() {
         fields.forEach((f) => f.paint());
-        cmdLine.textContent = script();
+        cmdLine.textContent = summary();
       }
 
       /** Four presets and one empty field, in one row, because it is one choice. */

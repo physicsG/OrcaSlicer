@@ -29,11 +29,15 @@
 'use strict';
 
 import { CMD, TASK_CONFIG, cssColor } from '../../../../../shared/js/protocol.js';
+import { isTimeout } from '../../../../../shared/js/sswcp.js';
+import { machineActivity, isBusy } from '../../../../../shared/js/activity.js';
 // Everything about the ACE comes from one module - see shared/js/multiACE.js for why.
-import { ACE, DRY_MINUTES_PER_HOUR, aceUnitId, aceLine, aceOverridesUrl,
-         parseAceOverrides, aceGlyph }
+import { ACE, FEEDER, DRY_MINUTES_PER_HOUR, aceUnitId, aceLine, aceOverridesUrl,
+         parseAceOverrides, aceGlyph, channelStep, channelWord,
+         gcodeStoreUrl, lastPrinterError }
   from '../../../../../shared/js/multiACE.js';
-import { openDialog, numberField, toggleField } from '../../../core/overlay.js';
+import { openDialog, openBlockingDialog, numberField, toggleField }
+  from '../../../core/overlay.js';
 import { el } from '../../../core/dom.js';
 
 
@@ -146,29 +150,234 @@ export function create(deps) {
     macro(line(ACE.SET_MODE, { MODE: mode }), `ACE mode: ${mode}`, 'ace-mode', mode);
 
   /* ---- loading, unloading, swapping -------------------------------- */
-
-  /**
-   * Put the filament in one bay into one head.
+  /*
+   * There were three functions here - loadBay, loadHead, unloadHead - one per control that
+   * could send one. They are gone, and runVerb() below is what replaced them: the verb
+   * list decides WHICH macro applies in the state the head is in, so a caller that picks
+   * the function has already made that decision somewhere else. Two places deciding the
+   * same thing is how a Load ends up offered on a head that is already loaded.
    *
-   * ACE_SWAP_HEAD is the right macro even for a head that is empty - it is the one that
-   * takes a slot - and the pending key is the head's own source, because what confirms
-   * this is `head_source[n]` naming the bay that was asked for.
+   * The conformance suite is what said so, and it said it the moment the last caller went:
+   * "nothing calls filament.loadBay, loadHead, unloadHead - either wire a control to it or
+   * delete it."
    */
-  const loadBay = (i, unit, slot) =>
-    macro(line(ACE.SWAP_HEAD, { HEAD: i, ACE: unit, SLOT: slot }),
-          `Toolhead ${i + 1}: load ${aceUnitId(unit)}${slot + 1}`,
-          `ace-load-${i}`, `${aceUnitId(unit)}${slot + 1}`);
-
-  const loadHead = (i, unit) =>
-    macro(line(ACE.LOAD_HEAD, { HEAD: i, ACE: unit }),
-          `Toolhead ${i + 1}: load`, `ace-load-${i}`, 'loading');
-
-  const unloadHead = (i) =>
-    macro(line(ACE.UNLOAD_HEAD, { HEAD: i }),
-          `Toolhead ${i + 1}: unload`, `ace-load-${i}`, '');
 
   const unloadAllHeads = () =>
     macro(ACE.UNLOAD_ALL, 'Unloading every toolhead');
+
+  /**
+   * Send one verb from `aceVerbs()`, whichever surface it was chosen on.
+   *
+   * The list already carries the line - the sheet and the menu both show it before it is
+   * sent - so this sends THAT rather than rebuilding it from the verb's name. A control
+   * that displays one command and sends another is the bug this shape makes impossible.
+   *
+   * The pending key is the head's own load state, because what confirms any of these is
+   * `head_source[n]` changing - and none of them is awaited: ACE_BG_UNLOAD's own help
+   * says ~3 min, and an instant `ok` is indistinguishable from success.
+   */
+  /*
+   * Every macro a verb is allowed to send, named here rather than trusted from the verb.
+   *
+   * `aceVerbs()` builds the line and this sends it, which is what stops a control showing
+   * one command and sending another - but it also means the macro name appears nowhere in
+   * this module, and check_coverage.py reads exactly that to answer "can a user reach
+   * this command". It said UNACCOUNTED for both background verbs and it was right: the
+   * panel could send them and nothing here claimed them.
+   *
+   * So the claim is made by being true. A verb whose macro is not in this set is not sent,
+   * which is a real gate on a surface where one of the macros purges ~60 mm onto the bed.
+   */
+  const VERB_MACROS = new Set([
+    ACE.LOAD_HEAD, ACE.UNLOAD_HEAD, ACE.SWAP_HEAD,
+    ACE.BG_SWAP, ACE.BG_UNLOAD, ACE.BG_SET_HEAD,
+    // The U1's own, for a head with no ACE behind it to send an ACE macro to.
+    FEEDER.FEED,
+  ]);
+
+  /*
+   * A verb that moves filament takes the machine over, so the panel says so and waits.
+   *
+   * Three things this has to get right, and the Control panel's runToolAction learned all
+   * three the expensive way:
+   *
+   *  1. `sw_SendGCodes` does not return until Klipper has finished, and the bridge gives
+   *     up after 15s. A load HOMES first - measured 14.7s to `xy` and 31s from cold - so
+   *     the request rejects while the printer is working, and the panel reported
+   *     `Toolhead 1: load failed: sw_SendGCodes timed out after 15000ms` for a load that
+   *     was running. A timeout is not a refusal. The request is not awaited.
+   *  2. The ack only says the command was queued; machine state is what says it worked.
+   *  3. The machine says what it is DOING, and here it says it twice: `channel_state`
+   *     names the step (`unload_heating` -> "Heat nozzle") and `action_code` names the
+   *     operation ("Auto Loading"). The wait shows the finer of the two.
+   *
+   * It BLOCKS, and that is the point rather than a side effect: a non-background swap is
+   * about three minutes during which the machine can do nothing else, so a second verb
+   * started underneath it is not a queue, it is a collision. A background verb does not
+   * block - not blocking is its whole purpose.
+   */
+  const FILAMENT_HARD_CAP_MS = 10 * 60 * 1000;
+  const QUIET_MS = 90 * 1000;
+  /*
+   * How long the machine gets to START, which is a different question from how long it
+   * gets to keep going, and a much shorter one.
+   *
+   * A load HOMES first and that is the slow part - 31s from cold - but homing is reported:
+   * `action_code` goes to 832 within a second or two, so `sawBusy` is set long before the
+   * homing ends. Nothing busy and nothing on the channel after this means nothing started,
+   * and the 90s quiet window was spending 90 seconds on a stuck dialog to say so.
+   */
+  const NO_START_MS = 25 * 1000;
+
+  /*
+   * What the printer said, when it said no.
+   *
+   * `sw_SendGCodes` answered `ok` for a swap that never ran: multiACE printed
+   * `!! Must home Z axis first` and set `last_swap_result.status` to `error`, and the RPC
+   * reply carried neither. Moonraker's console history has the line, on the same host and
+   * port this page already reads the override store from.
+   */
+  async function printerSaid() {
+    try {
+      const url = gcodeStoreUrl(store.device, 30);
+      if (!url) return null;
+      const r = await fetch(url, { cache: 'no-store' });
+      return r.ok ? lastPrinterError(await r.json()) : null;
+    } catch (e) { return null; }        // an unreachable Moonraker is not the fault here
+  }
+
+  function runFilamentAction({ title, script, head, waiting, kind }) {
+    const dlg = openBlockingDialog({ title, message: waiting });
+    let refused = null;
+    // The reply is not read: an `ok` is not a yes on this machine, machine state is what
+    // says it worked, and the trace pane already carries the packet for anyone debugging.
+    deps.bridge.request(CMD.SEND_GCODES, { script })
+      .catch((e) => { if (!isTimeout(e)) refused = e; });
+
+    const started = Date.now();
+    let quiet = started + QUIET_MS;
+    let last = null;
+    let sawBusy = false;
+    // multiACE stamps every attempt into `last_swap_result`. Holding the one that was
+    // there BEFORE is what makes a new one mean this attempt rather than a previous one.
+    const wasSwap = JSON.stringify((state.ace().lastSwap) || null);
+
+    const giveUp = async (fallback) => {
+      const said = await printerSaid();
+      dlg.fail(said ? `The printer stopped: ${said}` : fallback);
+      render();
+    };
+
+    return (async () => {
+      for (;;) {
+        if (refused) { dlg.fail(`The printer refused the command: ${refused.message}`); return; }
+
+        const feed = (state.filaments()[head] || {}).feed;
+        const step = channelStep(feed && feed.channelState, kind);
+        if (step && step.failed) {
+          // A failure is a firmware state and is reported as one - translating it would
+          // be this panel's opinion of what happened.
+          dlg.fail(`${channelWord(step.state) || 'The printer stopped'}.`);
+          render();
+          return;
+        }
+        if (sawBusy && step && step.done) { dlg.close(); render(); return; }
+
+        // multiACE's own verdict, which arrives in a second rather than in twenty-five.
+        const ls = state.ace().lastSwap;
+        if (ls && JSON.stringify(ls) !== wasSwap && ls.status && ls.status !== 'ok') {
+          await giveUp(`The ${kind} failed.`);
+          return;
+        }
+
+        const act = state.activity();
+        // channel_state first: it names the step inside the operation, where action_code
+        // names only the operation. And where neither has a name for what it is doing,
+        // the machine's OWN WORD rather than a sentence about waiting: a dialog reading
+        // `wait_insert` says which state nothing is moving in, and one reading "Asking the
+        // printer..." for ninety seconds says only that the panel has stopped talking.
+        const raw = feed && feed.channelState;
+        const label = (step && step.label) ? `${step.label}  (${step.at + 1}/${step.total})`
+                    : machineActivity(act) || channelWord(raw);
+        if (label && label !== last) { dlg.update(label); last = label; }
+
+        if ((step && step.at != null) || isBusy(act)) {
+          sawBusy = true;
+          quiet = Date.now() + QUIET_MS;
+        }
+
+        if (!sawBusy && Date.now() - started > NO_START_MS) {
+          // An `ok` is not a yes on this machine, so nothing having started is a real
+          // outcome - and the reason for it is on the printer's console, not in the reply.
+          const where = channelWord(raw);
+          await giveUp(where ? `Nothing started. The toolhead is ${where.toLowerCase()}.`
+                             : 'Nothing started.');
+          return;
+        }
+        if (Date.now() > quiet) {
+          dlg.fail('The printer stopped reporting. It may have finished.');
+          render();
+          return;
+        }
+        if (Date.now() - started > FILAMENT_HARD_CAP_MS) {
+          dlg.fail('Giving up after ten minutes. The printer may still be working.');
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 400));
+        // `ace` is not on the stream, so it has to be asked for - and this is the one
+        // moment it changes most.
+        await session.refreshAce();
+      }
+    })();
+  }
+
+  function runVerb(v) {
+    if (!VERB_MACROS.has(v.macro)) {
+      setStatus(`${v.name} is not available`, 'err');
+      return Promise.resolve(false);
+    }
+    // `HEAD=` is multiACE's word for it and `EXTRUDER=` is the U1's, and the same
+    // toolhead is meant by both. Reading only the first left a feeder verb addressing
+    // nothing: an untitled dialog with no channel to follow, which is what "Load" with
+    // no toolhead and a permanent "Asking the printer..." looked like.
+    const head = v.args && (v.args.HEAD != null ? v.args.HEAD : v.args.EXTRUDER);
+    const slot = v.args && v.args.SLOT;
+    const unit = v.args && v.args.ACE;
+    // Named end to end, because this is the title of a dialog someone will be looking at
+    // for three minutes: which bay, and which head it is going to.
+    const bay = (slot != null && unit != null) ? `${aceUnitId(unit)}${slot + 1}` : null;
+    const label = head == null ? v.name
+      : bay ? `${v.name} ${bay} \u2192 Toolhead ${head + 1}`
+            : `${v.name} \u2014 Toolhead ${head + 1}`;
+    const value = (slot != null && unit != null) ? `${aceUnitId(unit)}${slot + 1}`
+                : /Unload/.test(v.name) ? '' : 'loading';
+    // A background verb runs while the printer gets on with something else, so it must
+    // not block; everything else takes the machine over and says so.
+    if (v.bg) return macro(v.cmd, label, `ace-load-${head}`, value);
+
+    const kind = /^Swap/.test(v.name) ? 'swap' : /^Unload/.test(v.name) ? 'unload' : 'load';
+    pending.track(`ace-load-${head}`, value, null);
+    confirmAce();
+    return runFilamentAction({
+      title: label,
+      script: v.cmd,
+      head,
+      kind,
+      waiting: 'Asking the printer\u2026',
+    });
+  }
+
+  /**
+   * Declare a head background-capable.
+   *
+   * Its own help says what the claim MEANS: the dock below that head is open, and the
+   * cold-pull purges ~60 mm through it. So this is asked for on its own rather than
+   * folded into the verb that needs it - the panel offers the macro, and sending it is a
+   * separate decision from running a swap with it.
+   */
+  const declareBgHead = (i) =>
+    macro(aceLine(ACE.BG_SET_HEAD, { HEAD: i, ENABLE: 1 }),
+          `Toolhead ${i + 1}: background swap enabled`);
 
   /* ---- the dryer ---------------------------------------------------- */
 
@@ -321,10 +530,9 @@ export function create(deps) {
     syncBays: () => syncBays(),
     setSource: (i, source) => setSource(i, source),
     setAceMode: (m) => setAceMode(m),
-    loadBay: (i, unit, slot) => loadBay(i, unit, slot),
-    loadHead: (i, unit) => loadHead(i, unit),
-    unloadHead: (i) => unloadHead(i),
     unloadAllHeads: () => unloadAllHeads(),
+    runVerb: (v) => runVerb(v),
+    declareBgHead: (i) => declareBgHead(i),
     startDrying: (u, t, h) => startDrying(u, t, h),
     stopDrying: (u) => stopDrying(u),
     setAutoDry: (u, t) => setAutoDry(u, t),

@@ -9,6 +9,7 @@
  */
 'use strict';
 
+import * as multiACE from '../../shared/js/multiACE.js';
 import { CMD, SUBSCRIBE_OBJECTS, NAMED, LIMITS, TASK_CONFIG, PRINT_PREFERENCES,
          asDeviceList, deviceLabel, DEVICE, hasTlsMaterial,
          CAMERA_DOMAIN, CAMERA_INTERVAL, cssColor, timelapseUrl }
@@ -389,4 +390,8 @@ window.__devicePage = { get state() { return state; }, get bridge() { return bri
                         // simulated ACE has to ask the page to look again - which is what
                         // every control that changes it does too.
                         session,
+                        // The one module a drive script has to be able to call directly:
+                        // its pure functions are the model, and a check that re-implements
+                        // them inline is checking its own copy rather than the page's.
+                        multiACE,
                         handlers: all, byModule, mock: null };

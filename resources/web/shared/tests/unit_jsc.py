@@ -336,9 +336,136 @@ def main():
           (d2["totalMin"], d2["remainingMin"], d2["doneMin"]) == (240, 79, 161),
           f"got {d2}")
 
+    # --- what the printer said, when it said no ----------------------------
+    # `sw_SendGCodes` answers `ok` for a macro that failed. The reason exists in exactly
+    # one place - Klipper's `!!` channel, in Moonraker's console history - and reading it
+    # is what turned "Nothing started" into "Must home Z axis first".
+    STORE = json.dumps({"result": {"gcode_store": [
+        {"message": "ACE_SWAP_HEAD HEAD=3 ACE=0 SLOT=3", "type": "command"},
+        {"message": "// multiace_event swap_failed head=3 status=error seq=2",
+         "type": "response"},
+        {"message": "!! Must home Z axis first: 229.300 250.000 277.000 [0.000]",
+         "type": "response"},
+    ]}})
+    check("the printer's own error is read out of the console history",
+          js(ctxA, f"lastPrinterError({STORE})").to_string()
+          == "Must home Z axis first: 229.300 250.000 277.000 [0.000]",
+          "read off 811002511261022618B3 after a swap the page reported as 'nothing "
+          "started'")
+    check("a `//` note is not an error, however alarming it reads",
+          js(ctxA, 'lastPrinterError({result:{gcode_store:['
+                   '{message:"// multiace_event swap_failed status=error"}]}})')
+            .is_null(),
+          "only `!!` is Klipper's error channel")
+    check("and nothing to read is null rather than a sentence",
+          js(ctxA, "lastPrinterError(null)").is_null(),
+          "an unreachable Moonraker must not become the reported fault")
+
     check("the module says which multiACE it was verified against",
           js(ctxA, "MULTIACE_VERIFIED.apiVersion").to_int32() == 1,
           "a plugin, not firmware - the contract version is part of the evidence")
+
+    # --- what can be done to one filament ---------------------------------
+    # The rule is not "which verbs exist" but "which are verbs at all in this state", and
+    # it is the half of the panel a screenshot cannot check: a Load offered on a loaded
+    # head and a Swap to the bay already feeding are both three-minute no-ops that a
+    # drawing looks perfectly happy with.
+    print("\n== multiACE: which verbs are verbs, in this state ==")
+
+    def verbs(head, slot, loaded, raw=RAW):
+        arg = "null" if slot is None else str(slot)
+        out = js(ctxA, f"JSON.stringify(aceVerbs(parseAce({raw}), {head}, {arg},"
+                       f" {str(loaded).lower()}).map(v => [v.name, v.off || '', v.cmd]))")
+        return json.loads(out.to_string())
+
+    # head 3 is the ACE-fed one and is fed from bay 2.
+    names = lambda vs: [v[0] for v in vs]
+    check("the bay already feeding the head is not a load and not a swap",
+          names(verbs(3, 2, True)) == ["Unload and retract", "Background unload"],
+          f"got {names(verbs(3, 2, True))}")
+    check("a different bay is a SWAP, because something is already loaded",
+          names(verbs(3, 0, True))[0] == "Swap",
+          f"got {names(verbs(3, 0, True))}")
+    # An ACE head is empty when the OBJECT says so - `head_source` naming no slot for it -
+    # not when a caller passes loaded=false. The first cut of this check passed the flag
+    # and asserted a Load, and the model was right to answer Swap: the machine still said
+    # bay 2 was feeding that head.
+    RAW_EMPTY = RAW.replace('"head_source": {"3": {"ace_index": 0, "slot": 2, '
+                            '"type": "PETG", "subtype": "Basic", "color": "632C2C", '
+                            '"brand": "Generic"}}', '"head_source": {}')
+    # And it is empty when the SENSOR says so, not when `head_source` has stopped naming a
+    # bay. That record is multiACE's account of the last feed and does not clear because
+    # the filament came out - the same trap as `filament_exist` one level down, and the
+    # one that let an unloaded head go on offering Unload.
+    check("a head whose head_source still names a bay is empty if nothing is in it",
+          names(verbs(3, 0, False))[0] == "Load",
+          f'got {names(verbs(3, 0, False))} - `fed == null && !loaded` made this a Swap')
+    check("and the bay it was last fed from is a load like any other",
+          names(verbs(3, 2, False))[0] == "Load", f"got {names(verbs(3, 2, False))}")
+    check("and an empty head is a LOAD, because it is not a swap",
+          names(verbs(3, 0, False, RAW_EMPTY))[0] == "Load",
+          "the panel sent ACE_SWAP_HEAD for both before, on the grounds that it is the "
+          f"macro that takes a slot; got {names(verbs(3, 0, False, RAW_EMPTY))}")
+    check("an unload on an ACE head retracts into the bay, which a feeder cannot",
+          "RETRACT_LENGTH" in verbs(3, 2, True)[0][2],
+          f"got {verbs(3, 2, True)[0][2]}")
+    # head 0 is on its stock feeder: one verb at a time, and never a swap.
+    check("a loaded stock feeder offers unload, alone",
+          names(verbs(0, None, True)) == ["Unload"], f"got {names(verbs(0, None, True))}")
+    check("and an empty one offers load, alone",
+          names(verbs(0, None, False)) == ["Load"], f"got {names(verbs(0, None, False))}")
+    bg = [v for v in verbs(3, 0, True) if v[0].startswith("Background")]
+    check("with enabled_heads empty, both background verbs are refused",
+          all(v[1] for v in bg) and len(bg) == 2, f"got {bg}")
+    check("and each names the macro that would lift the refusal, not the one it cannot run",
+          all(v[2].startswith("ACE_BG_SET_HEAD") for v in bg), f"got {bg}")
+    # the same object with head 3 declared
+    RAW_BG = RAW[:-1] + ', "ace_bg_swap": {"version": "v0.9", "enabled_heads": [3],' \
+                        ' "busy": [], "state": {}}}'
+    bg2 = [v for v in verbs(3, 0, True, RAW_BG) if v[0].startswith("Background")]
+    check("declaring the head with ACE_BG_SET_HEAD lifts it",
+          not any(v[1] for v in bg2) and bg2[0][2].startswith("ACE_BG_SWAP"),
+          f"got {bg2}")
+
+    # --- and what the machine says it is doing about it --------------------
+    # `channel_state` is the U1's own and is already on the subscription; `swap_phase` is
+    # multiACE's and has never been captured on hardware. The classification below is
+    # HelixScreen's, taken rather than re-derived.
+    print("\n== multiACE: the steps, from channel_state ==")
+
+    def step(state, kind="swap"):
+        out = js(ctxA, f"JSON.stringify(channelStep('{state}', '{kind}'))").to_string()
+        return json.loads(out)
+
+    check("a swap is one bar of six, both halves on it",
+          step("unload_homing")["total"] == 6 and step("load_flushing")["at"] == 5,
+          f"got {step('unload_homing')} / {step('load_flushing')}")
+    check("the unload half lands where the unload half is",
+          [step(s)["at"] for s in ("unload_homing", "unload_picking",
+                                   "unload_heating", "unload_doing")] == [0, 1, 2, 3])
+    check("and the load half's own Home/Select/Heat hold rather than jumping back",
+          [step(s)["at"] for s in ("load_homing", "load_picking", "load_heating")]
+          == [None, None, None],
+          "the head is mounted and already hot by then, so they pass straight through")
+    check("the heat step is the one that reads the nozzle",
+          step("unload_heating")["heat"] is True and step("unload_doing")["heat"] is False)
+    check("an unload on its own is four steps, not six",
+          step("unload_heating", "unload")["total"] == 4)
+    check("a *_fail is a failure, and carries the firmware's own word",
+          step("unload_fail")["failed"] is True and step("unload_fail")["state"] == "unload_fail")
+    check("a *_finish ends it", step("load_finish")["done"] is True)
+    check("idle words draw nothing at all",
+          step("none") is None and step("inited") is None and step("") is None)
+    # Measured on the machine, everything settled: two heads said `load_finish` and two
+    # said `wait_insert`. A terminal state is the RESTING state here - the field holds the
+    # last operation's ending rather than returning to a neutral word - so both have to be
+    # quiet or an idle panel is never quiet.
+    check("and so do the words a settled machine actually reports",
+          step("wait_insert") is None and step("load_finish")["done"] is True,
+          f'got {step("wait_insert")} / {step("load_finish")}')
+    check("an unrecognised state holds the right half rather than resetting the bar",
+          step("unload_something_new")["at"] == 0,
+          "this is a pre-1.0 plugin on a firmware that has grown states before")
 
     # --- what the machine says it is doing --------------------------------
     print("\n== activity, at both granularities ==")

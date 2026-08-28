@@ -714,9 +714,116 @@ body {
 .ace-bay:hover .ace-prov { color: var(--accent); }
 .ace-glyph { display: block; }
 
+/* The toolhead is a control: every one of these macros addresses `HEAD=n`, and it is the
+   one target that does not shrink with the panel. It wears the bay's own edge under the
+   pointer - a 1.5px traced accent, no fill, drawn as a backing BEHIND the artwork and
+   inset negatively so nothing moves - because two things you can click on one card should
+   not answer differently. Tight to the drawing: the element's top ~9px is the two inlet
+   hairlines, so the box is trimmed there. */
+.ace-tool.is-target { cursor: pointer; }
+.ace-tool.is-target::before {
+  content: ""; position: absolute; inset: 5px -5px 0; border-radius: 8px;
+  z-index: 0; pointer-events: none;
+}
+.ace-tool.is-target:hover::before,
+.ace-tool.is-target.is-hover::before,
+.ace-tool.is-target:focus-visible::before { box-shadow: inset 0 0 0 1.5px var(--accent); }
+/* `.is-hover` beside `:hover` for the same reason `.ace-bay` has one: a pointer cannot be
+   held across a re-render, and a screenshot under WSL proves nothing - so the state is
+   reachable by class and the edge is measured rather than looked at. */
+.ace-tool.is-target:focus-visible { outline: none; }
+
+/* The bays, brought to a sheet. Two of the five verbs take a SLOT= and a toolhead is not
+   one, so where the verb is chosen away from the cabinet the bays have to come to it -
+   each button saying what clicking it would do in the state the head is in. */
+.pickrow { display: flex; gap: 8px; margin: 8px 0 2px; flex-wrap: wrap; }
+.pickbay {
+  flex: 1 1 0; min-width: 62px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 8px 6px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--ink); font: 11.5px/1.2 var(--sans);
+}
+.pickbay:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.pickbay:disabled { cursor: not-allowed; opacity: .5; }
+.pickdisc {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center;
+  font: 500 10.5px/1 var(--mono); color: #333;
+  background-image:
+    linear-gradient(45deg, #C4C4C4 25%, transparent 25%, transparent 75%, #C4C4C4 75%),
+    linear-gradient(45deg, #C4C4C4 25%, transparent 25%, transparent 75%, #C4C4C4 75%);
+  background-size: 8px 8px; background-position: 0 0, 4px 4px; background-color: #E4E4E4;
+}
+.pickbay .picklab { white-space: nowrap; }
+
+/* ---- what the machine is doing to this head -------------------------------------
+   In the GUTTER beside the artwork, which is the only space this card has spare: the
+   toolhead is 32px wide in a 371px cell, and a row under the box measures 479 against a
+   456 budget - `.panel-body` is `overflow: hidden`, so that row would have been clipped
+   rather than seen.
+
+   One tick per step of `channel_state`'s own list. Determinate, because the machine
+   names WHICH of a known list it is in - not a percentage derived from a phase word. */
+.ace-flight {
+  position: absolute; left: 2px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  width: calc(50% - 22px);
+  font: 11px/1.25 var(--sans); color: #8A5A12;
+  pointer-events: none;
+}
+.ace-flight.is-fail { color: #A4331F; }
+.ace-flight-at {
+  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font: 500 10px/1 var(--mono); letter-spacing: .02em;
+  padding: 2px 6px; border-radius: 8px; background: #FDF1E3;
+}
+.ace-flight.is-fail .ace-flight-at { background: #FBE9E6; }
+.ace-steps { display: flex; gap: 3px; align-items: center; }
+.ace-steps i { width: 11px; height: 3px; border-radius: 2px; background: #E4E4E4; }
+.ace-steps i.is-done { background: #C9862A; }
+.ace-steps i.is-now { background: #E3B57A; box-shadow: inset 0 0 0 1px #C9862A; }
+
+/* ---- a bay's own sheet ------------------------------------------------------------
+   The verbs that take a `SLOT=`, where the slot is the thing you clicked. The macro
+   under each is not an explanation - it is the line that will be sent, which is the one
+   piece of prose this panel's copy rule allows in a dialog. */
+.verb-id { display: flex; align-items: center; gap: 10px; margin: 2px 0 0; }
+.verb-disc {
+  width: 36px; height: 36px; border-radius: 50%; flex: 0 0 36px;
+  display: grid; place-items: center; background: #E4E4E4;
+  font: 500 12px/1 var(--mono); color: #333;
+}
+.verb-idtext { font: 12.5px/1.4 var(--sans); color: var(--ink); min-width: 0; }
+.verb-idtext span { display: block; color: var(--ink-dim); font-size: 11.5px; }
+.verbs { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 2px; }
+.verb {
+  display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--ink); font: 12.5px/1.3 var(--sans);
+  cursor: pointer;
+}
+.verb:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.verb:disabled { cursor: not-allowed; opacity: .55; }
+.verb-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.verb-name { font-weight: 600; }
+.verb-cmd { font: 10.5px/1.35 var(--mono); color: var(--ink-dim); overflow-wrap: anywhere; }
+.verb:disabled .verb-cmd { color: #A4331F; }
+/* ACE_BG_SET_HEAD's help says what declaring a head means physically - the dock below is
+   open, the cold-pull purges ~60 mm through it - so it is asked for separately rather
+   than folded into the verb that needs it. */
+.verb-gate {
+  margin-top: 4px; align-self: flex-start; cursor: pointer;
+  border: 1px solid var(--accent); border-radius: 6px; background: var(--panel);
+  color: var(--accent); font: 500 11px/1 var(--sans); padding: 5px 8px;
+}
+.verb-gate:hover { background: var(--accent-soft, rgba(12, 99, 226, .08)); }
+
 /* The head carries no filament identity any more - no colour, no material, no pencil.
    What it has of its own is a SENSOR, and the printer reports that properly. */
-.ace-toolwrap { display: flex; justify-content: center; align-items: flex-end; }
+.ace-toolwrap {
+  position: relative;                 /* the in-flight line sits in its gutter */
+  display: flex; justify-content: center; align-items: flex-end;
+}
 .ace-tool {
   position: relative; --s: .5;
   width: calc(64px * var(--s)); height: calc(140px * var(--s));

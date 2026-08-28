@@ -187,18 +187,18 @@
     const lit = () => [...d.querySelectorAll('.dry-field')]
       .map((f) => { const o = f.querySelector('.dry-opt.is-on'); return o ? o.textContent : '-'; })
       .join('/');
+    // The line under the dialog used to be the macro it would send. It says what will
+    // HAPPEN now - the numbers and the wire disagree (hours offered, minutes sent) and
+    // that is a reason to get the conversion right, not to make the reader check the
+    // arithmetic in G-code. The wire is still asserted, further down, on the wire.
     const cmd = () => d.querySelector('.dry-cmd').textContent;
-    say('the presets are lit and the command matches them',
-        lit() + ' | ' + /TEMP=55 DURATION=240/.test(cmd()), '55 °C/4 h/Off | true');
-    say('the panel offers hours and the wire carries minutes',
-        /DURATION=240/.test(cmd()) && !/DURATION=4\b/.test(cmd()), true);
-    say('and automatic drying is ENABLE/RH_START, not the THRESHOLD that was guessed',
-        /ACE_SET_AUTO_DRY ACE=0 ENABLE=0/.test(cmd()) && !/THRESHOLD/.test(cmd()), true);
+    say('the presets are lit and the summary matches them',
+        lit() + ' | ' + cmd(), '55 °C/4 h/Off | Dries at 55 °C for 4 h, and not automatically.');
     const type = (i, v) => { const e = d.querySelectorAll('.dry-custom')[i];
                              e.value = v; e.dispatchEvent(new Event('input')); return e; };
     type(0, '68');
     say('typing a temperature un-lights its preset', lit(), '-/4 h/Off');
-    say('and the command says what would be sent', /TEMP=68 DURATION=240/.test(cmd()), true);
+    say('and the summary follows what was typed', /at 68 °C for 4 h/.test(cmd()), true);
     type(0, '');
     say('clearing it hands the highlight straight back', lit(), '55 °C/4 h/Off');
     const e0 = type(0, '999'); e0.dispatchEvent(new Event('change'));
@@ -209,8 +209,19 @@
         d.querySelectorAll('.dry-custom')[0].value, '');
     say('and lights that preset', lit(), '45 °C/4 h/Off');
     say('the panel body is untouched while it is open', fits(), true);
+    const nDry = P.mock.printer.gcodeLog.length;
     d.querySelector('.dialog-foot .btn.primary').click();
     await wait(700);
+    // On the WIRE, which is where these two were always the point: the panel offers HOURS
+    // and `ACE_DRY` takes MINUTES, so a dialog offering 4 would have dried for four
+    // minutes; and automatic drying is ENABLE/RH_START, not the THRESHOLD that was
+    // guessed - `ACE_SET_AUTO_DRY THRESHOLD=` answers `ok` and changes nothing.
+    const dryLines = P.mock.printer.gcodeLog.slice(nDry).join('\n');
+    say('the panel offers hours and the wire carries minutes',
+        /ACE_DRY ACE=0 TEMP=45 DURATION=240/.test(dryLines)
+        && !/DURATION=4\b/.test(dryLines), true);
+    say('and automatic drying is ENABLE/RH_START, not the THRESHOLD that was guessed',
+        !/THRESHOLD/.test(dryLines), true);
     say('starting it puts the chip on a countdown',
         /\d+ m \/ /.test($('#filament .ace-dry').textContent), true);
     say('and the chip`s row still does not overflow',
@@ -218,15 +229,19 @@
     $('#filament .ace-dry').click(); await wait(40);
     say('re-opening it offers Stop rather than Start',
         $('.dialog-foot .btn.primary').textContent, 'Stop');
-    // ACED__DRY_STOP stops "the current ACE", which on a machine with two units is
-    // whichever is active rather than the one whose chip was pressed.
-    say('and stops THIS unit by name',
-        $('.dialog .dry-cmd').textContent.trim(), 'ACE_STOP_DRYING ACE=0');
+    say('and says so, rather than naming the macro',
+        $('.dialog .dry-cmd').textContent.trim(), 'Stops drying now.');
+    const nStop = P.mock.printer.gcodeLog.length;
     // The claim that a running dryer refuses loads was never verified and the macro help
     // says nothing of the kind.
     say('and claims nothing about loads being refused',
         /refus/i.test($('.dialog').textContent), false);
     $('.dialog-foot .btn.primary').click(); await wait(700);
+    // ACED__DRY_STOP stops "the current ACE", which on a machine with two units is
+    // whichever is active rather than the one whose chip was pressed. The unit is named
+    // on the wire; the dialog says what will happen.
+    say('and stops THIS unit by name',
+        P.mock.printer.gcodeLog.slice(nStop).join('\n').trim(), 'ACE_STOP_DRYING ACE=0');
     say('stopping it puts the chip back to offering',
         $('#filament .ace-dry').textContent.trim(), 'Dry');
 
@@ -237,8 +252,10 @@
         $('.menu .menu-head').textContent, 'This printer');
     say('holding the settings a person sets once',
         $$('.menu .menu-item').length, 5);
-    say('each naming the macro behind it',
-        $$('.menu .menu-item').every((b) => /^ACE_/.test(b.title || '')), true);
+    say('each named for what it sets, with no G-code on any of them',
+        [$$('.menu .mcmd').length,
+         $$('.menu .menu-item').some((b) => /ACE_[A-Z]/.test(b.title || ''))].join('/'),
+        '0/false');
     say('and it is pulled inside the window rather than off its edge',
         $('.menu').getBoundingClientRect().right <= window.innerWidth + 1, true);
     document.body.click(); await wait(30);
@@ -250,23 +267,31 @@
     $$('#filament .ace-more')[1].click(); await wait(30);
     say('a feeder-fed head cannot, because there are no other bays',
         $$('.menu .menu-item').some((b) => /Swap/.test(b.textContent)), false);
-    say('a loaded head offers Reload rather than Load',
-        $('.menu .menu-item span').textContent, 'Reload');
+    // Not `Reload` any more, and not both verbs either. A stock feeder has one thing it
+    // can be asked to do at a time - it holds filament or it does not - which is the rule
+    // multiace-actions.html settled and aceVerbs() carries.
+    say('a loaded stock feeder offers Unload, and only Unload',
+        $$('.menu .menu-item span:not(.mcmd)').map((e) => e.textContent)
+          .filter((t) => /^(Load|Unload)/.test(t)).join(','), 'Unload');
     document.body.click(); await wait(30);
-    // `filaments()` returns a record per slot whether or not anything is in it, so the
-    // object is always truthy and `loaded` is the field that answers. Reading the object
-    // left Unload offered on an empty head.
+    // Emptied the way the machine empties a head: `channel_action_state`, which is the
+    // last operation the channel FINISHED. Not `print_task_config.filament_exist`, the
+    // slicer's assignment, which survives a physical unload; and not
+    // `filament_at_extruder`, which on the printer stayed TRUE on both emptied heads.
+    // drive/ace-verbs.js pins down both wrong answers.
     // On the printer, not on the mirror: the simulator pushes a full snapshot every tick,
     // so a value written into the mirror survives only until the next one - which made
     // this check pass or fail on how long the script before it took.
-    P.mock.printer.filamentExist[1] = false;
+    P.mock.printer.channels[1].act = 'unload_finish';
     await wait(1400);
     $$('#filament .ace-more')[1].click(); await wait(30);
-    say('an empty head greys Unload rather than offering it',
-        $$('.menu .menu-item.is-muted').length, 1);
-    say('and offers Load, not Reload', $('.menu .menu-item span').textContent, 'Load');
+    // An unload with nothing to unload is not a greyed control now, it is not a verb:
+    // there is no reason to show for something that does not exist in this state.
+    say('an empty one offers Load, and does not list Unload at all',
+        $$('.menu .menu-item span:not(.mcmd)').map((e) => e.textContent)
+          .filter((t) => /^(Load|Unload)/.test(t)).join(','), 'Load');
     document.body.click(); await wait(30);
-    P.mock.printer.filamentExist[1] = true;
+    P.mock.printer.channels[1].act = 'load_finish';
     await wait(1400);
     say('a menu costs the panel body nothing', fits(), true);
 
@@ -296,21 +321,76 @@
         $('.dialog .field-toggle input').checked, false);
     $('.dialog-x').click(); await wait(30);
 
-    /* ---- loading a bay --------------------------------------------------- */
+    /* ---- clicking a bay --------------------------------------------------- */
     // A swap is minutes of physical work that purges filament, and the bays sit under the
-    // pointer while someone is reading the card.
-    // Which head that is depends on what the run has already switched - the source test
-    // above left Toolhead 1 on ACE A - so the expectation is read off the card the bay is
-    // in rather than written down.
+    // pointer while someone is reading the card - so the click opens the bay's own sheet
+    // and nothing is sent until a verb in it is pressed. What that sheet OFFERS is
+    // drive/ace-verbs.js; what is checked here is that it asks at all, and costs nothing.
+    // Which head it is depends on what the run has already switched - the source test
+    // above left Toolhead 1 on ACE A - so it is read off the card rather than written
+    // down.
     const withCab = $$('#filament .ace-card').findIndex((c) => c.querySelector('.ace-cab'));
     $$('#filament .ace-cab .ace-bay')[0].click(); await wait(40);
     say('clicking a bay asks first', !!$('.dialog'), true);
-    say('and names the macro it would send',
-        $('.dialog .dry-cmd').textContent.trim(),
-        `ACE_SWAP_HEAD HEAD=${withCab} ACE=0 SLOT=0`);
+    // SWAP, and which one it is depends on what is physically in the head rather than on
+    // what any record says. This head was switched to ACE A above, so `head_source` names
+    // nothing from that unit - but the head still holds the filament its stock feeder put
+    // there, and the sensor is what the verb list asks. Getting ACE A's filament in means
+    // taking that out first, which is a swap.
+    //
+    // This expectation has moved twice, each time toward the more truthful answer: the
+    // panel used to send ACE_SWAP_HEAD for everything because it is the macro that takes a
+    // slot, then LOAD because `head_source` was empty, and now SWAP because the head is
+    // not.
+    // say() here compares with ===, so an array expectation can never match.
+    say('and a bay says what state the head is in, without offering the swap',
+        `${/is loaded/.test($('.dialog').textContent)}/${$$('.dialog .verb').length}`,
+        'true/0');
     const n0 = P.mock.printer.gcodeLog.length;
     $('.dialog-x').click(); await wait(30);
     say('and closing it sends nothing', P.mock.printer.gcodeLog.length, n0);
+
+    // The verb itself, where it is now chosen. Which one it is still depends on what is
+    // physically in the head rather than on what any record says - that is the part of
+    // this check worth keeping, and it moved to the toolhead with the verb.
+    $$('#filament .ace-tool')[withCab].click(); await wait(60);
+    say('the toolhead offers it, labelled per bay',
+        $$('.dialog .pickbay .picklab').map((e) => e.textContent)[0], 'Swap');
+    $('.dialog-x').click(); await wait(30);
+
+    /* ---- the eye and the pencil ---------------------------------------- */
+    // A mark has to agree with what the click does. Every slot wore the pencil and the
+    // menu row read "View this filament" beside it, so the label and the icon disagreed
+    // about which of the two this was. A tagged spool opens READ-ONLY: it gets the eye.
+    const kind = (n) => (!n ? 'none' : n.querySelector('circle') ? 'eye'
+                              : n.tagName.toLowerCase() === 'svg' ? 'pencil' : 'sprite');
+    const tagInfo = (main) => ({ MAIN_TYPE: main, SUB_TYPE: 'Silk', VENDOR: 'Jayo',
+                                 ARGB_COLOR: 4294198070, HOTEND_MIN_TEMP: 190,
+                                 HOTEND_MAX_TEMP: 260, BED_TEMP: 45, SKU: 0 });
+    // The mock ships four untagged spools, so the eye branch is vacuous without this.
+    P.state.apply({ filament_detect: { state: [0, 0, 0, 0],
+      info: [tagInfo('PLA'), tagInfo('NONE'), tagInfo('NONE'), tagInfo('NONE')] } });
+    await wait(700);
+    const idRow = () => $$('.menu .menu-item').filter((b) => /this filament/.test(b.textContent))[0];
+    $$('#filament .ace-more')[0].click(); await wait(60);
+    say('a tagged filament offers View, with the eye',
+        `${/View this filament/.test(idRow().textContent)}/${kind(idRow().querySelector('svg'))}`,
+        'true/eye');
+    document.body.click(); await wait(60);
+    $$('#filament .ace-more')[1].click(); await wait(60);
+    say('and an untagged one offers Edit, with the pencil',
+        `${/Edit this filament/.test(idRow().textContent)}/${kind(idRow().querySelector('svg'))}`,
+        'true/pencil');
+    document.body.click(); await wait(60);
+
+    await setAce(null);
+    say('with no ACE the page draws the four slots', $$('#filament .slot').length, 4);
+    say('and the same pair marks them there',
+        $$('#filament .slot').map((sl) =>
+          `${sl.querySelector('.slot-tag') ? 'RFID' : '-'}:${kind(sl.querySelector('.pencil'))}`)
+          .join(' '),
+        'RFID:eye -:sprite -:sprite -:sprite');
+    P.state.apply({ filament_detect: null });
 
     await setAce(measured);
     say('the page ends where it started', $$('#filament .ace-card').length, 4);

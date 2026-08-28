@@ -269,9 +269,11 @@ ACE_MACROS = {
     "ACE_CLEAR_HEADS": None,
 
     "ACE_UNLOAD_ALL_CANCEL":
-        "NOT BUILT  the panel does not await the unload it cancels, so there is no "
-        "moment on screen at which a cancel is the obvious thing to press. It belongs "
-        "with a progress surface for the unload, which does not exist yet.",
+        "NOT BUILT  the reason it had - that nothing on screen waits for an unload, so "
+        "there is no moment at which a cancel is the obvious thing to press - expired "
+        "when the blocking dialog arrived. It now has a home and no evidence: what the "
+        "macro does to a head mid-retract has never been measured, and a cancel that "
+        "leaves filament somewhere unnamed is worse than finishing.",
     "ACE_SWITCH":
         "NOT BUILT  switches the ACTIVE unit, which only matters in multi mode. The "
         "panel is head-major: every card names its own unit, so there is no such thing "
@@ -280,14 +282,19 @@ ACE_MACROS = {
         "not in v1  bowden calibration is a guided physical procedure - feed, mark, "
         "return - and a panel that starts it without walking someone through it is worse "
         "than no button.",
-    "ACE_BG_SWAP":
-        "[EXPERIMENTAL]  its own help requires head mode, 1:1 wiring and an OPEN dock "
-        "below the head, and purges ~60 mm. Offering it without enforcing those purges "
-        "filament onto a bed.",
-    "ACE_BG_UNLOAD":
-        "[EXPERIMENTAL]  same preconditions, and its own help says ~3 min.",
+    # Offered now, and the reason they were withheld is the reason they are gated rather
+    # than simply present: the preconditions are real and the panel does not guess at
+    # them. `ace_bg_swap.enabled_heads` is what ACE_BG_SET_HEAD writes, it is read in the
+    # same sw_GetMachineState call as `ace`, and a head that is not in it gets the verb
+    # drawn UNAVAILABLE with that macro named as what would lift it. On the measured
+    # machine the list is empty, so that refusal is the state the panel opens in.
+    "ACE_BG_SWAP": None,
+    "ACE_BG_UNLOAD": None,
+    "ACE_BG_SET_HEAD": None,
     "ACE_BG_MOVE":
-        "[EXPERIMENTAL]  same preconditions.",
+        "[EXPERIMENTAL]  the same preconditions, and nothing on the panel needs a bare "
+        "move: the two verbs above are what a person asks for, and this is what they are "
+        "built out of.",
 }
 
 

@@ -13,7 +13,7 @@
 'use strict';
 
 import { TOOLHEADS, PRINT_STATE, PURIFIER_MODES } from './protocol.js';
-import { parseAce } from './multiACE.js';
+import { parseAce, headOccupied } from './multiACE.js';
 
 /** Pull the object map out of whatever shape the transport handed us. */
 export function unwrapStatus(data) {
@@ -227,11 +227,27 @@ export class MachineState {
           inToolhead: !!v.filament_in_toolhead,
           atExtruder: !!v.filament_at_extruder,
           channelState: v.channel_state || null,
+          // The LAST OPERATION THAT FINISHED on this channel, which is a different
+          // question from what it is doing now and outlives the answer to it:
+          // `channel_state` settles back to `wait_insert`, this one stays. It is what
+          // says whether a head is holding filament - see multiACE.js's headOccupied().
+          actionState: v.channel_action_state || null,
           error: v.channel_error && v.channel_error !== 'ok' ? v.channel_error : null,
         };
       }
     }
     return out;
+  }
+
+  /**
+   * Whether toolhead `i` is holding filament, for anything that has not already got the
+   * three sources in hand. The rule - and the measurement behind it - is
+   * multiACE.js's headOccupied(); the filament panel calls that directly because it is
+   * already holding all three and this would re-parse them per card.
+   */
+  headLoaded(i) {
+    return headOccupied(this.feedChannels()[i], this.ace().heads[i],
+                        !!(this.filaments()[i] || {}).loaded);
   }
 
   /**

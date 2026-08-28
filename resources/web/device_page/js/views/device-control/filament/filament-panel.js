@@ -35,7 +35,7 @@ export default {
       label: aceModeLabel,
       enabled: (ctx) => ctx.state.ace().present,
       title: (ctx) => (ctx.state.ace().present
-        ? 'SET_ACE_MODE MODE=normal|multi|head' : 'No ACE on this printer'),
+        ? 'How the ACE feeds the toolheads' : 'No ACE on this printer'),
       on: (ctx) => openAceModeMenu(document.getElementById('filament-mode'), ctx) },
     { kind: 'spacer' },
     { kind: 'status', id: 'filament-ace', text: aceStatus,

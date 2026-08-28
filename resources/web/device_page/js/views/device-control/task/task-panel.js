@@ -27,8 +27,11 @@ export default {
     { kind: 'status', id: 'task-state', cls: 'job-badge',
       text: (ctx) => stateLabel(ctx.state.job().state),
       state: (ctx) => ctx.state.job().state,
-      // The machine's own word stays on the title, so the rename to `idle` hides nothing.
-      title: (ctx) => `print_stats.state: ${ctx.state.job().state}` },
+      // The badge already carries `stateLabel()`, which is the machine's word in words.
+      // The hover used to carry the raw one beside it - `print_stats.state: standby` - so
+      // that the rename to `idle` "hid nothing"; translating is not hiding, and the field
+      // name was the only thing the second copy added.
+    },
     { kind: 'spacer' },
   ],
 

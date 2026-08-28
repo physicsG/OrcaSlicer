@@ -365,11 +365,23 @@ CHECKS = r"""
     say('and keeps that ratio on screen',
         Math.abs(badge.getBoundingClientRect().width
                  / badge.getBoundingClientRect().height - 44 / 26) < 0.02, true);
-    say('its base is drawn wider than its hood, which is what makes it a cabinet',
-        Number(badge.querySelector('rect:last-of-type').getAttribute('width')) === 44
-        && badge.querySelector('path').getAttribute('d').startsWith('M2 9'), true);
-    say('and it carries one bay per slot, colour only',
-        badge.querySelectorAll('rect').length, 5);   // four bays plus the base
+    // G, not A: one body the full width with a colour stop through it, and the spools
+    // drawn LAST so none is cropped. The draw order is the point, so it is what is asked.
+    const kids = [...badge.children].map(e => e.tagName.toLowerCase());
+    say('the badge is one body the full width, not a hood over a wider base',
+        [badge.querySelector('rect').getAttribute('x'),
+         badge.querySelector('rect').getAttribute('width')].join(','), '0,44');
+    say('split by a colour stop rather than a second box',
+        badge.querySelector('path').getAttribute('d').startsWith('M0 16'), true);
+    say('and the spools are drawn over both, so none is cropped',
+        kids.indexOf('path') < kids.lastIndexOf('rect'), true);
+    say('one bay per slot, colour only, at the standard`s 6x16',
+        [...badge.querySelectorAll('rect')].slice(1)
+          .map(e => e.getAttribute('width') + 'x' + e.getAttribute('height')).join(','),
+        '6x16,6x16,6x16,6x16');
+    say('with 4 px of margin all round, which is the gap`s own number',
+        [...badge.querySelectorAll('rect')].slice(1)
+          .map(e => Number(e.getAttribute('x'))).join(','), '4,14,24,34');
     say('the ACE mode pill reports the mode rather than the one it was built with',
         document.getElementById('filament-mode').textContent.trim(), 'ACE mode · Head');
   }
