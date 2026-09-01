@@ -23,8 +23,20 @@
     const live = P.state.job().state;
     say('it reads the live state', badge.textContent,
         live === 'standby' ? 'idle' : live);
-    say('and carries the machine word on the title',
-        badge.title, `print_stats.state: ${live}`);
+    // This check used to assert the OPPOSITE - that the hover read
+    // `print_stats.state: <state>`, which f7ddc2973 put there so that renaming standby
+    // to idle "hid nothing". a946c250b took it off again and was right to: translating
+    // is not hiding. `stateLabel()` is a single rename and every other state passes
+    // through verbatim, so the badge already carries the machine's word; the only thing
+    // the hover added was the FIELD NAME, which says where the page read it. That is
+    // the page's business, and the wire has a home already - the trace pane.
+    //
+    // So the check is inverted, and it is the rule it guards rather than the instance:
+    // no schema on a hover. conformance_test.py asks the same of every hover on the
+    // page; this one asks it of the running DOM, where a title assembled at runtime is
+    // visible and a source scan cannot see it.
+    say('and carries no schema on its hover',
+        /[a-z0-9]_[a-z0-9]|\.[a-z_]{3}/.test(badge.title || ''), false);
     say('the card no longer repeats the machine name',
         document.querySelectorAll('#task .job-dev').length, 0);
     say('nor carries its own badge', document.querySelectorAll('#task .job-badge').length, 0);

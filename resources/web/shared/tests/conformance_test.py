@@ -1053,5 +1053,123 @@ check("the bed buttons say which way the bed goes and what Z is sent",
       "toward the nozzle" in ui_src and "away from the nozzle" in ui_src,
       "an arrow alone is ambiguous when the moving part is the bed, not the head")
 
+# ---------------------------------------------------------------------------
+# No hover on this page carries the machine's schema.
+#
+# CLAUDE.md: UI copy says what a control is or what state it is in, in words - not in
+# the machine's schema. A field name (`print_stats.state`, `hum_level2`, `channel_state`)
+# says where the page READ something, which is the page's business; a macro name says
+# what will be sent, which is the trace pane's. Both have been trimmed out of hovers by
+# hand at least twice - 073d67f2c and a946c250b - and the second one left `job-band.js`
+# asserting the removed tooltip for four commits, red, with nothing to force a look.
+#
+# So it is derived. Every hover site is found, its value's STRING LITERALS are read, and
+# a schema-shaped token in one is a failure. Only literals: a title assembled from an
+# expression (`it.filename`, `spec.title(ctx)`) cannot be judged from the source, and
+# job-band.js asks the same question of the running DOM, where it can.
+#
+# The known limit: `ace` and `job` are indistinguishable from English, so a hover naming
+# a bare lowercase object still gets through. Underscores, dots and SHOUTING do not.
+def _no_comments(src):
+    """Source with comments removed - prose ABOUT a field is not copy carrying one."""
+    out, i, n = [], 0, len(src)
+    while i < n:
+        c = src[i]
+        if c in "'\"`":
+            j = i + 1
+            while j < n and src[j] != c:
+                j += 2 if src[j] == "\\" else 1
+            out.append(src[i:j + 1]); i = j + 1; continue
+        if src.startswith("//", i):
+            j = src.find("\n", i); j = n if j < 0 else j
+            out.append("\n"); i = j + 1; continue
+        if src.startswith("/*", i):
+            j = src.find("*/", i); j = n if j < 0 else j + 2
+            out.append(" "); i = j; continue
+        out.append(c); i += 1
+    return "".join(out)
+
+
+def _value(src, i):
+    """The property value at i: to a , ; or closing bracket at depth zero."""
+    depth, j, n = 0, i, len(src)
+    while j < n:
+        c = src[j]
+        if c in "'\"`":
+            j += 1
+            while j < n and src[j] != c:
+                j += 2 if src[j] == "\\" else 1
+            j += 1; continue
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            if depth == 0:
+                return src[i:j]
+            depth -= 1
+        elif c in ",;" and depth == 0:
+            return src[i:j]
+        j += 1
+    return src[i:j]
+
+
+def _literals(span):
+    """Static text of each string/template literal; a template's ${...} is not text."""
+    out, i, n = [], 0, len(span)
+    while i < n:
+        c = span[i]
+        if c in "'\"":
+            j, buf = i + 1, []
+            while j < n and span[j] != c:
+                if span[j] == "\\":
+                    buf.append(span[j + 1:j + 2]); j += 2
+                else:
+                    buf.append(span[j]); j += 1
+            out.append("".join(buf)); i = j + 1; continue
+        if c == "`":
+            j, buf = i + 1, []
+            while j < n and span[j] != "`":
+                if span[j] == "\\":
+                    j += 2
+                elif span.startswith("${", j):
+                    d, k = 1, j + 2
+                    while k < n and d:
+                        d += (span[k] == "{") - (span[k] == "}")
+                        k += 1
+                    j = k
+                else:
+                    buf.append(span[j]); j += 1
+            out.append("".join(buf)); i = j + 1; continue
+        i += 1
+    return out
+
+
+_SCHEMA = [
+    (re.compile(r"\b[a-z][a-z0-9]*(?:_[a-z0-9]+)*\.[a-z][a-z0-9_]*\b"), "a field path"),
+    (re.compile(r"\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b"), "a field name"),
+    (re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b"), "a macro name"),
+]
+_HOVER = re.compile(r"""(?:\btitle\s*:|\.title\s*=(?!=)|setAttribute\(\s*['"](?:title|aria-label)['"]\s*,)""")
+
+_schema_hovers, _hover_sites = [], 0
+for _root, _dirs, _files in os.walk(JS):
+    for _f in sorted(_files):
+        if not _f.endswith(".js"):
+            continue
+        _rel = os.path.relpath(os.path.join(_root, _f), JS)
+        _src = _no_comments(open(os.path.join(_root, _f), encoding="utf-8").read())
+        for _m in _HOVER.finditer(_src):
+            _hover_sites += 1
+            for _lit in _literals(_value(_src, _m.end())):
+                for _rx, _what in _SCHEMA:
+                    _g = _rx.search(_lit)
+                    if _g:
+                        _schema_hovers.append(f"{_rel}: {_what}, {_g.group(0)!r}")
+check("no hover on the page carries the machine's schema",
+      not _schema_hovers and _hover_sites > 50,
+      f"{', '.join(sorted(set(_schema_hovers))) or 'found no hovers to scan'} - a field "
+      "name says where the page read something and a macro name says what it will send; "
+      "neither is what the control is or what state it is in. The wire has a home, and "
+      "it is the trace pane")
+
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)
