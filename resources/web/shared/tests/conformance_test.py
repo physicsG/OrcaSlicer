@@ -415,10 +415,16 @@ check("the simulator wraps printer replies the way Orca does",
 
 # colours: the two real forms, cross-checked against each other in the capture
 hw_colors = hw.get("_filament_colors") or {}
+# The two forms used to be parallel literals. They are one now - the rgba strings are
+# the simulator's state (so a drive script can wipe a head the way multiACE does) and the
+# ARGB integer is derived from them - which is a stronger guarantee than two literals
+# agreeing, because they cannot drift apart. What still has to hold is the SHAPE: bare
+# RRGGBBAA with no '#', and an integer with the alpha in the top byte.
 check("the simulator sends filament colour in the printer's forms, not CSS",
-      "filament_color_rgba: ['E03131FF'" in mock_src
-      and "filament_color: [0xFFE03131" in mock_src,
-      "'#RRGGBBAA' is not what the wire carries")
+      re.search(r"filamentColorRgba:\s*\[([^\]]*)\]", mock_src) is not None
+      and "#" not in re.search(r"filamentColorRgba:\s*\[([^\]]*)\]", mock_src).group(1)
+      and "E03131FF" in mock_src and "<< 24 >>> 0" in mock_src,
+      "'#RRGGBBAA' is not what the wire carries, and filament_color is an ARGB int")
 check("a colour normaliser exists and is used",
       "export function cssColor" in src
       and "cssColor" in part_src("filament", "view"),

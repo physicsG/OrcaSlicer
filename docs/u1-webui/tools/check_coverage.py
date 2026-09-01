@@ -253,7 +253,13 @@ ACE_MACROS = {
     "ACE_SET_HEAD_MANUAL": None,
     "ACE_LOAD_HEAD": None,
     "ACE_UNLOAD_HEAD": None,
-    "ACE_SWAP_HEAD": None,
+    "ACE_SWAP_HEAD":
+        "NOT BUILT  the PRINT's swap, not a person's. It opens with an unconditional "
+        "`G91 / G1 Z2 F600 / G90` to lift the nozzle off the part, and Klipper refuses a "
+        "Z move on an unhomed Z - so on an idle machine at `homed_axes: \"xy\"` it "
+        "answered `ok`, printed `!! Must home Z axis first` and did nothing. Swap IS "
+        "offered: as ACE_UNLOAD_HEAD then ACE_LOAD_HEAD, neither of which moves Z, which "
+        "is what multiACE's own dashboard and HelixScreen both send for the same verb.",
     "ACE_UNLOAD_ALL_HEADS": None,
     "ACE_DRY": None,
     "ACE_STOP_DRYING": None,

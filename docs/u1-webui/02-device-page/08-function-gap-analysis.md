@@ -1438,6 +1438,11 @@ own commands and nothing else, and the remedy is a control already on screen in 
 view. Guessing which verbs need a homed Z would also have been guessing — the unload in
 the same console ran fine on `"xy"`.
 
+> **Round fifteen overtook this.** No verb on this panel needs a homed Z. The unload ran
+> fine because it does not move Z, and neither does the load; only `ACE_SWAP_HEAD` does,
+> and the panel does not send it any more. The error-reading built here stays, because a
+> macro that declines still answers `ok`.
+
 ### The rest of the macro lines
 
 Round thirteen stopped at the toolhead actions and left the dryer and the settings menus
@@ -1453,3 +1458,581 @@ MINUTES, and one offering 4 would have dried for four minutes. That is a reason 
 conversion right, which it is, and not a reason to make the reader check the arithmetic in
 G-code. **Both of those facts are still asserted** — moved from the preview text onto
 `printer.gcodeLog`, which is where they were always really about.
+
+
+## Round fifteen — the swap that wanted a homed Z was the print's swap
+
+Reported: *the Device page, on swap, tells me to home Z first — odd, since a normal
+load/unload without ACE does not need it, and HelixScreen can swap too.*
+
+Both halves of that were right, and together they were the answer. **The requirement was
+never a property of swapping. It was a property of `ACE_SWAP_HEAD`**, which is the macro
+a *print* uses, and the Device page was the only UI on this machine sending it from a
+button.
+
+### Read out of the plugin, not inferred from the failure
+
+Round fourteen had the symptom and stopped at it:
+
+```
+[com] ACE_SWAP_HEAD HEAD=3 ACE=0 SLOT=3
+[res] // park extruder1 !!!
+[res] // pick extruder3 !!!
+[res] !! Must home Z axis first: 229.300 250.000 277.000 [0.000]
+```
+
+The park and the pick are XY and they succeeded. What failed is four lines into
+`cmd_ACE_SWAP_HEAD` in multiACE's `klipper/extras/ace.py`:
+
+```python
+self.gcode.run_script_from_command('G91')
+self.gcode.run_script_from_command('G1 Z2 F600')
+self.gcode.run_script_from_command('G90')
+self.toolhead.wait_moves()
+```
+
+A 2 mm lift off the part before the unload — right for a mid-print swap, meaningless on an
+idle machine, and refused outright by Klipper when Z is not homed.
+
+| macro | Z motion | needs a homed Z |
+|---|---|---|
+| `ACE_SWAP_HEAD` | `G91 / G1 Z2 F600 / G90` | **yes** |
+| `ACE_LOAD_HEAD` | none | no |
+| `ACE_UNLOAD_HEAD` | none | no |
+| `ACE_BG_SWAP`, `ACE_BG_UNLOAD` | none in `ace_bg_swap.py` | no |
+
+So *"an unload ran fine on `"xy"` in the same console"* — round fourteen's reason for not
+gating anything — was not luck. It is the whole rule, and reading the source rather than
+the console is what turned one measurement into it.
+
+**multiACE guards this exact hop everywhere else it can run idle.** `_discard_wipe()` and
+`_bg_pick_flow_check()` both open with a `homed_axes` check and bail with *axes not
+homed - skipped*. `cmd_ACE_SWAP_HEAD` is the one place the same three lines are unguarded,
+because a print is homed by definition.
+
+### The two neighbours had both already answered it
+
+Neither other UI that drives this plugin sends `ACE_SWAP_HEAD` for a swap someone asked
+for:
+
+| | what it sends | in its own words |
+|---|---|---|
+| **multiACE's own dashboard** — `web/frontend/app.js`, `loadSlot` | `ACE_UNLOAD_HEAD HEAD=h` then `ACE_LOAD_HEAD HEAD=h ACE=a SLOT=s` | *"The print's OWN swaps (`ACE_SWAP_HEAD` from the gcode file) … do not go through these buttons"* |
+| **HelixScreen** — `AmsBackendMultiAce::do_load_filament` | the same pair | *"the single-command `ACE_SWAP_HEAD` this backend does not use"* |
+
+The unload cannot be folded into the load, and that is why it is two commands rather than
+one: `ACE_LOAD_HEAD`'s own guard *refuses* a head that already holds filament rather than
+swapping for it.
+
+### What the panel does now
+
+`aceVerbs()`'s Swap carries **two lines**, and `sw_SendGCodes` already took a
+newline-separated script — the feeder verb has sent two since round twelve. `withCmd()`
+generalised from *one macro, optionally repeated with a `STAGE`* to *a list of steps*, and
+each verb now also carries `macros`, every name it would put on the wire, because
+`VERB_MACROS` is a gate on what is sent and checking one of two is not a gate.
+
+Nothing on screen moved: the DOM walker's dump is byte-identical either side of the change
+apart from the trace pane's own rolling log.
+
+`ACE_SWAP_HEAD` is `NOT BUILT` in `check_coverage.py` with the reason written down, which
+is the point of that table — the next person to notice that the macro taking a slot is not
+being used will find out why before sending it.
+
+### The same question about `ACE_BG_SWAP`, asked and answered
+
+Reasonable next thought: if Swap is now two commands, should Background swap be
+`ACE_BG_UNLOAD` + a background load? **No, twice over.**
+
+- **There is no `ACE_BG_LOAD`.** The whole family the machine registers is five:
+  `ACE_BG_SWAP`, `ACE_BG_UNLOAD`, `ACE_BG_SET_HEAD`, `ACE_BG_MOVE`, `ACE_BG_STATUS`
+  (`ace_bg_swap.py`, lines 90-99, and `data/ace-macros.json` says the same). The load half
+  exists only *inside* `ACE_BG_SWAP` — its help spells the sequence out: *"unload (if
+  loaded), then feed+grip+prime the target slot through the OPEN dock"*. There is nothing
+  to decompose it into.
+- **The reason `ACE_SWAP_HEAD` had to go does not apply.** It was never "a swap should be
+  two commands"; it was one specific thing, that macro moving Z. `ace_bg_swap.py` contains
+  **no motion G-code whatsoever** — grepped for `G0`/`G1`/`G28`/`G91`/`G90`/`MOVE_TO`, zero
+  hits, and its single `run_script_from_command` is a `SAVE_VARIABLE` persisting the
+  enabled-heads list. It moves filament by appending to a **private trapq** on the parked
+  head's extruder stepper (`stepper.set_trapq` / `trapq_append`), which is what "background"
+  means here: it bypasses the toolhead's motion queue entirely, so it never reaches the
+  kinematics that raise `Must home Z axis first`.
+
+And its refusals are nothing like `ACE_SWAP_HEAD`'s silent `ok`: it raises on a head that
+is not bg-enabled, not ACE-driven, not in head mode, already busy, already loaded from that
+slot, or **is the active toolhead** — *"bg swaps are for parked heads"*. `ACE_BG_SWAP`
+stays exactly as it is.
+
+### What went with it
+
+The mid-print machinery, all of which the pair does without: the Z hop, the XYZ/E position
+restore, `_pause_for_recovery`, `last_swap_result`, and **`KEEP_HEAT` between the halves** —
+so the nozzle cools and reheats where a print-time swap holds it. Neither neighbour passes
+a temperature either, and picking one here would be inventing a number.
+
+`last_swap_result` is still watched by the blocking dialog, and only `ACE_SWAP_HEAD` writes
+it: what the watch now catches is the **print's** swap failing underneath a verb someone
+started, which dooms that verb too. Round fourteen's console read stays for the same reason
+it was built — a macro that declines still answers `ok`, and Klipper's `!!` channel is the
+only place the reason exists.
+
+### Checked
+
+`unit_jsc.py` asserts the pair, its order, and that a load on an empty head is still one
+line — pure logic, no DOM. `drive/ace-verbs.js` asserts it **on the wire**, off
+`printer.gcodeLog`, because the panel puts no macro name on screen. `drive/ace-verbs-real.js`
+had gone stale against round thirteen's copy pass — it was reading `.verb-cmd` off rows
+that no longer carry one — and now reads the model and prints the machine's live
+`homed_axes` beside it, which is the state the swap used to care about.
+
+```
+171/171  unit_jsc.py            61/61  run_webkit --size 1920x1080
+ 47/47  drive/ace-verbs.js      54/54  run_webkit (single column)
+ 75/75  drive/ace-panel.js     153/153 conformance_test.py
+  8/8   drive/no-printer.js      0 unaccounted  check_coverage.py
+```
+
+**Still unrun on hardware**: a swap sent as the pair, watched. The macros are the ones the
+machine has and the two neighbours send, but this page has not put them out over a real
+ACE — and the handover has said since round fourteen that one real swap is a person's
+decision, not a suite's.
+
+
+## Round sixteen — the eye and the pencil were asking the wrong question
+
+Reported: *the view and edit buttons are switched. Some filaments are read by RFID and
+should not be changeable — they even read "From the spool tag" in the popup.*
+
+Both halves were true, and they were the same bug seen from two sides.
+
+### The sheet was always a form
+
+`editSlot()` drew three editable inputs and a **Confirm** for every slot, tagged or not.
+Around it, four separate pieces of copy promised the opposite on a tagged one: the mark
+was an **eye**, the menu row read **View this filament**, its hover read *"Read only — the
+spool carries its own record"*, and the sheet headed a block **From the spool tag**. Every
+word said reading; every button said form.
+
+### And "has a tag" is not the question
+
+The panel decided read-only from `f.tag` — `filament_detect.info[i].MAIN_TYPE !== "NONE"`.
+The machine answers a different and better question itself, in two fields that have been
+on the subscription since the beginning and were never read:
+
+| | |
+|---|---|
+| `print_task_config.filament_official[i]` | is the identity in use the spool's own record |
+| `print_task_config.filament_edit[i]` | **may this slot be edited** |
+
+Read off 811002511261022618B3 on 2026-08-28, over Moonraker's HTTP port:
+
+```
+head                 0          1          2          3
+filament_vendor    Jayo    Forshape      NONE    Kingroon
+filament_type       PLA        PLA       NONE       PETG
+filament_sub_type Marble         ""      NONE      Basic
+filament_exist     true       true      false       true
+filament_official  true      FALSE      false      false
+filament_edit     false       TRUE      false       TRUE
+```
+
+and `filament_detect`:
+
+```
+0  Jayo PLA Marble   OFFICIAL true  CARD_UID 04 7B F3 AD 7D 26 81  NTAG  tigertag
+1  Forshape PLA Silk OFFICIAL true  CARD_UID 04 2C EE AE 7D 26 81  NTAG  tigertag
+2  —                 3  —
+```
+
+**Head 2 is the case that settles it.** It carries a decodable physical tag and the machine
+still says `filament_edit: true`, because the record in use has been overridden — the
+sub-type in `print_task_config` is `""` where the tag says `Silk`. The tag rule marked it
+read-only; the machine was happy to have it edited. So the mark was wrong in one direction
+and the sheet in the other, on the same slot.
+
+The rule the machine states, on this sample: **editable ⟺ loaded and not official.** The
+page does not re-derive that. It reads `filament_edit`, because that is the field the
+shipped UI branches on too — its editor is `FilamentUnofficialWidget` and there is no
+official counterpart in the bundle.
+
+> **Round eighteen qualified this.** Reading the permission was right; *following it
+> alone* was not. `filament_edit` is a **latch** — a write clears `filament_official`, so
+> one edit unlocks a tagged spool for good. The page requires the permission **and** the
+> absence of a tag.
+
+### What changed
+
+- `filaments()` gained `official` and `editable`. `editable` is the machine's bit; the
+  fallback for a firmware that does not report it is the old tag rule, named as a fallback
+  rather than left as the rule.
+- The mark, the menu row's label, its hover and **what the click opens** are now one
+  decision. Read-only means no inputs at all and a single **Close** — not disabled fields,
+  because there is nothing to type.
+- The **RFID badge keeps its own question.** A chip on the spool is a fact about the spool;
+  whether the record may be edited is a fact about the slot. Head 2 wears the badge and
+  takes the pencil, and that is not a contradiction.
+- The read-only sheet shows **the record in use** above **what the spool claims** — two
+  readings, because on head 2 they differ.
+
+### This machine is running the Extended Firmware
+
+`filament_detect` here carries `CARD_TYPE` and `TAG_FORMAT: "tigertag"`, and **neither
+string exists anywhere in the shipped Flutter bundle** — they are
+[SnapmakerU1-Extended-Firmware](../../../../SnapmakerU1-Extended-Firmware/docs/design/filament_detect.md)
+additions. That firmware also exposes `POST /printer/filament_detect/set`, which writes the
+**tag record itself** (`VENDOR`, `MAIN_TYPE`, `SUB_TYPE`, `RGB_1`, `ALPHA`,
+`HOTEND_MIN_TEMP`, `HOTEND_MAX_TEMP`, `BED_TEMP`, `CARD_UID`, `SKU`) and mirrors a full
+update into `print_task_config`. HelixScreen already uses it — `AmsBackendSnapmaker::
+set_slot_info` POSTs there. **Not adopted here**: it would make an official head editable,
+which is a decision about what this panel is for rather than a bug in it.
+
+### The ACE side is a different subsystem and did not move
+
+Measured in the same session: every ACE bay reads `rfid: 0`, `head_tag_seen` is `{}`, and
+all four bays are named in multiACE's override store (`0_0`…`0_3`, Kingroon/Generic PETG
+Basic). So on this machine **no bay is ever read-only** — `PROV.rfid` is unreachable for a
+bay — and every bay is `override`, wearing the pencil.
+
+**So every bay wears the eye now.** The pencil was a promise the panel cannot keep:
+**naming a bay from the panel is not built** (tier 2b — `ACE_SPOOL_ASSIGN`, since
+multiACE's own `POST /api/slot-override` is behind the missing CORS header), and three of
+the four bays wore one over nothing. The PROV *word* is unchanged, because multiACE's
+`rfid → override → derived` is the thing worth knowing about a bay; only the glyph stopped
+varying with it. When 2b lands, `override`, `derived` and `unknown` get the pencil back and
+`rfid` never does.
+
+And editing an **ACE-fed head** in Materials Setting is a trap worth knowing about: it
+writes `print_task_config`, and the next `ACE_LOAD_HEAD` re-pushes the bay's identity over
+it via `SET_PRINT_FILAMENT_CONFIG`. The bay is where that edit belongs — which is the other
+reason not to imply the head's form is the way to name one.
+
+### Decided, not defaulted
+
+Three forks were put to the reporter rather than guessed:
+
+| | |
+|---|---|
+| A filament the machine calls its own | **stays read-only.** Matches the shipped UI, which has no editor for official filament. `POST /printer/filament_detect/set` is reachable on this machine and was **not** adopted — writing the spool's own record is a different product decision |
+| What the form may input | **type, vendor, colour** — the three `UpdateMachineFilamentInfo` is measured to accept. `filament_sub_type` is carried by the machine and shown by the panel, and is **not** writable from here: whether that key round-trips has never been measured |
+| Naming an ACE bay | **not from this panel yet.** Hence the eye above |
+
+### Checked
+
+`unit_jsc.py` holds the model to the measured payload — that both tagged heads read a tag,
+that only one is official, that the permission is the printer's, that the overridden
+tagged head is editable, and that an absent `filament_edit` does not read as "edit
+anything". `drive/ace-panel.js` reaches both states with the **tag held constant**, so the
+only thing varying is the thing under test, and asserts the sheet each one opens.
+
+```
+177/177  unit_jsc.py            78/78  drive/ace-panel.js      61/61  run_webkit 1920
+ 47/47  drive/ace-verbs.js      54/54  run_webkit (1 column)  153/153 conformance_test.py
+```
+
+
+## Round seventeen — the tag stopped showing, and the card stopped repainting
+
+Reported, straight after round sixteen: *the Forshape PLA is also an RFID tag, but that
+does not show.*
+
+Correct, and it had never shown on this machine. Two separate defects behind it.
+
+### The RFID badge lives in a shape this printer never draws
+
+The green `RFID` word is `renderSlots()`'s, in the **four-slot form** — the shape a printer
+with no `ace` object gets. Measured by rendering the reported payload and walking the DOM:
+
+```
+the panel drew 4 toolhead cards (ace.present = true)
+shape per card: T1=feeder T2=feeder T3=feeder T4=cabinet
+the four-slot form is drawn: false   <- where the green RFID word lives
+```
+
+Heads 1–3 are on their **stock feeder** (`head_feeder {0,1,2 true}`) and are drawn as a
+feeder box inside a card. That box has only ever carried the provenance mark. So a tagged
+feeder spool on an ACE-equipped printer had no tag drawn anywhere.
+
+It was *masked* until round sixteen: the eye was driven by `f.tag`, so a tagged head got
+one for free. Pointing the eye at the machine's `filament_edit` is right and measured — and
+on a head whose tagged record has been overridden it leaves a pencil and nothing at all
+saying a tag is there. Exactly the head that motivated round sixteen.
+
+**Two marks, two questions, mirrored about the same roll.** `.ace-tag` is the contactless
+arcs in `#16A34A` — the colour `.slot .slot-tag` already uses for this fact — absolute like
+`.ace-prov` so a spool with a tag and one without occupy the same box. A bay is 62 px and
+its chip is already an ellipsis away from truncating a material name; nothing there may
+move when a tag appears. Asserted: mirrored to 0.5 px, same height, no overlap, and the
+body still 456.
+
+```
+marks per card (edit-mark/tag-mark): T1=eye/tag  T2=pencil/tag  T3=pencil/-  T4=eye/-
+```
+
+An ACE **bay** gets the same mark from multiACE's own `source: "rfid"`. No bay on this
+machine has one (`rfid: 0` on every raw slot), so that arm is drawn from the model rather
+than from a sighting.
+
+### And the card would not have repainted for it anyway
+
+The check failed first for a better reason than the missing mark: `cardSig()` — the
+signature `keyedList` reconciles on — carried `[material, subType, vendor, color]` and
+**neither the tag nor the edit permission**. Neither of those moves any of the four, so:
+
+- a tag arriving repaints nothing. The reader is asynchronous; it lands seconds after the
+  filament does.
+- the machine flipping a slot between its own record and an overridden one repaints
+  nothing either — so round sixteen's eye/pencil would have been correct only from the
+  first paint.
+
+The card kept whatever pair it was built with. This is the failure mode the panel has hit
+before, in this same function, and the comment above `channel_state` in it says so: *a card
+whose signature omits something it draws simply never repaints for it.* Two more fields
+are in it now.
+
+What caught it: a check that applied a tag to an **already-drawn** panel and found the
+menu had it (rebuilt on every click) while the card did not. A check that set the state up
+front and then looked would have passed on a broken panel.
+
+```
+177/177 unit_jsc.py     87/87 drive/ace-panel.js    61/61 run_webkit 1920
+ 47/47 drive/ace-verbs  54/54 run_webkit 1-column  153/153 conformance   8/8 no-printer
+```
+
+
+## Round eighteen — the permission was real, and it was a latch
+
+Reported against the real machine: *the Forshape PLA has an RFID icon and is still
+editable, which it should not be.*
+
+Round sixteen read `print_task_config.filament_edit` and followed it. The field means what
+its name says — that much was verified, not assumed, and the verification is worth keeping
+because it also found the thing that was wrong.
+
+### What the field actually is
+
+Not a guess from a name and a four-point correlation this time. The U1's own
+`print_task_config.py`, as carried in the Extended Firmware's `13-patch-rfid` overlay:
+
+```python
+allowed_edit = False
+if self.print_task_config['filament_exist'][ch]:
+    if self.print_task_config['filament_official'][ch] == False:
+        allowed_edit = True
+tmp_filament_edit[ch] = allowed_edit
+```
+
+and the other half of the same gate, enforced in `SET_PRINT_FILAMENT_CONFIG`:
+
+```python
+if tmp_print_task_config['filament_official'][config_extruder] and bool(force) == False:
+    raise gcmd.error("[print_task_config] filament_config, official filament, not configurable!")
+```
+
+So `filament_edit` **is** `allowed_edit`, and the refusal behind it is real rather than
+advisory. Reading it was correct.
+
+### And why following it alone was not
+
+Eleven lines further down the same function:
+
+```python
+tmp_print_task_config['filament_official'][config_extruder] = False
+```
+
+**Every write clears `official`.** So the permission is a *latch*, not a statement about
+the spool: edit a tagged slot once and `filament_edit` stays `true` until the tag is read
+again — which happens on the next load. Head 2 has been sitting in that state, which is
+why it reads `official: false, edit: true` with an NTAG physically present and
+`filament_sub_type` `""` where the tag says `Silk`.
+
+Following the latch means offering to type over a spool whose record will revert on its
+next load, and drift further from the tag every time someone does.
+
+### The rule
+
+**The page requires the machine's permission AND the absence of a tag.** Stricter than the
+permission, never looser — `allowedEdit` is still required, so an official slot and an
+empty one stay closed for the machine's own reason, and the panel never offers an edit
+`SET_PRINT_FILAMENT_CONFIG` would refuse.
+
+| head | tag | `allowedEdit` | panel |
+|---|---|---|---|
+| 1 Jayo | yes | false — the machine's own record | **reads** |
+| 2 Forshape | yes | **true** — latch left open by an old write | **reads** |
+| 3 empty | — | false | nothing to edit |
+| 4 Kingroon (ACE-fed) | no | true | **edits** |
+
+`filaments()` carries both: `allowedEdit` is the machine's, verbatim; `editable` is this
+page's, and the comment on it says which is which. Splitting them is the point — a single
+field would have hidden that the panel is making a choice the machine did not.
+
+### What that leaves the tag mark doing
+
+Both tagged heads read now, for two different reasons, and the marks say which: the eye is
+the refusal, the tag mark is *why this one* — the spool's own record, rather than the
+machine having nothing to edit. On an untagged head the eye can only mean the latter.
+
+```
+marks per card (edit-mark/tag-mark): T1=eye/tag  T2=eye/tag  T3=pencil/-  T4=eye/-
+```
+
+```
+180/180 unit_jsc.py    89/89 drive/ace-panel.js   61/61 + 54/54 layout
+153/153 conformance    47/47 drive/ace-verbs       8/8 no-printer
+```
+
+### Worth keeping
+
+The three rounds ran: mark → machine's field → machine's field, qualified. The middle step
+was not wasted — it is what produced the `official`/`edit` reading and the read-only sheet,
+and both survive. What it got wrong was treating a permission as a description. **A gate
+that a write can open is not a fact about the thing behind it**, and this page had no way
+to notice that from the four values it had measured. The firmware source did.
+
+
+## Round nineteen — the mode switch blacked the spools, and the machine meant to
+
+Reported: *switching between ACE modes on `--real` switches filaments, blacks them.*
+
+Both halves are real, and only one of them is a bug here.
+
+### The machine wipes the feeder heads on purpose
+
+`SET_ACE_MODE` calls `ACE_RUN_MODE_SWITCH`, and entering **head** mode runs, for every
+head on its stock feeder:
+
+```python
+for h in range(4):
+    if self.head_is_feeder(h) and not self.head_is_manual(h):
+        self._clear_filament_display(h)
+```
+
+which is
+
+```
+SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER=n FILAMENT_TYPE="" \
+    FILAMENT_COLOR_RGBA=00000000 VENDOR="" FILAMENT_SUBTYPE=""
+```
+
+So the identities really do go away — that is multiACE's decision, not the panel's, and
+the filament stays physically in the head while it happens. (It also clears
+`filament_official`, since every `SET_PRINT_FILAMENT_CONFIG` write does; round eighteen.)
+
+**"Switches filaments" is also partly real**: the mode decides `head_feeder`, so which
+card is a cabinet and which is a feeder box genuinely changes.
+
+### The blacking was ours, in one line
+
+`00000000` is **RRGGBBAA with alpha 00** — the machine saying *no colour*. `cssColor` threw
+the alpha away:
+
+```js
+if (/^[0-9a-f]{8}$/i.test(t) || /^[0-9a-f]{6}$/i.test(t)) return '#' + t.slice(0, 6)…
+```
+
+so it came back `#000000` and got painted — on the spool disc **and** on the tube, which
+takes its core colour from the same value. Four black spools.
+
+The alpha is read now, in both forms, and only alpha **zero** is an absence: opaque black
+is `000000FF` / `0xFF000000` and still returns `#000000`, because black filament is the
+commonest there is. A six-digit value has no alpha to read and is taken as written.
+
+### And then it would have gone wrong the other way
+
+With the colour correctly absent, `feeder()` fell through to the checkerboard — which is
+this page's word for **empty**, and the filament is still in the head. That box had only
+two states where a **bay** has always had three:
+
+| | disc | chip |
+|---|---|---|
+| named | its colour | the material |
+| occupied, not named | `#B7BDC6` | `?` |
+| empty | checkerboard | `/` |
+
+It has the same three now, drawn with the same two values a bay uses. `card()` asks
+`headLoaded()` once and hands the answer to both the box and the toolhead marker — the
+occupancy question cannot be answered from the identity that was just wiped, which is the
+whole reason this state exists.
+
+Same shape as round seventeen: a guard the four-slot form has (`if (f.loaded)` before
+painting the dot) that the ACE card's box never had.
+
+### The simulator could not show this state
+
+`filament_vendor`, `filament_type` and `filament_color_rgba` were three hard-coded literals
+in `snapshot()`, so no drive script could put a head in the wiped state at all. They are
+`printer` state now, with `clearFilamentDisplay(head)` doing exactly what multiACE does,
+and `filament_color` is **derived** from the rgba rather than being a second literal —
+which is a stronger guarantee than two literals agreeing, because they cannot drift.
+`conformance_test.py` still holds the shape: bare `RRGGBBAA` with no `#`, and an ARGB
+integer with the alpha in the top byte.
+
+### Checked
+
+`unit_jsc.py` holds `cssColor` to the alpha rule in both forms, including that opaque and
+partly-transparent colours survive. `drive/ace-panel.js` wipes a feeder head the way the
+machine does and asserts the drawing is neither black nor empty, that the card **repaints
+at all** (which needs the colour in `cardSig`), and that it comes back when the machine
+names it again. It finds the feeder head rather than assuming one — an earlier block in
+that script switches Toolhead 1 onto ACE A.
+
+```
+185/185 unit_jsc.py   153/153 conformance   97/97 drive/ace-panel.js
+ 61/61 + 54/54 layout  47/47 drive/ace-verbs  8/8 no-printer   0 unaccounted
+```
+
+### It was still wrong, and the identity was never gone
+
+Round nineteen drew the wipe honestly and stopped there. The reporter cycled
+normal → multi → head and sent a screenshot: two toolheads that had shown their filament
+were a grey `?` and a checkerboard. *"The issue is not mitigated yet."*
+
+Right, because **`_clear_filament_display` wipes `print_task_config` and does not touch
+`filament_detect`**. Read off the machine in that exact state:
+
+```
+head 0: ptc vendor='' type='' rgba='00000000' exist=True | TAG Jayo PLA Marble    OFFICIAL
+head 1: ptc vendor='' type='' rgba='00000000' exist=True | TAG Forshape PLA Silk  OFFICIAL
+head 2: ptc vendor='' type='' rgba='00000000' exist=False| TAG none
+head 3: ptc Kingroon PETG Basic               exist=True | TAG none
+```
+
+The identity was sitting in the other object the whole time. So `filaments()` falls back to
+the spool's own record when the working copy has none — which is **multiACE's own
+precedence one level up** (`rfid → override → derived`), applied where it had not been. The
+tag is only a fallback, so a record someone set deliberately still wins while it exists,
+and `fromTag` says which was used.
+
+`loaded` went with it: it read `!!type`, so a head the wipe had blanked reported itself
+unloaded even with `filament_exist: true`. Whether a slot HAS filament and whether anything
+NAMES it are two questions, and only the first is `filament_exist`'s.
+
+**Run against the machine, not reasoned about.** `--real`, read-only, nothing sent:
+
+```
+head 0: type="PLA" vendor="Jayo"     fromTag=true  loaded=true tag=true editable=false
+head 1: type="PLA" vendor="Forshape" fromTag=true  loaded=true tag=true editable=false
+head 2: type=null                    fromTag=false loaded=false
+head 3: type="PETG" vendor="Kingroon" fromTag=false loaded=true editable=true
+T1: feeder chips=[PLA] disc=rgb(244,67,54)   prov=eye tagmark=yes  "Stock feeder: PLA · Jayo"
+T2: feeder chips=[PLA] disc=rgb(255,255,220) prov=eye tagmark=yes  "Stock feeder: PLA · Forshape"
+T3: feeder chips=[/]   disc=checkerboard     prov=-   tagmark=-    "nothing detected"
+T4: cabinet chips=[PETG,PETG,PETG,PETG]      prov=eye
+```
+
+The occupied-and-unnamed drawing from the section above is still right and still reachable —
+it is what a wiped head with **no** tag gets, which is every machine whose feeder spools
+carry none. Both branches are asserted now, the second by taking the tag away as well.
+
+### Two notes for next time
+
+- **A duplicate `const` in a drive script is silent.** The new block re-declared `before`,
+  which is a `SyntaxError`, so `evaluate_javascript` never ran the file and the harness
+  reported only *"the driving script never reported"* after its full 300 s. Worth knowing
+  before debugging the wrong thing.
+- **A failed assert in an edit script rolls back the whole file.** The `card()` and
+  `feeder()` changes were one write; the second pattern did not match, so neither landed —
+  and `feeder()` then took an argument nothing passed, which reads exactly like a logic
+  bug. The debug script that dumped the state, not the check that failed, is what found it.
+

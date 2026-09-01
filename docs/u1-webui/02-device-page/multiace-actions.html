@@ -969,8 +969,11 @@ the width and starting a swap all need script.</div></noscript>
     <td>Any loaded head. On an ACE head it is <b>unload <i>and retract</i></b> &mdash; the
     unit can pull the filament all the way back into its bay, which is what
     <code>RETRACT_LENGTH</code> is for and what a stock feeder cannot do</td></tr>
-<tr><td><b>Swap</b></td><td><code>ACE_SWAP_HEAD HEAD=n ACE=a [SLOT=s]</code></td>
-    <td>a bay only &mdash; it takes a slot</td></tr>
+<tr><td><b>Swap</b></td>
+    <td><s><code>ACE_SWAP_HEAD HEAD=n ACE=a [SLOT=s]</code></s><br>
+    <code>ACE_UNLOAD_HEAD HEAD=n</code> <b>then</b>
+    <code>ACE_LOAD_HEAD HEAD=n ACE=a SLOT=s</code></td>
+    <td>a bay only &mdash; it takes a slot. <b>Corrected 2026-08-28</b>, see below</td></tr>
 <tr><td><b>Background&nbsp;swap</b></td>
     <td><code>ACE_BG_SWAP HEAD=0-3 SLOT=0-3 [ACE=n] [TEMP=] [ANTI_OOZE=] [QUIET=1] [FORCE=1]</code></td>
     <td>a bay on a head <b>declared capable</b> by <code>ACE_BG_SET_HEAD</code>, and on
@@ -978,6 +981,20 @@ the width and starting a swap all need script.</div></noscript>
 <tr><td><b>Background&nbsp;unload</b></td><td><code>ACE_BG_UNLOAD HEAD=0-3 [TEMP=]</code></td>
     <td>the same head, the same gate</td></tr>
 </table></div>
+<div class="note"><b>Corrected 2026-08-28 &mdash; a swap is not <code>ACE_SWAP_HEAD</code>.</b>
+That macro is the <i>print&#39;s</i> swap. It opens with an unconditional
+<code>G91 / G1 Z2 F600 / G90</code> to lift the nozzle off the part before it parks and
+picks the head, and Klipper refuses a Z move on an unhomed Z &mdash; so from a button on an
+idle machine at <code>homed_axes: &quot;xy&quot;</code> it answered <code>ok</code>, printed
+<code>!! Must home Z axis first</code> and did nothing. <code>ACE_LOAD_HEAD</code> and
+<code>ACE_UNLOAD_HEAD</code> contain <b>no Z motion at all</b>, and the pair is what
+multiACE&#39;s own dashboard (<code>app.js</code>, <code>loadSlot</code>) and HelixScreen
+both send for this verb. <b>Everything this study settled about the verb still holds</b>
+&mdash; where it lives, what it is called, what it is offered on, what it draws while it
+runs. Only the line that goes out changed. The record is
+<a href="08-function-gap-analysis.md">round fifteen</a>; the demo below still logs the old
+macro.</div>
+
 <div class="note"><b>The gate is real hardware, not a preference.</b>
 <code>ACE_BG_UNLOAD</code>&#39;s own help states the requirements: head mode, 1:1 wiring,
 <b>an OPEN dock below the head &mdash; it purges ~60&nbsp;mm</b> &mdash; and the head stays

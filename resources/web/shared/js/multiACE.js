@@ -138,6 +138,9 @@ export const ACE = {
   SET_HEAD_MANUAL: 'ACE_SET_HEAD_MANUAL',     // HEAD=n ENABLE=0|1
   LOAD_HEAD:       'ACE_LOAD_HEAD',           // HEAD=n [ACE=a] [SLOT=s]
   UNLOAD_HEAD:     'ACE_UNLOAD_HEAD',         // HEAD=n [RETRACT_LENGTH=] [KEEP_HEAT=]
+  // The PRINT's swap, and not this panel's: it opens with a Z hop that Klipper
+  // refuses on an unhomed Z. Kept named so it is recognisable in a trace, and so
+  // the reason not to send it is written down. See the Swap verb in aceVerbs().
   SWAP_HEAD:       'ACE_SWAP_HEAD',           // HEAD=n ACE=a [SLOT=s]
   DRY:             'ACE_DRY',                 // ACE=a [TEMP=C] [DURATION=MINUTES]
   // NOT ACED__DRY_STOP, which stops "the current ACE" - on a machine with two units that
@@ -265,8 +268,37 @@ export function aceVerbs(ace, head, slot, loaded) {
                 args: { HEAD: head, ACE: unit.index, SLOT: slot },
                 off: there ? null : 'that bay is empty' });
   } else if (!same) {
-    list.push({ name: 'Swap', macro: ACE.SWAP_HEAD, slotted: true,
+    /*
+     * A swap is an UNLOAD and then a LOAD, and deliberately NOT `ACE_SWAP_HEAD`.
+     *
+     * That macro is the PRINT's swap. It opens with an unconditional `G91 / G1 Z2 F600 /
+     * G90` to lift the nozzle off the part before it parks and picks the head, and
+     * Klipper refuses a Z move on an unhomed Z - so on a machine sitting at
+     * `homed_axes: "xy"` it printed `!! Must home Z axis first` and did nothing, while
+     * the RPC answered `ok`. multiACE guards that same hop with a homed_axes check in
+     * the two paths that can run idle (`_discard_wipe`, `_bg_pick_flow_check`); the swap
+     * path is the one place it does not, because a print is homed by definition.
+     *
+     * Neither ACE_UNLOAD_HEAD nor ACE_LOAD_HEAD moves Z at all, so the pair needs no
+     * homing - and the pair is what BOTH other UIs on this machine send for a swap
+     * someone asked for: multiACE's own dashboard (`app.js`, loadSlot, whose comment
+     * calls the other one "ACE_SWAP_HEAD from the gcode file") and HelixScreen's
+     * AmsBackendMultiAce, which says outright that it does not use it.
+     *
+     * The unload has to come first and cannot be folded in: ACE_LOAD_HEAD's own guard
+     * refuses a head that already holds filament rather than swapping for you.
+     *
+     * What goes with the print's macro is its mid-print machinery - the Z hop, the XYZ/E
+     * restore, pause-for-recovery, `last_swap_result`, and `KEEP_HEAT` between the
+     * halves, so the nozzle cools and reheats where a print-time swap holds it. Neither
+     * of the other two passes a temperature either, and picking one here would be
+     * inventing a number.
+     */
+    list.push({ name: 'Swap', macro: ACE.LOAD_HEAD, slotted: true,
                 args: { HEAD: head, ACE: unit.index, SLOT: slot },
+                steps: [{ macro: ACE.UNLOAD_HEAD, args: { HEAD: head } },
+                        { macro: ACE.LOAD_HEAD,
+                          args: { HEAD: head, ACE: unit.index, SLOT: slot } }],
                 off: there ? null : 'that bay is empty' });
     list.push({ name: 'Background swap', macro: ACE.BG_SWAP, slotted: true, bg: true,
                 args: { HEAD: head, SLOT: slot, ACE: unit.index },
@@ -292,17 +324,29 @@ export function aceVerbs(ace, head, slot, loaded) {
  * is showing the shape of the command, not sending it yet.
  */
 function withCmd(v) {
-  const args = {};
-  Object.entries(v.args || {}).forEach(([k, x]) => {
-    args[k] = x === null ? (k === 'RETRACT_LENGTH' ? '<mm>' : '<n>') : x;
-  });
+  const shown = (a) => {
+    const out = {};
+    Object.entries(a || {}).forEach(([k, x]) => {
+      out[k] = x === null ? (k === 'RETRACT_LENGTH' ? '<mm>' : '<n>') : x;
+    });
+    return out;
+  };
   const gate = v.gate ? aceLine(v.gate.macro, v.gate.args) : null;
-  // A verb with stages is two lines and not one - the machine runs the feeder that way
-  // in its own config, and `sw_SendGCodes` takes a newline-separated script.
-  const cmd = v.stages
-    ? v.stages.map((st) => aceLine(v.macro, Object.assign({}, args, { STAGE: st }))).join('\n')
-    : aceLine(v.macro, args);
-  return Object.assign({}, v, { cmd: gate || cmd });
+  /*
+   * A verb is one line unless the machine needs more than one, and two of them do: a
+   * feeder verb is the same macro twice with a different STAGE, and a swap is an unload
+   * followed by a load. `sw_SendGCodes` takes a newline-separated script.
+   */
+  const steps = v.steps ? v.steps
+    : v.stages ? v.stages.map((st) => ({ macro: v.macro,
+                                         args: Object.assign({}, v.args, { STAGE: st }) }))
+    : [{ macro: v.macro, args: v.args }];
+  // Every macro this verb would actually send. The caller's allow-list is about what
+  // goes on the wire, and `macro` alone stopped being that the moment a verb had two.
+  return Object.assign({}, v, {
+    cmd: gate || steps.map((s) => aceLine(s.macro, shown(s.args))).join('\n'),
+    macros: steps.map((s) => s.macro),
+  });
 }
 
 /**

@@ -1085,9 +1085,10 @@ structure is one directory per panel and the registry is the only place that nam
 [02-device-page/11-multiace-handover.md](02-device-page/11-multiace-handover.md) ends with
 the list, and it is six things. The short form:
 
-- **A swap needs a homed Z** and the panel only says so after the fact. Whether to refuse
-  it up front is a decision, not a bug — which verbs need Z is measured for exactly one of
-  them.
+- ~~**A swap needs a homed Z**~~ — **closed 2026-08-28.** It never did. Only
+  `ACE_SWAP_HEAD` moves Z (a 2 mm hop off the part, for a mid-print swap), and the panel
+  sends `ACE_UNLOAD_HEAD` then `ACE_LOAD_HEAD` now — which is what multiACE's own dashboard
+  and HelixScreen both send, and neither moves Z. Round fifteen.
 - **`AUTO_FEEDING … LOAD=1` is inferred**, and is the only macro argument on this page that
   was not settled by sending it and reading the object back.
 - **One real swap, watched.** Three minutes and a purge, so it is a person's decision.

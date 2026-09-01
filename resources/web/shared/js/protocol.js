@@ -536,15 +536,31 @@ export const TOOLHEADS = ['extruder', 'extruder1', 'extruder2', 'extruder3'];
  *
  * Returns null when there is no usable colour, so callers can fall back deliberately
  * rather than painting an empty string.
+ *
+ * **A fully transparent value is NOT black.** The alpha is carried in both forms and was
+ * being discarded, so `00000000` - which is the machine's way of saying *no colour* -
+ * came back `#000000` and got painted. multiACE writes exactly that:
+ * `_clear_filament_display()` sends
+ * `SET_PRINT_FILAMENT_CONFIG FILAMENT_TYPE="" FILAMENT_COLOR_RGBA=00000000 VENDOR=""`
+ * to every feeder head when the machine enters head mode, and the panel drew four black
+ * spools. Reported as "switching between ACE modes switches filaments, blacks them".
+ *
+ * Opaque black is `FF000000` as an ARGB integer and `000000FF` as RRGGBBAA, and both
+ * still come back `#000000` - it is only alpha ZERO that is an absence.
  */
 export function cssColor(v) {
   if (v == null) return null;
   if (typeof v === 'number' && Number.isFinite(v)) {
     // ARGB: the alpha rides in the top byte and the rest is plain RGB
-    return '#' + ((v >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0').toUpperCase();
+    const n = v >>> 0;
+    if ((n >>> 24) === 0) return null;          // alpha 0 - an absence, not black
+    return '#' + (n & 0xFFFFFF).toString(16).padStart(6, '0').toUpperCase();
   }
   const t = String(v).trim().replace(/^#/, '');
-  if (/^[0-9a-f]{8}$/i.test(t) || /^[0-9a-f]{6}$/i.test(t)) return '#' + t.slice(0, 6).toUpperCase();
+  if (/^[0-9a-f]{8}$/i.test(t)) {
+    return /^00$/i.test(t.slice(6)) ? null : '#' + t.slice(0, 6).toUpperCase();
+  }
+  if (/^[0-9a-f]{6}$/i.test(t)) return '#' + t.slice(0, 6).toUpperCase();
   if (/^[0-9a-f]{3}$/i.test(t)) return '#' + t.replace(/./g, (c) => c + c).toUpperCase();
   return null;
 }

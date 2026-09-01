@@ -1943,6 +1943,29 @@ Bambu draws on its own slots, and <code>.slot</code> already ships the pencil.</
 <tr><td>Empty</td><td>no mark</td><td class="num">gate_status 0</td></tr>
 </table></div>
 
+<div class="note"><b>Corrected 2026-08-28 &mdash; the panel does not draw it this way any
+more, in either column.</b>
+<b>A BAY reads, whatever named it.</b> The row above is a statement about where a name came
+from, and that half still holds &mdash; but a pencil is an offer to <i>edit</i>, and naming
+a bay from this panel was never built (reading is: <code>syncBays()</code> merges the
+override store; writing is tier 2b and wants <code>ACE_SPOOL_ASSIGN</code>). Three bays wore
+a pencil over nothing. Every bay carries the <b>eye</b> now, and the word still says which
+source named it.
+<b>A HEAD asks the machine, not the tag.</b> <code>filament_detect.info[i].MAIN_TYPE
+&ne; NONE</code> answers &ldquo;is there a tag on the spool&rdquo;, which is a different
+question from &ldquo;may this be edited&rdquo;. The printer publishes the second itself as
+<code>print_task_config.filament_edit[i]</code> &mdash; literally <code>allowed_edit</code>
+in its own <code>print_task_config.py</code>. The panel reads that bit <b>and</b> requires
+that no tag is present, because the bit is a <b>latch</b>: every write clears
+<code>filament_official</code>, so one edit unlocks a tagged spool until the tag is read
+again. Measured on 811002511261022618B3, a head carrying a decodable NTAG reported
+<code>filament_official: false, filament_edit: true</code> with its sub-type blank where
+the tag says <code>Silk</code> &mdash; and the panel reads it rather than offering to type
+over a record that reverts on the next load. A tagged spool also gets a mark of its own
+(<code>.ace-tag</code>), which says <i>which</i> refusal this is.
+The record is <a href="08-function-gap-analysis.md">round sixteen</a>; the demo below still
+draws the old pair.</div>
+
 <div class="note warn"><b>Every raw ACE slot on the measured machine reads
 <code>rfid: 0</code></b>, so the tagged bay in these drawings is invented to exercise the
 state, and its own tooltip says so. The distinction is real — the U1's

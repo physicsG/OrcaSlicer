@@ -126,7 +126,7 @@ Everything below is settled. `multiace-cabinet.html` is the drawing it is settle
 | **Cabinet** | Two halves, `#EEEEEE` over `#CECECE` (Orca's own AMS neutrals). Seam **through the roll**, hard stop. Hugs its four spools with 16 px of shoulder |
 | **Bay** | `.slot`'s own — 36 px disc over a 58×19 `#6E6E6E` name pill, 6 px apart. Nothing drawn round it at rest |
 | **Feeder** | The same drawing in `#FFFFFF` over `#1F1F1F` — the U1's Automatic Filament Feeder Module. Its badge is that frame at badge size, square, 17 px |
-| **Provenance** | Eye on the roll for an RFID tag (read only), pencil for typed or unnamed |
+| **Provenance** | A **bay**: eye for an RFID tag, pencil for typed or unnamed — multiACE's `rfid → override → derived`. A **head**: the printer's own `print_task_config.filament_edit`, which is *not* the same as "has a tag" (round sixteen) |
 | **Pointer** | A 1.5 px `#0C63E2` edge round the roll and its chip, no fill. Nothing else — no metadata layer |
 | **Head** | Below the box at **0.50** (32×70). Sensor dot centred on the artwork's body — `(32, 72.5)` of its 64×140 |
 | **Tube** | Manifold **below** the cabinet, drawn **behind** it, vertical into the artwork's inlet |
@@ -783,29 +783,47 @@ unmeasured; that still needs one real swap.
 Nothing below is a bug in the sense of "the page is wrong about something it knows". Each
 is a thing the panel does not yet know, or a decision deliberately left to a person.
 
-### 1. A swap needs a homed Z, and the panel only says so afterwards
+### 1. ~~A swap needs a homed Z~~ — closed. It never did; the wrong macro did
 
-`ACE_SWAP_HEAD` parks and picks a head; it does not home first, because it is written for
-mid-print swaps where the machine already is. On a machine sitting at `homed_axes: "xy"`
-it fails instantly, and the dialog now reports the printer's own sentence:
+**Resolved 2026-08-28.** It was not a rule about swapping, it was a rule about
+`ACE_SWAP_HEAD`, and that macro is the **print's** swap rather than a person's. The panel
+sends **`ACE_UNLOAD_HEAD` then `ACE_LOAD_HEAD`** now, and no homing question arises. The
+full record is *[Round fifteen](08-function-gap-analysis.md#round-fifteen--the-swap-that-wanted-a-homed-z-was-the-prints-swap)*
+in the gap analysis; the short version:
 
-> The printer stopped: Must home Z axis first: 229.300 250.000 277.000 [0.000]
+- **Only `ACE_SWAP_HEAD` moves Z.** It opens with an unconditional
+  `G91 / G1 Z2 F600 / G90` — a 2 mm lift off the part before it parks and picks the head —
+  and Klipper refuses a Z move on an unhomed Z. `ACE_LOAD_HEAD` and `ACE_UNLOAD_HEAD`
+  contain **no Z motion at all**, which is why the unload in the same console ran fine on
+  `"xy"`. That is read out of `ace.py`, not inferred from the failure.
+- **multiACE guards that same hop everywhere it can run idle** — `_discard_wipe()` and
+  `_bg_pick_flow_check()` both bail with *axes not homed - skipped*. The swap path is the
+  one place it does not, because a print is homed by definition.
+- **Neither other UI on this machine sends it.** multiACE's own dashboard composes a swap
+  as unload-then-load (`web/frontend/app.js`, `loadSlot`), and its comment calls the other
+  one *"ACE_SWAP_HEAD from the gcode file"*. HelixScreen's `AmsBackendMultiAce` does the
+  same and says outright that it does not use it. The Device page was the only one of the
+  three sending the print's macro from an idle-time button.
 
-That is a good failure and it is still a failure. **The choice not yet made** is whether
-the verb should be refused *before* it is sent — greyed with `the axes are not homed`,
-the way a background verb is greyed with `not enabled for this toolhead` — and whether
-anything should offer to home.
+So the question that was written down here — *which verbs need Z, and should Swap be
+greyed until the axes are homed* — dissolved rather than being answered. **No verb on this
+panel needs a homed Z.** Homing stays the Control panel's command and no filament dialog
+reaches for it.
 
-Three things bear on it, and none of them settles it:
+**`ACE_BG_SWAP` is not the same case and did not change.** There is no `ACE_BG_LOAD` to
+split it into — the family is `ACE_BG_SWAP`, `_UNLOAD`, `_SET_HEAD`, `_MOVE`, `_STATUS`
+and nothing else — and `ace_bg_swap.py` emits **no motion G-code at all**: it drives the
+parked head's extruder through a private trapq, which is precisely what lets it run
+underneath a print, and what puts it out of reach of the kinematics check. Asked and
+answered in round fifteen.
 
-- **Which verbs actually need Z is not known.** Swap does, measured. An unload ran fine on
-  `"xy"` in the same console. A load through the ACE has never been tried unhomed. Gating
-  all of them would be a guess in the other direction.
-- **Homing is the Control panel's command**, and a panel is handed its own commands and
-  nothing else. A Home button in a filament dialog reaches across that line. The remedy is
-  already on screen in the same view, one panel over.
-- **The U1's own feeder verbs home themselves**, so a stock-feeder load and an ACE swap
-  behave differently for a reason the reader has no way to see.
+**What went with `ACE_SWAP_HEAD`**, and is worth knowing before anyone puts it back: the Z
+hop, the XYZ/E position restore, `_pause_for_recovery`, `last_swap_result`, and
+**`KEEP_HEAT` between the halves** — so the nozzle cools and reheats where a print-time
+swap holds it. Neither of the other two UIs passes a temperature either, and picking one
+here would be inventing a number. `last_swap_result` is still watched, because only that
+macro writes it: what the watch now catches is the *print's* swap failing underneath a verb
+someone started, which dooms that verb too.
 
 ### 2. `AUTO_FEEDING … LOAD=1` is the one inferred macro on this page
 

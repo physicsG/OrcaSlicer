@@ -129,12 +129,25 @@
     say('each card names its own unit',
         $$('#filament .ace-unit b').map((e) => e.textContent).join(','),
         'ACE A,ACE B,ACE C,ACE D');
-    say('a tagged spool reads and the rest edit',
+    say('every occupied bay carries a mark', 
         $$('#filament .ace-card')[0].querySelectorAll('.ace-prov').length, 4);
-    say('the tagged bay reads and the typed ones edit',
+    /*
+     * And every one of them is an EYE, whatever named it.
+     *
+     * The word still says which source it was - multiACE's `rfid → override → derived`
+     * is the thing worth knowing about a bay - but the glyph does not, because a pencil
+     * is an offer to edit and naming a bay from this panel is not built. Three of these
+     * wore one over nothing. `--drive` reads the drawing, not just the title, which is
+     * how the mark and the promise are held to each other.
+     */
+    say('and every one of them reads, because no bay can be named from here',
         [...$$('#filament .ace-card')[0].querySelectorAll('.ace-prov')]
-          .map((e) => (/read only/.test(e.title) ? 'eye' : 'pencil')).join(','),
-        'eye,pencil,pencil,pencil');
+          .map((e) => (e.querySelector('svg circle') ? 'eye' : 'pencil')).join(','),
+        'eye,eye,eye,eye');
+    say('while the word still says which source named it',
+        [...$$('#filament .ace-card')[0].querySelectorAll('.ace-prov')]
+          .map((e) => (/read only/.test(e.title) ? 'tag' : 'named')).join(','),
+        'tag,named,named,named');
 
     /* ---- one unit feeding three heads ---------------------------------- */
     // ACE_SET_HEAD_ACE binds a head to a unit and says nothing about the reverse. The
@@ -341,7 +354,8 @@
     // This expectation has moved twice, each time toward the more truthful answer: the
     // panel used to send ACE_SWAP_HEAD for everything because it is the macro that takes a
     // slot, then LOAD because `head_source` was empty, and now SWAP because the head is
-    // not.
+    // not. ACE_SWAP_HEAD is gone from the panel entirely since - it is the print's swap
+    // and opens with a Z hop - and Swap goes out as an unload then a load.
     // say() here compares with ===, so an array expectation can never match.
     say('and a bay says what state the head is in, without offering the swap',
         `${/is loaded/.test($('.dialog').textContent)}/${$$('.dialog .verb').length}`,
@@ -359,37 +373,221 @@
     $('.dialog-x').click(); await wait(30);
 
     /* ---- the eye and the pencil ---------------------------------------- */
-    // A mark has to agree with what the click does. Every slot wore the pencil and the
-    // menu row read "View this filament" beside it, so the label and the icon disagreed
-    // about which of the two this was. A tagged spool opens READ-ONLY: it gets the eye.
+    /*
+     * A mark has to agree with what the click does, and the MACHINE decides which it is.
+     *
+     * This asked whether the spool carried an RFID tag, which is a different question.
+     * Measured on 811002511261022618B3: head 2 carries a tag, reads
+     * `filament_official: false, filament_edit: true`, and its record has been
+     * overridden - the sub-type in `print_task_config` is empty where the tag says
+     * `Silk`. So a tag present does not mean read-only, and the panel now reads
+     * `filament_edit` rather than deciding for itself.
+     *
+     * Both states are reached here, with the tag held CONSTANT across them so the thing
+     * being varied is the only thing that moved.
+     */
     const kind = (n) => (!n ? 'none' : n.querySelector('circle') ? 'eye'
                               : n.tagName.toLowerCase() === 'svg' ? 'pencil' : 'sprite');
     const tagInfo = (main) => ({ MAIN_TYPE: main, SUB_TYPE: 'Silk', VENDOR: 'Jayo',
                                  ARGB_COLOR: 4294198070, HOTEND_MIN_TEMP: 190,
                                  HOTEND_MAX_TEMP: 260, BED_TEMP: 45, SKU: 0 });
     // The mock ships four untagged spools, so the eye branch is vacuous without this.
+    // Heads 1 AND 2 get the same tag; only head 1 is the machine's own record.
     P.state.apply({ filament_detect: { state: [0, 0, 0, 0],
-      info: [tagInfo('PLA'), tagInfo('NONE'), tagInfo('NONE'), tagInfo('NONE')] } });
-    await wait(700);
+      info: [tagInfo('PLA'), tagInfo('PLA'), tagInfo('NONE'), tagInfo('NONE')] } });
+    // On the simulated PRINTER, so `filament_edit` is derived from it the way the machine
+    // derives its own, and the push carries both.
+    P.mock.printer.filamentOfficial = [true, false, false, false];
+    await wait(1500);
     const idRow = () => $$('.menu .menu-item').filter((b) => /this filament/.test(b.textContent))[0];
     $$('#filament .ace-more')[0].click(); await wait(60);
-    say('a tagged filament offers View, with the eye',
+    say('the machine`s own record offers View, with the eye',
         `${/View this filament/.test(idRow().textContent)}/${kind(idRow().querySelector('svg'))}`,
         'true/eye');
+    // And the sheet obeys the same answer: it used to open three inputs and a Confirm
+    // under a row that said "View", which is the report this came from.
+    idRow().click(); await wait(140);
+    say('and opening it is a reading, not a form',
+        [$$('.dialog input').length, $('.dialog .btn.primary').textContent,
+         $$('.dialog .dialog-foot .btn').length].join('/'), '0/Close/1');
+    // The record IN USE, which is not the tag: the mock's slot 1 is Snapmaker PLA and the
+    // tag on it reads Jayo. The sheet shows what the printer is going by, and the tag's
+    // own block below it says what the spool claims - two readings, not one.
+    say('showing the record in use above what the spool claims',
+        [/Snapmaker/.test($('.dialog .ms-block').textContent),
+         /From the spool tag/.test($('.dialog').textContent)].join('/'), 'true/true');
+    $('.dialog-x').click(); await wait(60);
+
     document.body.click(); await wait(60);
+    /*
+     * And the head whose LATCH is open but whose spool still carries a tag reads too.
+     *
+     * `filament_edit` is the machine's permission and it is a latch: the same firmware
+     * function that writes a slot sets `filament_official[ch] = False`, so one edit
+     * unlocks a tagged spool until the tag is read again. Head 2 of the real machine is
+     * sitting in that state - an NTAG reading Forshape PLA Silk, `print_task_config`
+     * saying sub-type "" - and the machine will take another write.
+     *
+     * The page is deliberately STRICTER than the permission here and never looser: a
+     * spool that carries a tag is not typed over from this panel, because the record
+     * reverts on its next load and drifts further from the tag each time.
+     */
     $$('#filament .ace-more')[1].click(); await wait(60);
-    say('and an untagged one offers Edit, with the pencil',
+    say('a tag the machine would let you overwrite is still not edited from here',
+        `${/View this filament/.test(idRow().textContent)}/${kind(idRow().querySelector('svg'))}`,
+        'true/eye');
+    idRow().click(); await wait(140);
+    say('and its sheet is a reading, like the official one',
+        [$$('.dialog input').length, $('.dialog .btn.primary').textContent].join('/'),
+        '0/Close');
+    $('.dialog-x').click(); await wait(60);
+    document.body.click(); await wait(60);
+
+    // The head with no tag at all is the one that is a form.
+    $$('#filament .ace-more')[2].click(); await wait(60);
+    say('an untagged head offers Edit, with the pencil',
         `${/Edit this filament/.test(idRow().textContent)}/${kind(idRow().querySelector('svg'))}`,
         'true/pencil');
+    idRow().click(); await wait(140);
+    say('and that one really is a form, with a Confirm that writes',
+        [$$('.dialog input').length > 0, $('.dialog .btn.primary').textContent].join('/'),
+        'true/Confirm');
+    $('.dialog-x').click(); await wait(60);
     document.body.click(); await wait(60);
+
+    /* ---- and the tag is its own mark, because it is its own fact -------- */
+    /*
+     * Reported from the panel: "the Forshape PLA is also an RFID tag, but that does not
+     * show". It did not, and it never had on this machine.
+     *
+     * The green `RFID` word lives in the four-slot form, and a printer that reports an
+     * `ace` object never draws that form - it draws four toolhead cards, and heads on
+     * their STOCK FEEDER are drawn as a feeder box inside one. So a tagged feeder spool
+     * had no tag mark at all here. It was masked while the eye was driven by `f.tag`;
+     * pointing the eye at the machine's `filament_edit` (which is right) left a pencil
+     * and nothing else on exactly the head that motivated the change.
+     *
+     * Two marks, two questions, mirrored about the same roll.
+     */
+    const cards = () => $$('#filament .ace-card');
+    say('a printer with an ACE draws cards, not the four-slot form',
+        [cards().length, $$('#filament .slot').length].join('/'), '4/0');
+    say('a tagged head carries BOTH marks',
+        [!!cards()[1].querySelector('.ace-prov'),
+         !!cards()[1].querySelector('.ace-tag')].join('/'), 'true/true');
+    // The tag mark is not redundant beside the eye: it says WHICH refusal this is - the
+    // spool's own record, rather than the machine having nothing to edit.
+    say('and the eye, because a tagged spool is not typed over from here',
+        !!cards()[1].querySelector('.ace-prov svg circle'), true);
+    say('the tag mark says what it is, in words',
+        /carries an RFID tag/.test(cards()[1].querySelector('.ace-tag').title), true);
+    say('a head with no tag carries only the one mark',
+        [!!cards()[2].querySelector('.ace-prov'),
+         !!cards()[2].querySelector('.ace-tag')].join('/'), 'true/false');
+    // Geometry: a tag must not move the roll. `.ace-tag` is absolute like its twin, and
+    // a bay is 62px - anything in flow there costs a material name its last characters.
+    const box = (n) => { const r = n.getBoundingClientRect();
+                         return `${Math.round(r.width)}x${Math.round(r.height)}`; };
+    say('a tag costs the spool no layout',
+        box(cards()[1].querySelector('.ace-bay')),
+        box(cards()[2].querySelector('.ace-bay')));
+    const off = (n) => { const r = n.getBoundingClientRect();
+                         const d = cards()[1].querySelector('.ace-disc').getBoundingClientRect();
+                         return r.left + r.width / 2 - (d.left + d.width / 2); };
+    say('and the two sit mirrored about the roll, at the same height',
+        [Math.abs(off(cards()[1].querySelector('.ace-prov'))
+                  + off(cards()[1].querySelector('.ace-tag'))) < 0.5,
+         Math.abs(cards()[1].querySelector('.ace-prov').getBoundingClientRect().top
+                  - cards()[1].querySelector('.ace-tag').getBoundingClientRect().top) < 0.5]
+          .join('/'), 'true/true');
+    say('and none of it cost the body its 456', fits(), true);
+
+    /* ---- entering head mode, which the machine answers by wiping the heads --- */
+    /*
+     * Reported: "switching between ACE modes on --real switches filaments, blacks them."
+     *
+     * The machine does it, deliberately. `ACE_RUN_MODE_SWITCH` into head mode runs
+     * `_clear_filament_display(h)` for every FEEDER head, which sends
+     * `SET_PRINT_FILAMENT_CONFIG FILAMENT_TYPE="" VENDOR="" FILAMENT_COLOR_RGBA=00000000`.
+     * `00000000` is RRGGBBAA with alpha ZERO - no colour - and the panel painted it black,
+     * because cssColor threw the alpha away. The filament is still physically in the head.
+     */
+    // A FEEDER head, found rather than assumed: an earlier block switched Toolhead 1 onto
+    // ACE A, so card 0 is a cabinet by now and `_clear_filament_display` only ever
+    // touches heads on their stock feeder.
+    const fed = cards().findIndex((c) => !c.querySelector('.ace-cab'));
+    const disc = (n) => getComputedStyle(cards()[n].querySelector('.ace-disc')).background;
+    const chip = (n) => cards()[n].querySelector('.ace-chip').textContent;
+    say('there is a stock-feeder head to wipe', fed >= 0, true);
+    const wasNamed = disc(fed);
+    const other = cards().findIndex((c, k) => k !== fed && !c.querySelector('.ace-cab'));
+    const otherWas = disc(other);
+    // Kept rather than written back from a literal: which head this is depends on what
+    // the blocks above left, and each one ships a different colour.
+    const held = ['filamentVendor', 'filamentType', 'filamentSubType', 'filamentColorRgba']
+      .map((k) => [k, P.mock.printer[k][fed]]);
+    // The tag on this head, from the block above, and what it says.
+    const tagType = P.state.filaments()[fed].tag
+      ? P.state.filaments()[fed].tag.type : null;
+    P.mock.printer.clearFilamentDisplay(fed);
+    await wait(1500);
+    say('a wiped head is not black', /rgb\(0, *0, *0\)/.test(disc(fed)), false);
+    /*
+     * And a head whose SPOOL still knows what it is says so.
+     *
+     * `_clear_filament_display` wipes `print_task_config` and does not touch
+     * `filament_detect`, so on a tagged head the identity is still on the machine - in
+     * the other object. Measured on 811002511261022618B3 after cycling normal → multi →
+     * head: two heads reading `'' '' '00000000'` in one and `Jayo PLA Marble` /
+     * `Forshape PLA Silk` in the other. The panel drew both blank, which is what was
+     * reported.
+     */
+    say('a wiped head falls back to the spool`s own record',
+        [chip(fed), /gradient/.test(disc(fed))].join('/'), `${tagType}/false`);
+    say('and it is read-only, because that record is the tag`s',
+        !!cards()[fed].querySelector('.ace-prov svg circle'), true);
+
+    // Take the tag away too, and there is genuinely nothing left that names it - which is
+    // the state a machine whose feeder spools carry no tag is in after the same wipe.
+    // Occupied-and-unnamed is the neutral and the `?` a bay in that state has always used.
+    const info = [0, 1, 2, 3].map((k) => (k === fed
+      ? { MAIN_TYPE: 'NONE', SUB_TYPE: 'NONE', VENDOR: 'NONE' }
+      : (P.state.filaments()[k].tag ? { MAIN_TYPE: 'PLA', SUB_TYPE: 'Silk', VENDOR: 'Jayo',
+                                        ARGB_COLOR: 4294198070 }
+                                    : { MAIN_TYPE: 'NONE' })));
+    P.state.apply({ filament_detect: { info } });
+    await wait(900);
+    say('with no tag either, it is occupied and unnamed',
+        [/183, *189, *198/.test(disc(fed)), /gradient/.test(disc(fed))].join('/'),
+        'true/false');
+    say('and it says so, in the chip and in words',
+        [chip(fed),
+         /occupied, not named/.test(cards()[fed].querySelector('.ace-bay').title)].join('/'),
+        '?/true');
+    say('a head the machine did not wipe is untouched', disc(other), otherWas);
+    say('and the card repainted at all, which needs the colour in its signature',
+        disc(fed) !== wasNamed, true);
+    say('and none of it cost the body its 456', fits(), true);
+    // Put it all back, so what follows sees the panel it expects - the tags this block
+    // took away as well as the identity the wipe cleared.
+    P.state.apply({ filament_detect: { state: [0, 0, 0, 0],
+      info: [tagInfo('PLA'), tagInfo('PLA'), tagInfo('NONE'), tagInfo('NONE')] } });
+    held.forEach(([k, v]) => { P.mock.printer[k][fed] = v; });
+    await wait(1500);
+    say('and it comes back when the machine names it again',
+        disc(fed), wasNamed);
 
     await setAce(null);
     say('with no ACE the page draws the four slots', $$('#filament .slot').length, 4);
+    // Both tagged slots read, for two different reasons - slot 1 because the machine
+    // calls the record its own, slot 2 because the page will not type over a tag whose
+    // latch happens to be open. The badge still answers its own question, and here it
+    // agrees with the mark on both.
     say('and the same pair marks them there',
         $$('#filament .slot').map((sl) =>
           `${sl.querySelector('.slot-tag') ? 'RFID' : '-'}:${kind(sl.querySelector('.pencil'))}`)
           .join(' '),
-        'RFID:eye -:sprite -:sprite -:sprite');
+        'RFID:eye RFID:eye -:sprite -:sprite');
     P.state.apply({ filament_detect: null });
 
     await setAce(measured);

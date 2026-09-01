@@ -573,6 +573,31 @@ export function makePrinter() {
     // the mirror instead was overwritten by the next tick, which made the check pass or
     // fail on how long the script before it took.
     filamentExist: [true, true, true, true],
+    // No slot's record is the spool's own by default - the mock ships four untagged
+    // spools, so every one of them is a slot a person may edit. A drive script sets one
+    // true (with `filament_detect` to match) to reach the read-only branch.
+    filamentOfficial: [false, false, false, false],
+    filamentSubType: ['Basic', 'Basic', 'Basic', 'Basic'],
+    /*
+     * The identity per head, settable, so a drive script can reach the state multiACE
+     * puts a feeder head in when the machine enters head mode.
+     *
+     * `_clear_filament_display()` sends `FILAMENT_TYPE="" VENDOR=""
+     * FILAMENT_COLOR_RGBA=00000000` to every feeder head, and 00000000 is RRGGBBAA with
+     * alpha ZERO - the machine saying "no colour", not "black". These were three
+     * hard-coded literals, so the panel could not be shown that state at all.
+     */
+    filamentVendor: ['Snapmaker', 'Snapmaker', 'Snapmaker', 'Generic'],
+    filamentType: ['PLA', 'PLA', 'PETG', 'ABS'],
+    filamentColorRgba: ['E03131FF', '1971C2FF', '2F9E44FF', 'F08C00FF'],
+    /** What multiACE does to a feeder head on entering head mode. */
+    clearFilamentDisplay(head) {
+      this.filamentVendor[head] = '';
+      this.filamentType[head] = '';
+      this.filamentSubType[head] = '';
+      this.filamentColorRgba[head] = '00000000';
+      this.filamentOfficial[head] = false;
+    },
     /*
      * What each head's feed channel is doing, as the machine reports it at rest.
      *
@@ -875,12 +900,28 @@ export function makePrinter() {
       },
       machine_state_manager: { main_state: p.mainState, action_code: p.actionCode },
       print_task_config: {
-        filament_vendor: ['Snapmaker', 'Snapmaker', 'Snapmaker', 'Generic'],
-        filament_type: ['PLA', 'PLA', 'PETG', 'ABS'],
+        filament_vendor: p.filamentVendor.slice(),
+        filament_type: p.filamentType.slice(),
         // As the wire carries them: filament_color is an ARGB integer and
         // filament_color_rgba is hex with NO leading '#'. Measured on a U1.
-        filament_color: [0xFFE03131, 0xFF1971C2, 0xFF2F9E44, 0xFFF08C00],
-        filament_color_rgba: ['E03131FF', '1971C2FF', '2F9E44FF', 'F08C00FF'],
+        filament_color: p.filamentColorRgba.map(
+          (h) => (parseInt(String(h).slice(6, 8), 16) << 24 >>> 0)
+                 | parseInt(String(h).slice(0, 6), 16)),
+        filament_color_rgba: p.filamentColorRgba.slice(),
+        filament_sub_type: p.filamentSubType.slice(),
+        /*
+         * The machine's own two answers about each slot's identity, in the shape it
+         * reports them - read off 811002511261022618B3 on 2026-08-28, where a tagged
+         * head that had been overridden came back `official: false, edit: true`.
+         *
+         * `filamentOfficial` is the simulated printer's, so a drive script can put a
+         * slot in either state; `filament_edit` follows the machine's own rule - a
+         * loaded slot whose record is NOT the spool's own may be edited - rather than
+         * being a second knob that can be set to disagree with itself.
+         */
+        filament_official: p.filamentOfficial.slice(),
+        filament_edit: p.filamentExist.map(
+          (e, i) => e !== false && !p.filamentOfficial[i]),
         filament_exist: p.filamentExist.slice(),
         extruders_used: [0, 1, 2, 3],
         extruder_map_table: { 0: 0, 1: 1, 2: 2, 3: 3 },

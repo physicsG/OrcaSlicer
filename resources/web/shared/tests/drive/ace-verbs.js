@@ -31,8 +31,8 @@
       /* ---- a bay says what is in it; a swap is chosen at the toolhead ------ */
       // A swap reads as an operation on the filament when it is offered on the spool -
       // "swap this one" - and what it actually does is move a TOOLHEAD from one bay to
-      // another. `ACE_SWAP_HEAD HEAD=n` addresses the head, and the head's own sheet
-      // brings every bay to it labelled with what each would do.
+      // another. Every macro it sends addresses `HEAD=n`, and the head's own sheet brings
+      // every bay to it labelled with what each would do.
       const bays = () => $$('#filament .ace-card.is-ace .ace-bay');
       bays()[2].click(); await wait(120);
       say('the bay already feeding says so',
@@ -131,6 +131,16 @@
           'Swap A1 → Toolhead 4');
       say('with no way to dismiss it while the machine is working',
           !$('.dialog.blocking .dialog-x'), true);
+      // And what went out is an UNLOAD then a LOAD, not ACE_SWAP_HEAD.
+      //
+      // That macro is the print's swap: it opens with `G91 / G1 Z2 F600 / G90` to lift
+      // the nozzle off the part, and Klipper refuses a Z move on an unhomed Z - so it
+      // answered `ok`, printed `!! Must home Z axis first` and did nothing on a machine
+      // at `homed_axes: "xy"`. Neither half of the pair moves Z. Asserted on the WIRE,
+      // because the panel does not put macro names on screen.
+      say('and a swap sends the pair that needs no homed Z, in that order',
+          P.mock.printer.gcodeLog[P.mock.printer.gcodeLog.length - 1],
+          'ACE_UNLOAD_HEAD HEAD=3\nACE_LOAD_HEAD HEAD=3 ACE=0 SLOT=0');
       P.mock.printer.channels[3].state = 'unload_heating'; await wait(1500);
       say('and it reports the step the printer is on, not a spinner alone',
           $('.blocking-msg').textContent, 'Heat nozzle  (3/6)');
@@ -147,6 +157,10 @@
       // the page was not reading: `ace.last_swap_result.status` went to `error`, and its
       // console carried `!! Must home Z axis first` - `homed_axes` was "xy". The RPC reply
       // was `ok`, which on this machine is not a yes.
+      //
+      // The Z failure itself is gone with ACE_SWAP_HEAD, and only that macro writes
+      // `last_swap_result` - so what this now covers is the PRINT's swap failing
+      // underneath a verb someone started, which dooms that verb too.
       $$('#filament .ace-tool')[3].click(); await wait(160);
       $$('.dialog .pickbay').find((b) => b.querySelector('.picklab').textContent === 'Swap')
         .click();

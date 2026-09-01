@@ -148,9 +148,43 @@ standard the C++ Prepare page draws from) — named for the plugin rather than t
 hardware. `MachineState.ace()` calls into it. It was spread over three files, and that
 is how the panel came to read bay identity from a source that does not carry it.
 
+**Whether a filament may be edited takes the machine's permission AND the absence of a
+tag.** `print_task_config.filament_edit[i]` is the printer's own per-slot permission —
+literally `allowed_edit` in its `print_task_config.py`, enforced by
+`SET_PRINT_FILAMENT_CONFIG` refusing an `official` slot without `FORCE=1`. Read it, never
+re-derive it. But it is a **latch**: the same firmware function sets
+`filament_official[ch] = False` on every write, so one edit unlocks a tagged spool until
+the tag is read again on its next load. So the page requires **both** — `allowedEdit` (the
+machine's, verbatim) *and* no tag; `editable` in `filaments()` is that pair, and the two
+are separate fields so it is visible that the panel is stricter than the machine rather
+than disagreeing with it. Stricter is allowed; looser never is. The mark, the label and what
+the click opens all come from that one bit, and read-only means **no inputs and a single
+Close** — not disabled fields. **Whether the spool carries a tag is a separate fact and
+gets its own mark**: the green `RFID` word is the four-slot form's, and a printer with an
+`ace` object never draws that form — its stock-feeder heads are feeder boxes inside cards,
+so a tagged feeder spool had no tag drawn at all. `.ace-tag` is that mark, mirrored about
+the roll from `.ace-prov`. Both are in `cardSig()`, because **a card whose signature omits
+something it draws never repaints for it** — and a tag arrives seconds after the filament. An ACE **bay** is a different subsystem: bays carry no tags
+here (`rfid: 0`, `head_tag_seen: {}`), their identity is multiACE's override store, and
+writing one from the panel is unbuilt — so **every bay wears the eye**, whatever named it,
+and only the PROV *word* still says which source it was. A pencil goes back on a bay when
+`ACE_SPOOL_ASSIGN` does.
+
 **UI copy says what a control is or what state it is in — and stops there.** No
 explaining what multiACE is in a tooltip, no reasoning in a dialog. The explanations
 belong in `docs/u1-webui/`, and a reader of a hover has not asked for one.
+
+**A colour with alpha zero is an absence, not black.** `cssColor` reads the alpha in both
+forms the wire uses. multiACE wipes every stock-feeder head's identity when the machine
+enters head mode — `_clear_filament_display()` sends `FILAMENT_TYPE="" VENDOR=""
+FILAMENT_COLOR_RGBA=00000000` — and the filament stays physically in the head while it
+happens. It does **not** touch `filament_detect`, so on a tagged head the identity is
+still there in the other object: `filaments()` falls back to the spool's own record when
+the working copy has none (`fromTag` says which was used), which is multiACE's
+`rfid → override → derived` applied one level up. The feeder box then has a **bay's three
+states**: named, occupied-and-unnamed (`#B7BDC6` and `?`, for a wiped head with no tag),
+empty (the checkerboard). Occupancy comes from `filament_exist` and `headLoaded()`, never
+from the identity that was just wiped. Opaque black is `000000FF` and still draws black.
 
 **And it says it in words, not in the machine's schema.** A *field* name (`channel_state`,
 `print_task_config`, `hum_level2`) says where the page read something, which is the page's
@@ -173,8 +207,15 @@ names in an override store. Orca's Prepare page polls the merged `/multiace/api/
 from C++ and saw filament the panel drew as `?`. nginx serves `/multiace/` with no CORS
 header, but Moonraker on :7125 reflects the Origin and the store is a file under its
 `config` root, so the page reads it directly: `syncBays()` → `store.aceBays`, merged with
-multiACE's own precedence **rfid → override → derived**. Four things that are in
-the code because hardware said so: **`head_ace` does not answer "what feeds this head"**
+multiACE's own precedence **rfid → override → derived**. Five things that are in
+the code because the machine or the plugin said so: **a swap is `ACE_UNLOAD_HEAD` then
+`ACE_LOAD_HEAD`, never `ACE_SWAP_HEAD`** — that one is the *print's* swap, it opens with a
+`G1 Z2` hop off the part and Klipper refuses it on an unhomed Z, which is why a swap from
+the panel said "Must home Z axis first" when a load and an unload never do; multiACE's own
+dashboard and HelixScreen both send the pair, and neither half moves Z. (The background
+family is not the same case and is unchanged: there is no `ACE_BG_LOAD`, and
+`ace_bg_swap.py` emits no motion G-code at all — it drives the parked head's extruder
+through a private trapq.) **`head_ace` does not answer "what feeds this head"**
 (resolve `head_manual` → `head_feeder` → `head_ace`, in that order); **no bay has a
 level** — `spool_binding` is empty, so a disc is a colour and not a gauge; and **an `ok` is
 not a yes** — `ACE_SET_AUTO_DRY THRESHOLD=` returns `ok` and changes nothing, and

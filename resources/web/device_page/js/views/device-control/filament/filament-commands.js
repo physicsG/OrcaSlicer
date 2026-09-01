@@ -189,7 +189,10 @@ export function create(deps) {
    * which is a real gate on a surface where one of the macros purges ~60 mm onto the bed.
    */
   const VERB_MACROS = new Set([
-    ACE.LOAD_HEAD, ACE.UNLOAD_HEAD, ACE.SWAP_HEAD,
+    // ACE_SWAP_HEAD is NOT here and Swap is still offered: a swap someone asks for is an
+    // ACE_UNLOAD_HEAD then an ACE_LOAD_HEAD, both of which are. The reason is in
+    // aceVerbs() - that macro is the print's, and it opens with a Z hop.
+    ACE.LOAD_HEAD, ACE.UNLOAD_HEAD,
     ACE.BG_SWAP, ACE.BG_UNLOAD, ACE.BG_SET_HEAD,
     // The U1's own, for a head with no ACE behind it to send an ACE macro to.
     FEEDER.FEED,
@@ -236,6 +239,11 @@ export function create(deps) {
    * `!! Must home Z axis first` and set `last_swap_result.status` to `error`, and the RPC
    * reply carried neither. Moonraker's console history has the line, on the same host and
    * port this page already reads the override store from.
+   *
+   * That particular sentence is history - the panel does not send the macro that raised
+   * it any more (see the Swap verb in aceVerbs) - but the shape of the failure is not: a
+   * macro that declines is an `ok` here, and the console is the only place the reason
+   * exists.
    */
   async function printerSaid() {
     try {
@@ -284,6 +292,10 @@ export function create(deps) {
         if (sawBusy && step && step.done) { dlg.close(); render(); return; }
 
         // multiACE's own verdict, which arrives in a second rather than in twenty-five.
+        //
+        // Only `ACE_SWAP_HEAD` writes `last_swap_result`, and the panel stopped sending
+        // it - so what this now catches is the PRINT's own swap failing underneath a verb
+        // someone started, which dooms that verb too. Kept for that, not for ours.
         const ls = state.ace().lastSwap;
         if (ls && JSON.stringify(ls) !== wasSwap && ls.status && ls.status !== 'ok') {
           await giveUp(`The ${kind} failed.`);
@@ -332,7 +344,9 @@ export function create(deps) {
   }
 
   function runVerb(v) {
-    if (!VERB_MACROS.has(v.macro)) {
+    // EVERY macro the verb would send, not just the one it is named for. A swap sends
+    // two, and checking one of them is not a gate.
+    if (!(v.macros || [v.macro]).every((m) => VERB_MACROS.has(m))) {
       setStatus(`${v.name} is not available`, 'err');
       return Promise.resolve(false);
     }

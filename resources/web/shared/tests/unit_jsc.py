@@ -232,6 +232,104 @@ def main():
           js(ctx3, "JSON.stringify(st.filaments().map(f=>cssColor(f.color)))").to_string()
           == '["#F44336","#FFFFDC","#FFFFFF","#632C2C"]')
 
+    # --- a transparent colour is an absence, and is not black ---------------
+    #
+    # multiACE wipes a feeder head's identity when the machine enters head mode:
+    #   SET_PRINT_FILAMENT_CONFIG FILAMENT_TYPE="" VENDOR="" FILAMENT_COLOR_RGBA=00000000
+    # `00000000` is RRGGBBAA with alpha ZERO. The alpha was being sliced off and thrown
+    # away, so it came back "#000000" and four spools were painted black. Reported as
+    # "switching between ACE modes switches filaments, blacks them".
+    print("\n== a colour the machine did not give ==")
+    cc = lambda v: js(ctx3, f"String(cssColor({v}))").to_string()
+    check("a fully transparent RRGGBBAA is no colour at all",
+          cc('"00000000"') == "null", f'got {cc(chr(34) + "00000000" + chr(34))}')
+    check("and so is an ARGB integer with no alpha",
+          cc("0") == "null" and cc("0x0000FF00") == "null",
+          f'got {cc("0")} and {cc("0x0000FF00")}')
+    # The whole point of reading the alpha rather than the RGB: opaque black IS a colour,
+    # and black filament is the commonest there is.
+    check("opaque black is still black, in both forms",
+          cc('"000000FF"') == "#000000" and cc("0xFF000000") == "#000000",
+          f'got {cc(chr(34) + "000000FF" + chr(34))} and {cc("0xFF000000")}')
+    check("a six-digit value has no alpha to read and is taken as written",
+          cc('"000000"') == "#000000" and cc('"8FA7C8"') == "#8FA7C8")
+    check("and a partly transparent colour is still that colour",
+          cc('"3366CC80"') == "#3366CC", f'got {cc(chr(34) + "3366CC80" + chr(34))}')
+
+    # --- who owns a slot's identity, and who may change it ----------------
+    #
+    # Both are the PRINTER's answers, per slot, and both were on the subscription and
+    # unread while the panel decided the same question off the RFID tag. They are not
+    # the same question: the payload below is 811002511261022618B3 as it stood on
+    # 2026-08-28, where head 2 carries a decodable tag (`filament_detect` reads Forshape
+    # PLA Silk, OFFICIAL, with a CARD_UID) and the machine still says it may be edited,
+    # because the record in use has been overridden - `filament_sub_type` there is `""`
+    # where the tag says `Silk`.
+    print("\n== who may edit a slot, and who decides ==")
+    TAGGED = {"MAIN_TYPE": "PLA", "SUB_TYPE": "Silk", "VENDOR": "Forshape",
+              "ARGB_COLOR": 4294967260, "CARD_UID": [4, 44, 238, 174],
+              "CARD_TYPE": "NTAG", "OFFICIAL": True}
+    NOTAG = {"MAIN_TYPE": "NONE", "SUB_TYPE": "NONE", "VENDOR": "NONE"}
+    measured = {
+        "print_task_config": {
+            "filament_type": ["PLA", "PLA", "NONE", "PETG"],
+            "filament_vendor": ["Jayo", "Forshape", "NONE", "Kingroon"],
+            "filament_sub_type": ["Marble", "", "NONE", "Basic"],
+            "filament_color_rgba": ["F44336FF", "FFFFDCFF", "FFFFFFFF", "8FA7C8FF"],
+            "filament_exist": [True, True, False, True],
+            "filament_official": [True, False, False, False],
+            "filament_edit": [False, True, False, True]},
+        # Heads 1 AND 2 carry a tag. Only head 1's record is the tag's.
+        "filament_detect": {"info": [dict(TAGGED, VENDOR="Jayo", SUB_TYPE="Marble"),
+                                     TAGGED, NOTAG, NOTAG]},
+    }
+    js(ctx3, f"var m=new MachineState(); m.apply({json.dumps(measured)});")
+    fl = lambda expr: js(ctx3, f"JSON.stringify(m.filaments().map(f=>{expr}))").to_string()
+    check("a tag is read on both heads that carry one",
+          fl("!!f.tag") == "[true,true,false,false]", f"got {fl('!!f.tag')}")
+    check("but only one of them is the machine's own record",
+          fl("f.official") == "[true,false,false,false]", f"got {fl('f.official')}")
+    # The machine's own permission, verbatim. Its firmware computes it as
+    #     allowed_edit = filament_exist[ch] and not filament_official[ch]
+    # and enforces the other half in SET_PRINT_FILAMENT_CONFIG, which raises "official
+    # filament, not configurable!" without FORCE=1.
+    check("the machine's permission is carried as the machine states it",
+          fl("f.allowedEdit") == "[false,true,false,true]",
+          f"got {fl('f.allowedEdit')}")
+    # And the page is STRICTER than it, deliberately. That permission is a LATCH: the
+    # same firmware function sets `filament_official[ch] = False` on every write, so one
+    # edit unlocks a tagged spool until the tag is read again. Head 2 is sitting in that
+    # state - an NTAG reading Forshape PLA Silk is physically present, print_task_config
+    # says sub-type "" - and following the latch alone offers to type over a spool that
+    # reverts on its next load.
+    check("but a spool that carries a tag is not edited from this page",
+          fl("f.editable") == "[false,false,false,true]", f"got {fl('f.editable')}")
+    check("the head with a tag and an unlocked latch is the case that separates them",
+          js(ctx3, "JSON.stringify([m.filaments()[1].tag !== null,"
+                   " m.filaments()[1].allowedEdit, m.filaments()[1].editable])")
+            .to_string() == "[true,true,false]",
+          "reported from the panel: it has an rfid icon and is still editable")
+    # Stricter, never more permissive: the machine's own refusals still stand on their
+    # own reason, so an untagged official slot and an empty one stay closed.
+    check("and the machine's own refusals are not loosened by that",
+          js(ctx3, "m.filaments().every(f => f.editable ? f.allowedEdit : true)")
+            .to_boolean())
+    check("an empty slot is not editable, because there is nothing there",
+          js(ctx3, "m.filaments()[2].editable === false").to_boolean())
+    check("the untagged head is the only one this page will edit",
+          js(ctx3, "JSON.stringify(m.filaments().map((f,i)=>f.editable?i:null)"
+                   ".filter(x=>x!==null))").to_string() == "[3]",
+          "the ACE-fed head: no tag, and the machine allows it")
+
+    # A firmware that does not report the field at all must not read as "edit anything".
+    js(ctx3, "var n=new MachineState(); n.apply({print_task_config:{"
+             "filament_type:['PLA','PLA'],filament_exist:[true,true]},"
+             "filament_detect:{info:[" + json.dumps(TAGGED) + ",{MAIN_TYPE:'NONE'}]}});")
+    check("with no permission bit reported, the tag is the fallback and is named as one",
+          js(ctx3, "JSON.stringify(n.filaments().slice(0,2).map(f=>f.allowedEdit))")
+            .to_string() == "[false,true]",
+          "an absent `filament_edit` must not read as 'everything is editable'")
+
     # --- which toolhead is live -------------------------------------------
     print("\n== the active toolhead follows the live stream ==")
     parked = {("extruder" if i == 0 else f"extruder{i}"): {"state": "PARKED"}
@@ -386,6 +484,27 @@ def main():
     check("a different bay is a SWAP, because something is already loaded",
           names(verbs(3, 0, True))[0] == "Swap",
           f"got {names(verbs(3, 0, True))}")
+    # And a swap is an unload then a load, NOT ACE_SWAP_HEAD.
+    #
+    # That macro is the print's: it opens with `G91 / G1 Z2 F600 / G90` to lift the nozzle
+    # off the part, and Klipper refuses a Z move on an unhomed Z - so a swap from the
+    # panel on a machine at `homed_axes: "xy"` answered `ok`, printed
+    # `!! Must home Z axis first` and did nothing. Neither half of the pair moves Z, and
+    # the pair is what multiACE's own dashboard and HelixScreen both send for this verb.
+    check("and it is sent as an unload then a load, which need no homed Z",
+          verbs(3, 0, True)[0][2]
+          == "ACE_UNLOAD_HEAD HEAD=3\nACE_LOAD_HEAD HEAD=3 ACE=0 SLOT=0",
+          f"got {verbs(3, 0, True)[0][2]!r} - ACE_SWAP_HEAD is the print's swap and "
+          f"opens with a Z hop")
+    # The unload cannot be folded in: ACE_LOAD_HEAD's own guard refuses a head that
+    # already holds filament rather than swapping for you.
+    check("the unload comes first, because a load alone would be refused",
+          verbs(3, 0, True)[0][2].splitlines()[0].startswith("ACE_UNLOAD_HEAD"),
+          f"got {verbs(3, 0, True)[0][2]!r}")
+    # A load is still one line - only the swap grew a second.
+    check("and a load on an empty head is still the one macro",
+          verbs(3, 0, False)[0][2] == "ACE_LOAD_HEAD HEAD=3 ACE=0 SLOT=0",
+          f"got {verbs(3, 0, False)[0][2]!r}")
     # An ACE head is empty when the OBJECT says so - `head_source` naming no slot for it -
     # not when a caller passes loaded=false. The first cut of this check passed the flag
     # and asserted a Load, and the model was right to answer Swap: the machine still said

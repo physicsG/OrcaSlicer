@@ -66,39 +66,56 @@
 
       const other = [0, 1, 2, 3].find((k) => k !== fedBay);
       bays[other].click(); await wait(120);
-      const verbs = $$('.dialog .verb').map((e) => ({
-        name: e.querySelector('.verb-name').textContent,
-        cmd: e.querySelector('.verb-cmd').textContent,
-        off: e.disabled,
-      }));
-      note('bay sheet offers: ' + verbs.map((v) => `${v.name}${v.off ? ' (off)' : ''}`).join(', '));
+      // A swap is not offered on a bay either: it moves a TOOLHEAD from one bay to
+      // another, and the toolhead is what every macro it sends addresses. The sheet says
+      // what state the head is in and offers nothing; the verb is on the head's sheet.
+      say('another bay offers no verb either, and says why',
+          [$$('.dialog .verb').length, /is loaded/.test($('.dialog').textContent)].join('/'),
+          '0/true');
+      shut(); await wait(80);
+
+      /* ---- the lines that would go out, with this machine's own indices ----- */
+      // From the MODEL, not the DOM: the panel puts no macro name on screen (the trace
+      // pane is where the wire belongs), and this is the one place what would be sent can
+      // be checked against a real machine's indices rather than the simulator's.
+      const unitIx = ace.units[ace.heads[fedHead].unitIndex].index;
+      const verbs = P.multiACE.aceVerbs(ace, fedHead, other, P.state.headLoaded(fedHead));
+      note('for that bay: ' + verbs.map((v) => `${v.name}${v.off ? ' (off)' : ''}`).join(', '));
       say('a different bay offers the two that take a slot', verbs.length, 2);
-      say('the first is a swap, because that head is loaded',
-          verbs[0].name.split(' — ')[0], 'Swap');
-      say('and it names the line it would send, with this machine`s own indices',
-          verbs[0].cmd, `ACE_SWAP_HEAD HEAD=${fedHead} ACE=0 SLOT=${other}`);
-      say('the background one is refused on this machine',
-          verbs[1].off, true);
+      say('the first is a swap, because that head is loaded', verbs[0].name, 'Swap');
+      /*
+       * And NOT `ACE_SWAP_HEAD`. That macro is the PRINT's swap: it opens with
+       * `G91 / G1 Z2 F600 / G90` to lift the nozzle off the part, and Klipper refuses a Z
+       * move on an unhomed Z - so on this machine, sitting at `homed_axes: "xy"`, it
+       * answered `ok`, printed `!! Must home Z axis first` and did nothing. Neither
+       * ACE_UNLOAD_HEAD nor ACE_LOAD_HEAD moves Z, which is why the pair is what
+       * multiACE's own dashboard and HelixScreen both send for this verb.
+       */
+      say('and it goes out as an unload then a load, which need no homed Z',
+          verbs[0].cmd, `ACE_UNLOAD_HEAD HEAD=${fedHead}\n`
+                        + `ACE_LOAD_HEAD HEAD=${fedHead} ACE=${unitIx} SLOT=${other}`);
+      note('toolhead.homed_axes right now: '
+           + JSON.stringify((P.state.toolhead() || {}).homedAxes)
+           + ' — a swap must not care, and this is the machine it did care on');
+      say('the background one is refused on this machine', !!verbs[1].off, true);
       say('and names ACE_BG_SET_HEAD, which is what would lift it',
           verbs[1].cmd, `ACE_BG_SET_HEAD HEAD=${fedHead} ENABLE=1`);
-      say('with a control that would send exactly that', !!$('.verb-gate'), true);
-      shut(); await wait(80);
 
       /* ---- the card menu, on the same head --------------------------------- */
       card.querySelector('.ace-more').click(); await wait(120);
       const items = $$('.menu .menu-item').map((b) => ({
-        label: b.querySelector('span:not(.mcmd)').textContent,
-        cmd: (b.querySelector('.mcmd') || {}).textContent,
+        label: b.querySelector('span').textContent,
+        title: b.title,
         muted: b.classList.contains('is-muted'),
       }));
       note('card menu: ' + items.map((i) => `${i.label}${i.muted ? ' (muted)' : ''}`).join(', '));
       say('the menu carries the verbs that take no slot',
           items.filter((i) => /nload/.test(i.label)).map((i) => i.label).join(','),
           'Unload and retract,Background unload');
-      say('an ACE unload retracts into the bay, which a feeder cannot',
-          items.find((i) => i.label === 'Unload and retract').cmd, 'ACE_UNLOAD_HEAD');
-      say('and the refused one names its gate, not the macro it cannot run',
-          items.find((i) => i.label === 'Background unload').cmd, 'ACE_BG_SET_HEAD');
+      // No macro chips on any of them: the reason is in the row's own hover, in words.
+      say('and the refused one gives its reason in words, not in G-code',
+          items.find((i) => i.label === 'Background unload').title,
+          'Background unload — not enabled for this toolhead');
       document.body.click(); await wait(80);
 
       /* ---- the toolhead, on the machine ------------------------------------ */

@@ -65,20 +65,44 @@ const HEAD_SCALE = 0.5;
 const SENSOR = { at: 'Filament loaded', none: 'No filament loaded', err: 'Feed error' };
 
 /**
- * Where a bay's name came from, and therefore what may be done to it.
+ * Where a bay's name came from - and every one of them is a READING here.
  *
- * A spool that identified itself over RFID carries vendor, type, colour and its own
- * temperatures, and none of that is ours to overwrite - so it gets an EYE. A value typed
- * in, or a bay that is occupied and unnamed, gets a PENCIL. Bambu draws exactly this
- * distinction on its own slots and `.slot` already ships the pencil.
+ * The word still says which source it is, because multiACE's precedence
+ * (`rfid → override → derived`) is the thing worth knowing about a bay. The GLYPH does
+ * not vary with it any more: a pencil is an offer to edit, and naming a bay from this
+ * panel is not built - reading is (`syncBays()` merges the override store), writing is
+ * tier 2b and wants `ACE_SPOOL_ASSIGN`. Three of these wore the pencil and nothing
+ * behind it, which is a promise on the face of the panel that the panel cannot keep.
+ *
+ * The bay's own web UI is where a name is typed today, and this page does not pretend
+ * otherwise. When 2b lands, `override`, `derived` and `unknown` are the three that get
+ * the pencil back; `rfid` never does - a tag is the hardware's own record.
  */
 const PROV = {
-  rfid:     { glyph: 'eye',    word: 'spool tag · read only' },
-  override: { glyph: 'pencil', word: 'named in multiACE' },
-  derived:  { glyph: 'pencil', word: 'from the loaded filament' },
-  typed:    { glyph: 'pencil', word: 'typed in' },
-  unknown:  { glyph: 'pencil', word: 'not named' },
+  rfid:     { glyph: 'eye', word: 'spool tag · read only' },
+  override: { glyph: 'eye', word: 'named in multiACE' },
+  derived:  { glyph: 'eye', word: 'from the loaded filament' },
+  typed:    { glyph: 'eye', word: 'typed in' },
+  unknown:  { glyph: 'eye', word: 'not named' },
 };
+
+/**
+ * The same question for a HEAD, where the machine answers it itself.
+ *
+ * A bay's provenance is multiACE's (above). A head's is the printer's, and it publishes
+ * the verdict: `print_task_config.filament_edit`. This asks that and nothing else.
+ *
+ * It used to ask `f.tag` - is there an RFID tag on the spool - and that is a DIFFERENT
+ * question. Measured on 811002511261022618B3: head 2 carries a tag, reads
+ * `filament_official: false, filament_edit: true`, and its record has been overridden.
+ * The panel drew it read-only and then opened an editor on it anyway, which is how the
+ * mark and the click came to disagree in both directions at once.
+ */
+function headProv(f) {
+  return f.editable
+    ? { glyph: 'pencil', word: 'can be edited' }
+    : { glyph: 'eye',    word: f.tag ? 'spool tag · read only' : 'read only' };
+}
 
 /* ---------------------------------------------------------------- *
  * the panel body
@@ -132,11 +156,11 @@ function renderSlots(root, slots, handlers) {
       }
       slot.appendChild(dot);
       slot.appendChild(el('div', 'bar', f.loaded ? f.type : '/'));
-      // A spool that identified itself is worth distinguishing from one typed in by
-      // hand, and the mark has to agree with what the click does: a tagged spool opens
-      // read-only, so it wears the EYE. Every slot wore the pencil, tagged or not.
+      // The mark has to agree with what the click does, and what the click may do is the
+      // MACHINE's answer - see headProv(). The RFID chip is a separate fact and keeps its
+      // own badge: a tag can be present on a spool whose record is editable anyway.
       if (f.tag) slot.appendChild(el('span', 'slot-tag', 'RFID'));
-      const mark = f.tag ? glyph('eye') : icon('iconFilamentEdit', 'pencil');
+      const mark = f.editable ? icon('iconFilamentEdit', 'pencil') : glyph('eye');
       mark.classList.add('pencil');
       slot.appendChild(mark);
       slot.onclick = () => editSlot(i, f, handlers);
@@ -196,6 +220,18 @@ function cardSig(ace, slots, pending, i, overrides) {
     (slots[i] && slots[i].feed && slots[i].feed.channelState) || '',
     ace.bgHeads.join(','),
     sp ? [sp.material || sp.type, sp.subType, sp.vendor, sp.color].join(',') : '-',
+    /*
+     * The two marks on the roll, which are not derivable from anything above it.
+     *
+     * A card whose signature omits something it DRAWS simply never repaints for it, and
+     * this omitted both: a tag arriving (the reader is asynchronous - it lands seconds
+     * after the filament does) and the machine flipping a slot between its own record
+     * and an overridden one. Neither moves material, sub-type, vendor or colour, so the
+     * line above cannot stand in for them, and the card kept whatever pair it was built
+     * with. Caught by a check that applied a tag to a drawn panel and found the mark
+     * missing while the menu - rebuilt on every click - had it.
+     */
+    slots[i] ? `${slots[i].tag ? 1 : 0}${slots[i].editable ? 1 : 0}` : '-',
     u ? [u.id, u.model, u.humidity, u.temperature, u.dryer.running,
          u.dryer.doneMin, u.dryer.totalMin,
          mergeAceBays(u, overrides)
@@ -253,9 +289,14 @@ function card(ace, slots, ctx, i) {
 
   const body = el('div', 'ace-body');
   const spool = unit ? h.loaded : slots[i];
-  body.appendChild(unit ? cabinet(ctx, i, unit, bays, h.bay) : feeder(ctx, i, src.value, spool));
+  // Whether anything is THERE is a different question from whether it has a name, and the
+  // feeder box needs both - see the note in feeder(). Asked once, from the field that
+  // answers it, rather than inferred from the identity that may have just been wiped.
+  const occupied = headLoaded(ace, slots, i);
+  body.appendChild(unit ? cabinet(ctx, i, unit, bays, h.bay)
+                        : feeder(ctx, i, src.value, spool, occupied));
   body.appendChild(el('div', 'ace-lane'));
-  body.appendChild(head(slots[i], i, unit, ctx, headLoaded(ace, slots, i)));
+  body.appendChild(head(slots[i], i, unit, ctx, occupied));
 
   // The tube layer paints BEHIND the cabinet and is appended last, so it also paints
   // over the toolhead's inlet - which is where it is meant to land.
@@ -456,8 +497,37 @@ function bay(ctx, i, u, b, fed) {
   node.appendChild(disc);
   node.appendChild(el('span', 'ace-chip', b.occupied ? (b.material || '?') : '/'));
   if (b.occupied) node.appendChild(provMark(b));
+  // multiACE's own answer for a bay. No bay on the measured machine has a tag - every
+  // raw slot reads `rfid: 0` - so this is drawn from the model rather than from a
+  // sighting, and it is the same mark a feeder spool gets for the same reason.
+  if (b.occupied && b.source === 'rfid') {
+    node.appendChild(tagMark([b.material, b.subType].filter(Boolean).join(' ') || b.addr));
+  }
   node.onclick = () => baySheet(ctx, i, u, b);
   return node;
+}
+
+/**
+ * "This spool identified itself over the air", which is a DIFFERENT fact from whether
+ * its record may be edited - and the one the panel stopped drawing.
+ *
+ * The four-slot form has always carried it as a green `RFID` word under the chip, and
+ * that shape has the room for it. The ACE card does not: a bay is 62 px wide and the
+ * chip is already an ellipsis away from cutting off a material name. So it is the same
+ * fact at the same weight as the provenance mark, mirrored to the other side of the
+ * roll, absolute like that one so it costs no layout.
+ *
+ * Why it needs its own mark at all: the eye used to be driven by the tag, so a tagged
+ * head got one for free. It is driven by the machine's `filament_edit` now - which is
+ * right, and measured - and on a head whose tagged record has been overridden that
+ * leaves a pencil and nothing at all saying a tag is there. Reported from the panel:
+ * Toolhead 2 carries an NTAG reading Forshape PLA Silk and showed no sign of it.
+ */
+function tagMark(what) {
+  const w = el('span', 'ace-tag');
+  w.appendChild(glyph('tag'));
+  w.title = `${what} · carries an RFID tag`;
+  return w;
 }
 
 function provMark(b) {
@@ -477,7 +547,7 @@ function provMark(b) {
  * change horizontal padding and nothing else, or a feeder's spool stops sitting at an
  * ACE bay's exact height.
  */
-function feeder(ctx, i, source, spool) {
+function feeder(ctx, i, source, spool, occupied) {
   const box = el('div', 'ace-box');
   const f = el('div', 'ace-feed');
   const top = el('div', 'ace-feed-top');
@@ -487,22 +557,53 @@ function feeder(ctx, i, source, spool) {
   const what = source === 'manual' ? 'Hand-fed' : 'Stock feeder';
   const col = spool ? cssColor(spool.color) : null;
   const material = spool ? (spool.material || spool.type) : null;
+  /*
+   * Three states, exactly as a BAY has had all along: named, occupied-and-unnamed, empty.
+   * This box had two - it painted whatever colour it was handed, or the checkerboard -
+   * and the middle one is not hypothetical here.
+   *
+   * multiACE clears a feeder head's identity when the machine enters head mode
+   * (`_clear_filament_display`: empty type, empty vendor, `FILAMENT_COLOR_RGBA=00000000`)
+   * while the filament stays physically in the head. That painted a black spool, because
+   * the transparent colour read as black - see cssColor, fixed there. With the colour
+   * correctly ABSENT it would then have drawn the checkerboard, which is this page's word
+   * for EMPTY and a lie in the other direction.
+   *
+   * So: occupied and unnamed is the neutral `#B7BDC6` and a `?` - the same drawing and
+   * the same two values a bay in that state has always used.
+   */
+  const unnamed = !!occupied && !col && !material;
   b.title = material ? `${what}: ${[material, spool.vendor].filter(Boolean).join(' · ')}`
-                     : `${what}: nothing detected`;
+          : unnamed ? `${what}: occupied, not named`
+                    : `${what}: nothing detected`;
   b.setAttribute('aria-label', b.title);
+  if (unnamed) b.classList.add('is-unknown');
   const disc = el('span', 'ace-disc');
   if (col) {
     disc.dataset.loaded = '1';
     disc.style.background = col;
     disc.style.color = isDarkColor(col) ? '#fff' : '#333';
+  } else if (unnamed) {
+    // Never the checkerboard: that is EMPTY, and something is in the head.
+    disc.dataset.loaded = '1';
+    disc.style.background = '#B7BDC6';
   }
   b.appendChild(disc);
-  b.appendChild(el('span', 'ace-chip', material || '/'));
+  b.appendChild(el('span', 'ace-chip', material || (unnamed ? '?' : '/')));
   // The spool at the head gets the same mark a bay does, and for the same reason: a tag
   // can be read and not written. `.slot` already drew the pencil half of this.
   if (material) {
-    b.appendChild(provMark({ material, vendor: spool.vendor,
-                             source: spool.tag ? 'rfid' : 'typed' }));
+    const p = headProv(spool);
+    const w = el('span', 'ace-prov');
+    w.appendChild(glyph(p.glyph));
+    w.title = `${[material, spool.vendor].filter(Boolean).join(' · ')} · ${p.word}`;
+    b.appendChild(w);
+    // The other side of the roll, and the other question: a tag on the spool is the
+    // spool's fact, and it is drawn whether or not the record may be edited.
+    if (spool.tag) {
+      b.appendChild(tagMark([spool.tag.vendor, spool.tag.type, spool.tag.subType]
+        .filter(Boolean).join(' ') || 'This spool'));
+    }
   }
   b.onclick = () => editSlot(i, spool || {}, ctx.handlers);
   row.appendChild(b);
@@ -682,7 +783,14 @@ function openHeadMenu(anchor, ace, ctx, i, unit) {
   const f = slots[i];
   const loaded = headLoaded(ace, slots, i);
   const spool = loaded ? (unit ? h.loaded || f : f) : null;
-  const tagged = !!(spool && (spool.rfid || spool.tag));
+  /*
+   * Off the HEAD's record, not off `spool`.
+   *
+   * `spool` may be the bay for an ACE-fed head, and the row opens the head's Materials
+   * Setting - `filaments()[i]` - so asking the bay whether the head may be edited would
+   * be two different slots answering as one.
+   */
+  const editable = !!f.editable;
 
   // The same list the bay sheet reads, filtered the other way: the verbs that take no
   // SLOT= have nothing to choose, so they belong here and the slotted ones do not.
@@ -710,12 +818,12 @@ function openHeadMenu(anchor, ace, ctx, i, unit) {
   }
   items.push(null);
   items.push({
-    // An EYE for a spool that identified itself and a PENCIL for one that did not, which
-    // is the same pair the bay marks carry. The row said "View this filament" beside the
-    // edit pencil, so the label and the icon disagreed about which of the two it was.
-    label: tagged ? 'View this filament' : 'Edit this filament…',
-    glyph: glyph(tagged ? 'eye' : 'pencil'),
-    title: tagged ? 'Read only — the spool carries its own record' : null,
+    // View or edit, as the MACHINE has it - and now the sheet obeys the same answer, so
+    // the label, the icon and what opens are one decision. This asked whether the spool
+    // had a tag, which is a different question, and then opened an editor either way.
+    label: editable ? 'Edit this filament…' : 'View this filament',
+    glyph: glyph(editable ? 'pencil' : 'eye'),
+    title: editable ? null : 'Read only — this is the spool’s own record',
     onClick: () => editSlot(i, ctx.state.filaments()[i], ctx.handlers),
   });
   openMenu(anchor, items, { head: `Toolhead ${i + 1}` });
@@ -815,9 +923,9 @@ export function aceModeLabel(ctx) {
  *
  * A SWAP is not offered here. It reads as an operation on the filament - "swap this
  * spool" - when what it does is move a TOOLHEAD from one bay to another, and the toolhead
- * is the thing it addresses (`ACE_SWAP_HEAD HEAD=n`). The toolhead's own sheet brings
- * every bay to it and labels each with what it would do, which is the same choice made
- * where the target is named. Loading an empty head from a bay stays: the bay is the
+ * is the thing it addresses: both macros it sends take `HEAD=n`. The toolhead's own sheet
+ * brings every bay to it and labels each with what it would do, which is the same choice
+ * made where the target is named. Loading an empty head from a bay stays: the bay is the
  * argument and there is no other end to it.
  */
 function baySheet(ctx, i, u, b) {
@@ -1206,12 +1314,28 @@ function moduleBadge() {
   return s;
 }
 
-/** The eye and the pencil, inline so they take the mark's own colour on hover. */
+/** The eye, the pencil and the tag, inline so they take the mark's own colour on hover. */
 function glyph(kind) {
   const s = svg('svg', { width: 13, height: 13, viewBox: '0 0 20 20',
                          'aria-hidden': 'true', class: 'ace-glyph' });
   const g = svg('g', { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.3,
                        'stroke-linejoin': 'round' });
+  if (kind === 'tag') {
+    /*
+     * The contactless arcs, which are what an RFID read looks like everywhere else.
+     *
+     * Not a luggage-tag outline: at 13 px a tag shape is a rounded rectangle with a dot
+     * in it and reads as nothing. Three arcs off a point read as "this was read over the
+     * air" at any size, which is the fact being drawn.
+     */
+    g.setAttribute('stroke-linecap', 'round');
+    g.appendChild(svg('circle', { cx: 5.6, cy: 10, r: 1.15, fill: 'currentColor',
+                                  stroke: 'none' }));
+    [4.2, 7.6, 11].forEach((r) => g.appendChild(svg('path', {
+      d: `M${5.6 + r * 0.5} ${10 - r * 0.866} A${r} ${r} 0 0 1 ${5.6 + r * 0.5} ${10 + r * 0.866}` })));
+    s.appendChild(g);
+    return s;
+  }
   if (kind === 'eye') {
     g.appendChild(svg('path', { d: 'M1.8 10S4.7 5.2 10 5.2 18.2 10 18.2 10 15.3 14.8 10 14.8 1.8 10 1.8 10Z' }));
     g.appendChild(svg('circle', { cx: 10, cy: 10, r: 2.4 }));
@@ -1238,6 +1362,19 @@ function glyph(kind) {
 function editSlot(index, f, handlers) {
   let type, vendor, color;
   const tag = f.tag;
+  /*
+   * Whether this sheet is a form or a reading, and the machine decides.
+   *
+   * It was always a form. A tagged head wore the eye, its menu row said *View this
+   * filament* and *Read only - the spool carries its own record*, the sheet headed a
+   * block *From the spool tag* - and then offered three editable fields and a Confirm
+   * that wrote over them. Every word promised one thing and the buttons did the other.
+   *
+   * `print_task_config.filament_edit` is the printer's own permission bit; see
+   * headProv(). Read-only here means no inputs at all, not disabled ones: there is
+   * nothing to type, so a field to type in is the wrong drawing.
+   */
+  const editable = !!f.editable;
 
   const row = (parent, label, value, hint) => {
     const r = el('div', 'ms-row');
@@ -1255,6 +1392,25 @@ function editSlot(index, f, handlers) {
       b.classList.add('materials');
 
       // --- identity ---
+      if (!editable) {
+        // The same three values the form would offer, as readings. `f.loaded` rather
+        // than a tag: an empty slot has nothing to show and nothing to change either.
+        const ro = el('div', 'ms-block');
+        if (f.loaded) {
+          row(ro, 'Filament', [f.type, f.subType].filter(Boolean).join(' ') || '—');
+          row(ro, 'Vendor', f.vendor || '—');
+          const c = row(ro, 'Color', cssColor(f.color) || '—');
+          const sw = el('span', 'ms-swatch');
+          sw.style.background = cssColor(f.color) || '#CCCCCC';
+          c.lastChild.prepend(sw);
+        } else {
+          ro.appendChild(el('div', 'ms-note', 'Nothing is loaded at this toolhead.'));
+        }
+        b.appendChild(ro);
+        buildRest(b);
+        return;
+      }
+
       const id = el('div', 'ms-block');
       const tRow = el('label', 'field');
       tRow.appendChild(el('span', 'field-label', 'Filament'));
@@ -1297,6 +1453,24 @@ function editSlot(index, f, handlers) {
       id.appendChild(cRow);
       b.appendChild(id);
 
+      buildRest(b);
+    },
+    // A sheet that only tells you something offers Close alone: Cancel and Confirm are
+    // both wrong words for a reading, and `cancel: false` is what the dryer's own
+    // read-only sheet uses.
+    cancel: editable,
+    confirmLabel: editable ? 'Confirm' : 'Close',
+    onConfirm: () => {
+      if (!editable) return true;
+      return handlers.setFilament(index, type.value.trim(), color.value,
+                                  vendor.value.trim());
+    },
+  });
+
+  // Everything below the identity, which is read-only in both shapes: the tag's own
+  // temperatures are the spool's, pressure advance is Klipper's calibration, and the
+  // feed path is a reading of where the filament is.
+  function buildRest(b) {
       // --- what the spool says about itself ---
       if (tag) {
         b.appendChild(el('h4', 'ms-head', 'From the spool tag'));
@@ -1340,11 +1514,7 @@ function editSlot(index, f, handlers) {
         }
         b.appendChild(fp);
       }
-    },
-    confirmLabel: 'Confirm',
-    onConfirm: () => handlers.setFilament(index, type.value.trim(), color.value,
-                                          vendor.value.trim()),
-  });
+  }
 }
 
 /* ---- small things -------------------------------------------------- */

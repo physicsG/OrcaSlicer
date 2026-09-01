@@ -163,6 +163,29 @@ export class MachineState {
     const subs = arr('filament_sub_type');
     const rgba = arr('filament_color_rgba'), argb = arr('filament_color');
     const exists = arr('filament_exist');
+    /*
+     * Whether the machine considers this slot's identity ITS OWN, and whether it will
+     * let it be edited. Both are the printer's, per slot, and both were on the
+     * subscription and unread while the panel decided the same question from the RFID
+     * tag - which is not the same question.
+     *
+     * Measured on 811002511261022618B3, 2026-08-28:
+     *
+     *   head            0          1          2         3
+     *   vendor        Jayo     Forshape     NONE    Kingroon
+     *   sub_type     Marble        ""       NONE      Basic
+     *   filament_detect: a decodable tag?    yes       yes      no        no
+     *   filament_official                   true     FALSE   false     false
+     *   filament_edit                      false      TRUE   false      TRUE
+     *
+     * Head 1 is the case that settles it: it carries a physical tag (`filament_detect`
+     * reads Forshape PLA Silk, OFFICIAL, with a CARD_UID) and the machine still says
+     * `filament_edit: true`, because the record in use has been overridden - the
+     * sub-type there is `""` where the tag says `Silk`. **A tag present is not the same
+     * question as read-only**, and the panel was asking the wrong one.
+     */
+    const official = arr('filament_official');
+    const editable = arr('filament_edit');
 
     // The RFID tag, when there is one. `filament_detect.info` is one entry per slot in
     // slot order - TRAY is 0 on every entry, so it is the position that identifies the
@@ -173,18 +196,67 @@ export class MachineState {
     const tags = Array.isArray(det.info) ? det.info : [];
     const feed = this.feedChannels();
 
+    const named = (v) => (v && v !== 'NONE' ? v : null);
+
     return TOOLHEADS.map((key, i) => {
       const type = types[i];
       const tag = tags[i] || {};
       const tagged = tag.MAIN_TYPE && tag.MAIN_TYPE !== 'NONE';
       const ext = this.objects[key] || {};
+      /*
+       * The spool's own record, when the machine's working copy has none.
+       *
+       * `print_task_config` and `filament_detect` are two records of one slot and the
+       * first is not always filled: multiACE wipes it on every stock-feeder head when the
+       * machine enters head mode (`_clear_filament_display`: empty type, empty vendor,
+       * `FILAMENT_COLOR_RGBA=00000000`) and does NOT touch the tag. Measured on
+       * 811002511261022618B3 after cycling normal → multi → head:
+       *
+       *   head 0   ptc '' '' '00000000'   exist true   TAG Jayo PLA Marble, OFFICIAL
+       *   head 1   ptc '' '' '00000000'   exist true   TAG Forshape PLA Silk, OFFICIAL
+       *
+       * The panel drew both as "occupied, not named" while the identity was sitting in
+       * the other object, which is what was reported: two toolheads that had shown their
+       * filament went blank after a mode switch.
+       *
+       * This is multiACE's own precedence one level up - a tag beats a typed value -
+       * applied where it had not been: the tag is only a FALLBACK here, so a record
+       * someone set deliberately still wins while it exists.
+       */
+      const ptcType = named(type);
+      const fromTag = !ptcType && tagged;
       return {
         index: i,
-        type: (type && type !== 'NONE') ? type : null,
-        subType: (subs[i] && subs[i] !== 'NONE') ? subs[i] : null,
-        vendor: (vendors[i] && vendors[i] !== 'NONE') ? vendors[i] : null,
-        color: rgba[i] != null ? rgba[i] : argb[i],
-        loaded: exists[i] !== false && !!type && type !== 'NONE',
+        type: ptcType || (fromTag ? named(tag.MAIN_TYPE) : null),
+        subType: named(subs[i]) || (fromTag ? named(tag.SUB_TYPE) : null),
+        vendor: named(vendors[i]) || (fromTag ? named(tag.VENDOR) : null),
+        color: fromTag ? tag.ARGB_COLOR
+             : (rgba[i] != null ? rgba[i] : argb[i]),
+        // Where the identity on screen came from, so a caller need not re-derive it.
+        fromTag: !!fromTag,
+        // The machine says a slot HAS filament in `filament_exist`; the identity is a
+        // separate question and a wiped one does not make the slot empty. This read
+        // `!!type`, so a head the mode switch had blanked reported itself unloaded.
+        loaded: exists[i] !== false && !!(ptcType || tagged),
+        // The machine's own answer to "is this identity the spool's own record".
+        official: official[i] === true,
+        /*
+         * The machine's own PERMISSION, verbatim. Its firmware computes it as:
+         *
+         *     allowed_edit = False
+         *     if filament_exist[ch] and filament_official[ch] == False:
+         *         allowed_edit = True
+         *
+         * and enforces the other half in `SET_PRINT_FILAMENT_CONFIG`, which raises
+         * "official filament, not configurable!" without `FORCE=1`. So this is a real
+         * gate and not a hint - but it is a LATCH, see `editable` below.
+         *
+         * The fallback is for a firmware that does not report the field; on this one it
+         * is always there.
+         */
+        allowedEdit: editable[i] != null ? editable[i] === true
+                   : (exists[i] !== false && !!type && type !== 'NONE'
+                      && !(tag.MAIN_TYPE && tag.MAIN_TYPE !== 'NONE')),
         // from the tag - null when the spool carries none
         tag: tagged ? {
           vendor: tag.VENDOR !== 'NONE' ? tag.VENDOR : null,
@@ -204,7 +276,31 @@ export class MachineState {
         smoothTime: numOrNull(ext.smooth_time),
         feed: feed[i] || null,
       };
-    });
+    }).map((f) => Object.assign(f, {
+      /*
+       * What this PAGE will offer, which is deliberately stricter than the machine's
+       * permission: a spool that carries a tag is not edited from here, whatever the
+       * latch says.
+       *
+       * `allowedEdit` above is a latch, not a statement about the spool. Writing a slot
+       * sets `filament_official[ch] = False` in the same firmware function, so ONE edit
+       * unlocks a tagged spool permanently - until the tag is read again, which happens
+       * when the filament is next loaded. Head 2 of 811002511261022618B3 is sitting in
+       * exactly that state: an NTAG reading Forshape PLA **Silk** is physically there,
+       * `print_task_config` says PLA with sub-type `""`, and the machine will cheerfully
+       * take another write.
+       *
+       * Following the latch alone means the panel offers to type over a spool that will
+       * revert on its next load, and the record drifts further from the tag each time.
+       * So both must hold. A page may be more restrictive than a permission; it must
+       * never be more permissive, and this is never that - `allowedEdit` is still
+       * required, so an official or empty slot stays closed for the machine's own reason.
+       *
+       * Reported from the panel, on the real machine: "it has an rfid icon and is still
+       * editable, which it should not be."
+       */
+      editable: f.allowedEdit && !f.tag,
+    }));
   }
 
   /**
