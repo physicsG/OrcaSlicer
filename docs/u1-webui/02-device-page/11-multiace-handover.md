@@ -45,10 +45,15 @@ ACE 2 Pro on firmware V1.1.26. Steps 1-5 of the build order below are in
 `resources/web/device_page/`; step 6 turned out not to need the C++ it was waiting for
 (see *Tier 2 was wrong*).
 
-**The one to read first is *The bay identity the panel was missing***: the panel drew
-three of four bays as `?` on a machine that knew all four, because the `ace` object does
-not carry per-bay identity and multiACE's override store does. Found by comparing against
-what Orca's own Prepare page syncs.
+**The one to read first is now *[Start here: the panel has only ever been right in ONE of
+the three modes](#start-here-the-panel-has-only-ever-been-right-in-one-of-the-three-modes)***
+— everything here was measured in `head` mode, and `multi` changes what the numbers mean.
+It is the next session's work.
+
+After that, *The bay identity the panel was missing*: the panel drew three of four bays as
+`?` on a machine that knew all four, because the `ace` object does not carry per-bay
+identity and multiACE's override store does. Found by comparing against what Orca's own
+Prepare page syncs.
 
 **Four things the machine disagreed with, and every one answered `ok` first.** They are
 listed in full further down; the short version is that a macro accepting an argument
@@ -778,10 +783,204 @@ unmeasured; that still needs one real swap.
 
 ---
 
+## Start here: the panel has only ever been right in ONE of the three modes
+
+**This is the next session's work, and it is not a polish item.** Every measurement behind
+this panel was taken on a machine in **`head`** mode, and the model was written from those
+readings. `multi` and `normal` have never been observed at all — not on hardware, not in
+the simulator, which is hard-coded `mode: 'head'`. What follows is read out of multiACE's
+own source and cross-checked against HelixScreen, so it is evidence, but it is **not
+measurement** and it should be treated the way every other unmeasured claim in this
+document has been: confirmed on the machine before it is trusted.
+
+The short version: **in `multi` mode the panel will draw the wrong sources and offer loads
+the hardware cannot perform.** That second half is why this is first.
+
+### What the three modes actually are
+
+Off multiACE's own config comment, which is the clearest statement of it anywhere:
+
+> `head` mode = exactly ONE head is ACE-driven (fixed to ACE 0, e.g. via a 4→1 combiner so
+> that ACE's slots all feed one head); every OTHER head uses its stock side feeder. …
+> **0 ACE heads = normal, 1 = head, all = multi.**
+
+So a mode is not a display preference. It is *how many heads the ACE drives*, and it
+changes the physical wiring the numbers refer to.
+
+| | `normal` | `head` | `multi` |
+|---|---|---|---|
+| heads the ACE drives | none | one | all |
+| what a unit's four bays are | — | four spools for **one** head, a hub | one spool for **each** head |
+| `head_feeder` | ignored | **the** answer | ignored |
+| `head_ace` | ignored | **the** wiring | ignored — head *N* is ACE *N* |
+| `SLOT` defaults to | — | the head's armed slot | **`HEAD`** |
+| switching into it | reboot | live | live |
+
+### The three claims that break the current model
+
+All from `ace.py`, and all one-liners:
+
+```python
+def head_uses_ace(self, head):
+    if self.head_is_manual(head): return False
+    if self._ace_mode == 'head':  return not self.head_is_feeder(head)
+    return True                                  # multi/normal: EVERY head
+
+def head_ace_for(self, head):
+    if self._ace_mode != 'head':  return int(head)   # multi: head N is on ACE N
+    return int(self.head_ace.get(int(head), int(head)))
+```
+
+and in `cmd_ACE_LOAD_HEAD`, the non-head branch:
+
+```python
+slot = gcmd.get_int('SLOT', head)                # multi: bay s feeds head s
+```
+
+1. **`head_feeder` is consulted ONLY in head mode.** `headSource()` in
+   [`multiACE.js`](../../../resources/web/shared/js/multiACE.js) tests it first, in every
+   mode. On the measured machine `head_feeder` is `{0,1,2 true, 3 false}` — so in `multi`
+   the panel would draw three stock-feeder cards and one ACE card, the head-mode picture,
+   while the machine considers all four ACE-driven.
+2. **`head_ace` is not the wiring outside head mode.** In `multi`, head *N* is on ACE *N*
+   regardless of what `head_ace` says. The panel reads `head_ace` unconditionally and then
+   discards heads naming a unit that does not exist — which in `multi` with one ACE is
+   heads 1–3.
+3. **A bay is not free to feed any head.** `aceVerbs()` builds
+   `ACE_LOAD_HEAD HEAD=h ACE=a SLOT=s` with an explicit `SLOT` for every bay on every
+   card. In `multi` that is wrong and the machine will not refuse it: bay 2's tube goes to
+   head 2, and asking for `HEAD=0 SLOT=2` asks the ACE to push filament somewhere it is
+   not plumbed.
+
+HelixScreen reached the same three independently and says so in its own words —
+`bay_feeds_head_locked()`: *"Multi mode: bay s feeds head s … Head mode: the one head this
+ACE is bound to"*, and *"In head mode one ACE binds to a single head and all four of its
+slots feed that head — a hub, not a parallel fan. In multi mode slot s feeds head s, so
+each slot has its own path."* Its comment also records the same bug being fixed there: *"the
+dispatch copy only knew head mode, so in multi mode a bay's Load either named the wrong
+head or refused a perfectly valid bay."*
+
+### And the machine already answers the question the page is re-deriving
+
+```python
+ace_heads_now = [h for h in range(4) if self.head_uses_ace(h)]
+```
+
+**`ace.ace_heads` is the list of ACE-driven heads, computed live from the mode**, and it is
+already in the object the page reads — `parseAce` even passes over it. This is the third
+time in five rounds that the panel has re-derived something the machine states: after
+`filament_edit` and `filament_official`, this one should be read rather than rebuilt.
+`headSource()` should ask `ace_heads` whether a head is on the ACE, and only then work out
+*which* unit and *which* bay — with the mode deciding that second part.
+
+Careful, though, and this is the one place `ace_heads` is not sufficient on its own: it
+says *whether*, not *which*. Head mode still needs `head_ace`; multi mode needs the
+identity rule above. And `head_manual` is folded into it already (`head_uses_ace` returns
+False for a manual head), so a manual head disappears from the list rather than being
+distinguishable — the panel still needs `head_manual` separately to draw *Hand-fed*.
+
+### The switch itself has three behaviours the panel does not handle
+
+Read from `SET_ACE_MODE` (`ace.cfg`) and `cmd_ACE_RUN_MODE_SWITCH` (`ace.py`):
+
+- **normal ↔ (multi|head) needs a REBOOT and reports it as an error.** It runs
+  `ace_mode_switch.sh`, which swaps `filament_feed.py`, `extruder.py` and
+  `filament_switch_sensor.py` for their stock or ACE variants, then raises
+  `gcmd.error('[multiACE] Switched to %s mode. Please reboot the printer to activate!')`
+  and a `RAISE_EXCEPTION ID=6666`. So a **successful** mode change arrives at the page as a
+  rejected `sw_SendGCodes`. The pill will report a failure for something that worked and
+  needs a power cycle, and `ace.mode` will keep reporting the old mode until the reboot
+  happens. **This is the one to design first**, because it is the only control on the panel
+  whose success looks exactly like a failure.
+- **It refuses outright when any filament is loaded**, and only through
+  `action_respond_info`: *"Cannot switch mode! Filament still loaded in: E0, E1"*. The RPC
+  gets `ok`, nothing happens, and the pending mode sits until it times out and reports
+  itself lost. Same shape as every other **an `ok` is not a yes** on this page — and the
+  reason is already reachable, on Klipper's console, through `lastPrinterError()`
+  (which reads `!!` lines; this one is an `//` note, so it needs the note channel too).
+- **multi ↔ head is live, and entering `head` wipes every feeder head's identity.** That is
+  round nineteen and it is handled — the panel falls back to the spool's tag — but the
+  wipe is a *mode* behaviour and belongs in this section's picture, not only in the colour
+  one. Note it also clears `filament_official`, so a mode switch quietly unlatches
+  `filament_edit` on every feeder head.
+
+### Two smaller things that fall out of the same reading
+
+- **`ACE_SWITCH` is `NOT BUILT` for a reason that only holds in head mode.**
+  `check_coverage.py` says: *"switches the ACTIVE unit, which only matters in multi mode.
+  The panel is head-major: every card names its own unit, so there is no such thing as the
+  active one on it."* In `multi` there **is** an active unit — `_ensure_active_ace_for_head`
+  returns `self._active_device_index` outside head mode, and `active_device` is in the
+  object and already parsed as `ace.activeUnit`. Revisit that entry with the mode in hand.
+- **`SET_ACE_MODE MODE=head HEAD=n` is never sent.** The optional `HEAD=` picks which head
+  is the ACE-driven one and writes `head_feeder[h] = (h != n)` for all four. Without it,
+  head mode keeps whatever wiring was there. The panel offers the mode and not the head,
+  which is fine as a default and is a gap if someone wants to move it.
+
+### How to settle it, without breaking a printer
+
+`normal` is the expensive one: it needs a reboot each way and it swaps Klipper extras. Do
+not reach for it first.
+
+**multi ↔ head is live and reversible**, and the machine is already in `head`. The whole of
+the above can be settled by switching to `multi`, dumping the object, and switching back —
+minutes, no filament movement, no purge. It does need every head unloaded only for a
+`normal` transition, not for this one.
+
+```bash
+# read-only first: what head mode looks like, for the diff
+curl -s 'http://<ip>:7125/printer/objects/query?ace' > /tmp/ace-head.json
+
+# the switch is a macro like any other
+curl -s http://<ip>:7125/printer/gcode/script --data-urlencode 'script=SET_ACE_MODE MODE=multi'
+curl -s 'http://<ip>:7125/printer/objects/query?ace' > /tmp/ace-multi.json
+curl -s http://<ip>:7125/printer/gcode/script --data-urlencode 'script=SET_ACE_MODE MODE=head'
+```
+
+What the diff has to answer, and none of it is guessable:
+
+| | |
+|---|---|
+| `ace_heads` | does it become `[0,1,2,3]`? |
+| `head_feeder` | is it left stale, or rewritten? |
+| `head_ace` | left stale, or rewritten to identity? |
+| `head_source` | cleared, or carried across the switch? |
+| `print_task_config` | is the head-mode wipe symmetric — does going *to* multi wipe anything? |
+| `active_device` | does it start mattering? |
+| `gate_status` / `slots` | unchanged, presumably — confirm |
+
+Then the same three states through `run_webkit.py --real --drive`, read-only, and the
+answers into `mockhost.js` so the simulator can hold two modes rather than one.
+
+### What to build, once it is measured
+
+1. **`headSource()` asks `ace_heads` first**, then resolves the unit and bay per mode. One
+   function, three branches, and the mode named in each.
+2. **`aceVerbs()` stops offering every bay to every head in multi mode.** A card in multi
+   shows the one bay that feeds it; the cabinet's other three belong to other heads and
+   are drawn as theirs. HelixScreen's `PathTopology::HUB` vs `PARALLEL` is the same
+   distinction and the same fix.
+3. **The mode pill reports the reboot case honestly** — a success that arrives as an error,
+   and a state where `ace.mode` and the saved `ace__mode` disagree until a power cycle.
+4. **The loaded-filament refusal is read off the console**, not waited out.
+5. **`unit_jsc.py` gets the mode rules as pure logic**, the way the verb list and the
+   override precedence are held: given an `ace` object in each mode, which head is on which
+   unit and which bay, and what a Load would send.
+
+**Do not ship any of it on the source reading alone.** The last five rounds each turned on
+a field meaning something other than its name — `filament_edit` was a latch, `head_ace` is
+not what feeds a head, `ACE_SWAP_HEAD` is the print's — and this section is currently in
+exactly the state those were in before someone asked the machine.
+
+---
+
 ## Open, as of 2026-08-28
 
 Nothing below is a bug in the sense of "the page is wrong about something it knows". Each
 is a thing the panel does not yet know, or a decision deliberately left to a person.
+
+**Except the section above**, which is a thing the panel is probably wrong about in two of
+the three modes it offers, and which is why it is above rather than in this list.
 
 ### 1. ~~A swap needs a homed Z~~ — closed. It never did; the wrong macro did
 

@@ -1085,6 +1085,13 @@ structure is one directory per panel and the registry is the only place that nam
 [02-device-page/11-multiace-handover.md](02-device-page/11-multiace-handover.md) ends with
 the list, and it is six things. The short form:
 
+- **The panel has only ever been right in ONE of the three ACE modes.** Everything was
+  measured in `head`; `multi` and `normal` have never been observed, and in `multi`
+  multiACE ignores `head_feeder` and `head_ace` entirely — every head is ACE-driven and
+  **bay *s* feeds head *s***. So the panel will draw the wrong sources and offer loads the
+  hardware is not plumbed for. `ace.ace_heads` is the machine's own answer and the page
+  re-derives it. **This is the next session's work** — see the handover's first section,
+  which includes the reversible multi↔head measurement that settles it.
 - ~~**A swap needs a homed Z**~~ — **closed 2026-08-28.** It never did. Only
   `ACE_SWAP_HEAD` moves Z (a 2 mm hop off the part, for a mid-print swap), and the panel
   sends `ACE_UNLOAD_HEAD` then `ACE_LOAD_HEAD` now — which is what multiACE's own dashboard
