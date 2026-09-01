@@ -1,0 +1,131 @@
+{
+ "extruder_default_fields": [
+  "temperature",
+  "target",
+  "power",
+  "can_extrude",
+  "pressure_advance",
+  "smooth_time",
+  "state",
+  "nozzle_diameter"
+ ],
+ "field_filter": {
+  "configfile": [
+   "settings"
+  ],
+  "defect_detection": null,
+  "display_status": [
+   "progress",
+   "message"
+  ],
+  "fan": [
+   "speed"
+  ],
+  "fan_generic cavity_fan": [
+   "speed"
+  ],
+  "filament_detect": null,
+  "filament_feed left": null,
+  "filament_feed right": null,
+  "gcode_move": [
+   "speed_factor",
+   "speed",
+   "extrude_factor"
+  ],
+  "heater_bed": [
+   "temperature",
+   "target"
+  ],
+  "led cavity_led": [
+   "color_data"
+  ],
+  "machine_state_manager": [
+   "main_state",
+   "action_code"
+  ],
+  "motion_report": null,
+  "print_stats": [
+   "filename",
+   "state",
+   "total_duration",
+   "print_duration",
+   "filament_used",
+   "message",
+   "info"
+  ],
+  "print_task_config": [
+   "filament_vendor",
+   "filament_type",
+   "filament_sku",
+   "filament_official",
+   "filament_sub_type",
+   "filament_color",
+   "filament_color_rgba",
+   "extruder_map_table",
+   "extruders_used",
+   "auto_bed_leveling",
+   "flow_calibrate",
+   "flow_calib_extruders",
+   "shaper_calibrate",
+   "save",
+   "time_lapse_camera",
+   "auto_replenish_filament",
+   "can_auto_replenish",
+   "auto_replenish_index",
+   "filament_edit",
+   "filament_exist",
+   "filament_soft",
+   "filament_color_multi",
+   "extruders_replenished"
+  ],
+  "purifier": [
+   "power_detected",
+   "power_det_value",
+   "mode",
+   "exhaust_fan",
+   "inner_fan"
+  ],
+  "toolhead": null,
+  "virtual_sdcard": [
+   "progress",
+   "file_position",
+   "is_active",
+   "file_size",
+   "file_path"
+  ],
+  "webhooks": [
+   "state",
+   "state_message"
+  ]
+ },
+ "notes": {
+  "extruder_rule": "any object whose name contains 'extruder' uses extruder_default_fields",
+  "null_fields": "null => subscribe to all fields of that object"
+ },
+ "subscription_list": [
+  "extruder",
+  "extruder1",
+  "extruder2",
+  "extruder3",
+  "virtual_sdcard",
+  "print_stats",
+  "display_status",
+  "gcode_move",
+  "heater_bed",
+  "webhooks",
+  "idle_timeout",
+  "job",
+  "file_metadata",
+  "led cavity_led",
+  "fan",
+  "fan_generic cavity_fan",
+  "print_task_config",
+  "motion_report",
+  "purifier",
+  "filament_feed left",
+  "filament_feed right",
+  "machine_state_manager",
+  "filament_detect",
+  "defect_detection"
+ ]
+}

@@ -436,6 +436,7 @@ private:
     void sw_UploadAsyncTimelapseInstance();
     void sw_DeleteCameraTimelapse();
     void sw_GetCameraTimelapseInstance();
+    void sw_GetPrintHistory();
 
     void sw_DefectDetactionConfig();    
     void sw_PrinterDefectDetection();

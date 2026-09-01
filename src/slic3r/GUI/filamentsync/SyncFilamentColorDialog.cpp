@@ -94,16 +94,30 @@ constexpr const char* g_block3BorderColor = "#F0F0F0";
 constexpr const char* g_block3SeparatorColor = "#F3F4F6";
 constexpr const char* g_secondaryHoverBg = "#F3F4F6";
 
+// Overwrite mode's result: the machine's own filaments, in machine order.
+//
+// `wholeMachine` decides how many. Normally it is the count the project already had, because
+// overwriting a project that has objects in it must not renumber the filaments those objects
+// reference. With nothing on the plate there is no such constraint and no design to preserve, so
+// the project takes the machine's whole inventory - which is the only way a four-slot ACE ever
+// shows four filaments.
+//
+// Skipped either way: NONE-typed rows (an empty slot, or the explicit "Assign None" action) and
+// disabled rows. A disabled row is a toolhead fed by an ACE; it carries whatever slot is loaded
+// at this moment, so taking it as well as that slot would list the same spool twice.
 std::vector<Slic3r::GUI::FilamentData> collectVisibleOverwriteMachineFilaments(
     const std::vector<Slic3r::GUI::FilamentData>& machineDataList,
-    size_t designCount)
+    size_t designCount,
+    bool   wholeMachine)
 {
     std::vector<Slic3r::GUI::FilamentData> visibleMachine;
-    size_t visibleCount = std::min(designCount, machineDataList.size());
-    visibleMachine.reserve(visibleCount);
-    for (size_t i = 0; i < visibleCount; ++i) {
-        if (!Slic3r::GUI::is_none_filament(machineDataList[i]))
-            visibleMachine.push_back(machineDataList[i]);
+    visibleMachine.reserve(machineDataList.size());
+    for (const auto& data : machineDataList) {
+        if (Slic3r::GUI::is_none_filament(data) || data.m_disabled)
+            continue;
+        if (!wholeMachine && visibleMachine.size() >= designCount)
+            break;
+        visibleMachine.push_back(data);
     }
     return visibleMachine;
 }
@@ -170,7 +184,7 @@ SyncFilamentColorDialog::SyncFilamentColorDialog(wxWindow* parent,
             loadCoverPreview();
         });
 
-        m_bNeedScroll = m_pFilamentColorMapBoxGroup->exceedsRowCount(2);
+        m_bNeedScroll = m_pFilamentColorMapBoxGroup->exceedsRowCount(3);
 
         // --- Preview wrapper (was Block 3) ---
         auto* previewWrapper = new wxPanel(block, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
@@ -232,7 +246,7 @@ SyncFilamentColorDialog::SyncFilamentColorDialog(wxWindow* parent,
         // Assemble: scroll widgets are always created so the scrollbar
         //           can be shown / hidden when the mode changes.
         // ============================================================
-        m_maxViewportHeight  = m_pFilamentColorMapBoxGroup->getHeightForRowCount(2);
+        m_maxViewportHeight  = m_pFilamentColorMapBoxGroup->getHeightForRowCount(3);
         {
             int boxCount   = m_pFilamentColorMapBoxGroup->getVisibleBoxCount();
             int gridCols   = FilamentColorMapBoxGroup::GetGridCols();
@@ -397,7 +411,8 @@ std::vector<FilamentData> SyncFilamentColorDialog::getSyncDataList() const
         return dataList;
 
     if (!m_bMappingMode) {
-        return collectVisibleOverwriteMachineFilaments(m_machineDataList, m_designDataList.size());
+        return collectVisibleOverwriteMachineFilaments(m_machineDataList, m_designDataList.size(),
+                                                       m_bOverwriteWholeMachine);
     }
 
     dataList = m_pFilamentColorMapBoxGroup->getCurFilamentList();
@@ -418,8 +433,9 @@ std::vector<FilamentData> SyncFilamentColorDialog::getSyncDataList() const
     return dataList;
 }
 
-void SyncFilamentColorDialog::setOverwriteMode()
+void SyncFilamentColorDialog::setOverwriteMode(bool whole_machine)
 {
+    m_bOverwriteWholeMachine = whole_machine;
     if (m_pModeToggle)
         m_pModeToggle->setSelected(g_modeOverwrite);
     onModeChanged(g_modeOverwrite);
@@ -625,7 +641,9 @@ void SyncFilamentColorDialog::loadCoverPreview()
 
     std::vector<FilamentData> filamentMapping;
     if (!m_bMappingMode) {
-        filamentMapping = collectVisibleOverwriteMachineFilaments(m_machineDataList, m_designDataList.size());
+        // Same list the sync will apply, so the preview cannot promise something else.
+        filamentMapping = collectVisibleOverwriteMachineFilaments(m_machineDataList, m_designDataList.size(),
+                                                                  m_bOverwriteWholeMachine);
     } else if (m_pFilamentColorMapBoxGroup) {
         filamentMapping = m_pFilamentColorMapBoxGroup->getCurFilamentList();
     }
@@ -816,11 +834,11 @@ void SyncFilamentColorDialog::updateScrollState()
     if (!m_pFilamentColorMapBoxGroup || !m_pScrollBar || !m_pScrollGap || !m_pScrollViewport)
         return;
 
-    bool needScroll = m_pFilamentColorMapBoxGroup->exceedsRowCount(2);
+    bool needScroll = m_pFilamentColorMapBoxGroup->exceedsRowCount(3);
     m_bNeedScroll = needScroll;
 
     // Recalculate heights (visible count may have changed)
-    m_maxViewportHeight  = m_pFilamentColorMapBoxGroup->getHeightForRowCount(2);
+    m_maxViewportHeight  = m_pFilamentColorMapBoxGroup->getHeightForRowCount(3);
     {
         int boxCount   = m_pFilamentColorMapBoxGroup->getVisibleBoxCount();
         int gridCols   = FilamentColorMapBoxGroup::GetGridCols();

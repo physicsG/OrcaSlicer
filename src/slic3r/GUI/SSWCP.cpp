@@ -2121,6 +2121,8 @@ void SSWCP_MachineOption_Instance::process()
         sw_UploadAsyncTimelapseInstance();
     } else if (m_cmd == "sw_DeleteCameraTimelapse") {
         sw_DeleteCameraTimelapse();
+    } else if (m_cmd == "sw_GetPrintHistory") {
+        sw_GetPrintHistory();
     } else if (m_cmd == "sw_GetCameraTimelapseInstance") {
         sw_GetCameraTimelapseInstance();
     } else if (m_cmd == "sw_ServerClientManagerSetUserinfo") {
@@ -3757,6 +3759,28 @@ void SSWCP_MachineOption_Instance::sw_GetCameraTimelapseInstance()
 
         auto weak_self = std::weak_ptr<SSWCP_Instance>(shared_from_this());
         host->async_get_timelapse_instance(m_param_data, [weak_self](const json& response) {
+            auto self = weak_self.lock();
+            if (self) {
+                SSWCP_Instance::on_mqtt_msg_arrived(self, response);
+            }
+        });
+    }
+}
+// Completed jobs, from Moonraker's own history store. Params are passed through
+// verbatim: {limit, start, since, before, order} are what server.history.list takes.
+void SSWCP_MachineOption_Instance::sw_GetPrintHistory()
+{
+    {
+        std::shared_ptr<PrintHost> host = nullptr;
+        wxGetApp().get_connect_host(host);
+
+        if (!host) {
+            handle_general_fail(-1, "Connection lost!");
+            return;
+        }
+
+        auto weak_self = std::weak_ptr<SSWCP_Instance>(shared_from_this());
+        host->async_get_print_history(m_param_data, [weak_self](const json& response) {
             auto self = weak_self.lock();
             if (self) {
                 SSWCP_Instance::on_mqtt_msg_arrived(self, response);
@@ -6931,14 +6955,12 @@ void SSWCP_MqttAgent_Instance::sw_mqtt_set_engine()
                                     wxGetApp().mainframe->update_slice_print_status(MainFrame::eEventPlateUpdate);
 
                                     if (!wxGetApp().mainframe->m_printer_view->isSnapmakerPage()) {
-                                        wxString url      = wxString::FromUTF8(LOCALHOST_URL + std::to_string(wxGetApp().get_page_http_port()) +
-                                                                               "/web/flutter_web/index.html?path=2");
+                                        wxString url      = wxGetApp().get_u1_surface_url(GUI_App::U1Surface::DeviceTab);
                                         auto     real_url = wxGetApp().get_international_url(url);
                                         wxGetApp().mainframe->load_printer_url(real_url); 
                                     } else {
                                         if (reload_device_view) {
-                                            wxString url      = wxString::FromUTF8(LOCALHOST_URL + std::to_string(wxGetApp().get_page_http_port()) +
-                                                                                   "/web/flutter_web/index.html?path=2");
+                                            wxString url      = wxGetApp().get_u1_surface_url(GUI_App::U1Surface::DeviceTab);
                                             auto     real_url = wxGetApp().get_international_url(url);
 
                                             wxGetApp().mainframe->load_printer_url(real_url);
@@ -7164,6 +7186,7 @@ std::unordered_set<std::string> SSWCP::m_machine_option_cmd_list = {
     "sw_UploadAsyncTimelapseInstance",
     "sw_DeleteCameraTimelapse",
     "sw_GetCameraTimelapseInstance",
+    "sw_GetPrintHistory",
     "sw_ServerClientManagerSetUserinfo",
     "sw_DefectDetactionConfig",
     "sw_PrinterDefectDetection",

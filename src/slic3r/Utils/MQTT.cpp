@@ -9,6 +9,31 @@
 
 namespace {
 
+/*
+ * Paho reports a failed operation by THROWING.
+ *
+ * `token::wait_for()` calls `check_ret()`, which throws `mqtt::exception` whenever the
+ * return code is not success, and `async_client`'s own calls check the C return the same
+ * way. Every method below is documented to answer `false` rather than throw - and only
+ * Disconnect() actually did. So a printer that was simply switched off took the whole
+ * application down at startup:
+ *
+ *     terminate called after throwing an instance of 'mqtt::exception'
+ *       what():  MQTT error [-1]: TCP/TLS connect failure
+ *
+ * Both callers of Connect() in MoonRaker.cpp already branch on the `false`; nothing about
+ * the contract needed to change, only its being kept. This is that guard, in one place so
+ * the four methods cannot report a failure four different ways.
+ */
+bool mqtt_failed(const char* op, const std::string& server, const std::exception& e,
+                 std::string& msg)
+{
+    BOOST_LOG_TRIVIAL(error) << "[MQTT_INFO] " << op << " failed: " << e.what()
+                             << ", Server: " << server;
+    msg = std::string(op) + " failed: " + e.what();
+    return false;
+}
+
 // Paho throws when disconnect() is called while already disconnected / handle gone.
 bool is_soft_disconnect_error(const mqtt::exception& e)
 {
@@ -142,7 +167,7 @@ bool MqttClient::Connect(std::string& msg)
         return true;
     }
 
-    {                        
+    try {
          {
             auto ssl_opts = connOpts_.get_ssl_options();
             BOOST_LOG_TRIVIAL(debug) << "[MQTT_INFO] SSL config info:"
@@ -194,6 +219,11 @@ bool MqttClient::Connect(std::string& msg)
         BOOST_LOG_TRIVIAL(info) << "[MQTT_INFO] Successfully connected to MQTT server";
         msg = "success";
         return true;
+    } catch (const std::exception& e) {
+        // An unreachable host arrives here, and it is the ordinary case rather than an
+        // exceptional one: the printer is off, or on another network.
+        connected_.store(false, std::memory_order_release);
+        return mqtt_failed("connect", server_address_, e, msg);
     }
 }
 
@@ -247,7 +277,7 @@ bool MqttClient::Subscribe(const std::string& topic, int qos, std::string& msg)
         return false;
     }
 
-    {
+    try {
         BOOST_LOG_TRIVIAL(info) << "[MQTT_INFO] Subscribing to MQTT topic '" << topic << "' with QoS " << qos;
         mqtt::token_ptr subtok = client_->subscribe(topic, qos, nullptr, subListener_);
         if (!subtok->wait_for(std::chrono::seconds(5))) {
@@ -258,6 +288,8 @@ bool MqttClient::Subscribe(const std::string& topic, int qos, std::string& msg)
         add_topic_to_resubscribe(topic, qos);
         msg = "success";
         return true;
+    } catch (const std::exception& e) {
+        return mqtt_failed("subscribe", server_address_, e, msg);
     }
 }
 
@@ -272,7 +304,7 @@ bool MqttClient::Unsubscribe(const std::string& topic, std::string& msg)
         return false;
     }
 
-    {
+    try {
         BOOST_LOG_TRIVIAL(info) << "[MQTT_INFO] Unsubscribing from MQTT topic '" << topic << "'";
         mqtt::token_ptr unsubtok = client_->unsubscribe(topic);
         if (!unsubtok->wait_for(std::chrono::seconds(5))) {
@@ -283,6 +315,8 @@ bool MqttClient::Unsubscribe(const std::string& topic, std::string& msg)
         remove_topic_from_resubscribe(topic);
         msg = "success";
         return true;
+    } catch (const std::exception& e) {
+        return mqtt_failed("unsubscribe", server_address_, e, msg);
     }
 }
 
@@ -301,7 +335,7 @@ bool MqttClient::Publish(const std::string& topic, const std::string& payload, i
     mqtt::message_ptr pubmsg = mqtt::make_message(topic, payload);
     pubmsg->set_qos(qos);
 
-    {
+    try {
         BOOST_LOG_TRIVIAL(debug) << "[MQTT_INFO] Publishing message to topic '" << topic << "' with QoS " << qos;
         mqtt::token_ptr pubtok = client_->publish(pubmsg);
         /*if (!pubtok->wait_for(std::chrono::seconds(5))) {
@@ -310,7 +344,11 @@ bool MqttClient::Publish(const std::string& topic, const std::string& payload, i
         }*/
         msg = "success";
         return true;
-    } 
+    } catch (const std::exception& e) {
+        // CheckConnected() above is a snapshot, not a lock: the link can drop between
+        // that answer and this call, and publish() then throws MQTTASYNC_DISCONNECTED.
+        return mqtt_failed("publish", server_address_, e, msg);
+    }
 }
 
 // Set callback function for handling incoming messages
@@ -354,7 +392,16 @@ bool MqttClient::CheckConnected()
         return false;
     }
     
-    if (!check_future.get()) {
+    // .get() rethrows anything the probe threw, and this is called from the destructor's
+    // path as well as the panel's - so it answers the same way the others do.
+    try {
+        if (!check_future.get()) {
+            connected_.store(false, std::memory_order_release);
+            return false;
+        }
+    } catch (const std::exception& e) {
+        BOOST_LOG_TRIVIAL(error) << "[MQTT_INFO] connection check failed: " << e.what()
+                                 << ", Server: " << server_address_;
         connected_.store(false, std::memory_order_release);
         return false;
     }

@@ -1,0 +1,330 @@
+{
+ "camera.delete_timelapse_instance": {
+  "call_sites": 1,
+  "method": "camera.delete_timelapse_instance",
+  "param_style": [
+   "dynamic"
+  ],
+  "params": []
+ },
+ "camera.get_timelapse_instance": {
+  "call_sites": 1,
+  "method": "camera.get_timelapse_instance",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "page_index",
+   "page_rows",
+   "thumbnail_direct"
+  ]
+ },
+ "camera.start_monitor": {
+  "call_sites": 1,
+  "method": "camera.start_monitor",
+  "param_style": [
+   "dynamic"
+  ],
+  "params": []
+ },
+ "camera.stop_monitor": {
+  "call_sites": 1,
+  "method": "camera.stop_monitor",
+  "param_style": [
+   "dynamic"
+  ],
+  "params": []
+ },
+ "custom.file.filament.objects.get_mapping": {
+  "call_sites": 1,
+  "method": "custom.file.filament.objects.get_mapping",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "filename"
+  ]
+ },
+ "machine.heartbeat": {
+  "call_sites": 1,
+  "method": "machine.heartbeat",
+  "param_style": [
+   "none"
+  ],
+  "params": []
+ },
+ "machine.set_device_name": {
+  "call_sites": 1,
+  "method": "machine.set_device_name",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "name"
+  ]
+ },
+ "machine.system_info": {
+  "call_sites": 1,
+  "method": "machine.system_info",
+  "param_style": [
+   "none"
+  ],
+  "params": []
+ },
+ "printer.control.bed_temp": {
+  "call_sites": 1,
+  "method": "printer.control.bed_temp",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "temp"
+  ]
+ },
+ "printer.control.generic_fan": {
+  "call_sites": 1,
+  "method": "printer.control.generic_fan",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "name",
+   "speed"
+  ]
+ },
+ "printer.control.led": {
+  "call_sites": 1,
+  "method": "printer.control.led",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "name",
+   "white"
+  ]
+ },
+ "printer.control.main_fan": {
+  "call_sites": 1,
+  "method": "printer.control.main_fan",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "speed"
+  ]
+ },
+ "printer.control.print_speed": {
+  "call_sites": 1,
+  "method": "printer.control.print_speed",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "percentage"
+  ]
+ },
+ "printer.control.purifier": {
+  "call_sites": 1,
+  "method": "printer.control.purifier",
+  "param_style": [
+   "dynamic"
+  ],
+  "params": []
+ },
+ "printer.defect_detection.config": {
+  "call_sites": 1,
+  "method": "printer.defect_detection.config",
+  "param_style": [
+   "dynamic"
+  ],
+  "params": []
+ },
+ "printer.gcode.script": {
+  "call_sites": 1,
+  "method": "printer.gcode.script",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "script"
+  ]
+ },
+ "printer.objects.list": {
+  "call_sites": 1,
+  "method": "printer.objects.list",
+  "param_style": [
+   "none"
+  ],
+  "params": []
+ },
+ "printer.objects.query": {
+  "call_sites": 1,
+  "method": "printer.objects.query",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "objects"
+  ]
+ },
+ "printer.objects.setSubscribeFilter": {
+  "call_sites": 1,
+  "method": "printer.objects.setSubscribeFilter",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "objects",
+   "sn"
+  ]
+ },
+ "printer.objects.subscribe": {
+  "call_sites": 1,
+  "method": "printer.objects.subscribe",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "objects"
+  ]
+ },
+ "printer.print.cancel": {
+  "call_sites": 1,
+  "method": "printer.print.cancel",
+  "param_style": [
+   "none"
+  ],
+  "params": []
+ },
+ "printer.print.pause": {
+  "call_sites": 1,
+  "method": "printer.print.pause",
+  "param_style": [
+   "none"
+  ],
+  "params": []
+ },
+ "printer.print.resume": {
+  "call_sites": 1,
+  "method": "printer.print.resume",
+  "param_style": [
+   "none"
+  ],
+  "params": []
+ },
+ "printer.print.start": {
+  "call_sites": 1,
+  "method": "printer.print.start",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "filename"
+  ]
+ },
+ "server.client_manager.confirm_lan_status": {
+  "call_sites": 1,
+  "method": "server.client_manager.confirm_lan_status",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "clientid"
+  ]
+ },
+ "server.client_manager.request_lan_auth": {
+  "call_sites": 1,
+  "method": "server.client_manager.request_lan_auth",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "app_id",
+   "clientid"
+  ]
+ },
+ "server.client_manager.request_pin_code": {
+  "call_sites": 1,
+  "method": "server.client_manager.request_pin_code",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "app_id",
+   "nickname",
+   "userid"
+  ]
+ },
+ "server.exception.query": {
+  "call_sites": 1,
+  "method": "server.exception.query",
+  "param_style": [
+   "none"
+  ],
+  "params": []
+ },
+ "server.files.get_status": {
+  "call_sites": 1,
+  "method": "server.files.get_status",
+  "param_style": [
+   "none"
+  ],
+  "params": []
+ },
+ "server.files.list_page": {
+  "call_sites": 1,
+  "method": "server.files.list_page",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "files_per_page",
+   "page_number",
+   "root"
+  ]
+ },
+ "server.files.metadata": {
+  "call_sites": 2,
+  "method": "server.files.metadata",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "filename"
+  ]
+ },
+ "server.files.pull": {
+  "call_sites": 1,
+  "method": "server.files.pull",
+  "param_style": [
+   "dynamic"
+  ],
+  "params": []
+ },
+ "server.files.roots": {
+  "call_sites": 1,
+  "method": "server.files.roots",
+  "param_style": [
+   "none"
+  ],
+  "params": []
+ },
+ "server.files.thumbnails_base64": {
+  "call_sites": 1,
+  "method": "server.files.thumbnails_base64",
+  "param_style": [
+   "literal"
+  ],
+  "params": [
+   "path"
+  ]
+ },
+ "system.get_device_info": {
+  "call_sites": 1,
+  "method": "system.get_device_info",
+  "param_style": [
+   "none"
+  ],
+  "params": []
+ }
+}

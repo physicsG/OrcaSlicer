@@ -249,9 +249,11 @@ void FilamentColorMapBox::onPaint(wxPaintEvent&)
     {
         gdc.SetTextForeground(g_bodyTextColor);
         gdc.SetFont(Label::Body_10);
-        const wxString type = m_belowFilament.m_type.empty()
-                                  ? wxString("NONE")
-                                  : wxString(m_belowFilament.m_type);
+        const wxString type = !m_belowFilament.m_label.empty()
+                                  ? wxString::FromUTF8(m_belowFilament.m_label)
+                                  : (m_belowFilament.m_type.empty()
+                                         ? wxString("NONE")
+                                         : wxString(m_belowFilament.m_type));
         const wxSize te = gdc.GetTextExtent(type);
         gdc.DrawText(type, (w - te.x) / 2,
                      splitY + FromDIP(g_nameTextY));

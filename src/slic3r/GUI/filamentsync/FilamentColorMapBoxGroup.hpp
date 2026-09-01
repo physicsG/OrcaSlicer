@@ -61,8 +61,7 @@ private:
 
     MachineFilamentPicker* m_pPicker = nullptr;
 
-    Label* m_pLabelDesign  = nullptr;
-    Label* m_pLabelMachine = nullptr;
+    Label* m_pCaption = nullptr;
 
     std::function<void()> m_mappingChangedCallback = nullptr;
 };

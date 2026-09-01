@@ -178,6 +178,7 @@ public:
     virtual void async_delete_camera_timelapse(const nlohmann::json& targets, std::function<void(const nlohmann::json& response)>) {}
 
     virtual void async_get_timelapse_instance(const nlohmann::json& targets, std::function<void(const nlohmann::json& response)>) {}
+    virtual void async_get_print_history(const nlohmann::json& targets, std::function<void(const nlohmann::json& response)>) {}
 
     virtual void async_get_userdata_space(const nlohmann::json& targets, std::function<void(const nlohmann::json& response)>) {}
     

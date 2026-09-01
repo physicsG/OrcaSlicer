@@ -1,0 +1,2400 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Four Panels, Four Cameras, One ACE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/*
+ * Sibling of panel-popover-mockup.html, and deliberately the same object: the token
+ * set, the card/note/table vocabulary and the "keep the rejected alternates" rule are
+ * lifted from it rather than re-invented, so the two read as one design record.
+ *
+ * Variant switching is radio inputs and the sibling combinator. No :has(), no
+ * JavaScript for anything load-bearing - the first draft of the earlier mockup was
+ * emptied by a viewer that stripped its script, and that is a cheap lesson to reuse.
+ * The only JS here drives the fake camera frame, and the page is complete without it.
+ */
+:root{
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --bg:#f4f6f8; --panel:#fff; --panel-2:#eef2f6; --panel-3:#e3e9ef;
+  --ink:#16202b; --ink-2:#47566a; --muted:#7c8b9d;
+  --line:#d8e0e8; --line-soft:#e7edf2;
+  --accent:#0C63E2; --accent-in:#fff; --accent-soft:#e7f0fd;
+  --ok:#1f7a4d; --warn:#9a5b12; --bad:#a92a1d;
+  /* Orca's own AMS_CONTROL_BRAND_COLOUR. Taken from the codebase, not chosen here -
+     which is the whole point of 16-ace-visuals.md. */
+  --ace:#009688; --ace-soft:#e2f2f0;
+  --doc-bg:#eceff2; --card:#fff; --rail:#fbfcfd;
+  --shadow:0 1px 2px rgba(16,24,32,.06),0 14px 34px -22px rgba(16,24,32,.45);
+  --scr:#dfe5ec;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1319; --panel:#161d26; --panel-2:#1d2732; --panel-3:#243040;
+    --ink:#e6ecf3; --ink-2:#b3c0cf; --muted:#7f8d9d;
+    --line:#26313d; --line-soft:#202932;
+    --accent:#5B9CF8; --accent-in:#0a1420; --accent-soft:#152539;
+    --ok:#4cc38a; --warn:#d79a4f; --bad:#e8705f;
+    --ace:#3fc9bb; --ace-soft:#10312f;
+    --doc-bg:#0a0e12; --card:#141a21; --rail:#121821;
+    --shadow:0 1px 0 rgba(255,255,255,.03),0 14px 34px -18px rgba(0,0,0,.8);
+    --scr:#1a222c;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1319; --panel:#161d26; --panel-2:#1d2732; --panel-3:#243040;
+  --ink:#e6ecf3; --ink-2:#b3c0cf; --muted:#7f8d9d;
+  --line:#26313d; --line-soft:#202932;
+  --accent:#5B9CF8; --accent-in:#0a1420; --accent-soft:#152539;
+  --ok:#4cc38a; --warn:#d79a4f; --bad:#e8705f;
+  --ace:#3fc9bb; --ace-soft:#10312f;
+  --doc-bg:#0a0e12; --card:#141a21; --rail:#121821;
+  --shadow:0 1px 0 rgba(255,255,255,.03),0 14px 34px -18px rgba(0,0,0,.8);
+  --scr:#1a222c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--doc-bg);color:var(--ink);font-family:var(--sans);
+     line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:44px 24px 110px}
+h1{font-size:30px;margin:0 0 8px;letter-spacing:-.02em;text-wrap:balance;font-weight:600}
+.sub{color:var(--muted);margin:0 0 8px;font-size:14.5px;max-width:74ch}
+.stamp{font-family:var(--mono);font-size:12px;color:var(--muted);margin:0 0 34px}
+.stamp b{color:var(--ok);font-weight:500}
+h2{font-size:20px;margin:56px 0 6px;letter-spacing:-.01em;font-weight:600;text-wrap:balance}
+h2 .n{color:var(--muted);font-family:var(--mono);font-size:13px;margin-right:10px;font-weight:400}
+h3{font-size:15px;margin:30px 0 6px;font-weight:600}
+.lede{color:var(--ink-2);font-size:14.5px;margin:0 0 16px;max-width:76ch}
+code,kbd{font-family:var(--mono);font-size:.88em;background:var(--panel-2);padding:1.5px 5px;
+     border-radius:4px;color:var(--ink)}
+a{color:var(--accent)}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:10px}
+th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.scroll{overflow-x:auto}
+.note{border-left:3px solid var(--accent);padding:3px 0 3px 15px;margin:16px 0;
+      color:var(--ink-2);font-size:13.5px;max-width:76ch}
+.note.warn{border-left-color:var(--warn)}
+.note.bad{border-left-color:var(--bad)}
+.note.ok{border-left-color:var(--ok)}
+.note b{color:var(--ink)}
+ul.tight{margin:10px 0;padding-left:20px;font-size:14px;color:var(--ink-2);max-width:76ch}
+ul.tight li{margin:5px 0}
+ul.tight b{color:var(--ink)}
+
+/* ---- verdict chips ---- */
+.chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;
+      padding:2px 7px;border-radius:5px;background:var(--panel-2);color:var(--ink-2);
+      white-space:nowrap;font-weight:500}
+.chip.yes{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+.chip.no{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.chip.maybe{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+
+/* ---- variant switcher ---- */
+.vradio{position:absolute;opacity:0;pointer-events:none}
+.picker{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.picker label{display:block;cursor:pointer;border:1px solid var(--line);border-radius:9px;
+  padding:9px 13px;background:var(--panel);min-width:150px;flex:1 1 150px;max-width:280px}
+.picker label:hover{border-color:var(--accent)}
+.picker .k{font-family:var(--mono);font-size:11px;color:var(--muted);display:block}
+.picker .t{font-size:13.5px;font-weight:600;display:block;margin-top:1px}
+.picker .d{font-size:12px;color:var(--muted);display:block;margin-top:2px;line-height:1.4}
+.vradio:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
+/* checked states are enumerated per group below */
+
+.stage{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:18px;
+       margin:16px 0}
+.caption{font-size:12.5px;color:var(--muted);margin:12px 2px 0;font-family:var(--mono)}
+.caption b{color:var(--ink-2);font-weight:500}
+
+/* =====================================================================
+   PART 1 - the page layout, drawn to scale
+   ===================================================================== */
+/* A whole Orca window, shrunk. The inner box is the real pixel geometry - rail 322px,
+   panels at their real widths - and one transform scales it to fit this document, so
+   the proportions on screen are the proportions in the app. */
+.screenbox{overflow:hidden;border-radius:10px;border:1px solid var(--line);background:var(--scr)}
+.screen{transform-origin:0 0;background:var(--scr);display:flex;font-size:11px}
+.screen .rail{width:322px;flex:0 0 322px;background:var(--rail);
+  border-right:1px solid var(--line);padding:14px 0}
+.screen .railtop{height:64px;border-bottom:1px solid var(--line-soft);margin-bottom:10px;
+  display:flex;align-items:center;gap:10px;padding:0 24px}
+.screen .railtop .dot{width:26px;height:26px;border-radius:7px;background:#101418;color:#fff;
+  display:grid;place-items:center;font-style:italic;font-weight:700;font-size:13px}
+.screen .railtop .nm{font-size:15px}
+.screen .navitem{height:44px;display:flex;align-items:center;gap:14px;padding:0 34px;
+  color:var(--ink-2);font-size:14px}
+.screen .navitem.on{background:var(--accent-soft);color:var(--ink)}
+.screen .navitem .sq{width:18px;height:18px;border-radius:4px;background:var(--muted);opacity:.5}
+.screen .navitem.on .sq{background:var(--accent);opacity:1}
+.screen .content{flex:1;min-width:0;padding:20px 21px 28px;display:grid;gap:20px;
+  align-content:start}
+
+.p{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+   display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.p>.ph{height:40px;flex:0 0 40px;background:var(--panel-2);display:flex;align-items:center;
+   padding:0 16px 0 26px;gap:10px;font-size:14px;border-bottom:1px solid var(--line-soft)}
+.p>.ph .grow{flex:1}
+.p>.ph .pill{height:24px;border-radius:5px;background:var(--panel-3);padding:0 9px;
+   display:grid;place-items:center;font-size:11.5px;color:var(--ink-2)}
+.p>.pb{flex:1;min-height:0;padding:16px 20px;display:flex;flex-direction:column;min-width:0}
+
+/* The four panels sit in two column wrappers. For the three GRID versions those
+   wrappers are `display: contents`, so the panels stay direct children of the grid and
+   nothing changes. L3 needs them to be real, because its whole point is that the two
+   columns distribute height independently - Control shrinks and Filament takes what it
+   gives up, without the camera on the other side having a say. That is the same
+   `display: contents` move `#view-control` already makes in device.css. */
+.pcam{grid-area:cam} .pctl{grid-area:ctl} .ptask{grid-area:task} .pfil{grid-area:fil}
+.col-l,.col-r{display:contents}
+
+/* --- L0: today - four equal cells, each locked to 830/548 --- */
+#l0:checked~.stage .content{grid-template-columns:1fr 1fr;
+  grid-template-areas:"cam ctl" "task fil"}
+#l0:checked~.stage .p>.pb{aspect-ratio:830/548}
+#l0:checked~.stage .pctl>.pb{aspect-ratio:auto}
+
+/* --- L1: fixed 590px rail, control reflows --- */
+#l1:checked~.stage .content{grid-template-columns:minmax(0,1fr) 590px;
+  grid-template-rows:1fr auto;
+  grid-template-areas:"cam ctl" "task fil";min-height:100%}
+#l1:checked~.stage .ptask>.pb{height:150px;flex:0 0 150px}
+#l1:checked~.stage .pctl>.pb{flex:0 0 auto}
+#l1:checked~.stage .ctl-wide{display:none}
+#l1:checked~.stage .ctl-tall{display:flex}
+
+/* --- L2: proportional 2fr / 1fr --- */
+#l2:checked~.stage .content{grid-template-columns:2fr 1fr;grid-template-rows:1fr auto;
+  grid-template-areas:"cam ctl" "task fil";min-height:100%}
+#l2:checked~.stage .ptask>.pb{height:150px;flex:0 0 150px}
+#l2:checked~.stage .pctl>.pb{flex:0 0 auto}
+#l2:checked~.stage .ctl-wide{display:none}
+#l2:checked~.stage .ctl-tall{display:flex}
+
+/* --- L3: an 830 rail, the control shortened, Filament taking the rest ------------
+   Two independent flex columns. Control keeps the cluster it has and gives up only
+   HEIGHT - which is the move that makes the 830 affordable, because 830 was never
+   really about the camera's width, it was about not rebuilding a panel that works. */
+#l3:checked~.stage .content{display:flex;gap:20px;min-height:100%;align-items:stretch}
+#l3:checked~.stage .col-l{display:flex;flex-direction:column;gap:20px;flex:1;min-width:0}
+#l3:checked~.stage .col-r{display:flex;flex-direction:column;gap:20px;
+  flex:0 0 830px;min-width:0}
+#l3:checked~.stage .pctl{flex:0 0 auto}
+#l3:checked~.stage .pctl>.pb{flex:0 0 auto;padding-bottom:12px}
+/* the Filament panel is the one that grows */
+#l3:checked~.stage .pfil{flex:1;min-height:0}
+#l3:checked~.stage .pcam{flex:1;min-height:0}
+#l3:checked~.stage .ptask{flex:0 0 auto}
+#l3:checked~.stage .ptask>.pb{height:150px;flex:0 0 150px}
+
+/* --- and where the left column's surplus height goes ---------------------------- */
+/* H1 letterbox: the camera panel fills the column and the frame centres in black. */
+#h1:checked~.stage .camview .fr{object-fit:contain}
+/* H2 task absorbs: the camera keeps 16:9, Printing Task takes what is left. */
+#h2:checked~.stage .pcam{flex:0 0 auto}
+#h2:checked~.stage .pcam>.pb{aspect-ratio:16/9;padding:0}
+#h2:checked~.stage .ptask{flex:1;min-height:0}
+#h2:checked~.stage .ptask>.pb{height:auto;flex:1}
+/* H3 short column: the camera keeps 16:9 and the column simply ends. */
+#h3:checked~.stage .pcam{flex:0 0 auto}
+#h3:checked~.stage .pcam>.pb{aspect-ratio:16/9;padding:0}
+#h3:checked~.stage .col-l{justify-content:flex-start}
+#h3:checked~.stage .ptask{flex:0 0 auto}
+
+.picker label{transition:border-color .12s ease}
+#l0:checked~.picker [for=l0],#l1:checked~.picker [for=l1],
+#l2:checked~.picker [for=l2],#l3:checked~.picker [for=l3]
+  {border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+
+/* --- the fake panel innards --- */
+.camview{flex:1;min-height:0;background:#0b0f14;border-radius:8px;position:relative;
+  display:grid;place-items:center;overflow:hidden}
+.camview .fr{position:absolute;inset:0;object-fit:contain;width:100%;height:100%}
+.camview .plybtn{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.9);
+  display:grid;place-items:center;position:relative;z-index:2}
+.camview .plybtn::after{content:"";border-left:17px solid #16202b;border-top:11px solid transparent;
+  border-bottom:11px solid transparent;margin-left:5px}
+.camview .ovl{position:absolute;left:12px;bottom:12px;z-index:3;display:flex;gap:7px}
+.camview .ovlchip{height:26px;border-radius:6px;background:rgba(10,14,20,.72);color:#fff;
+  display:flex;align-items:center;gap:6px;padding:0 10px;font-size:12px;
+  font-family:var(--mono);backdrop-filter:blur(6px)}
+.camview .ovlchip.on{background:rgba(12,99,226,.9)}
+
+/* control cluster, two shapes */
+.ctl-wide{display:flex;gap:40px;max-width:758px;align-items:flex-start}
+.ctl-tall{display:none;flex-direction:column;gap:18px}
+.readcol{width:126px;flex:0 0 126px;display:flex;flex-direction:column;gap:2px}
+.readrow{height:38px;display:flex;align-items:center;justify-content:center;gap:5px;
+  border-radius:8px;font-size:13px;background:var(--panel-2)}
+.readrow .ic{width:20px;height:20px;border-radius:5px;background:var(--muted);opacity:.45}
+.readrow .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px}
+.readstrip{display:flex;gap:8px}
+.readstrip .readrow{flex:1;min-width:0}
+.pickcol{width:236px;flex:0 0 236px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pickbox{height:74px;border:1px solid var(--line);border-radius:9px;display:grid;
+  place-items:center;background:var(--panel);gap:3px;font-size:11.5px;color:var(--muted)}
+.pickbox .sq{width:26px;height:26px;border-radius:6px;background:var(--panel-3)}
+.pickbox.live{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok)}
+.motcol{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:12px}
+.wheel{width:180px;height:180px;border-radius:50%;border:1px solid var(--line);
+  background:conic-gradient(from 45deg,var(--panel-2) 0 25%,var(--panel) 0 50%,
+  var(--panel-2) 0 75%,var(--panel) 0);position:relative}
+.wheel::after{content:"";position:absolute;inset:36%;border-radius:50%;
+  background:var(--panel);border:1px solid var(--line)}
+.bedrow{display:flex;gap:8px}
+.bedrow .b{height:34px;min-width:52px;border:1px solid var(--line);border-radius:8px;
+  background:var(--panel);display:grid;place-items:center;font-size:12px;color:var(--ink-2)}
+.tiles{display:flex;gap:10px}
+.tile{flex:1;height:56px;border:1px solid var(--line);border-radius:9px;background:var(--panel);
+  display:grid;place-items:center;gap:2px;font-size:11px;color:var(--muted)}
+.tile .sq{width:20px;height:20px;border-radius:5px;background:var(--panel-3)}
+
+/* task card */
+.taskcard{display:flex;gap:14px;align-items:center;min-width:0}
+.taskcard .thumb{width:82px;height:82px;flex:0 0 82px;border-radius:8px;background:var(--panel-2);
+  border:1px solid var(--line)}
+.taskcard .meta{flex:1;min-width:0}
+.taskcard .nm{font-size:14px;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.bar{height:6px;border-radius:3px;background:var(--panel-2);overflow:hidden}
+.bar i{display:block;height:100%;width:64%;background:var(--ok);border-radius:3px}
+.taskcard .sub2{display:flex;gap:16px;margin-top:7px;font-size:11.5px;color:var(--muted);
+  font-family:var(--mono)}
+.taskbtns{display:flex;gap:8px;flex:0 0 auto}
+.taskbtns .b{width:40px;height:40px;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel);display:grid;place-items:center;color:var(--ink-2)}
+
+/* filament slots (today) */
+.slots{display:flex;gap:14px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+.slot{width:96px;border:1px solid var(--line);border-radius:10px;padding:12px 8px;
+  display:grid;place-items:center;gap:8px;background:var(--panel)}
+.slot .disc{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;
+  font-weight:600;color:#fff;font-size:14px}
+.slot .lb{font-size:11.5px;color:var(--ink-2);font-family:var(--mono)}
+</style>
+
+<div class="wrap">
+
+<h1>Four panels, four cameras, one ACE</h1>
+<p class="sub">Three changes to the rebuilt U1 Device page. <b>The versions are picked</b>
+— the table below says which — and every alternate stays switchable in this file rather
+than being deleted, so a decision can be revisited without re-deriving it. That is what
+the earlier panel mockup is for, and this is its sibling.</p>
+<p class="stamp">Measured against the machine on <b>2026-08-25</b> — Snapmaker U1
+<code>811002511261022618B3</code> at 192.168.2.242, running paxx12 Extended Firmware with
+multiACE <code>0.99.8b</code> and an ACE&nbsp;2&nbsp;Pro on toolhead&nbsp;4. Engine
+capabilities read from WebKitGTK, which is what Orca renders with.</p>
+
+<div class="scroll"><table>
+<tr><th>part</th><th>chosen</th><th>state</th><th>and what it means</th></tr>
+<tr><td>01 · layout</td><td><b>L3 + H1</b></td>
+    <td><span class="chip yes">built</span></td>
+    <td>An 830 rail, the Control panel shortened to its cluster, Filament growing upward
+        into what it releases. The camera fills its own column and letterboxes.</td></tr>
+<tr><td>02 · camera</td><td><b>S2 + view grid + M-A</b></td>
+    <td><span class="chip yes">built</span></td>
+    <td>A gear opening an anchored popover; one, two or four views at once; transports
+        named as transports, with Auto on top. <b>9.5 fps measured through the panel</b>
+        against the printer, against 0.5 before.</td></tr>
+<tr><td>04 · job card</td><td><b>T1</b></td>
+    <td><span class="chip yes">built</span></td>
+    <td>A band rather than a stack — thumbnail anchoring, metadata on the name's line,
+        buttons riding the bar, and the status word moved into the panel header.
+        <b>306 px down to 128.</b></td></tr>
+<tr><td>03 · multiACE</td><td><b>P1</b></td>
+    <td><span class="chip maybe">not started</span></td>
+    <td>The Filament panel becomes ACE-aware — four toolhead cards, each with its own
+        three-way source switch, over the unit that feeds them.</td></tr>
+</table></div>
+
+<div class="note ok"><b>Parts 01 and 02 are in the page and driven against the machine.</b>
+Where a number below was corrected by building the thing, the correction is marked and the
+original is named — the arithmetic in part 01's first table was wrong, and it was wrong in
+a way that flattered the version that got picked.</div>
+
+<div class="note ok"><b>Nothing here is sketched from the docs.</b> Every number in this
+page came off that printer or out of that engine in the last hour: the 14&nbsp;fps, the
+CORS refusal, the 277&nbsp;ms ACE query, the empty slot identities. Where something was
+<em>not</em> measured it says so.</div>
+
+<style>
+/* viewport width switcher: --swn is the logical window width, and the scale is
+   whatever makes it fit this document, so what you compare is proportion. */
+.screen{width:calc(var(--swn) * 1px);height:980px;transform:scale(calc(1140 / var(--swn)))}
+.screenbox{height:calc(980px * (1140 / var(--swn)))}
+#w1420:checked~.stage{--swn:1420} #w1600:checked~.stage{--swn:1600}
+#w1920:checked~.stage{--swn:1920} #w2560:checked~.stage{--swn:2560}
+.wpick{display:flex;gap:6px;margin:0 0 14px;align-items:center;flex-wrap:wrap}
+.wpick .lbl{font-size:12px;color:var(--muted);margin-right:4px}
+.wpick label{font-family:var(--mono);font-size:12px;padding:5px 11px;border-radius:7px;
+  border:1px solid var(--line);cursor:pointer;background:var(--panel)}
+.wpick label:hover{border-color:var(--accent)}
+#w1420:checked~.wpick [for=w1420],#w1600:checked~.wpick [for=w1600],
+#w1920:checked~.wpick [for=w1920],#w2560:checked~.wpick [for=w2560]
+  {background:var(--accent);color:var(--accent-in);border-color:var(--accent)}
+.camwidth{font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:auto}
+</style>
+
+<h2><span class="n">01</span>The four panels stop being four equal squares</h2>
+<p class="lede">Today every panel is locked to <code>aspect-ratio: 830/548</code> in a 2×2
+grid, so a wider window buys four wider squares and the camera — the one panel whose
+content actually scales — gains nothing the others do not. The ask is Bambu's shape: the
+camera grows in both directions, the print job sits under it as a wide short strip, and
+Filament sits under Control at the same width.</p>
+
+<p class="lede">The obstacle is real and worth naming. <b>The Control panel's cluster
+is 758&nbsp;px wide</b> — <code>.control-grid</code> caps it there, and 830&nbsp;px with
+its padding. A right-hand column that holds it unchanged is 830&nbsp;px, which at a
+1600&nbsp;px window leaves the camera <em>less</em> room than the control it was supposed
+to outgrow.</p>
+
+<p class="lede">Which is only decisive if width is the currency. It is not:
+<b>a panel has two dimensions and the Control panel is wasteful in the other one.</b>
+It inherits a 548&nbsp;px body for a cluster that needs about 280, and gives the surplus
+to nobody. Let it size to its content and Filament — directly beneath it, in the same
+column — takes what it releases. So the two columns stop being rows of a 2×2 grid and
+become independent stacks, which is the version selected below.</p>
+
+<input class="vradio" type="radio" name="lay" id="l0">
+<input class="vradio" type="radio" name="lay" id="l1">
+<input class="vradio" type="radio" name="lay" id="l2">
+<input class="vradio" type="radio" name="lay" id="l3" checked>
+<input class="vradio" type="radio" name="hgt" id="h1" checked>
+<input class="vradio" type="radio" name="hgt" id="h2">
+<input class="vradio" type="radio" name="hgt" id="h3">
+<input class="vradio" type="radio" name="vw" id="w1420">
+<input class="vradio" type="radio" name="vw" id="w1600" checked>
+<input class="vradio" type="radio" name="vw" id="w1920">
+<input class="vradio" type="radio" name="vw" id="w2560">
+
+<div class="picker">
+  <label for="l0"><span class="k">L0</span><span class="t">Today</span>
+    <span class="d">2×2, every panel locked to 830/548. The baseline.</span></label>
+  <label for="l1"><span class="k">L1</span><span class="t">Fixed 590 rail</span>
+    <span class="d">Control reflows to one narrow column. Widest camera; rebuilds a
+    panel that works.</span></label>
+  <label for="l2"><span class="k">L2</span><span class="t">Proportional 2fr / 1fr</span>
+    <span class="d">Both columns grow. Simplest rule, most slack on the right.</span></label>
+  <label for="l3"><span class="k">L3</span><span class="t">830 rail, shorter Control</span>
+    <span class="d">The cluster keeps its width and gives up height. Filament grows
+    upward into what it releases.</span></label>
+</div>
+
+<div class="picker" style="margin-top:4px">
+  <label for="h1"><span class="k">H1</span><span class="t">Camera fills, frame letterboxes</span>
+    <span class="d">The panel takes the whole column; the frame centres in its own
+    black. Bars shrink as the window widens and vanish past ~2100.</span></label>
+  <label for="h2"><span class="k">H2</span><span class="t">Printing Task absorbs it</span>
+    <span class="d">Camera stays 16:9, Task grows. Reduced from today's square, but
+    not by much at 1920.</span></label>
+  <label for="h3"><span class="k">H3</span><span class="t">The column just ends</span>
+    <span class="d">Camera 16:9, Task 150, whitespace below. What an ordinary
+    two-column page does.</span></label>
+</div>
+
+<div class="wpick">
+  <span class="lbl">window</span>
+  <label for="w1420">1420</label><label for="w1600">1600</label>
+  <label for="w1920">1920</label><label for="w2560">2560</label>
+  <span class="camwidth">the rail is 322 px in every one of them</span>
+</div>
+
+<div class="stage">
+ <div class="screenbox"><div class="screen">
+  <div class="rail">
+    <div class="railtop"><span class="dot">S</span><span class="nm">U1 G</span></div>
+    <div class="navitem on"><span class="sq"></span>Device control</div>
+    <div class="navitem"><span class="sq"></span>Storage</div>
+  </div>
+  <div class="content">
+   <div class="col-l">
+
+    <section class="p pcam">
+      <div class="ph"><span>Camera</span><span class="grow"></span>
+        <span class="pill">case ▾</span><span class="pill">⚙</span></div>
+      <div class="pb" style="padding:0">
+        <div class="camview">
+          <canvas class="fr" id="camcanvas" width="640" height="360"></canvas>
+          <div class="ovl">
+            <span class="ovlchip on">14.0 fps</span>
+            <span class="ovlchip">1920×1080</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="p ptask">
+      <div class="ph"><span>Printing Task</span><span class="grow"></span>
+        <span class="pill">↻</span></div>
+      <div class="pb">
+        <div class="taskcard">
+          <div class="thumb"></div>
+          <div class="meta">
+            <div class="nm">MC_Center_Rack_Key-wall_LVL_02_PETG_1h1m.gcode</div>
+            <div class="bar"><i></i></div>
+            <div class="sub2"><span>64%</span><span>Layer 98/153</span><span>22 min left</span></div>
+          </div>
+          <div class="taskbtns"><span class="b">⏸</span><span class="b">■</span></div>
+        </div>
+      </div>
+    </section>
+
+   </div>
+   <div class="col-r">
+
+    <section class="p pctl">
+      <div class="ph"><span>Control</span><span class="grow"></span>
+        <span class="pill">↻</span></div>
+      <div class="pb">
+        <div class="ctl-wide">
+          <div class="readcol">
+            <div class="readrow"><span class="ic"></span><span class="v">218/220</span></div>
+            <div class="readrow"><span class="ic"></span><span class="v">26/—</span></div>
+            <div class="readrow"><span class="ic"></span><span class="v">26/—</span></div>
+            <div class="readrow"><span class="ic"></span><span class="v">26/—</span></div>
+            <div class="readrow"><span class="ic"></span><span class="v">60/60</span></div>
+          </div>
+          <div class="pickcol">
+            <div class="pickbox live"><span class="sq"></span>T1</div>
+            <div class="pickbox"><span class="sq"></span>T2</div>
+            <div class="pickbox"><span class="sq"></span>T3</div>
+            <div class="pickbox"><span class="sq"></span>T4</div>
+          </div>
+          <div class="motcol">
+            <div class="wheel"></div>
+            <div class="bedrow"><span class="b">Bed ▲</span><span class="b">▼</span></div>
+          </div>
+        </div>
+
+        <div class="ctl-tall">
+          <div class="readstrip">
+            <div class="readrow"><span class="ic"></span><span class="v">218</span></div>
+            <div class="readrow"><span class="ic"></span><span class="v">26</span></div>
+            <div class="readrow"><span class="ic"></span><span class="v">26</span></div>
+            <div class="readrow"><span class="ic"></span><span class="v">26</span></div>
+            <div class="readrow"><span class="ic"></span><span class="v">60</span></div>
+          </div>
+          <div style="display:flex;gap:22px;align-items:flex-start;justify-content:center">
+            <div class="pickcol" style="width:190px;flex:0 0 190px">
+              <div class="pickbox live"><span class="sq"></span>T1</div>
+              <div class="pickbox"><span class="sq"></span>T2</div>
+              <div class="pickbox"><span class="sq"></span>T3</div>
+              <div class="pickbox"><span class="sq"></span>T4</div>
+            </div>
+            <div class="motcol">
+              <div class="wheel"></div>
+              <div class="bedrow"><span class="b">Bed ▲</span><span class="b">▼</span></div>
+            </div>
+          </div>
+          <div class="tiles">
+            <div class="tile"><span class="sq"></span>Speed</div>
+            <div class="tile"><span class="sq"></span>Fans</div>
+            <div class="tile"><span class="sq"></span>Purifier</div>
+            <div class="tile"><span class="sq"></span>Light</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="p pfil">
+      <div class="ph"><span>Filament</span><span class="grow"></span>
+        <span class="pill">↻</span></div>
+      <div class="pb" style="justify-content:center">
+        <div class="slots">
+          <div class="slot"><span class="disc" style="background:#f44336">1</span>
+            <span class="lb">PLA</span></div>
+          <div class="slot"><span class="disc" style="background:#ffffdc;color:#333">2</span>
+            <span class="lb">PLA</span></div>
+          <div class="slot"><span class="disc" style="background:#c4c4c4">3</span>
+            <span class="lb">/</span></div>
+          <div class="slot"><span class="disc" style="background:#632c2c">4</span>
+            <span class="lb">PETG</span></div>
+        </div>
+      </div>
+    </section>
+
+   </div>
+  </div>
+ </div></div>
+ <p class="caption">Switch version and window width above. <b>L0 is today</b> — note how
+ the camera never becomes the biggest thing on the page no matter how wide the window
+ gets, and how much empty white the Control panel carries at 2560.</p>
+</div>
+
+<h3>What each version gives, in pixels</h3>
+<p class="lede">Width first. Content is <code>window &minus; 262 rail &minus; 42
+padding</code>, then a 20&nbsp;px gap; the bold figure is the camera. The last column is
+what the single centred column below the breakpoint gives it, which turns out to matter.</p>
+
+<div class="note warn"><b>Corrected after building it.</b> This table first read
+<code>window &minus; 322 rail</code>. 322 is the rail <em>plus</em> the padding and the
+gap — it comes from a measured note in <code>device.css</code> that folds all three
+together — and subtracting the padding again on top of it took 42&nbsp;px off every
+figure. The crossover where L3's camera overtakes the old grid was reported as
+<b>~2550</b>; it is <b>1984</b>. That error made L3 look worse than it is, which is worth
+saying plainly: the version that was picked was picked <em>despite</em> it.</div>
+
+<div class="scroll"><table>
+<tr><th>window</th><th>content</th><th>L3 · 830 rail</th><th>L1 · 590 rail</th>
+    <th>L0 · old equal grid</th><th>one column</th></tr>
+<tr><td class="num">1500</td><td class="num">1196</td>
+    <td class="num"><b>346</b> / 830</td><td class="num"><b>586</b> / 590</td>
+    <td class="num">588 / 588</td><td class="num">961</td></tr>
+<tr><td class="num">1600</td><td class="num">1296</td>
+    <td class="num"><b>446</b> / 830</td><td class="num"><b>686</b> / 590</td>
+    <td class="num">638 / 638</td><td class="num">1021</td></tr>
+<tr><td class="num">1920</td><td class="num">1616</td>
+    <td class="num"><b>766</b> / 830</td><td class="num"><b>1006</b> / 590</td>
+    <td class="num">798 / 798</td><td class="num">1213</td></tr>
+<tr><td class="num">1984</td><td class="num">1680</td>
+    <td class="num"><b>830</b> / 830 <span class="chip yes">crossover</span></td>
+    <td class="num"><b>1070</b> / 590</td>
+    <td class="num">830 / 830</td><td class="num">1252</td></tr>
+<tr><td class="num">2560</td><td class="num">2256</td>
+    <td class="num"><b>1406</b> / 830</td><td class="num"><b>1646</b> / 590</td>
+    <td class="num">1118 / 1118</td><td class="num">1597</td></tr>
+</table></div>
+
+<div class="note bad"><b>The last column is the uncomfortable one, and it is not an
+argument against L3.</b> A single centred column always gives the camera more width than
+any two-column layout can — that is arithmetic, not design. Two columns exist so the
+controls and the picture are on screen together, and that is worth a narrower picture or
+it is not. <b>The breakpoint is where that judgement is written down</b>, and it is one
+number in <code>device.css</code>: it shipped at <b>1600</b>. Raise it to 1984 and the
+two-column layout never costs the camera a pixel; lower it to 1420 and it engages where
+it used to.</div>
+
+<p class="lede">Then height, which is the half that decides it. A 980&nbsp;px window leaves
+932 inside the content padding. Control's cluster is the taller of its two groups — the
+jog wheel at 202 plus 12 and a 34&nbsp;px bed row, against five 38&nbsp;px readings — so
+its body is about 280 and the panel about 340.</p>
+
+<div class="scroll"><table>
+<tr><th>right column at 980 window</th><th>L3</th><th>L0 · today</th></tr>
+<tr><td>Control panel</td><td class="num">340 <span class="chip yes">sized to its cluster</span></td>
+    <td class="num">588 <span class="chip no">830/548 + header</span></td></tr>
+<tr><td>gap</td><td class="num">20</td><td class="num">20</td></tr>
+<tr><td><b>Filament panel</b></td><td class="num"><b>572</b></td>
+    <td class="num"><b>324</b>, and it does not grow</td></tr>
+</table></div>
+
+<div class="note ok"><b>830 wide with real height under Control is the number that
+matters</b>, because it is the ACE panel's budget in part 03 - enough for four toolhead
+cards each carrying a source switch, over a unit box with four bays, with the feed wires
+drawn between them. L1's 590-wide column cannot hold that at any height.</div>
+
+<div class="note"><b>Measured after building it</b>, at a 1920x1080 window: Control
+<b>424</b> and Filament <b>496</b>, against 588 and 588 before - which did not fit, so the
+destination scrolled. Control's body is its 340px cluster plus 44px of padding; the 588
+was the 830/548 ratio and nothing else. The table above said 340/572, which was the
+cluster mistaken for the panel.</div>
+
+<div class="note warn"><b>What L3 costs, now that the arithmetic is right.</b> Between the
+breakpoint and 1984 the camera is narrower than the old equal grid gave it - 446 against
+638 at 1600, and 766 against 798 at 1920. The 1920 case is 32px, and it buys Filament
+172px of height and a page that fits its window. The 1600 case is 192px and is the
+weakest point of this design.</div>
+
+<div class="note bad"><b>L2 fails at both ends</b>, and is kept only as the record. A
+proportional split hands the right column 345px at 1420 - narrower than the cluster can be
+drawn at all - and 725px at 2560, which is 300px of air beside fixed-size content. A
+column holding a fixed-size cluster should not be sized as a fraction of anything.</div>
+
+
+<h3>Where the left column's surplus height goes</h3>
+<p class="lede">L3's two columns are independent, so they do not end at the same place.
+Measured at 1920: the right column wants 940 and the left needs 661 - the camera at 16:9
+in a 766px column is 431 plus a 40px header, Task is 150 plus 40. That is <b>259px</b>
+unspoken for, and the switcher above draws all three answers.</p>
+
+<div class="scroll"><table>
+<tr><th></th><th>what it does</th><th>at 1920, measured</th><th>at 2560</th></tr>
+<tr><td><b>H1</b> letterbox <span class="chip yes">built</span></td>
+    <td>Camera panel fills the column; the frame centres in its own black</td>
+    <td class="num">panel 766x730, frame 766x431 &rarr; 129 px bars</td>
+    <td class="num">the frame becomes width-bound; no bars at all</td></tr>
+<tr><td><b>H2</b> Task absorbs</td><td>Camera stays 16:9; Printing Task grows</td>
+    <td class="num">Task body 409 - barely reduced from the 548 it had</td>
+    <td class="num">Task body ~190</td></tr>
+<tr><td><b>H3</b> short column</td><td>Camera 16:9, Task 150, whitespace below</td>
+    <td class="num">259 px empty</td><td class="num">~40 px empty</td></tr>
+</table></div>
+
+
+<div class="note ok"><b>H1 is the recommendation, and it is the one that answers the
+original ask.</b> "Expandable in x and y" is exactly a panel that takes both dimensions of
+its column; the frame centring in black is what every video player does, and the ground is
+already black. The bars are self-correcting — they shrink as the window widens and are
+gone by about 2100, where the frame becomes width-bound instead. H2 makes Printing Task
+435&nbsp;px tall to hold a thumbnail and a progress bar, which is the panel the whole
+change was trying to shrink.</div>
+
+<h3>Two smaller calls inside L3</h3>
+<div class="scroll"><table>
+<tr><th>question</th><th>options</th><th>lean</th></tr>
+<tr><td>What does the Control panel give up, exactly?</td>
+    <td><b>Only the aspect ratio.</b> <code>.control-body</code> already sets
+        <code>aspect-ratio: auto</code>; what still pads it out is
+        <code>.panel-body</code>'s <code>min-height: 320px</code> and the grid row it
+        shares with the camera. Both go with the flex columns.</td>
+    <td>No change to <code>control-view.js</code> at all — which is the whole reason to
+        prefer L3 over L1.</td></tr>
+<tr><td>Printing Task height</td><td>150 fixed · content-sized</td>
+    <td><b>Content-sized</b> — and this row said "150 fixed" until the card was measured
+        at 304 and found to have been silently clipped. A body that hides its overflow
+        should never be given a number a human guessed.</td></tr>
+</table></div>
+
+<h2><span class="n">02</span>The camera gets modes, because the machine now has four of them</h2>
+<p class="lede">Today the panel does exactly one thing: <code>camera.start_monitor</code>
+tells the printer to rewrite <code>timelapse/monitor.jpg</code> every
+<code>CAMERA_INTERVAL&nbsp;=&nbsp;2</code> seconds, and the page fetches that one file over
+HTTP. <b>That is half a frame per second.</b> The extended firmware on this machine serves
+the same camera at 1920×1080 as fast as the engine will take it, serves a second USB
+camera beside it, and offers two real streaming transports on top.</p>
+
+<h3>What the printer offers</h3>
+<p class="lede"><code>GET :7125/server/webcams/list</code> — four entries, and only two of
+them are cameras. Filtering matters: the list is Moonraker's, and anything can register in
+it.</p>
+
+<div class="scroll"><table>
+<tr><th>name</th><th>service</th><th>stream</th><th>snapshot</th><th>measured just now</th></tr>
+<tr><td><code>case</code></td><td class="num">webrtc-camerastreamer</td>
+    <td class="num">/webcam/webrtc</td><td class="num">/webcam/snapshot.jpg</td>
+    <td class="num">1920×1080 · 226 KB · 81 ms <span class="chip yes">camera</span></td></tr>
+<tr><td><code>usb</code></td><td class="num">webrtc-camerastreamer</td>
+    <td class="num">/webcam2/webrtc</td><td class="num">/webcam2/snapshot.jpg</td>
+    <td class="num">1280×720 · 87 KB · 44 ms <span class="chip yes">camera</span></td></tr>
+<tr><td><code>gui</code></td><td class="num">iframe</td>
+    <td class="num">/screen/</td><td class="num">/screen/snapshot</td>
+    <td class="num">710 B PNG, 480×320 <span class="chip maybe">the printer's own screen</span></td></tr>
+<tr><td><code>multiACE</code></td><td class="num">iframe</td>
+    <td class="num">/multiace/?panel=1</td><td class="num">—</td>
+    <td class="num">a web panel <span class="chip no">not a camera</span></td></tr>
+</table></div>
+
+<div class="note"><b>The printer's own touchscreen is in that list</b>, as
+<code>gui</code>, and it answers with a PNG. It is not a camera, but it is a live view of
+the machine and it costs nothing to offer — worth a decision rather than an accident.
+Suggested rule: entries whose <code>snapshot_url</code> is empty are not offered;
+<code>gui</code> is offered, last, and labelled <em>Screen</em> rather than sitting in the
+camera list unexplained.</div>
+
+<h3>What Orca's engine can actually decode</h3>
+<p class="lede">This is the part that decides the design, and it is not the same answer on
+every platform. Read out of WebKitGTK — the engine Orca renders with on Linux — a moment
+ago:</p>
+
+<div class="scroll"><table>
+<tr><th>transport</th><th>how</th><th>fps</th><th>WebKitGTK · Linux</th>
+    <th>WebView2 · Windows</th><th>WKWebView · macOS</th></tr>
+<tr><td><b>Snapshot · stock</b></td>
+    <td class="num">sw_CameraStartMonitor → timelapse/monitor.jpg</td>
+    <td class="num">0.5</td>
+    <td><span class="chip yes">works</span></td><td><span class="chip yes">works</span></td>
+    <td><span class="chip yes">works</span></td></tr>
+<tr><td><b>Snapshot · direct</b></td>
+    <td class="num">&lt;img&gt; onto /webcam/snapshot.jpg, re-pointed on load</td>
+    <td class="num">14.0 <span class="chip yes">measured</span></td>
+    <td><span class="chip yes">works</span></td><td><span class="chip yes">works</span></td>
+    <td><span class="chip yes">works</span></td></tr>
+<tr><td><b>H.264 stream</b></td>
+    <td class="num">fetch /webcam/stream.h264 → jmuxer → MSE</td>
+    <td class="num">~30</td>
+    <td><span class="chip no">no H.264</span></td><td><span class="chip yes">expected</span></td>
+    <td><span class="chip yes">expected</span></td></tr>
+<tr><td><b>WebRTC</b></td>
+    <td class="num">POST /webcam/webrtc → RTCPeerConnection</td>
+    <td class="num">~30</td>
+    <td><span class="chip no">no RTCPeerConnection</span></td>
+    <td><span class="chip maybe">unverified</span></td><td><span class="chip maybe">unverified</span></td></tr>
+<tr><td><b>RTSP</b></td><td class="num">rtsp://ip:8554/stream</td><td class="num">~30</td>
+    <td><span class="chip no">no browser speaks RTSP</span></td>
+    <td><span class="chip no">—</span></td><td><span class="chip no">—</span></td></tr>
+</table></div>
+
+<div class="note bad"><b>Both streaming transports are dead on Linux, and the evidence is
+four lines.</b> <code>canPlayType('video/mp4; codecs="avc1.42E01E")</code> answers the
+empty string; <code>MediaSource.isTypeSupported</code> for the same is <code>false</code>
+(VP8 is <code>true</code>, so MSE itself is fine — it is the codec that is missing);
+<code>typeof RTCPeerConnection</code> is <code>"undefined"</code>. The UA is
+<code>AppleWebKit/605.1.15 Version/60.5</code>. This is the same limitation that already
+stops time-lapse playback in the Storage panel, so it is a known quantity rather than a
+surprise.</div>
+
+<div class="note ok"><b>And the fallback is not a consolation prize.</b> 14.0 fps at
+1920×1080, chained in the real engine for three seconds, is 28× the current page and
+visually a video. The direct snapshot mode is the one that should ship first and be the
+default; the streaming modes are a Windows/macOS bonus that has to be probed for, not
+assumed.</div>
+
+<div class="note warn"><b>One trap that will bite whoever wires this.</b> nginx on port 80
+sends <em>no</em> <code>Access-Control-Allow-Origin</code> at all, and Moonraker on 7125
+sends one. An <code>&lt;img src&gt;</code> to <code>/webcam/snapshot.jpg</code> loads
+anyway — images are not CORS-restricted unless you read their pixels — but a
+<code>fetch()</code> of the identical URL fails with <em>Load failed</em>. Both were run
+just now. So: <b>enumerate over 7125, display with &lt;img&gt;, never fetch a frame.</b>
+</div>
+
+<style>
+/* ---- camera panel mockups ---- */
+.campanel{width:100%;max-width:760px;margin:0 auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.campanel .ph{height:40px;background:var(--panel-2);display:flex;align-items:center;gap:0;
+  padding:0 15px 0 26px;font-size:14px;border-bottom:1px solid var(--line-soft)}
+.campanel .ph .grow{flex:1}
+.ptab{align-self:flex-end;height:36px;min-width:52px;display:grid;place-items:center;
+  border:0;border-radius:6px 6px 0 0;background:none;padding:0 14px;font:inherit;
+  font-size:13px;color:var(--ink-2);cursor:pointer}
+.ptab.on{background:var(--panel);color:var(--ink)}
+.iconbtn{width:32px;height:32px;border-radius:7px;border:1px solid transparent;
+  background:none;display:grid;place-items:center;cursor:pointer;color:var(--ink-2);
+  font-size:15px}
+.iconbtn:hover{background:var(--panel-3)}
+.iconbtn.on{background:var(--accent);color:var(--accent-in)}
+.camstage{position:relative;background:#0b0f14;aspect-ratio:16/9;display:grid;
+  place-items:center;overflow:hidden}
+.camstage canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+/* One stage, four tiles. Which tiles are drawn - and how big - is the whole of the
+   view-layout choice, so it is grid-template plus a display toggle and nothing else. */
+.tiles-cam{position:absolute;inset:0;display:grid;gap:2px;background:#05080b}
+.ctile{position:relative;overflow:hidden;background:#0b0f14;min-width:0;min-height:0}
+.ctile .tlab{position:absolute;left:7px;bottom:6px;z-index:2;font-size:10.5px;
+  font-family:var(--mono);color:#fff;background:rgba(8,11,16,.68);padding:2px 7px;
+  border-radius:4px}
+.ctile .tempty{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;
+  color:#5d6774;font-family:var(--mono)}
+.t-2,.t-3,.t-4{display:none}
+/* v1 single */
+#v1:checked~.stage .tiles-cam{grid-template-columns:1fr}
+/* v2 split - two side by side */
+#v2:checked~.stage .tiles-cam{grid-template-columns:1fr 1fr}
+#v2:checked~.stage .t-2{display:block}
+/* v3 grid - 2x2, and the fourth cell says why it is empty */
+#v3:checked~.stage .tiles-cam{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+#v3:checked~.stage .t-2,#v3:checked~.stage .t-3,#v3:checked~.stage .t-4{display:block}
+/* v4 picture-in-picture - one full, one inset */
+#v4:checked~.stage .tiles-cam{grid-template-columns:1fr}
+#v4:checked~.stage .t-2{display:block;position:absolute;right:12px;top:12px;
+  width:31%;aspect-ratio:16/9;border-radius:7px;border:2px solid rgba(255,255,255,.5);
+  box-shadow:0 6px 18px rgba(0,0,0,.5);z-index:3}
+#v1:checked~.picker [for=v1],#v2:checked~.picker [for=v2],
+#v3:checked~.picker [for=v3],#v4:checked~.picker [for=v4]
+  {border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.vseg{display:inline-flex;border:1px solid var(--line);border-radius:9px;padding:4px;
+  background:var(--panel);gap:2px;flex-wrap:wrap}
+.vseg span{padding:6px 12px;border-radius:6px;font-size:12.5px;color:var(--ink-2);cursor:pointer}
+.vseg span.on{background:var(--accent);color:var(--accent-in)}
+.camstage .hud{position:absolute;left:12px;top:12px;display:flex;gap:7px;z-index:3}
+.hudchip{height:26px;border-radius:6px;background:rgba(10,14,20,.72);color:#fff;
+  display:flex;align-items:center;gap:6px;padding:0 10px;font-size:12px;
+  font-family:var(--mono)}
+.hudchip.live::before{content:"";width:7px;height:7px;border-radius:50%;background:#4ade80}
+
+/* the settings body, shared by all three placements */
+.camset{padding:18px 22px;font-size:13.5px}
+.setgrp{margin-bottom:20px}
+.setgrp:last-child{margin-bottom:0}
+.setlbl{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+  font-weight:600;margin-bottom:8px}
+.modelist{display:flex;flex-direction:column;gap:6px}
+.moderow{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;
+  border:1px solid var(--line);background:var(--panel);cursor:pointer}
+.moderow:hover{border-color:var(--accent)}
+.moderow.on{border-color:var(--accent);background:var(--accent-soft);
+  box-shadow:inset 0 0 0 1px var(--accent)}
+.moderow.off{opacity:.55;cursor:not-allowed;background:var(--panel-2)}
+.moderow.off:hover{border-color:var(--line)}
+.moderow .rd{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--muted);
+  flex:0 0 15px;position:relative}
+.moderow.on .rd{border-color:var(--accent)}
+.moderow.on .rd::after{content:"";position:absolute;inset:3px;border-radius:50%;
+  background:var(--accent)}
+.moderow .body{flex:1;min-width:0}
+.moderow .t{font-weight:600;font-size:13px}
+.moderow .d{font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-top:1px}
+.moderow .rt{flex:0 0 auto}
+.camrow{display:flex;gap:8px;flex-wrap:wrap}
+.campick{display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:9px;
+  border:1px solid var(--line);background:var(--panel);cursor:pointer;font-size:13px}
+.campick.on{border-color:var(--accent);background:var(--accent-soft);
+  box-shadow:inset 0 0 0 1px var(--accent)}
+.campick .th{width:44px;height:26px;border-radius:4px;background:#0b0f14;flex:0 0 44px}
+.campick .sub{font-size:11px;color:var(--muted);font-family:var(--mono)}
+.seg2{display:inline-flex;border:1px solid var(--line);border-radius:9px;padding:4px;
+  background:var(--panel);gap:2px}
+.seg2 span{padding:6px 14px;border-radius:6px;font-size:13px;color:var(--ink-2);cursor:pointer}
+.seg2 span.on{background:var(--accent);color:var(--accent-in)}
+.discl{margin-top:10px;font-size:12px;color:var(--muted);font-family:var(--mono);
+  border-top:1px dashed var(--line);padding-top:10px}
+
+/* placement switching */
+#s1:checked~.stage .sheet-tab{display:block}
+#s1:checked~.stage .camstage-wrap{display:none}
+#s1:checked~.stage .tab-gear{background:var(--panel);color:var(--ink)}
+#s2:checked~.stage .pop{display:block}
+#s2:checked~.stage .gear-btn{background:var(--accent);color:var(--accent-in)}
+#s3:checked~.stage .playbar{display:flex}
+.sheet-tab{display:none}
+.camstage-wrap{display:block}
+.pop{display:none;position:absolute;right:14px;top:46px;width:330px;z-index:20;
+  background:var(--panel);border:1px solid var(--line);border-radius:11px;
+  box-shadow:0 2px 4px rgba(16,24,32,.08),0 18px 40px -14px rgba(16,24,32,.5)}
+.pop::before{content:"";position:absolute;right:20px;top:-7px;width:12px;height:12px;
+  background:var(--panel);border-left:1px solid var(--line);border-top:1px solid var(--line);
+  transform:rotate(45deg)}
+.playbar{display:none;position:absolute;left:0;right:0;bottom:0;z-index:4;
+  background:linear-gradient(transparent,rgba(6,9,13,.86) 34%);
+  padding:34px 14px 12px;align-items:center;gap:9px}
+.playbar .bchip{height:30px;border-radius:7px;background:rgba(255,255,255,.13);color:#fff;
+  display:flex;align-items:center;gap:6px;padding:0 11px;font-size:12.5px;cursor:pointer}
+.playbar .bchip.on{background:rgba(12,99,226,.95)}
+.playbar .grow{flex:1}
+#s1:checked~.picker [for=s1],#s2:checked~.picker [for=s2],#s3:checked~.picker [for=s3]
+  {border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.relwrap{position:relative}
+</style>
+
+<h3>Where the settings live</h3>
+<p class="lede">The page already owns two patterns for this: a header tab that swaps the
+body (what the Camera panel's Time&nbsp;lapse tab used to be) and a control that opens an
+anchored popover under itself (what the Control panel's four quick-setting tiles are). A
+third is worth considering because this is video: the bar inside the picture.</p>
+
+<input class="vradio" type="radio" name="place" id="s1">
+<input class="vradio" type="radio" name="place" id="s2" checked>
+<input class="vradio" type="radio" name="place" id="s3">
+<input class="vradio" type="radio" name="cview" id="v1">
+<input class="vradio" type="radio" name="cview" id="v2">
+<input class="vradio" type="radio" name="cview" id="v3" checked>
+<input class="vradio" type="radio" name="cview" id="v4">
+
+<div class="picker">
+  <label for="s1"><span class="k">S1</span><span class="t">A tab in the header</span>
+    <span class="d">Settings replace the picture. The panel's own established tab
+    vocabulary; costs you the live view while you change it.</span></label>
+  <label for="s2"><span class="k">S2</span><span class="t">A gear, and a popover</span>
+    <span class="d">Anchored under the control that owns it, exactly like the Control
+    panel's tiles. Picture stays up behind it.</span></label>
+  <label for="s3"><span class="k">S3</span><span class="t">A bar in the picture</span>
+    <span class="d">Player-style, revealed on hover. Reads as video; hides a setting
+    behind a hover, which nothing else on this page does.</span></label>
+</div>
+
+<p class="lede" style="margin-top:22px">And one view or several. The machine offers three
+live pictures — the case camera, the USB camera and the printer's own touchscreen — and
+watching two at once is the reason to have a second camera at all.</p>
+
+<div class="picker">
+  <label for="v1"><span class="k">V1</span><span class="t">Single</span>
+    <span class="d">One picture, picked from the list. Today's behaviour.</span></label>
+  <label for="v2"><span class="k">V2</span><span class="t">Split</span>
+    <span class="d">Two side by side, each half width. Both stay legible.</span></label>
+  <label for="v3"><span class="k">V3</span><span class="t">Grid 2×2</span>
+    <span class="d">Every view at once. Four quarter-size tiles, and one of them
+    says why it is empty.</span></label>
+  <label for="v4"><span class="k">V4</span><span class="t">Picture in picture</span>
+    <span class="d">One full size with a second inset. Keeps a main view and
+    still watches the other.</span></label>
+</div>
+
+<div class="stage">
+ <div class="campanel relwrap">
+  <div class="ph">
+    <span>Camera</span>
+    <span class="grow"></span>
+    <button class="ptab tab-gear" type="button">Settings</button>
+    <button class="iconbtn gear-btn" type="button" aria-label="Camera settings">⚙</button>
+  </div>
+
+  <div class="camstage-wrap">
+   <div class="camstage">
+    <div class="tiles-cam">
+      <div class="ctile t-main"><canvas id="camcanvas2" width="800" height="450"></canvas>
+        <span class="tlab">Case</span></div>
+      <div class="ctile t-2"><canvas id="camcanvas3" width="800" height="450"></canvas>
+        <span class="tlab">USB</span></div>
+      <div class="ctile t-3"><canvas id="camcanvas4" width="800" height="450"></canvas>
+        <span class="tlab">Screen</span></div>
+      <div class="ctile t-4"><div class="tempty">No fourth camera</div></div>
+    </div>
+    <div class="hud">
+      <span class="hudchip live">14.0 fps</span>
+      <span class="hudchip">case · 1920×1080</span>
+    </div>
+    <div class="playbar">
+      <span class="bchip on">⚙ Direct snapshot</span>
+      <span class="bchip">▦ Grid</span>
+      <span class="grow"></span>
+      <span class="bchip">14.0 fps</span>
+      <span class="bchip">⛶</span>
+    </div>
+   </div>
+  </div>
+
+  <div class="sheet-tab camset">
+    <div class="setgrp">
+      <div class="setlbl">Camera</div>
+      <div class="camrow">
+        <span class="campick on"><span class="th"></span>
+          <span>Case<br><span class="sub">1920×1080</span></span></span>
+        <span class="campick"><span class="th"></span>
+          <span>USB<br><span class="sub">1280×720</span></span></span>
+        <span class="campick"><span class="th"></span>
+          <span>Screen<br><span class="sub">480×320</span></span></span>
+      </div>
+    </div>
+    <div class="setgrp">
+      <div class="setlbl">Quality</div>
+      <div class="modelist">
+        <span class="moderow on"><span class="rd"></span><span class="body">
+          <span class="t">Sharp</span>
+          <span class="d">snapshot · direct · 14 fps · 1920×1080</span></span>
+          <span class="rt chip yes">in use</span></span>
+        <span class="moderow"><span class="rd"></span><span class="body">
+          <span class="t">Smooth</span>
+          <span class="d">H.264 · 30 fps</span></span>
+          <span class="rt chip no">no H.264 in this engine</span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="pop camset">
+    <div class="setgrp">
+      <div class="setlbl">Views</div>
+      <div class="vseg"><span>Single</span><span>Split</span><span class="on">Grid</span>
+        <span>PiP</span></div>
+    </div>
+    <div class="setgrp">
+      <div class="setlbl">Cameras</div>
+      <div class="camrow">
+        <span class="campick on"><span class="th"></span>
+          <span>Case<br><span class="sub">1920×1080</span></span></span>
+        <span class="campick on"><span class="th"></span>
+          <span>USB<br><span class="sub">1280×720</span></span></span>
+        <span class="campick on"><span class="th"></span>
+          <span>Screen<br><span class="sub">480×320</span></span></span>
+      </div>
+    </div>
+    <div class="setgrp">
+      <div class="setlbl">Transport</div>
+      <div class="modelist">
+        <span class="moderow on"><span class="rd"></span><span class="body">
+          <span class="t">Auto</span>
+          <span class="d">the best this computer can decode</span></span>
+          <span class="rt chip yes">direct snapshot</span></span>
+        <span class="moderow"><span class="rd"></span><span class="body">
+          <span class="t">Monitor file</span>
+          <span class="d">camera.start_monitor · 0.5 fps</span></span></span>
+        <span class="moderow"><span class="rd"></span><span class="body">
+          <span class="t">Direct snapshot</span>
+          <span class="d">/webcam/snapshot.jpg · 14 fps</span></span></span>
+        <span class="moderow off"><span class="rd"></span><span class="body">
+          <span class="t">H.264 stream</span>
+          <span class="d">/webcam/stream.h264 · 30 fps</span></span>
+          <span class="rt chip no">no codec</span></span>
+        <span class="moderow off"><span class="rd"></span><span class="body">
+          <span class="t">WebRTC</span>
+          <span class="d">/webcam/webrtc · 30 fps</span></span>
+          <span class="rt chip no">no WebRTC</span></span>
+      </div>
+    </div>
+    <div class="setgrp" style="margin-bottom:0">
+      <div class="setlbl">Frames per second</div>
+      <div class="vseg"><span>1</span><span>5</span><span>10</span><span class="on">15</span></div>
+      <div class="discl">The printer's own <code>target_fps</code> is <b>15</b>, so the
+        scale stops there.<br>Grid of three at 15 ≈ <b>4.7 MB/s</b>; unfocused tiles drop
+        to 1 fps, which brings it to 3.5.</div>
+    </div>
+  </div>
+ </div>
+ <p class="caption">S2 open, over a 2×2 grid. The popover opens on the gear and closes on
+ the next click outside, which is <b>already written</b> — <code>core/overlay.js</code>
+ does anchored popovers for the Control panel's tiles.</p>
+</div>
+
+<div class="note ok"><b>S2, and it earns it twice over now that there is a grid.</b> It is
+the only one of the three that lets you watch the picture change as you change the setting
+— which is the whole reason to have the setting, and doubly so when the setting is
+<em>how many pictures</em>. S1 costs the live view at exactly the wrong moment; S3 buries
+a persistent choice behind a hover, and nothing else on this page does that. Keep the
+in-picture <b>overlay chips</b> from S3 though: an fps readout and the camera name are
+honest and cheap, and in grid mode each tile needs its own name anyway.</div>
+
+<h3>What a grid costs</h3>
+<p class="lede">Each tile is its own poll — there is no multiplexed stream to share — so a
+grid multiplies both bandwidth and JPEG decoding. The frame sizes are measured, not
+estimated.</p>
+
+<div class="scroll"><table>
+<tr><th>view</th><th>tiles</th><th>bytes per frame</th><th>at 15 fps</th>
+    <th>with the focus rule</th></tr>
+<tr><td><b>V1</b> single (case)</td><td class="num">1</td><td class="num">226 KB</td>
+    <td class="num">3.4 MB/s</td><td class="num">3.4 MB/s</td></tr>
+<tr><td><b>V2</b> split (case + usb)</td><td class="num">2</td><td class="num">313 KB</td>
+    <td class="num">4.7 MB/s</td><td class="num">3.5 MB/s</td></tr>
+<tr><td><b>V3</b> grid (case + usb + screen)</td><td class="num">3</td>
+    <td class="num">314 KB</td><td class="num">4.7 MB/s</td><td class="num">3.5 MB/s</td></tr>
+<tr><td><b>V4</b> PiP (case + usb)</td><td class="num">2</td><td class="num">313 KB</td>
+    <td class="num">4.7 MB/s</td><td class="num">3.5 MB/s</td></tr>
+</table></div>
+
+<div class="note"><b>The focus rule is what makes a grid affordable:</b> the tile you are
+pointing at polls at the chosen rate, the rest at 1&nbsp;fps. That is one line of policy
+and it turns 4.7&nbsp;MB/s into 3.5, because the case camera's 226&nbsp;KB frame dominates
+everything else on the page — the USB camera is 87&nbsp;KB and the touchscreen is
+<b>710 bytes</b>. In V4 the inset is by definition the unfocused one, which is why PiP is
+the cheapest way to watch two things.</div>
+
+<div class="note warn"><b>Asking for more than 15 fps gets nothing.</b> The webcam entries
+report <code>target_fps: 15</code> and <code>target_fps_idle: 5</code>, and the 14.0 fps
+chained in the engine is that cap, not a client limit. So the fps control tops out at 15
+and the missing frames are the printer's, not the page's — worth saying in the UI rather
+than letting someone chase a 30 that does not exist.</div>
+
+<div class="note"><b>Two view-layout details worth deciding now.</b>
+<br>· <b>V3's fourth cell.</b> Three live views and a 2×2 grid leaves one empty. Drawing
+"No fourth camera" in it is better than a 3-up layout that reflows the moment someone
+plugs in a second USB camera — and the extended firmware supports exactly that.
+<br>· <b>The touchscreen is not a camera</b> and should not be in the same list unlabelled.
+It is a 480×320 PNG of the machine's own UI; as a tile it is genuinely useful (it shows
+what the printer thinks it is doing) and as a "camera" it is a category error. Offer it
+last and call it <em>Screen</em>.</div>
+
+<style>
+.three{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px}
+.three>div{background:var(--panel);border:1px solid var(--line);border-radius:11px;
+  overflow:hidden}
+.three .hd{padding:11px 15px;border-bottom:1px solid var(--line-soft);
+  background:var(--panel-2);display:flex;align-items:baseline;gap:9px}
+.three>div.chosen{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.three>div.chosen .hd{background:var(--accent-soft)}
+.three .hd .grow{flex:1}
+.three .hd .k{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.three .hd .t{font-size:13.5px;font-weight:600}
+.three .verdict{padding:10px 15px;border-top:1px solid var(--line-soft);font-size:12px;
+  color:var(--ink-2);background:var(--panel-2)}
+</style>
+
+<h3>And what the list inside it says</h3>
+<p class="lede">A mode here is two things at once — a transport and a picture quality — and
+they do not always move together. Naming a mode after the transport is honest and
+unreadable; naming it after the quality is readable and lies when the transport is the
+reason the option is greyed. Three ways to resolve that:</p>
+
+<div class="three">
+
+  <div class="chosen">
+    <div class="hd"><span class="k">M-A</span><span class="t">Name the transport</span>
+      <span class="grow"></span><span class="chip yes">chosen</span></div>
+    <div class="camset">
+      <div class="modelist">
+        <span class="moderow on"><span class="rd"></span><span class="body">
+          <span class="t">Auto</span>
+          <span class="d">the best this computer can decode</span></span>
+          <span class="rt chip yes">direct snapshot</span></span>
+        <span class="moderow"><span class="rd"></span><span class="body">
+          <span class="t">Monitor file</span>
+          <span class="d">camera.start_monitor · 0.5 fps</span></span></span>
+        <span class="moderow"><span class="rd"></span><span class="body">
+          <span class="t">Direct snapshot</span>
+          <span class="d">/webcam/snapshot.jpg · 14 fps</span></span></span>
+        <span class="moderow off"><span class="rd"></span><span class="body">
+          <span class="t">H.264 stream</span>
+          <span class="d">/webcam/stream.h264 · 30 fps</span></span>
+          <span class="rt chip no">no codec</span></span>
+        <span class="moderow off"><span class="rd"></span><span class="body">
+          <span class="t">WebRTC</span>
+          <span class="d">/webcam/webrtc · 30 fps</span></span>
+          <span class="rt chip no">no WebRTC</span></span>
+      </div>
+    </div>
+    <div class="verdict">Every greyed row explains itself, and a bug report quotes the
+      transport by name. Asks the user to know what H.264 is.</div>
+  </div>
+
+  <div>
+    <div class="hd"><span class="k">M-B</span><span class="t">Name the quality</span></div>
+    <div class="camset">
+      <div class="modelist">
+        <span class="moderow on"><span class="rd"></span><span class="body">
+          <span class="t">Auto</span>
+          <span class="d">best this computer can show</span></span>
+          <span class="rt chip yes">Sharp</span></span>
+        <span class="moderow"><span class="rd"></span><span class="body">
+          <span class="t">Sharp</span><span class="d">full resolution, ~14 fps</span></span></span>
+        <span class="moderow off"><span class="rd"></span><span class="body">
+          <span class="t">Smooth</span><span class="d">30 fps video</span></span>
+          <span class="rt chip no">not on Linux</span></span>
+        <span class="moderow"><span class="rd"></span><span class="body">
+          <span class="t">Saver</span><span class="d">one frame a second</span></span></span>
+      </div>
+    </div>
+    <div class="verdict">Reads instantly and Auto is a real answer. "Not on Linux" is a
+      worse explanation than "no codec" when someone has to act on it.</div>
+  </div>
+
+  <div>
+    <div class="hd"><span class="k">M-C</span><span class="t">Quality, transport on ask</span></div>
+    <div class="camset">
+      <div class="setgrp">
+        <div class="setlbl">Quality</div>
+        <div class="seg2"><span class="on">Auto</span><span>Sharp</span><span>Saver</span></div>
+      </div>
+      <div class="setgrp" style="margin-bottom:0">
+        <div class="setlbl">Frame rate limit</div>
+        <div class="seg2"><span>1</span><span>5</span><span class="on">15</span><span>30</span></div>
+        <div class="discl">▸ Transport &nbsp;<b>direct snapshot</b><br>
+          H.264 and WebRTC need a codec this engine does not have.</div>
+      </div>
+    </div>
+    <div class="verdict">Two controls instead of one list, and the fps cap is a setting
+      people genuinely want on a laptop. The transport becomes a fact you can look up
+      rather than a choice you must make.</div>
+  </div>
+
+</div>
+
+<div class="note ok"><b>M-A it is — the transport is the name.</b> It costs a person one
+new word and buys three things that matter more than the word did: a greyed row explains
+itself in the same vocabulary as the reason, a bug report quotes something searchable, and
+nobody has to decide what "Smooth" means when it is unavailable. The audience for a
+printer's device panel already knows what a stream is.</p>
+
+<p><b>Two things carried over from the versions not chosen.</b> M-C's <b>frames-per-second
+control stays</b>, as its own setting rather than folded into the mode — it is orthogonal
+to transport, it is the lever that makes a grid affordable, and the popover above shows
+them as separate groups. And M-B's <b>Auto</b> stays as the default selection, sitting
+above the four named transports rather than replacing them: it reports which one it
+chose, so the naming is still doing its work.</div><div class="note"><b>Auto has to be a probe, not a guess.</b> The three tests are one line
+each and all three ran cleanly here:
+<code>MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E"')</code>,
+<code>typeof RTCPeerConnection !== 'undefined'</code>, and — for the printer's half — a
+<code>GET :7125/server/webcams/list</code> that returns at least one entry with a
+<code>snapshot_url</code>. Stock firmware fails that last one and Auto falls back to the
+monitor file, which is the behaviour the page has today. <b>The extended firmware is
+detected, never configured.</b></div>
+
+<div class="note warn"><b>Two open questions this design does not settle</b>, both needing
+a machine that is not this one.
+<br>· <b>Is the stock mode still needed at all?</b> Every U1 without the extended firmware
+needs it, and none was available to test against — <code>/webcam/snapshot.jpg</code> on
+stock firmware has not been tried and may well 404. Keep the stock path until that is
+measured.
+<br>· <b>Does WebView2 do WebRTC against this printer's signalling?</b> The table above
+says <em>expected</em> for H.264 on Windows and macOS on the strength of those engines
+shipping the codec, and <em>unverified</em> for WebRTC. Neither has been run. The Auto
+probe makes both safe to be wrong about — it will simply not choose them.</div>
+
+<h2><span class="n">03</span>The ACE, on a page that already knows how to talk to it</h2>
+<p class="lede">This machine has one <b>ACE&nbsp;2&nbsp;Pro</b>, firmware
+<code>V1.1.26</code>, at 38&nbsp;% RH and 31&nbsp;°C, feeding <b>Toolhead&nbsp;4</b> while
+toolheads 1–3 run off the stock feeders. The mode is <code>head</code>. All four of its
+slots hold PETG. That paragraph is the whole design brief, and every word of it came out
+of the printer a few minutes ago.</p>
+
+<h3>The finding that decides what can be built</h3>
+<p class="lede">Two ways in, and they do not carry the same data. This was worth an hour
+because getting it wrong would have meant designing a panel that cannot be filled.</p>
+
+<div class="scroll"><table>
+<tr><th></th><th><code>ace</code> as a Klipper object, over the page's own MQTT session</th>
+    <th><code>/multiace/api/state</code>, the FastAPI service</th></tr>
+<tr><td><b>Reachable from the page?</b></td>
+    <td><span class="chip yes">yes</span> <code>sw_GetMachineState {objects:{ace:null}}</code>
+        — <b>277 ms</b>, measured through <code>run_webkit.py --real</code>.
+        <b>No new bridge command.</b></td>
+    <td><span class="chip no">no</span> nginx :80 sends no CORS header;
+        <code>fetch</code> fails <em>Load failed</em>. Measured in the engine.</td></tr>
+<tr><td><b>Topology</b></td>
+    <td><span class="chip yes">all of it</span> <code>mode</code>,
+        <code>device_count</code>, <code>ace_head</code>,
+        <code>head_ace {0:0,1:1,2:2,3:0}</code>,
+        <code>head_feeder {0,1,2 true, 3 false}</code></td>
+    <td><span class="chip yes">same</span></td></tr>
+<tr><td><b>Unit health</b></td>
+    <td><span class="chip yes">all of it</span> model, firmware, connected, temp 31,
+        humidity 38, <code>dryer_status</code>, <code>auto_dry</code></td>
+    <td><span class="chip yes">same</span></td></tr>
+<tr><td><b>Slot occupancy</b></td>
+    <td><span class="chip yes">yes</span> <code>gate_status: [1,1,1,1]</code></td>
+    <td><span class="chip yes">yes</span> per-slot <code>state</code></td></tr>
+<tr><td><b>Slot identity</b> — what filament is in each bay</td>
+    <td><span class="chip no">absent</span> every raw slot reads
+        <code>{material:"", brand:"", color:[0,0,0], rfid:0, status:"unknown"}</code></td>
+    <td><span class="chip yes">present</span> <code>PETG · Kingroon · #83AFFF ·
+        source:"override"</code></td></tr>
+<tr><td><b>Identity of what is loaded</b></td>
+    <td><span class="chip yes">yes</span> <code>head_source[3] = {ace_index:0, slot:2,
+        type:"PETG", subtype:"Basic", color:"632C2C", brand:"Generic"}</code></td>
+    <td><span class="chip yes">same</span></td></tr>
+</table></div>
+
+<div class="note bad"><b>The raw Klipper object does not carry per-slot filament
+identity, and no amount of reshaping will produce it.</b> multiACE keeps slot overrides in
+its own store and merges them in <code>_parse_state()</code>; the Klipper object is what
+the hardware reports, and the hardware reports nothing — <code>rfid: 0</code> on all four,
+because these spools have no tags and were typed in. Document 02 called this a
+"replicate the reshaping logic" trade-off. It is not: the data is not there to reshape.
+<br><br>Checked and ruled out on the way: Moonraker's database has no
+<code>multiace</code> namespace, and while <code>multiace_web</code> <em>is</em> a
+registered Moonraker agent, <code>server/extensions/request</code> answered empty for
+every method name guessed at it. That last one is the only lead left and it is unfinished
+— it was guesswork, not a read of multiACE's source.</div>
+
+<div class="note ok"><b>So the panel has two honest tiers, and the first is free.</b>
+<br>· <b>Tier 1, today, no C++ at all:</b> which units exist and are they well, humidity
+and temperature, the dryer, the mode, which head is fed by which unit, whether each bay is
+occupied, and the full identity of the filament <em>currently loaded</em> in each toolhead.
+That is a genuinely useful panel and it needs one existing command.
+<br>· <b>Tier 2, needs Orca:</b> naming the filament sitting in an <em>unloaded</em> bay.
+That needs someone to proxy <code>/multiace/api/state</code> past CORS — a small
+<code>sw_</code> command, or a Moonraker agent call if that lead pans out.
+<br><br>Tier 1 draws an occupied-but-unidentified bay as occupied-but-unidentified, which
+is true, rather than blank, which is not.</div>
+
+<div class="note warn"><b>And a level is unknown even in tier 2.</b>
+<code>spool_mode</code> is <code>"spoolman"</code> and <code>spool_binding</code> is
+<code>{}</code> — <em>nothing is bound</em> on this machine, so no bay has a weight behind
+it. Document 16 treats the unbound bay as the exception; here it is every bay. Draw the
+unknown level as the default state and the measured one as the bonus, not the reverse.</div>
+
+<style>
+/* ---- ACE panel ---- */
+.acepanel{width:830px;max-width:100%;margin:0 auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.acepanel.narrow{width:590px}
+.acepanel .ph{height:40px;background:var(--panel-2);display:flex;align-items:center;
+  padding:0 15px 0 26px;font-size:14px;gap:9px;border-bottom:1px solid var(--line-soft)}
+.acepanel .ph .grow{flex:1}
+.acebody{padding:14px 20px 18px}
+.seclbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  font-weight:600;margin:0 0 9px}
+
+/* ---- the toolhead card, and its source switch ------------------------------------
+   Bambu puts a two-way tab pair over each AMS group - the cabinet, or the single
+   external spool - and the selected one takes a green border. The U1 has the same
+   choice per TOOLHEAD rather than per group, and three answers rather than two,
+   because multiACE distinguishes a stock side feeder from a hand-fed bypass.
+   Every one of the three is a documented macro; see the table below. */
+.headcards{display:flex;gap:12px}
+.hcard{flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;
+  background:var(--panel);padding:9px 9px 10px;display:flex;flex-direction:column;gap:8px}
+.hcard.viaace{border-color:var(--ace)}
+.hcard .hname{font-size:11.5px;color:var(--muted);font-family:var(--mono);text-align:center}
+.srcsw{display:flex;gap:3px;padding:3px;background:var(--panel-2);border-radius:8px}
+.srcsw button{flex:1;height:30px;border:1px solid transparent;border-radius:6px;
+  background:transparent;display:grid;place-items:center;cursor:pointer;padding:0;
+  color:var(--ink-2)}
+.srcsw button:hover{background:var(--panel)}
+.srcsw button.on{background:var(--panel);border-color:var(--ace);
+  box-shadow:0 0 0 1px var(--ace)}
+.srcsw button svg{display:block}
+.hbody{display:flex;flex-direction:column;align-items:center;gap:6px;padding:2px 0}
+.hbody .mat{font-size:12.5px;font-weight:600}
+.hbody .vend{font-size:11px;color:var(--muted);font-family:var(--mono);text-align:center;
+  line-height:1.35}
+.hact{display:flex;gap:6px}
+.hact button{flex:1;height:28px;border:1px solid var(--line);border-radius:7px;
+  background:var(--panel);font:inherit;font-size:11.5px;color:var(--ink-2);cursor:pointer}
+.hact button:hover{border-color:var(--ace);color:var(--ace)}
+.hact button[disabled]{opacity:.4;cursor:not-allowed}
+
+/* ---- the tube: an AMSLib well, filled from the bottom ---------------------------- */
+.tube{width:58px;flex:0 0 58px;text-align:center}
+.tube.sm{width:46px;flex:0 0 46px}
+.tube .well{height:80px;border-radius:7px;background:var(--panel-2);
+  border:1px solid var(--line);padding:4px;display:flex;flex-direction:column;
+  justify-content:flex-end;position:relative;overflow:hidden;cursor:pointer}
+.tube.sm .well{height:62px}
+.tube .well:hover{border-color:var(--ace);box-shadow:0 0 0 1px var(--ace)}
+.tube .fill{border-radius:4px;width:100%}
+/* No binding, no weight, no honest level - so say so with hatching rather than draw a
+   full tube. spool_binding is {} on this machine: this is the DEFAULT case, not an edge. */
+.tube .fill.unknown{height:calc(100% - 8px);
+  background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.34) 0 4px,
+    transparent 4px 9px)}
+.tube .fill.bound{height:62%}
+.tube .well.empty{background:var(--panel);border-style:dashed}
+.tube .well.empty::after{content:"empty";position:absolute;inset:0;display:grid;
+  place-items:center;font-size:10.5px;color:var(--muted);font-family:var(--mono)}
+.tube .cap{font-size:11px;color:var(--ink-2);margin-top:5px;line-height:1.3}
+.tube .cap b{display:block;font-size:11.5px;color:var(--ink);font-weight:600}
+.tube .cap .src{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.tube .well.live{box-shadow:0 0 0 2px var(--ok)}
+.tube .well .grams{position:absolute;left:0;right:0;bottom:3px;font-size:9.5px;
+  font-family:var(--mono);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+
+.feedwire{height:30px;margin:0;position:relative}
+.feedwire svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+
+.acebox{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);
+  padding:11px 13px 13px}
+.acebox+.acebox{margin-top:10px}
+.acebox.off{opacity:.55}
+.acehead{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.acehead .nm{font-size:13px;font-weight:600}
+.acehead .md{font-size:11px;color:var(--muted);font-family:var(--mono)}
+.acehead .grow{flex:1}
+.hpill{height:26px;border-radius:13px;background:var(--panel);display:flex;
+  align-items:center;gap:7px;padding:0 10px;font-size:11.5px;font-family:var(--mono);
+  border:1px solid var(--line)}
+.hpill .div{width:1px;height:13px;background:var(--line)}
+.hpill.drying{border-color:var(--warn);color:var(--warn)}
+.drybtn{height:26px;border-radius:7px;border:1px solid var(--ace);color:var(--ace);
+  background:transparent;padding:0 11px;font-size:12px;cursor:pointer;font-family:inherit}
+.drybtn:hover{background:var(--ace-soft)}
+.drybtn.running{background:var(--warn);border-color:var(--warn);color:#fff}
+.bays{display:flex;gap:12px;justify-content:space-between}
+.moderow2{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-2);
+  margin-bottom:12px;flex-wrap:wrap}
+.modeseg{display:inline-flex;border:1px solid var(--line);border-radius:8px;padding:3px;
+  background:var(--panel);gap:2px}
+.modeseg span{padding:4px 11px;border-radius:5px;font-size:12px;color:var(--ink-2);cursor:pointer}
+.modeseg span.on{background:var(--ace);color:#fff}
+.modeseg span.dis{opacity:.4;cursor:not-allowed}
+.acebadge{flex:0 0 auto;display:block}
+
+/* the dry sheet, opened from the Dry button */
+.drysheet{border:1px solid var(--ace);border-radius:9px;background:var(--panel);
+  padding:11px 13px;margin-top:10px;display:flex;gap:14px;align-items:flex-end;
+  flex-wrap:wrap}
+.dfield{display:flex;flex-direction:column;gap:5px}
+.dfield .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+  font-weight:600}
+.dfield .vseg span{padding:5px 10px;font-size:12px}
+.drysheet .go{height:32px;border-radius:8px;border:0;background:var(--ace);color:#fff;
+  padding:0 16px;font:inherit;font-size:13px;cursor:pointer}
+.drysheet .cmd{width:100%;font-family:var(--mono);font-size:11px;color:var(--muted);
+  border-top:1px dashed var(--line);padding-top:8px;margin-top:2px}
+
+/* placement switching for part 3 */
+#p1:checked~.stage .v-p1{display:block} #p2:checked~.stage .v-p2{display:block}
+#p3:checked~.stage .v-p3{display:block}
+.v-p1,.v-p2,.v-p3{display:none}
+.v-a1,.v-a2,.v-a3,.v-a4{display:none}
+#a1:checked~.stage .v-a1,#a2:checked~.stage .v-a2,
+#a3:checked~.stage .v-a3,#a4:checked~.stage .v-a4{display:block}
+#a1:checked~.picker [for=a1],#a2:checked~.picker [for=a2],
+#a3:checked~.picker [for=a3],#a4:checked~.picker [for=a4]
+  {border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.srcsw.off button{opacity:.45;cursor:not-allowed}
+.srcsw.off button.on{opacity:.75}
+#p1:checked~.picker [for=p1],#p2:checked~.picker [for=p2],#p3:checked~.picker [for=p3]
+  {border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.railmock{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  background:var(--panel)}
+.railmock .rl{width:190px;flex:0 0 190px;background:var(--rail);
+  border-right:1px solid var(--line);padding:10px 0}
+.railmock .ni{height:40px;display:flex;align-items:center;gap:11px;padding:0 20px;
+  font-size:13px;color:var(--ink-2)}
+.railmock .ni.on{background:var(--accent-soft);color:var(--ink)}
+.railmock .ni .sq{width:16px;height:16px;border-radius:4px;background:var(--muted);opacity:.45}
+.railmock .ni.on .sq{background:var(--accent);opacity:1}
+.railmock .bd{flex:1;min-width:0;padding:16px}
+.stack{display:flex;flex-direction:column;gap:16px;align-items:center}
+</style>
+
+<h3>Where it goes</h3>
+<p class="lede">Layout L1 hands the Filament panel a 590&nbsp;px column with real height in
+it — which is the reason to settle part 01 before this one. All three versions below are
+drawn at that width.</p>
+
+<input class="vradio" type="radio" name="plc" id="p1" checked>
+<input class="vradio" type="radio" name="plc" id="p2">
+<input class="vradio" type="radio" name="plc" id="p3">
+
+<div class="picker">
+  <label for="p1"><span class="k">P1</span><span class="t">Filament becomes ACE-aware ✓</span>
+    <span class="d">One panel, four toolheads over the unit that feeds them. No new
+    panel, no new destination, no registry change.</span></label>
+  <label for="p2"><span class="k">P2</span><span class="t">A fifth panel beneath it</span>
+    <span class="d">Filament stays about toolheads; a Filament&nbsp;system panel owns the
+    units. Clean split, and a fifth panel in a 2×2 grid.</span></label>
+  <label for="p3"><span class="k">P3</span><span class="t">A third destination</span>
+    <span class="d">Like Storage: full height, its own rail entry. Room for four units
+    and a feed diagram; a click away from the camera.</span></label>
+</div>
+
+<div class="stage">
+
+ <div class="v-p1">
+  <div class="acepanel">
+   <div class="ph"><span>Filament</span><span class="grow"></span>
+     <span class="chip" style="font-family:var(--sans)">1 ACE unit</span>
+     <button class="iconbtn" type="button" title="Refresh">↻</button>
+     <button class="iconbtn" type="button" title="About">?</button></div>
+   <div class="acebody">
+
+     <div class="moderow2"><span>ACE mode</span>
+       <span class="modeseg"><span>Normal</span><span class="dis" title="Needs the emitter's slot map">Multi</span>
+         <span class="on">Head</span></span>
+       <span class="grow" style="flex:1"></span>
+       <span class="chip">SET_ACE_MODE MODE=head</span></div>
+
+     <p class="seclbl">Toolheads — each one picks its own source</p>
+     <div class="headcards">
+       <div class="hcard">
+         <div class="hname">Toolhead 1</div>
+         <div class="srcsw"><button class="feeder on" type="button" title="Stock side feeder" aria-label="Stock side feeder" aria-pressed="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+         <div class="hbody"><div class="tube"><div class="well"><div class="fill unknown" style="background-color:#f44336"></div></div></div>
+           <span class="mat">PLA</span>
+           <span class="vend">Jayo</span></div>
+         <div class="hact"><button type="button">Unload</button></div>
+       </div>       <div class="hcard">
+         <div class="hname">Toolhead 2</div>
+         <div class="srcsw"><button class="feeder on" type="button" title="Stock side feeder" aria-label="Stock side feeder" aria-pressed="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+         <div class="hbody"><div class="tube"><div class="well"><div class="fill unknown" style="background-color:#ffffdc"></div></div></div>
+           <span class="mat">PLA</span>
+           <span class="vend">Forshape</span></div>
+         <div class="hact"><button type="button">Unload</button></div>
+       </div>       <div class="hcard">
+         <div class="hname">Toolhead 3</div>
+         <div class="srcsw"><button class="feeder on" type="button" title="Stock side feeder" aria-label="Stock side feeder" aria-pressed="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+         <div class="hbody"><div class="tube"><div class="well empty"></div></div>
+           <span class="mat">—</span>
+           <span class="vend">nothing detected</span></div>
+         <div class="hact"><button type="button">Load</button></div>
+       </div>       <div class="hcard viaace">
+         <div class="hname">Toolhead 4</div>
+         <div class="srcsw"><button class="feeder" type="button" title="Stock side feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace on" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+         <div class="hbody"><div class="tube"><div class="well live"><div class="fill unknown" style="background-color:#632c2c"></div></div></div>
+           <span class="mat">PETG</span>
+           <span class="vend">ACE 1 · bay 3</span></div>
+         <div class="hact"><button type="button">Unload</button><button type="button">Swap</button></div>
+       </div>
+     </div>
+
+     <div class="feedwire"><svg viewBox="0 0 790 30" preserveAspectRatio="none">
+       <path d="M512 30 C512 10 696 20 696 0" fill="none" stroke="#632c2c"
+             stroke-width="2.5" stroke-linecap="round"/>
+       <circle cx="512" cy="28" r="3" fill="#632c2c"/></svg></div>
+
+     <div class="acebox">
+       <div class="acehead">
+         <svg class="acebadge" width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><rect x="2" y="1" width="40" height="20" rx="3" fill="#b9c2cc"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632c2c"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/><rect x="0" y="20" width="44" height="5" rx="1.5" fill="#9aa5b1"/></svg>
+         <span><span class="nm">ACE 1</span>
+           <span class="md" style="display:block">ACE 2 Pro · V1.1.26 · ready</span></span>
+         <span class="grow"></span>
+         <span class="chip">feed assist off</span>
+         <span class="hpill">💧 38%<span class="div"></span>31 °C</span>
+         <button class="drybtn" type="button">◈ Dry</button>
+       </div>
+       <div class="bays">
+         <div class="tube"><div class="well">
+             <div class="fill unknown" style="background-color:#83AFFF"></div></div>
+           <div class="cap"><b>PETG</b>Kingroon<span class="src">bay 1</span></div></div><div class="tube"><div class="well">
+             <div class="fill unknown" style="background-color:#8FA7C8"></div></div>
+           <div class="cap"><b>PETG</b>Kingroon<span class="src">bay 2</span></div></div><div class="tube"><div class="well live">
+             <div class="fill unknown" style="background-color:#632c2c"></div></div>
+           <div class="cap"><b>PETG</b>Generic<span class="src">→ Toolhead 4</span></div></div><div class="tube"><div class="well">
+             <div class="fill unknown" style="background-color:#C47053"></div></div>
+           <div class="cap"><b>PETG</b>Kingroon<span class="src">bay 4</span></div></div>
+       </div>
+       <div class="drysheet">
+         <div class="dfield"><span class="k">Temperature</span>
+           <span class="vseg"><span>45</span><span class="on">55</span><span>65</span>
+             <span>70 °C</span></span></div>
+         <div class="dfield"><span class="k">Duration</span>
+           <span class="vseg"><span>2</span><span class="on">4</span><span>6</span>
+             <span>12 h</span></span></div>
+         <div class="dfield"><span class="k">Automatic</span>
+           <span class="vseg"><span class="on">Off</span><span>Above 45% RH</span></span></div>
+         <button class="go" type="button">Start drying</button>
+         <span class="cmd">ACE_DRY ACE=0 TEMP=55 DURATION=4 &nbsp;·&nbsp; stop with
+           ACED__DRY_STOP &nbsp;·&nbsp; automatic is ACE_SET_AUTO_DRY</span>
+       </div>
+     </div>
+   </div>
+  </div>
+  <p class="caption">Drawn from the live payload at 830&nbsp;px — the width part 01's L3
+  gives it. Three heads on stock feeders, the fourth wired to bay&nbsp;3, and the wire
+  says so. <b>Every tube is hatched</b> because <code>spool_binding</code> is empty: the
+  level is unknown and the drawing does not pretend otherwise.</p>
+ </div>
+
+ <div class="v-p2">
+  <div class="stack">
+   <div class="acepanel narrow">
+    <div class="ph"><span>Filament</span><span class="grow"></span>
+      <button class="iconbtn" type="button">↻</button></div>
+    <div class="acebody">
+      <div class="headrow">
+        <div class="tube"><div class="well"><div class="fill unknown"
+             style="background-color:#f44336"></div></div>
+          <div class="cap"><b>PLA</b>Jayo</div></div>
+        <div class="tube"><div class="well"><div class="fill unknown"
+             style="background-color:#ffffdc"></div></div>
+          <div class="cap"><b>PLA</b>Forshape</div></div>
+        <div class="tube"><div class="well empty"></div><div class="cap"><b>—</b></div></div>
+        <div class="tube"><div class="well live"><div class="fill unknown"
+             style="background-color:#632c2c"></div></div>
+          <div class="cap"><b>PETG</b>Basic</div></div>
+      </div>
+    </div>
+   </div>
+   <div class="acepanel narrow">
+    <div class="ph"><span>Filament system</span><span class="grow"></span>
+      <span class="chip" style="font-family:var(--sans)">1 unit</span>
+      <button class="iconbtn" type="button">↻</button></div>
+    <div class="acebody">
+      <div class="moderow2"><span>ACE mode</span>
+        <span class="modeseg"><span>Normal</span><span class="dis">Multi</span>
+          <span class="on">Head</span></span></div>
+      <div class="acebox">
+        <div class="acehead">
+          <svg class="acebadge" width="44" height="26" viewBox="0 0 44 26" aria-hidden="true">
+            <rect x="2" y="1" width="40" height="20" rx="3" fill="#b9c2cc"/>
+            <rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/>
+            <rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/>
+            <rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632c2c"/>
+            <rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/>
+            <rect x="0" y="20" width="44" height="5" rx="1.5" fill="#9aa5b1"/>
+          </svg>
+          <span><span class="nm">ACE 1</span>
+            <span class="md" style="display:block">→ Toolhead 4</span></span>
+          <span class="grow"></span>
+          <span class="hpill">💧 38%<span class="div"></span>31 °C</span>
+          <button class="drybtn" type="button">◈ Dry</button>
+        </div>
+        <div class="bays">
+          <div class="tube"><div class="well"><div class="fill unknown"
+               style="background-color:#83AFFF"></div></div><div class="cap"><b>PETG</b></div></div>
+          <div class="tube"><div class="well"><div class="fill unknown"
+               style="background-color:#8FA7C8"></div></div><div class="cap"><b>PETG</b></div></div>
+          <div class="tube"><div class="well live"><div class="fill unknown"
+               style="background-color:#632c2c"></div></div><div class="cap"><b>PETG</b></div></div>
+          <div class="tube"><div class="well"><div class="fill unknown"
+               style="background-color:#C47053"></div></div><div class="cap"><b>PETG</b></div></div>
+        </div>
+      </div>
+    </div>
+   </div>
+  </div>
+  <p class="caption">Two panels, and <b>the wire between them cannot be drawn</b> — which
+  is exactly the information a person opens this to find.</p>
+ </div>
+
+ <div class="v-p3">
+  <div class="railmock">
+    <div class="rl">
+      <div class="ni"><span class="sq"></span>Device control</div>
+      <div class="ni on"><span class="sq"></span>Filament</div>
+      <div class="ni"><span class="sq"></span>Storage</div>
+    </div>
+    <div class="bd">
+      <div class="moderow2"><span>ACE mode</span>
+        <span class="modeseg"><span>Normal</span><span class="dis">Multi</span>
+          <span class="on">Head</span></span>
+        <span class="grow" style="flex:1"></span>
+        <span class="chip">1 of 4 units connected</span></div>
+      <p class="seclbl">Toolheads</p>
+      <div class="headrow" style="max-width:420px">
+        <div class="tube"><div class="well"><div class="fill unknown"
+             style="background-color:#f44336"></div></div><div class="cap"><b>PLA</b>T1</div></div>
+        <div class="tube"><div class="well"><div class="fill unknown"
+             style="background-color:#ffffdc"></div></div><div class="cap"><b>PLA</b>T2</div></div>
+        <div class="tube"><div class="well empty"></div><div class="cap"><b>—</b>T3</div></div>
+        <div class="tube"><div class="well live"><div class="fill unknown"
+             style="background-color:#632c2c"></div></div><div class="cap"><b>PETG</b>T4</div></div>
+      </div>
+      <div class="feedwire" style="max-width:420px"><svg viewBox="0 0 420 26" preserveAspectRatio="none">
+        <path d="M382 26 C382 14 382 12 382 0" fill="none" stroke="#632c2c"
+              stroke-width="2.5" stroke-linecap="round"/></svg></div>
+      <div class="acebox" style="max-width:420px">
+        <div class="acehead">
+          <svg class="acebadge" width="44" height="26" viewBox="0 0 44 26" aria-hidden="true">
+            <rect x="2" y="1" width="40" height="20" rx="3" fill="#b9c2cc"/>
+            <rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/>
+            <rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/>
+            <rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632c2c"/>
+            <rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/>
+            <rect x="0" y="20" width="44" height="5" rx="1.5" fill="#9aa5b1"/>
+          </svg>
+          <span class="nm">ACE 1</span><span class="grow"></span>
+          <span class="hpill">💧 38%<span class="div"></span>31 °C</span>
+          <button class="drybtn" type="button">◈ Dry</button>
+        </div>
+        <div class="bays">
+          <div class="tube"><div class="well"><div class="fill unknown"
+               style="background-color:#83AFFF"></div></div><div class="cap"><b>PETG</b></div></div>
+          <div class="tube"><div class="well"><div class="fill unknown"
+               style="background-color:#8FA7C8"></div></div><div class="cap"><b>PETG</b></div></div>
+          <div class="tube"><div class="well live"><div class="fill unknown"
+               style="background-color:#632c2c"></div></div><div class="cap"><b>PETG</b></div></div>
+          <div class="tube"><div class="well"><div class="fill unknown"
+               style="background-color:#C47053"></div></div><div class="cap"><b>PETG</b></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="caption">Room for four units and a real feed diagram — and a click away from
+  the camera, on a page whose two destinations were built so the printer session survives
+  the switch.</p>
+ </div>
+
+</div>
+
+<div class="note ok"><b>P1 it is</b> — and L3 is what makes it work. 830&nbsp;px is the
+width four toolhead cards need to each carry a source switch, a spool and two buttons;
+572&nbsp;px of height is what lets the unit box sit under them with the feed wires drawn
+between. At L1's 590 the cards would be 137&nbsp;px each and the switch would have to go
+somewhere else.
+<br><br><b>P2 is rejected on one specific ground:</b> the wire between a bay and the head
+it feeds is the single most useful thing on this panel, and P2 puts a panel seam across
+it. <b>P3 is not rejected, it is deferred</b> — see A2 below, where two units already
+crowd the space. Build P1, keep the unit box a component, promote it to a destination when
+a third unit appears. That is the move Storage already made, and the reason
+<code>views/storage/storage/</code> is shaped the way it is.</div>
+
+<h3>The source switch, and where it comes from</h3>
+<p class="lede">Bambu puts a two-way tab pair above each AMS group — the cabinet, or the
+single external spool — and gives the selected one a green border. The U1 has the same
+question and a third answer, because multiACE distinguishes a stock side feeder from a
+hand-fed bypass. So the pair becomes a <b>three-way switch on every toolhead card</b>,
+and each of the three is a documented macro.</p>
+
+<div class="scroll"><table>
+<tr><th>source</th><th>what it means</th><th>what it sends</th><th>read back from</th></tr>
+<tr><td><b>Feeder</b></td>
+    <td>The head's own stock side feeder. The ACE never touches it.</td>
+    <td class="num">ACE_SET_HEAD_FEEDER HEAD=n ENABLE=1</td>
+    <td class="num">head_feeder[n]</td></tr>
+<tr><td><b>ACE</b></td>
+    <td>Wired to exactly one unit, and can load only that unit's bays.</td>
+    <td class="num">ACE_SET_HEAD_FEEDER HEAD=n ENABLE=0<br>ACE_SET_HEAD_ACE HEAD=n ACE=a</td>
+    <td class="num">head_ace[n], with head_feeder false</td></tr>
+<tr><td><b>Manual</b></td>
+    <td>Hand-fed / TPU bypass. No ACE feed, retract, assist or RFID; the head sensor
+        stays live.</td>
+    <td class="num">ACE_SET_HEAD_MANUAL HEAD=n ENABLE=1</td>
+    <td class="num">head_manual[n]</td></tr>
+</table></div>
+
+<div class="note bad"><b><code>head_ace</code> is not the answer to "what feeds this
+head", and reading it as one draws a lie.</b> The live machine reports
+<code>head_ace {0:0, 1:1, 2:2, 3:0}</code> with <code>device_count: 1</code> — heads 2
+and 3 name ACE&nbsp;2 and ACE&nbsp;3, <em>which do not exist</em>. It is the wiring that
+would apply if those heads were ACE-fed; all three are on stock feeders. The source has to
+be resolved in order: <b>head_manual first, then
+<code>head_feeder</code>, and <code>head_ace</code> only for what is left.</b>
+<br><br>This is the same bug class <code>STATUS.md</code> spends a section on — a field
+that answers a different question than the one being asked, exactly like
+<code>toolhead.extruder</code> naming a parked head. It is worth writing down before it is
+written into the panel rather than after.</div>
+
+<div class="note warn"><b>The switch is a Head-mode control.</b> Both macros say "head
+mode only" in their own help. In Normal mode nothing is ACE-fed; in Multi mode one unit
+serves every head in turn. So the mode row sits <em>above</em> the toolhead cards — it
+governs them — and in the other two modes the switch is <b>disabled with the reason
+showing</b>, never hidden. A control that vanishes teaches nobody why.</div>
+
+<h3>The other states it has to draw</h3>
+<p class="lede">Four, and only the first was on the machine today. The rest are drawn from
+the payload's own vocabulary rather than imagined.</p>
+
+<input class="vradio" type="radio" name="ast" id="a1" checked>
+<input class="vradio" type="radio" name="ast" id="a2">
+<input class="vradio" type="radio" name="ast" id="a3">
+<input class="vradio" type="radio" name="ast" id="a4">
+<div class="picker">
+  <label for="a1"><span class="k">A1</span><span class="t">One unit, head mode</span>
+    <span class="d">What the printer reports right now.</span></label>
+  <label for="a2"><span class="k">A2</span><span class="t">Two units, mixed sources</span>
+    <span class="d">A shared unit, a second unit, and one head on TPU.</span></label>
+  <label for="a3"><span class="k">A3</span><span class="t">Normal mode</span>
+    <span class="d">The ACE is connected and feeding nothing.</span></label>
+  <label for="a4"><span class="k">A4</span><span class="t">Drying</span>
+    <span class="d">A countdown, and loads refused while it runs.</span></label>
+</div>
+
+<div class="stage">
+ <div class="v-a1"><div class="acepanel"><div class="ph"><span>Filament</span>
+   <span class="grow"></span><button class="iconbtn" type="button">↻</button></div>
+   <div class="acebody"><div class="moderow2"><span>ACE mode</span>
+       <span class="modeseg"><span>Normal</span><span class="dis">Multi</span>
+         <span class="on">Head</span></span>
+       <span class="grow" style="flex:1"></span><span class="chip">1 unit · head mode</span></div>
+     <div class="headcards">
+       <div class="hcard"><div class="hname">Toolhead 1</div>
+       <div class="srcsw"><button class="feeder on" type="button" title="Stock side feeder" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#f44336"></div></div></div><span class="mat">PLA</span>
+         <span class="vend">feeder</span></div></div>
+       <div class="hcard"><div class="hname">Toolhead 2</div>
+       <div class="srcsw"><button class="feeder on" type="button" title="Stock side feeder" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#ffffdc"></div></div></div><span class="mat">PLA</span>
+         <span class="vend">feeder</span></div></div>
+       <div class="hcard"><div class="hname">Toolhead 3</div>
+       <div class="srcsw"><button class="feeder on" type="button" title="Stock side feeder" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well empty"></div></div><span class="mat">—</span>
+         <span class="vend">feeder</span></div></div>
+       <div class="hcard viaace"><div class="hname">Toolhead 4</div>
+       <div class="srcsw"><button class="feeder" type="button" title="Stock side feeder" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace on" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well live"><div class="fill unknown" style="background-color:#632c2c"></div></div></div><span class="mat">PETG</span>
+         <span class="vend">ACE 1 · bay 3</span></div></div>
+     </div>
+     <div class="feedwire"><svg viewBox="0 0 790 30" preserveAspectRatio="none">
+       <path d="M512 30 C512 10 696 20 696 0" fill="none" stroke="#632c2c"
+         stroke-width="2.5" stroke-linecap="round"/></svg></div>
+     <div class="acebox"><div class="acehead"><svg class="acebadge" width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><rect x="2" y="1" width="40" height="20" rx="3" fill="#b9c2cc"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632c2c"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/><rect x="0" y="20" width="44" height="5" rx="1.5" fill="#9aa5b1"/></svg>
+       <span><span class="nm">ACE 1</span><span class="md" style="display:block">ACE 2 Pro · ready</span></span>
+       <span class="grow"></span><span class="hpill">💧 38%<span class="div"></span>31 °C</span>
+       <button class="drybtn" type="button">◈ Dry</button></div>
+       <div class="bays"><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#83AFFF"></div></div><div class="cap"><b>PETG</b>Kingroon<span class="src">bay 1</span></div></div><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#8FA7C8"></div></div><div class="cap"><b>PETG</b>Kingroon<span class="src">bay 2</span></div></div><div class="tube sm"><div class="well live"><div class="fill unknown" style="background-color:#632c2c"></div></div><div class="cap"><b>PETG</b>Generic<span class="src">→ T4</span></div></div><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#C47053"></div></div><div class="cap"><b>PETG</b>Kingroon<span class="src">bay 4</span></div></div></div></div></div></div>
+  <p class="caption">As measured — head mode, one unit, three stock feeders.</p></div>
+
+ <div class="v-a2"><div class="acepanel"><div class="ph"><span>Filament</span>
+   <span class="grow"></span><button class="iconbtn" type="button">↻</button></div>
+   <div class="acebody"><div class="moderow2"><span>ACE mode</span>
+       <span class="modeseg"><span>Normal</span><span class="dis">Multi</span>
+         <span class="on">Head</span></span>
+       <span class="grow" style="flex:1"></span><span class="chip">2 units · head mode</span></div>
+     <div class="headcards">
+       <div class="hcard viaace"><div class="hname">Toolhead 1</div>
+       <div class="srcsw"><button class="feeder" type="button" title="Stock side feeder" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace on" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well live"><div class="fill unknown" style="background-color:#83AFFF"></div></div></div><span class="mat">PETG</span>
+         <span class="vend">ACE 1 · bay 1</span></div></div>
+       <div class="hcard viaace"><div class="hname">Toolhead 2</div>
+       <div class="srcsw"><button class="feeder" type="button" title="Stock side feeder" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace on" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well live"><div class="fill unknown" style="background-color:#C47053"></div></div></div><span class="mat">PETG</span>
+         <span class="vend">ACE 1 · bay 4</span></div></div>
+       <div class="hcard viaace"><div class="hname">Toolhead 3</div>
+       <div class="srcsw"><button class="feeder" type="button" title="Stock side feeder" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace on" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well live"><div class="fill unknown" style="background-color:#2e7d32"></div></div></div><span class="mat">PLA</span>
+         <span class="vend">ACE 2 · bay 2</span></div></div>
+       <div class="hcard"><div class="hname">Toolhead 4</div>
+       <div class="srcsw"><button class="feeder" type="button" title="Stock side feeder" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual on" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#37474f"></div></div></div><span class="mat">TPU</span>
+         <span class="vend">hand-fed</span></div></div>
+     </div>
+     <div class="feedwire"><svg viewBox="0 0 790 30" preserveAspectRatio="none">
+       <path d="M46 30 C46 12 96 18 96 0" fill="none" stroke="#83AFFF" stroke-width="2.5" stroke-linecap="round"/>
+       <path d="M244 30 C244 12 296 18 296 0" fill="none" stroke="#C47053" stroke-width="2.5" stroke-linecap="round"/>
+       <path d="M540 30 C540 12 496 18 496 0" fill="none" stroke="#2e7d32" stroke-width="2.5" stroke-linecap="round"/>
+     </svg></div>
+     <div class="acebox"><div class="acehead"><svg class="acebadge" width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><rect x="2" y="1" width="40" height="20" rx="3" fill="#b9c2cc"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632c2c"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/><rect x="0" y="20" width="44" height="5" rx="1.5" fill="#9aa5b1"/></svg>
+       <span><span class="nm">ACE 1</span><span class="md" style="display:block">ACE 2 Pro · feeds T1, T2</span></span>
+       <span class="grow"></span><span class="hpill">💧 38%<span class="div"></span>31 °C</span>
+       <button class="drybtn" type="button">◈ Dry</button></div>
+       <div class="bays"><div class="tube sm"><div class="well live"><div class="fill unknown" style="background-color:#83AFFF"></div></div><div class="cap"><b>PETG</b>Kingroon<span class="src">→ T1</span></div></div><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#8FA7C8"></div></div><div class="cap"><b>PETG</b>Kingroon<span class="src">bay 2</span></div></div><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#632c2c"></div></div><div class="cap"><b>PETG</b>Generic<span class="src">bay 3</span></div></div><div class="tube sm"><div class="well live"><div class="fill unknown" style="background-color:#C47053"></div></div><div class="cap"><b>PETG</b>Kingroon<span class="src">→ T2</span></div></div></div></div>
+     <div class="acebox"><div class="acehead"><svg class="acebadge" width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><rect x="2" y="1" width="40" height="20" rx="3" fill="#b9c2cc"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#2e7d32"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#eceff1"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#ffffff"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#ffffff"/><rect x="0" y="20" width="44" height="5" rx="1.5" fill="#9aa5b1"/></svg>
+       <span><span class="nm">ACE 2</span><span class="md" style="display:block">ACE Pro · feeds T3</span></span>
+       <span class="grow"></span><span class="hpill">💧 52%<span class="div"></span>29 °C</span>
+       <button class="drybtn" type="button">◈ Dry</button></div>
+       <div class="bays"><div class="tube sm"><div class="well live"><div class="fill unknown" style="background-color:#2e7d32"></div></div><div class="cap"><b>PLA</b>Generic<span class="src">→ T3</span></div></div><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#eceff1"></div></div><div class="cap"><b>PLA</b>Generic<span class="src">bay 2</span></div></div><div class="tube sm"><div class="well empty"></div><div class="cap"><b>—</b>&nbsp;<span class="src">bay 3</span></div></div><div class="tube sm"><div class="well empty"></div><div class="cap"><b>—</b>&nbsp;<span class="src">bay 4</span></div></div></div></div></div></div>
+  <p class="caption">Two units. Heads 1 and 2 share ACE 1; head 3 has ACE 2; head 4 is hand-fed TPU. <b>One unit may feed several heads</b> — <code>head_ace</code> is a map from head to unit and says nothing about the reverse.</p></div>
+
+ <div class="v-a3"><div class="acepanel"><div class="ph"><span>Filament</span>
+   <span class="grow"></span><button class="iconbtn" type="button">↻</button></div>
+   <div class="acebody"><div class="moderow2"><span>ACE mode</span>
+       <span class="modeseg"><span class="on">Normal</span><span class="dis">Multi</span>
+         <span>Head</span></span>
+       <span class="grow" style="flex:1"></span>
+       <span class="chip maybe">the ACE feeds nothing in this mode</span></div>
+     <div class="headcards">
+       <div class="hcard"><div class="hname">Toolhead 1</div>
+       <div class="srcsw off"><button class="feeder on" type="button" disabled title="Only in Head mode" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" disabled title="Only in Head mode" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" disabled title="Only in Head mode" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#f44336"></div></div></div><span class="mat">PLA</span>
+         <span class="vend">feeder</span></div></div>
+       <div class="hcard"><div class="hname">Toolhead 2</div>
+       <div class="srcsw off"><button class="feeder on" type="button" disabled title="Only in Head mode" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" disabled title="Only in Head mode" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" disabled title="Only in Head mode" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#ffffdc"></div></div></div><span class="mat">PLA</span>
+         <span class="vend">feeder</span></div></div>
+       <div class="hcard"><div class="hname">Toolhead 3</div>
+       <div class="srcsw off"><button class="feeder on" type="button" disabled title="Only in Head mode" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" disabled title="Only in Head mode" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" disabled title="Only in Head mode" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well empty"></div></div><span class="mat">—</span>
+         <span class="vend">feeder</span></div></div>
+       <div class="hcard"><div class="hname">Toolhead 4</div>
+       <div class="srcsw off"><button class="feeder on" type="button" disabled title="Only in Head mode" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" disabled title="Only in Head mode" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" disabled title="Only in Head mode" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#632c2c"></div></div></div><span class="mat">PETG</span>
+         <span class="vend">feeder</span></div></div>
+     </div>
+     <div class="feedwire"></div>
+     <div class="acebox off"><div class="acehead"><svg class="acebadge" width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><rect x="2" y="1" width="40" height="20" rx="3" fill="#c9ced4"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632c2c"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/><rect x="0" y="20" width="44" height="5" rx="1.5" fill="#9aa5b1"/></svg>
+       <span><span class="nm">ACE 1</span><span class="md" style="display:block">connected, not in use</span></span>
+       <span class="grow"></span><span class="hpill">💧 38%<span class="div"></span>31 °C</span>
+       <button class="drybtn" type="button">◈ Dry</button></div>
+       <div class="bays"><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#83AFFF"></div></div><div class="cap"><b>PETG</b>Kingroon<span class="src">bay 1</span></div></div><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#8FA7C8"></div></div><div class="cap"><b>PETG</b>Kingroon<span class="src">bay 2</span></div></div><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#632c2c"></div></div><div class="cap"><b>PETG</b>Generic<span class="src">bay 3</span></div></div><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#C47053"></div></div><div class="cap"><b>PETG</b>Kingroon<span class="src">bay 4</span></div></div></div></div></div></div>
+  <p class="caption">Normal mode. The per-head switch is <b>disabled, not hidden</b> — <code>ACE_SET_HEAD_FEEDER</code> and <code>ACE_SET_HEAD_ACE</code> are documented "head mode only", so the control has to say why it is inert. The unit is still drawn, because it is still there and still drying.</p></div>
+
+ <div class="v-a4"><div class="acepanel"><div class="ph"><span>Filament</span>
+   <span class="grow"></span><button class="iconbtn" type="button">↻</button></div>
+   <div class="acebody"><div class="moderow2"><span>ACE mode</span>
+       <span class="modeseg"><span>Normal</span><span class="dis">Multi</span>
+         <span class="on">Head</span></span>
+       <span class="grow" style="flex:1"></span>
+       <span class="chip maybe">drying — loads refused until it stops</span></div>
+     <div class="headcards">
+       <div class="hcard"><div class="hname">Toolhead 1</div>
+       <div class="srcsw"><button class="feeder on" type="button" title="Stock side feeder" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#f44336"></div></div></div><span class="mat">PLA</span>
+         <span class="vend">feeder</span></div></div>
+       <div class="hcard"><div class="hname">Toolhead 2</div>
+       <div class="srcsw"><button class="feeder on" type="button" title="Stock side feeder" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#ffffdc"></div></div></div><span class="mat">PLA</span>
+         <span class="vend">feeder</span></div></div>
+       <div class="hcard"><div class="hname">Toolhead 3</div>
+       <div class="srcsw"><button class="feeder on" type="button" title="Stock side feeder" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well empty"></div></div><span class="mat">—</span>
+         <span class="vend">feeder</span></div></div>
+       <div class="hcard viaace"><div class="hname">Toolhead 4</div>
+       <div class="srcsw"><button class="feeder" type="button" title="Stock side feeder" aria-label="Stock side feeder"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor" stroke="none"/></svg></button><button class="ace on" type="button" title="Fed by an ACE unit" aria-label="Fed by an ACE unit"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></svg></button><button class="manual" type="button" title="Hand-fed / TPU bypass" aria-label="Hand-fed / TPU bypass"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></svg></button></div>
+       <div class="hbody"><div class="tube sm"><div class="well live"><div class="fill unknown" style="background-color:#632c2c"></div></div></div><span class="mat">PETG</span>
+         <span class="vend">ACE 1 · bay 3</span></div></div>
+     </div>
+     <div class="feedwire"><svg viewBox="0 0 790 30" preserveAspectRatio="none">
+       <path d="M512 30 C512 10 696 20 696 0" fill="none" stroke="#632c2c"
+         stroke-width="2.5" stroke-linecap="round"/></svg></div>
+     <div class="acebox"><div class="acehead"><svg class="acebadge" width="44" height="26" viewBox="0 0 44 26" aria-hidden="true"><rect x="2" y="1" width="40" height="20" rx="3" fill="#b9c2cc"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632c2c"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/><rect x="0" y="20" width="44" height="5" rx="1.5" fill="#9aa5b1"/></svg>
+       <span><span class="nm">ACE 1</span><span class="md" style="display:block">ACE 2 Pro · drying</span></span>
+       <span class="grow"></span>
+       <span class="hpill drying">◈ 55 °C<span class="div"></span>2 h 41 m left</span>
+       <span class="hpill">💧 31%<span class="div"></span>54 °C</span>
+       <button class="drybtn running" type="button">■ Stop</button></div>
+       <div class="bays"><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#83AFFF"></div></div><div class="cap"><b>PETG</b>Kingroon<span class="src">bay 1</span></div></div><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#8FA7C8"></div></div><div class="cap"><b>PETG</b>Kingroon<span class="src">bay 2</span></div></div><div class="tube sm"><div class="well live"><div class="fill unknown" style="background-color:#632c2c"></div></div><div class="cap"><b>PETG</b>Generic<span class="src">→ T4</span></div></div><div class="tube sm"><div class="well"><div class="fill unknown" style="background-color:#C47053"></div></div><div class="cap"><b>PETG</b>Kingroon<span class="src">bay 4</span></div></div></div></div></div></div>
+  <p class="caption">Drying. <code>dryer_status</code> gives target, duration and remaining, so the pill can count down; humidity is falling and the internal temperature is the dryer's, not the room's.</p></div>
+</div>
+
+<div class="note"><b>A2 is the one that argues for P3 eventually.</b> Two unit boxes plus
+four toolhead cards is 640&nbsp;px of panel, which fits the 572 L3 gives it only just.
+A third unit does not fit, and <code>ace_device_count</code> goes to 8. The unit box is
+therefore a component from the first commit, and promoting it into a destination is a
+move, not a rewrite.</div>
+
+<h3>What the panel can actually do, not just show</h3>
+<p class="lede">Doc&nbsp;09 listed "multiACE control endpoints (writes)" as <em>the main
+blocker</em> and left the dryer, the slot editor and the mode switch UI-only. Read out of
+<code>printer.gcode.help</code> on the machine, that blocker is gone: <b>every one of them
+is a plain G-code macro with documented arguments</b>, and the page already owns
+<code>sw_SendGCodes</code>.</p>
+
+<div class="scroll"><table>
+<tr><th>control</th><th>where it lives</th><th>what it sends</th><th>needs</th></tr>
+<tr><td><b>Source switch</b> — feeder / ACE / manual</td><td>each toolhead card</td>
+    <td class="num">ACE_SET_HEAD_FEEDER · ACE_SET_HEAD_ACE · ACE_SET_HEAD_MANUAL</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td>ACE mode</td><td>the row above the cards</td>
+    <td class="num">SET_ACE_MODE MODE=normal|multi|head [HEAD=n]</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td>Load a head</td><td>toolhead card</td>
+    <td class="num">ACE_LOAD_HEAD HEAD=0 [ACE=0] [SLOT=0]</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td>Unload a head</td><td>toolhead card</td>
+    <td class="num">ACE_UNLOAD_HEAD HEAD=0 [RETRACT_LENGTH=] [KEEP_HEAT=]</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td>Unload everything</td><td>panel header overflow</td>
+    <td class="num">ACE_UNLOAD_ALL_HEADS · ACE_UNLOAD_ALL_CANCEL</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td>Swap a head to another bay</td><td>toolhead card, and each bay</td>
+    <td class="num">ACE_SWAP_HEAD HEAD=0 ACE=1 [SLOT=0]</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td>Dry, with temperature and duration</td><td>the unit's Dry sheet</td>
+    <td class="num">ACE_DRY ACE=0 [TEMP=] [DURATION=] · ACED__DRY_STOP</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td>Dry automatically above a humidity</td><td>the same sheet</td>
+    <td class="num">ACE_SET_AUTO_DRY</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td>Switch the active unit</td><td>unit header, when there are two</td>
+    <td class="num">ACE_SWITCH TARGET=0 [AUTOLOAD=1]</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td>Flush length for the next swap</td><td>panel overflow</td>
+    <td class="num">ACE_SET_PURGE LENGTH=&lt;mm&gt; | RESET=1</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td>Confirm before load/unload</td><td>panel overflow</td>
+    <td class="num">ACE_SET_CONFIRM_COMMANDS ENABLE=0|1</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td>Spoolman URL and auto-sync</td><td>panel overflow</td>
+    <td class="num">ACE_SET_SPOOLMAN URL= AUTO=0|1</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td>Clear the head→bay bookkeeping</td><td>panel overflow</td>
+    <td class="num">ACE_CLEAR_HEADS [HEAD=0]</td>
+    <td><span class="chip yes">have it</span></td></tr>
+<tr><td><b>Name the filament in an unloaded bay</b></td><td>the bay's own sheet</td>
+    <td class="num">— no macro; multiACE's own override store</td>
+    <td><span class="chip no">tier 2, needs Orca</span></td></tr>
+<tr><td>Bowden calibration</td><td>—</td>
+    <td class="num">ACE_CALIBRATION_START / _FEED / _MARK / _RETURN …</td>
+    <td><span class="chip maybe">a wizard of its own</span></td></tr>
+<tr><td>Background swap while printing</td><td>—</td>
+    <td class="num">ACE_BG_SWAP · ACE_BG_UNLOAD · ACE_BG_MOVE</td>
+    <td><span class="chip no">experimental — see below</span></td></tr>
+</table></div>
+
+<div class="note"><b>Everything in "panel overflow" is a settings list, not a row of
+buttons.</b> Six of these are preferences a person sets once — flush length, confirmation,
+Spoolman, auto-dry defaults. They belong behind the header's <code>?</code>/overflow the
+way the camera's belong behind its gear, and putting them on the face of the panel would
+bury the four things that change daily.</div>
+
+<div class="note warn"><b>Every one of these is slow, and an instant <code>ok</code> is
+indistinguishable from success.</b> That trap is already written up in
+<code>STATUS.md</code> — <code>PARK_EXTRUDER</code> against a head that is not there
+returns immediately and successfully — and the ACE is worse, because
+<code>ACE_BG_UNLOAD</code>'s own help says <em>~3&nbsp;min</em>. So the same rules apply
+without amendment: <b>never await the request, confirm against machine state</b>
+(<code>swap_in_progress</code>, <code>last_swap_result</code>,
+<code>head_source</code>, <code>dryer_status.status</code>), and drive it through
+<code>core/pending.js</code>. <code>ace.event_seq</code> and
+<code>ace.swap_phase</code> exist and look purpose-built for exactly this — neither has
+been watched through a swap yet.</div>
+
+<div class="note"><b>One thing to be careful about offering.</b> Everything marked
+<em>[EXPERIMENTAL]</em> in the macro help — <code>ACE_BG_SWAP</code>,
+<code>ACE_BG_UNLOAD</code>, <code>ACE_BG_MOVE</code> — carries real preconditions in its
+own help text ("requires head mode, 1:1 wiring, an OPEN dock below the head (purges
+~60&nbsp;mm!)"). A panel that surfaces them without those preconditions is a panel that
+purges filament onto a bed. Leave them out of v1 and say so, the way
+<code>check_coverage.py</code> requires.</div>
+
+
+<h2><span class="n">04</span>The job card is 304 px of a 150 px idea</h2>
+<p class="lede">Part 01 pinned Printing Task at 150 and clipped it; sizing it to its card
+made it fit at <b>304</b>. Both numbers were wrong about the same thing — <b>the card is
+a stack when the panel is a band</b>. It is 766&nbsp;px wide and 304 tall, and it spends
+that on a 152&nbsp;px thumbnail, a 40&nbsp;px grey percentage, a row for the machine's own
+name, and a row of its own for two buttons.</p>
+
+<div class="note bad"><b>The machine's name is already in the rail.</b>
+<code>.job-dev</code> renders it at 17&nbsp;px, 24&nbsp;px tall with its badge, directly
+below a rail entry that says the same thing. That row is not compression — it is a
+duplicate, and it goes whichever version wins.</div>
+
+
+<style>
+/* ---- print-task card variants ---------------------------------------- *
+ * Drawn at 766px, which is what the main column is at a 1920 window under L3. Prefixed
+ * pt- so nothing here can collide with the .job-* names the real page uses. */
+.ptpanel{width:766px;max-width:100%;margin:0 auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.ptpanel .ph{height:40px;background:var(--panel-2);display:flex;align-items:center;
+  padding:0 15px 0 26px;font-size:14px;gap:9px;border-bottom:1px solid var(--line-soft)}
+.ptpanel .ph .grow{flex:1}
+.ptbody{overflow:hidden}
+.ptrule{height:0;border-top:1px dashed var(--accent);position:relative;margin:0}
+.ptrule span{position:absolute;right:0;top:-9px;background:var(--bg);padding:0 6px;
+  font-family:var(--mono);font-size:11px;color:var(--accent)}
+
+/* the shared furniture */
+.ptthumb{flex:0 0 auto;display:grid;place-items:center;overflow:hidden;
+  border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.ptthumb svg{width:78%;height:78%;display:block}
+.ptname{font-size:13px;color:var(--ink-2);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;min-width:0}
+.ptmeta{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;
+  display:flex;gap:14px;flex:0 0 auto}
+.ptpct{font-variant-numeric:tabular-nums;color:var(--ok);font-weight:600}
+.ptnums{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;
+  white-space:nowrap;display:flex;gap:14px}
+.ptbar{height:6px;border-radius:999px;background:var(--panel-2);overflow:hidden;flex:1;
+  min-width:0}
+.ptbar i{display:block;height:100%;width:100%;background:var(--ok)}
+.ptbtns{display:flex;gap:10px;flex:0 0 auto}
+.ptbtn{width:30px;height:30px;border:0;border-radius:50%;background:var(--panel-2);
+  display:grid;place-items:center;cursor:pointer;padding:0;color:var(--muted)}
+.ptbtn svg{width:16px;height:16px;fill:currentColor}
+.ptstate{font-size:11px;color:var(--muted)}
+.ptrow{display:flex;align-items:center;gap:12px;min-width:0}
+
+/* T0 - today: a stack, and a 152px thumbnail */
+.t0 .ptbody{padding:18px 24px}
+.t0 .head{display:flex;align-items:center;gap:10px}
+.t0 .badge{padding:2px 7px;border-radius:4px;background:var(--ok);color:#fff;
+  font-size:11px;font-weight:600}
+.t0 .dev{font-size:17px;color:var(--ink)}
+.t0 .main{display:flex;gap:26px;margin-top:18px}
+.t0 .ptthumb{width:152px;height:152px}
+.t0 .info{flex:1;min-width:0;display:flex;flex-direction:column}
+.t0 .big{font-size:40px;line-height:1.2;color:#C9CDD4;font-variant-numeric:tabular-nums}
+.t0 .ptnums{margin-top:auto;justify-content:space-between}
+.t0 .ptbar{margin:14px 0 10px;flex:none}
+.t0 .ptbtns{justify-content:center;margin-top:20px}
+.t0 .ptbtn{width:34px;height:34px}
+
+/* T1 - Bambu's band: the thumbnail anchors, three rows sit beside it */
+.t1 .ptbody{padding:16px 20px;display:flex;gap:18px}
+.t1 .ptthumb{width:96px;height:96px}
+.t1 .col{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.t1 .big{font-size:26px;line-height:1;color:var(--ok);font-weight:600;
+  font-variant-numeric:tabular-nums}
+.t1 .foot{display:flex;justify-content:flex-end}
+
+/* T2 - the same band with the percentage inline, two rows instead of three */
+.t2 .ptbody{padding:14px 20px;display:flex;gap:14px}
+.t2 .ptthumb{width:72px;height:72px}
+.t2 .col{flex:1;min-width:0;display:flex;flex-direction:column;gap:9px}
+.t2 .big{font-size:17px;color:var(--ok);font-weight:600;font-variant-numeric:tabular-nums}
+
+/* T3 - one line, and the thumbnail comes with it */
+.t3 .ptbody{padding:12px 20px}
+.t3 .ptthumb{width:40px;height:40px;border-radius:6px}
+.t3 .big{font-size:15px;color:var(--ok);font-weight:600;font-variant-numeric:tabular-nums}
+.t3 .ptbar{max-width:200px}
+
+.t0,.t1,.t2,.t3{display:none}
+#t0:checked~.stage .t0,#t1:checked~.stage .t1,
+#t2:checked~.stage .t2,#t3:checked~.stage .t3{display:block}
+#t0:checked~.picker [for=t0],#t1:checked~.picker [for=t1],
+#t2:checked~.picker [for=t2],#t3:checked~.picker [for=t3]
+  {border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+</style>
+
+
+<input class="vradio" type="radio" name="pt" id="t0">
+<input class="vradio" type="radio" name="pt" id="t1" checked>
+<input class="vradio" type="radio" name="pt" id="t2">
+<input class="vradio" type="radio" name="pt" id="t3">
+
+<div class="picker">
+  <label for="t0"><span class="k">T0</span><span class="t">Today — 306 px</span>
+    <span class="d">Badge and machine name, then a 152 thumbnail beside a 40 px
+    percentage, then the bar, then the buttons on their own row.</span></label>
+  <label for="t1"><span class="k">T1</span><span class="t">A band — 149 px</span>
+    <span class="d">The shape in the screenshot. A 96 thumbnail anchors it; name and
+    metadata share a line, the bar shares its line with the buttons.</span></label>
+  <label for="t2"><span class="k">T2</span><span class="t">Tighter band — 120 px</span>
+    <span class="d">72 thumbnail, percentage inline with the name, two rows instead of
+    three. The numbers move under the bar.</span></label>
+  <label for="t3"><span class="k">T3</span><span class="t">One line — 64 px</span>
+    <span class="d">Everything on a single row with a 40 px thumbnail. As small as this
+    can be while still showing what is printing.</span></label>
+</div>
+
+<div class="stage">
+
+ <div class="t0"><div class="ptpanel"><div class="ph"><span>Printing Task</span>
+   <span class="grow"></span><span class="chip">306 px</span></div>
+   <div class="ptbody">
+     <div class="head"><span class="badge">printing</span><span class="dev">U1 G</span></div>
+     <div class="main">
+       <div class="ptthumb"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 42 L32 30 L56 42 L32 54 Z" fill="#2b2f36"/><path d="M8 42 L32 30 L32 54 L8 54 Z" fill="#c8302b"/><path d="M32 30 L56 42 L56 54 L32 54 Z" fill="#e8b21f"/><path d="M8 42 L32 30 L56 42" fill="none" stroke="#1b1e23" stroke-width="1.4"/></svg></div>
+       <div class="info">
+         <div class="ptname">MC_Center_Rack_Key-wall_LVL_02_PETG_1h1m.gcode</div>
+         <div class="big">64%</div>
+         <div class="ptnums"><span>98/153</span><span>— 0h 22m</span></div>
+       </div>
+     </div>
+     <div class="ptbar"><i style="width:64%"></i></div>
+     <span class="ptbtns"><button class="ptbtn" type="button" title="Print again" aria-label="Print again"><svg viewBox="0 0 24 24"><path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg></button><button class="ptbtn" type="button" title="Pause" aria-label="Pause"><svg viewBox="0 0 24 24"><rect x="7.5" y="6" width="3.5" height="12" rx="1"/><rect x="13" y="6" width="3.5" height="12" rx="1"/></svg></button><button class="ptbtn" type="button" title="Cancel" aria-label="Cancel"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button></span>
+   </div></div>
+  <p class="caption">The card as it is. <b>The two things taking the room are the
+  152&nbsp;px thumbnail and the buttons' own row</b> — together with the machine-name row
+  they are 210 of the 304.</p>
+ </div>
+
+ <div class="t1"><div class="ptpanel"><div class="ph"><span>Printing Task</span>
+   <span class="grow"></span><span class="chip">149 px</span></div>
+   <div class="ptbody">
+     <div class="ptthumb"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 42 L32 30 L56 42 L32 54 Z" fill="#2b2f36"/><path d="M8 42 L32 30 L32 54 L8 54 Z" fill="#c8302b"/><path d="M32 30 L56 42 L56 54 L32 54 Z" fill="#e8b21f"/><path d="M8 42 L32 30 L56 42" fill="none" stroke="#1b1e23" stroke-width="1.4"/></svg></div>
+     <div class="col">
+       <div class="ptrow"><span class="ptname">MC_Center_Rack_Key-wall_LVL_02_PETG_1h1m.gcode</span>
+         <span class="grow" style="flex:1"></span>
+         <span class="ptmeta"><span>48min16s</span><span>24.03 g</span></span></div>
+       <div class="ptrow"><span class="big">64%</span>
+         <span class="grow" style="flex:1"></span>
+         <span class="ptnums"><span>Layer 98/153</span><span>— 22 min</span></span></div>
+       <div class="ptrow"><span class="ptbar"><i style="width:64%"></i></span><span class="ptbtns"><button class="ptbtn" type="button" title="Print again" aria-label="Print again"><svg viewBox="0 0 24 24"><path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg></button><button class="ptbtn" type="button" title="Pause" aria-label="Pause"><svg viewBox="0 0 24 24"><rect x="7.5" y="6" width="3.5" height="12" rx="1"/><rect x="13" y="6" width="3.5" height="12" rx="1"/></svg></button><button class="ptbtn" type="button" title="Cancel" aria-label="Cancel"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button></span></div>
+       <div class="foot"><span class="ptstate">Printing</span></div>
+     </div>
+   </div></div>
+  <p class="caption">Bambu's shape. Three moves and nothing else: the thumbnail anchors
+  the block instead of sitting above the bar, the metadata joins the name's line, and
+  <b>the buttons ride the bar's line</b> — which is the single biggest saving, because a
+  6&nbsp;px bar and a 30&nbsp;px button on separate rows cost 70 together and 30 side by
+  side.</p>
+ </div>
+
+ <div class="t2"><div class="ptpanel"><div class="ph"><span>Printing Task</span>
+   <span class="grow"></span><span class="chip">120 px</span></div>
+   <div class="ptbody">
+     <div class="ptthumb"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 42 L32 30 L56 42 L32 54 Z" fill="#2b2f36"/><path d="M8 42 L32 30 L32 54 L8 54 Z" fill="#c8302b"/><path d="M32 30 L56 42 L56 54 L32 54 Z" fill="#e8b21f"/><path d="M8 42 L32 30 L56 42" fill="none" stroke="#1b1e23" stroke-width="1.4"/></svg></div>
+     <div class="col">
+       <div class="ptrow"><span class="ptname">MC_Center_Rack_Key-wall_LVL_02_PETG_1h1m.gcode</span>
+         <span class="big">64%</span>
+         <span class="ptmeta"><span>48min16s</span><span>24.03 g</span></span></div>
+       <div class="ptrow"><span class="ptbar"><i style="width:64%"></i></span><span class="ptbtns"><button class="ptbtn" type="button" title="Print again" aria-label="Print again"><svg viewBox="0 0 24 24"><path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg></button><button class="ptbtn" type="button" title="Pause" aria-label="Pause"><svg viewBox="0 0 24 24"><rect x="7.5" y="6" width="3.5" height="12" rx="1"/><rect x="13" y="6" width="3.5" height="12" rx="1"/></svg></button><button class="ptbtn" type="button" title="Cancel" aria-label="Cancel"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button></span></div>
+       <div class="ptrow"><span class="ptnums"><span>Layer 98/153</span>
+         <span>— 22 min</span><span>Printing</span></span></div>
+     </div>
+   </div></div>
+  <p class="caption">The percentage joins the name's line and the numbers move below the
+  bar. <b>The percentage stops being the thing you see first</b>, which is the cost — and
+  the bar already says the same thing without reading.</p>
+ </div>
+
+ <div class="t3"><div class="ptpanel"><div class="ph"><span>Printing Task</span>
+   <span class="grow"></span><span class="chip">64 px</span></div>
+   <div class="ptbody">
+     <div class="ptrow">
+       <span class="ptthumb"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 42 L32 30 L56 42 L32 54 Z" fill="#2b2f36"/><path d="M8 42 L32 30 L32 54 L8 54 Z" fill="#c8302b"/><path d="M32 30 L56 42 L56 54 L32 54 Z" fill="#e8b21f"/><path d="M8 42 L32 30 L56 42" fill="none" stroke="#1b1e23" stroke-width="1.4"/></svg></span>
+       <span class="ptname">MC_Center_Rack_Key-wall_LVL_02_PETG_1h1m.gcode</span>
+       <span class="big">64%</span>
+       <span class="ptbar"><i style="width:64%"></i></span>
+       <span class="ptnums"><span>98/153</span><span>— 22 min</span></span>
+       <span class="ptbtns"><button class="ptbtn" type="button" title="Print again" aria-label="Print again"><svg viewBox="0 0 24 24"><path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg></button><button class="ptbtn" type="button" title="Pause" aria-label="Pause"><svg viewBox="0 0 24 24"><rect x="7.5" y="6" width="3.5" height="12" rx="1"/><rect x="13" y="6" width="3.5" height="12" rx="1"/></svg></button><button class="ptbtn" type="button" title="Cancel" aria-label="Cancel"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button></span>
+     </div>
+   </div></div>
+  <p class="caption">One row. It works at 766&nbsp;px and <b>it is the version that
+  breaks first</b>: below about 640 the filename has no room left to be a filename, and
+  under L3 the main column is 446 at a 1600 window.</p>
+ </div>
+
+</div>
+
+<h3>What the height actually buys</h3>
+<p class="lede">This is the part worth doing before choosing, and it is not what it looks
+like. The camera above takes whatever the card gives up — but only turns it into picture
+when the camera is <em>height</em>-bound, and at 1920 it is not: 766&nbsp;px wide at 16:9
+is 431&nbsp;tall, and everything above that is letterbox.</p>
+
+<div class="scroll"><table>
+<tr><th>version</th><th>card</th><th>panel</th>
+    <th colspan="2">at 1920 · camera 766 wide</th>
+    <th colspan="2">at 2560 · camera 1406 wide</th></tr>
+<tr><th></th><th></th><th></th><th>camera</th><th>what it gained</th>
+    <th>frame</th><th>what it gained</th></tr>
+<tr><td><b>T0</b> today</td><td class="num">306</td><td class="num">346</td>
+    <td class="num">574</td><td>frame 766×431, <b>51 px bars</b></td>
+    <td class="num">949×534</td><td><span class="chip yes">all picture</span></td></tr>
+<tr><td><b>T1</b> band</td><td class="num">149</td><td class="num">189</td>
+    <td class="num">731</td><td>frame unchanged, <b>130 px bars</b></td>
+    <td class="num">1228×691</td><td><span class="chip yes">+157 px of picture</span></td></tr>
+<tr><td><b>T2</b> tighter</td><td class="num">120</td><td class="num">160</td>
+    <td class="num">760</td><td>frame unchanged, <b>144 px bars</b></td>
+    <td class="num">1280×720</td><td><span class="chip yes">+186</span></td></tr>
+<tr><td><b>T3</b> one line</td><td class="num">64</td><td class="num">104</td>
+    <td class="num">816</td><td>frame unchanged, <b>172 px bars</b></td>
+    <td class="num">1380×776</td><td><span class="chip yes">+242</span></td></tr>
+</table></div>
+
+<div class="note"><b>These are the drawn heights, not the intended ones.</b> The table
+first read 150 / 106 / 66 from arithmetic; the sheet's own checks measure what is on
+screen and T2 came out 14&nbsp;px taller than claimed. Small, and the point of measuring
+is that nobody had to notice.</div>
+
+<div class="note bad"><b>At 1920 a shorter card buys black, not picture.</b> The camera is
+width-bound there — it cannot use the height, so every pixel the card gives up becomes
+letterbox. T3 saves 242&nbsp;px and turns all 242 into bars. <b>So "room efficiency" is
+not the argument for this change at the common window size</b>, and saying otherwise would
+be selling it on a benefit it does not have.</div>
+
+<div class="note ok"><b>Two arguments that do survive.</b>
+<br>· <b>At 2560 it is all picture.</b> Past about 2000 the camera becomes height-bound
+and every pixel the card releases is a pixel of frame — T1 is +157, T3 is +242.
+<br>· <b>The band is the better card at any size.</b> Reading it is one left-to-right
+sweep instead of four stacked blocks, the metadata sits where the eye already is, and the
+buttons are next to the bar they act on rather than centred under it. That is worth doing
+whether or not anything else gets the space.</div>
+
+<div class="note ok"><b>Built as T1, with one change: the status word went to the panel
+header.</b> The <em>Finished</em> line under the bar was a fourth row for one word, and a
+panel header already exists to say what a panel is - saying what it is <em>doing</em> in
+the same line costs nothing. That, plus dropping the machine-name row the rail duplicates,
+took the drawn card to <b>128 px</b> rather than T1's 149. The camera above went
+576 &rarr; 752.</div>
+
+<div class="note ok"><b>T1 was the recommendation.</b> It is the shape in the screenshot,
+it holds the filename at 446&nbsp;px (the 1600 case, which is where L3 is weakest), and it
+keeps a percentage big enough to read across a room — which is what a device panel is
+for. <b>T2 is the fallback</b> if the panel ever has to sit somewhere shorter; it costs
+the large percentage and nothing else. <b>T3 is kept as the record</b>: it is genuinely
+the most efficient and it stops being a filename below about 640&nbsp;px.</div>
+
+<div class="note warn"><b>One thing to check before building any of them.</b> The card
+rebuilds on a signature and patches the numbers, so a control that moves between rows must
+keep its class names or `renderTask` patches nodes that are no longer there. And the idle
+state is <em>the same card</em> — one card at every state, zeroed rather than replaced, is
+a decision <code>conformance_test.py</code> holds — so whichever row the buttons land on
+has to hold an idle machine's single "choose a file" button without collapsing.</div>
+
+<h2><span class="n">05</span>Order to build in</h2>
+<p class="lede">Everything above is decided. Steps 1-4 are <b>built, driven against the
+printer and committed</b>; the rest is the multiACE work, deferred. The column on the
+right is the one that matters: <b>only step 8 touches C++.</b></p>
+
+<div class="scroll"><table>
+<tr><th>#</th><th>step</th><th>touches</th><th>rebuild?</th></tr>
+<tr><td class="num">1 <span class="chip yes">done</span></td><td><b>Layout L3 + H1.</b> Two flex columns in place of the 2×2
+    grid, the 830 rail, <code>.panel-body</code>'s <code>min-height</code> released so
+    Control sizes to its cluster, Task sized to its card, the camera filling its column. Also
+    the breakpoint from 1420 to 1600. Nothing else can be judged until the panels are
+    their real size, and <b>no panel's own code changes.</b></td>
+    <td class="num">device.css</td>
+    <td><span class="chip yes">no</span></td></tr>
+<tr><td class="num">2 <span class="chip yes">done</span></td><td><b>Camera: direct snapshot, and the Auto probe.</b> Enumerate
+    over :7125, filter to entries with a <code>snapshot_url</code>, poll with
+    <code>&lt;img&gt;</code>. The 28× improvement, and the only camera work with no
+    platform question in it.</td>
+    <td class="num">camera-*.js · protocol.js</td>
+    <td><span class="chip yes">no</span></td></tr>
+<tr><td class="num">3 <span class="chip yes">done</span></td><td><b>Camera: the settings popover.</b> Camera list, transport
+    list with reasons, fps cap. <code>core/overlay.js</code> already does anchored
+    popovers.</td><td class="num">camera-*.js</td>
+    <td><span class="chip yes">no</span></td></tr>
+<tr><td class="num">4 <span class="chip yes">done</span></td><td><b>Camera: the view grid.</b> One / split / 2×2 / PiP, one
+    poller per tile, and the focus rule that keeps it under 4&nbsp;MB/s.</td>
+    <td class="num">camera-*.js</td><td><span class="chip yes">no</span></td></tr>
+<tr><td class="num">5</td><td><b>ACE tier 1, read-only.</b> One
+    <code>sw_GetMachineState {objects:{ace:null}}</code> folded into the state stream, the
+    toolhead cards, the unit box, the feed wires. Source resolved
+    <b>manual → feeder → ace</b>, in that order.</td>
+    <td class="num">filament-*.js · protocol.js</td><td><span class="chip yes">no</span></td></tr>
+<tr><td class="num">6</td><td><b>ACE writes.</b> Source switch, load/unload/swap, the dry
+    sheet — each pending-until-confirmed against <code>swap_phase</code>,
+    <code>head_source</code> and <code>dryer_status</code>, never against its own
+    request.</td><td class="num">filament-commands.js</td>
+    <td><span class="chip yes">no</span></td></tr>
+<tr><td class="num">7</td><td><b>ACE settings overflow</b> — flush length, confirmation,
+    Spoolman, auto-dry defaults.</td><td class="num">filament-*.js</td>
+    <td><span class="chip yes">no</span></td></tr>
+<tr><td class="num">8</td><td><b>ACE tier 2</b> — a proxy for
+    <code>/multiace/api/state</code> past CORS, so an unloaded bay can be named and a bound
+    bay can show grams.</td><td class="num">SSWCP.{hpp,cpp}</td>
+    <td><span class="chip maybe">yes</span></td></tr>
+<tr><td class="num">9</td><td><b>Camera: H.264 on Windows and macOS</b>, once the probe has
+    been run there. Nothing to do on Linux.</td><td class="num">camera-*.js</td>
+    <td><span class="chip yes">no</span></td></tr>
+</table></div>
+
+<div class="note ok"><b>Steps 1–7 need no C++ and no rebuild.</b> Between them: the layout,
+a camera 28× faster than today with a settings panel and a four-up grid, and an ACE panel
+that reads the machine and drives it. All on the page's existing command surface, all live
+on reload.</div>
+
+<div class="note warn"><b>Two things to fix in the page's own checks while doing it</b>, or
+they will go green over a broken panel the way they have before.
+<br>· <code>check_coverage.py</code> reads <code>CMD.</code> references out of the command
+module a panel is handed. Every ACE control goes through one command —
+<code>sw_SendGCodes</code> — so <b>coverage will count the whole ACE surface as one
+reachable command and be satisfied.</b> The G-code names need their own list, checked the
+same way, or this panel is exactly the "a panel with no button counted every command"
+hole reopened.
+<br>· A DOM dump before and after step 1. The layout change moves every panel in the
+grid, and a <code>ReferenceError</code> has already once left this page with a column
+missing while all 17 browser checks passed.</div>
+
+<h2><span class="n">06</span>How to re-run any of this</h2>
+<p class="lede">Nothing above is a claim you have to take on trust. These are the exact
+commands, and they are all read-only except where marked.</p>
+
+<div class="scroll"><table>
+<tr><th>claim</th><th>command</th></tr>
+<tr><td>Four webcams, two of them real</td>
+    <td class="num">curl :7125/server/webcams/list</td></tr>
+<tr><td>Snapshot sizes and timings</td>
+    <td class="num">curl -w '%{size_download} %{time_total}' http://IP/webcam/snapshot.jpg</td></tr>
+<tr><td>14.0 fps, no H.264, no WebRTC, and the CORS split</td>
+    <td class="num">run_webkit.py --drive cam_caps.js</td></tr>
+<tr><td>The ACE object over the page's own session, 277 ms</td>
+    <td class="num">run_webkit.py --real --drive ace_probe.js</td></tr>
+<tr><td>Raw slots carry no identity</td>
+    <td class="num">curl ':7125/printer/objects/query?ace'</td></tr>
+<tr><td>Full identity exists in the FastAPI</td>
+    <td class="num">curl http://IP/multiace/api/state</td></tr>
+<tr><td>Every ACE macro and its arguments</td>
+    <td class="num">curl :7125/printer/gcode/help</td></tr>
+<tr><td>multiACE is a registered Moonraker agent</td>
+    <td class="num">curl :7125/server/extensions/list</td></tr>
+<tr><td>The printer caps itself at 15 fps</td>
+    <td class="num">curl :7125/server/webcams/list — target_fps</td></tr>
+<tr><td>head_ace names units that do not exist</td>
+    <td class="num">curl ':7125/printer/objects/query?ace' — head_ace vs device_count</td></tr>
+<tr><td>This page's own geometry, in Orca's engine</td>
+    <td class="num">python3 docs/u1-webui/tools/check_mockup.py &lt;this file&gt;</td></tr>
+</table></div>
+
+<div class="note"><b>Orca must be closed for <code>--real</code></b> — it authenticates
+with the same saved <code>clientId</code> and a broker evicts the older holder. The plain
+<code>curl</code> lines above do not care.</div>
+
+<script>
+/* Decoration only. Every decision on this page is legible with the script removed -
+   the earlier mockup was written with no JS at all after a viewer stripped it, and this
+   keeps that property where it counts. */
+(function () {
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  /* The case camera and the USB camera see the same print from different places, so
+     they are the same scene at two angles rather than two unrelated pictures - which is
+     the only way a split view demonstrates anything. */
+  function printer(c, opts) {
+    var g = c.getContext('2d'), W = c.width, H = c.height, t = opts.seed;
+    var zoom = opts.zoom || 1, tint = opts.tint || 0;
+    function frame() {
+      t += 0.006;
+      var sky = g.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, tint ? '#101b1a' : '#12181f');
+      sky.addColorStop(1, '#0a0d11');
+      g.fillStyle = sky; g.fillRect(0, 0, W, H);
+      g.save();
+      g.translate(W / 2, H / 2); g.scale(zoom, zoom); g.translate(-W / 2, -H / 2);
+      g.fillStyle = tint ? '#1a2b2c' : '#1b2530';
+      g.beginPath();
+      g.moveTo(W * 0.18, H * 0.92); g.lineTo(W * 0.82, H * 0.92);
+      g.lineTo(W * 0.70, H * 0.56); g.lineTo(W * 0.30, H * 0.56);
+      g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(140,170,200,.14)'; g.lineWidth = 1;
+      for (var i = 1; i < 7; i++) {
+        var f = i / 7;
+        g.beginPath();
+        g.moveTo(W * (0.18 + 0.12 * f), H * (0.92 - 0.36 * f));
+        g.lineTo(W * (0.82 - 0.12 * f), H * (0.92 - 0.36 * f));
+        g.stroke();
+      }
+      var layers = 16, grown = (Math.sin(t) * 0.5 + 0.5) * layers;
+      for (var L = 0; L < grown; L++) {
+        var y = H * 0.80 - L * (H * 0.021);
+        var w = W * (0.22 - L * 0.004);
+        g.fillStyle = L % 2 ? '#7a3b34' : '#8d453c';
+        g.fillRect(W * 0.5 - w / 2, y, w, H * 0.020);
+      }
+      var hx = W * (0.5 + 0.19 * Math.sin(t * 3.1));
+      var hy = H * 0.80 - grown * (H * 0.021) - H * 0.05;
+      g.fillStyle = '#39434f'; g.fillRect(hx - W * 0.035, hy - H * 0.075, W * 0.07, H * 0.075);
+      g.fillStyle = '#c9d3dd';
+      g.beginPath(); g.moveTo(hx - 5, hy); g.lineTo(hx + 5, hy);
+      g.lineTo(hx, hy + H * 0.028); g.closePath(); g.fill();
+      g.restore();
+      requestAnimationFrame(frame);
+    }
+    frame();
+  }
+
+  /* The third tile is the printer's own touchscreen, which is a UI and not a scene -
+     drawing it as one is the point: it is in the webcam list and it is not a camera. */
+  function screen(c) {
+    var g = c.getContext('2d'), W = c.width, H = c.height, t = 0;
+    function frame() {
+      t += 0.01;
+      g.fillStyle = '#0f1418'; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#18202a'; g.fillRect(0, 0, W, H * 0.16);
+      g.fillStyle = '#8fa0b4'; g.fillRect(W * 0.05, H * 0.06, W * 0.26, H * 0.05);
+      var pct = (Math.sin(t) * 0.5 + 0.5);
+      g.fillStyle = '#1e2833'; g.fillRect(W * 0.08, H * 0.44, W * 0.84, H * 0.07);
+      g.fillStyle = '#3fa96f'; g.fillRect(W * 0.08, H * 0.44, W * 0.84 * pct, H * 0.07);
+      g.fillStyle = '#5d6b7c';
+      g.fillRect(W * 0.08, H * 0.30, W * 0.42, H * 0.06);
+      g.fillRect(W * 0.08, H * 0.60, W * 0.30, H * 0.05);
+      for (var i = 0; i < 3; i++) {
+        g.fillStyle = '#212c38';
+        g.fillRect(W * (0.08 + i * 0.30), H * 0.74, W * 0.24, H * 0.16);
+      }
+      requestAnimationFrame(frame);
+    }
+    frame();
+  }
+
+  var c1 = document.getElementById('camcanvas');
+  if (c1 && c1.getContext) printer(c1, { seed: 0 });
+  var c2 = document.getElementById('camcanvas2');
+  if (c2 && c2.getContext) printer(c2, { seed: 0.37 });
+  var c3 = document.getElementById('camcanvas3');
+  if (c3 && c3.getContext) printer(c3, { seed: 0.37, zoom: 1.9, tint: 1 });
+  var c4 = document.getElementById('camcanvas4');
+  if (c4 && c4.getContext) screen(c4);
+})();
+</script>
+
+</div>

@@ -28,7 +28,12 @@ PrinterWebView::PrinterWebView(wxWindow *parent)
 
     wxBoxSizer* topsizer = new wxBoxSizer(wxVERTICAL);
 
-    wxString url      = wxString::FromUTF8(LOCALHOST_URL + std::to_string(wxGetApp().get_page_http_port()) + "/web/flutter_web/index.html?path=2");
+    // Which implementation the tab opens on; the switcher can change it live.
+    m_reconstructed = wxGetApp().app_config->get_bool("u1_reconstructed_ui");
+
+    build_switcher(topsizer);
+
+    wxString url      = wxGetApp().get_u1_surface_url(GUI_App::U1Surface::DeviceTab);
     auto     real_url = wxGetApp().get_international_url(url);
       // Create the webview
     m_browser = WebView::CreateWebView(this, real_url);
@@ -67,13 +72,68 @@ PrinterWebView::~PrinterWebView()
 }
 
 
+// A slim bar above the webview: two buttons, one per implementation.
+void PrinterWebView::build_switcher(wxSizer* topsizer)
+{
+    m_switcher = new wxPanel(this, wxID_ANY);
+    auto* row = new wxBoxSizer(wxHORIZONTAL);
+
+    m_btn_original = new wxButton(m_switcher, wxID_ANY, _L("Original"),
+                                  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    m_btn_rebuilt  = new wxButton(m_switcher, wxID_ANY, _L("Rebuilt"),
+                                  wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    m_btn_original->SetToolTip(_L("The Snapmaker Device page as shipped"));
+    m_btn_rebuilt->SetToolTip(_L("The reconstruction in resources/web/device_page"));
+
+    m_btn_original->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { show_surface(false); });
+    m_btn_rebuilt->Bind(wxEVT_BUTTON,  [this](wxCommandEvent&) { show_surface(true); });
+
+    row->AddSpacer(FromDIP(8));
+    row->Add(m_btn_original, 0, wxALIGN_CENTER_VERTICAL | wxTOP | wxBOTTOM, FromDIP(4));
+    row->AddSpacer(FromDIP(4));
+    row->Add(m_btn_rebuilt, 0, wxALIGN_CENTER_VERTICAL | wxTOP | wxBOTTOM, FromDIP(4));
+    row->AddStretchSpacer(1);
+
+    m_switcher->SetSizer(row);
+    topsizer->Add(m_switcher, 0, wxEXPAND);
+    update_switcher();
+}
+
+// The selected one is disabled, which reads as "you are here" without needing a
+// custom toggle widget.
+void PrinterWebView::update_switcher()
+{
+    if (!m_btn_original || !m_btn_rebuilt)
+        return;
+    m_btn_original->Enable(m_reconstructed);
+    m_btn_rebuilt->Enable(!m_reconstructed);
+}
+
+void PrinterWebView::show_surface(bool reconstructed)
+{
+    if (m_browser == nullptr)
+        return;
+
+    m_reconstructed = reconstructed;
+    wxGetApp().app_config->set_bool("u1_reconstructed_ui", reconstructed);
+    update_switcher();
+
+    // Drop the outgoing page's bridge subscriptions before the new one loads;
+    // otherwise its pushes would arrive at a document that never asked for them.
+    SSWCP::on_webview_delete(m_browser);
+
+    wxString url      = wxGetApp().get_u1_surface_url(GUI_App::U1Surface::DeviceTab);
+    wxString real_url = wxGetApp().get_international_url(url);
+    load_url(real_url, m_apikey);
+}
+
 void PrinterWebView::load_url(wxString& url, wxString apikey)
 {
     if (m_browser == nullptr)
         return;
     m_apikey = apikey;
 
-    if (url.find("path=2") != std::string::npos) {
+    if (GUI_App::is_u1_device_tab_url(url)) {
         wxGetApp().fltviews().add_printer_view(this, url, apikey);
     } else {
         wxGetApp().fltviews().remove_printer_view(this);
@@ -95,7 +155,7 @@ bool PrinterWebView::isSnapmakerPage()
     if (m_browser == nullptr)
         return false;
     auto url = m_browser->GetCurrentURL();
-    return (url.find("flutter_web") != std::string::npos);
+    return GUI_App::is_u1_surface_url(url);
 }
 
 void PrinterWebView::sendMessage(const std::string& msg) {

@@ -90,6 +90,17 @@ float delta_e_ciede2000(uint8_t r1, uint8_t g1, uint8_t b1,
     return DeltaE00(L1, a1, b1v, L2, a2, b2v);
 }
 
+// A row the user cannot pick is not a candidate for the matcher either. Two kinds qualify:
+// NONE-typed rows (an empty slot or head, and the explicit "Assign None" action) and disabled
+// ones - a U1 toolhead fed by an ACE, which carries whatever slot is loaded at this moment. The
+// picker greys both; auto-matching to one anyway is how a mapping ends up on a row the user is
+// then not allowed to change, and on the U1 it duplicates a spool that is already in the list
+// under its own slot.
+static bool is_selectable_source(const GUI::FilamentData& d)
+{
+    return !is_none_filament(d) && !d.m_disabled;
+}
+
 std::vector<int> compute_color_match(
     const std::vector<GUI::FilamentData>& design_data,
     const std::vector<GUI::FilamentData>& machine_data)
@@ -125,7 +136,7 @@ std::vector<int> compute_color_match(
 
         // Pass 1: same filament type
         for (size_t j = 0; j < machineCount; ++j) {
-            if (is_none_filament(machine_data[j]))
+            if (!is_selectable_source(machine_data[j]))
                 continue;
             if (machine_data[j].m_type != designType)
                 continue;
@@ -140,7 +151,7 @@ std::vector<int> compute_color_match(
         // Pass 2 (fallback): any non-NONE machine filament
         if (bestIdx < 0) {
             for (size_t j = 0; j < machineCount; ++j) {
-                if (is_none_filament(machine_data[j]))
+                if (!is_selectable_source(machine_data[j]))
                     continue;
                 float dist = DeltaE00(designL, designA, designB,
                                       machineLab[j].L, machineLab[j].a, machineLab[j].b);
@@ -165,7 +176,7 @@ std::vector<int> compute_direct_override(
 
     std::vector<size_t> validPos;
     for (size_t j = 0; j < machine_data.size(); ++j) {
-        if (!is_none_filament(machine_data[j]))
+        if (is_selectable_source(machine_data[j]))
             validPos.push_back(j);
     }
 

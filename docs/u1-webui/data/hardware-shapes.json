@@ -1,0 +1,219 @@
+{
+  "_comment": [
+    "Response shapes captured from a real Snapmaker U1, not derived from the bundle.",
+    "These are pass-throughs from the printer, so no static extraction can reach them.",
+    "Regenerate with docs/u1-webui/tools/u1_probe.py and u1_topics.py; see",
+    "docs/u1-webui/05-printer-protocol/06-mqtt-topics.md for the full write-up."
+  ],
+  "_captured": "2026-08-24",
+  "_device": {
+    "model": "Snapmaker U1",
+    "sn": "811002511261022618B3"
+  },
+  "camera": {
+    "method": "camera.start_monitor",
+    "domain_accepted": "lan",
+    "domain_rejected": {
+      "value": "",
+      "code": -32000,
+      "message": "Start monitor failed"
+    },
+    "result_fields": [
+      "state",
+      "url"
+    ],
+    "result_url": "/files/camera/monitor.jpg",
+    "frames_pushed_over_mqtt": false,
+    "frame_http": {
+      "verified_url": "http://<ip>:7125/server/files/timelapse/monitor.jpg",
+      "port": 7125,
+      "root": "timelapse",
+      "file": "monitor.jpg",
+      "bytes": 96001,
+      "content_type": "image/jpeg",
+      "jpeg_soi": true
+    },
+    "frame_refresh_signal": {
+      "topic": "<SN>/notification",
+      "method": "notify_filelist_changed",
+      "item_fields": [
+        "modified",
+        "size",
+        "permissions",
+        "path",
+        "root"
+      ]
+    }
+  },
+  "thumbnails": {
+    "server.files.thumbnails": {
+      "params": [
+        "filename"
+      ],
+      "returns": "array",
+      "item_fields": [
+        "width",
+        "height",
+        "size",
+        "thumbnail_path"
+      ],
+      "carries_image_bytes": false
+    },
+    "server.files.thumbnails_base64": {
+      "params": [
+        "path"
+      ],
+      "returns": "object",
+      "fields": [
+        "width",
+        "height",
+        "size",
+        "data",
+        "state",
+        "path"
+      ],
+      "carries_image_bytes": true,
+      "image_field": "data",
+      "sample_prefix": "iVBORw0KGgo"
+    },
+    "directory_listing_embeds": {
+      "field": "thumbnails",
+      "item_fields": [
+        "width",
+        "height",
+        "size",
+        "relative_path"
+      ],
+      "carries_image_bytes": false
+    }
+  },
+  "timelapse": {
+    "method": "camera.get_timelapse_instance",
+    "result_fields": [
+      "count",
+      "instances"
+    ],
+    "instance_fields": [
+      "date_index",
+      "gcode_name",
+      "gcode_path",
+      "generate_date",
+      "thumbnail_path",
+      "timelapse_dir",
+      "unix_timestamp_s",
+      "video_duration",
+      "video_file_size",
+      "video_local_url_suffix",
+      "video_path"
+    ],
+    "thumbnail_direct_adds": "thumbnail_base64",
+    "thumbnail_base64_is_data_uri": true
+  },
+  "topics": {
+    "plain_leg": {
+      "port": 1884,
+      "tls": false,
+      "visible": [
+        "12345678/config/response"
+      ]
+    },
+    "session_leg": {
+      "port": 8883,
+      "tls": true,
+      "visible": [
+        "<SN>/status",
+        "<SN>/response",
+        "<SN>/notification",
+        "moonraker/response",
+        "camera/response",
+        "mqtt_agent/notification",
+        "LAVA/notification"
+      ]
+    },
+    "reply_routing": {
+      "all_replies": "<SN>/response",
+      "camera_replies_also_on": "camera/response"
+    },
+    "cloud_state_during_healthy_lan_session": {
+      "mqtt_agent/notification": {
+        "state": "disconnected"
+      },
+      "LAVA/notification": {
+        "server": "offline"
+      }
+    }
+  },
+  "toolchange": {
+    "_comment": [
+      "A real `T0 A0` on an unhomed U1, watched over MQTT end to end.",
+      "Times are seconds from dispatch. This is what a manual toolchange reports,",
+      "and just as importantly what it does NOT."
+    ],
+    "_captured": "2026-08-24",
+    "duration_s": 31,
+    "timeline": [
+      {
+        "t": 0.7,
+        "toolhead.homed_axes": "z",
+        "idle_timeout.state": "Printing"
+      },
+      {
+        "t": 2.7,
+        "toolhead.homed_axes": ""
+      },
+      {
+        "t": 4.7,
+        "toolhead.homed_axes": "y"
+      },
+      {
+        "t": 14.7,
+        "toolhead.homed_axes": "xy"
+      },
+      {
+        "t": 28.7,
+        "extruder.activating_move": true
+      },
+      {
+        "t": 30.7,
+        "extruder.state": "ACTIVATE",
+        "extruder.park_pin": false,
+        "extruder.grab_valid_pin": true
+      },
+      {
+        "t": 32.7,
+        "idle_timeout.state": "Ready"
+      }
+    ],
+    "silent_throughout": {
+      "machine_state_manager": {
+        "main_state": 0,
+        "action_code": 0
+      },
+      "extruder_offset_calibration.calibration_step": "idle",
+      "display_status.message": null
+    },
+    "conclusion": "The progress signal is toolhead.homed_axes, bracketed by idle_timeout. machine_state_manager and calibration_step report nothing for a manual toolchange, so a UI that watches only those has nothing to show."
+  },
+  "toolhead_extruder_field": {
+    "_comment": [
+      "toolhead.extruder is Klipper's current-extruder pointer for G-code, NOT a",
+      "statement that the head is docked. Measured on a fully parked U1."
+    ],
+    "_captured": "2026-08-24",
+    "observed": {
+      "toolhead.extruder": "extruder",
+      "extruder.state": "PARKED",
+      "extruder1.state": "PARKED",
+      "extruder2.state": "PARKED",
+      "extruder3.state": "PARKED"
+    },
+    "conclusion": "Engagement is answered only by extruder*.state === 'ACTIVATE'. Using toolhead.extruder as a fallback made the panel believe a head was live when none was, so Park sent PARK_EXTRUDER<n> to a head that was not there - an instant no-op 'ok', nothing moving, then a full timeout."
+  },
+  "park_command": {
+    "_captured": "2026-08-24",
+    "PARK_EXTRUDER2_on_live_head": "no reply within 20s - it blocks while it works",
+    "PARK_EXTRUDER_on_non_live_head": "instant ok, nothing moves",
+    "measured_duration_s": 1.5,
+    "note": "An instant ok is indistinguishable from success, which is why the wait must confirm against extruder*.state rather than the G-code ack."
+  }
+}
