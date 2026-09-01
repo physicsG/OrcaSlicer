@@ -111,6 +111,11 @@
     four.device_count = 4;
     four.head_feeder = { 0: false, 1: false, 2: false, 3: false };
     four.head_ace = { 0: 0, 1: 1, 2: 2, 3: 3 };
+    // `ace_heads` moves with the wiring, because on the machine it is DERIVED from it -
+    // `[h for h in range(4) if head_uses_ace(h)]`, recomputed on every read. A payload
+    // that clears head_feeder and leaves ace_heads behind is a state the printer cannot be
+    // in, and the panel reads the machine's answer rather than rebuilding it.
+    four.ace_heads = [0, 1, 2, 3];
     four.aces = [
       unit(0, [{ m: 'PETG', v: 'Kingroon', c: [131, 175, 255], rfid: 2 }, { m: 'PETG', v: 'Kingroon', c: [143, 167, 200] },
                { m: 'PETG', v: 'Generic', c: [99, 44, 44] }, { m: 'PETG', v: 'Kingroon', c: [196, 112, 83] }]),

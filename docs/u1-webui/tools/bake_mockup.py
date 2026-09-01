@@ -138,8 +138,49 @@ BAKERS["multiace-cabinet.html"] = r"""
 })();
 """
 
+# The modes study bakes STATES: the three modes, multi's rival drawings and its two
+# hardware truths (the measured cross-lane feed, the shipped model's wrong resolution),
+# the two-unit and 560px cases, and the switch's own four moments - the last three
+# reached the way a person reaches them, through the panel's pill and the machine strip.
+BAKERS["multiace-modes.html"] = r"""
+(function(){
+  const q=(s)=>document.querySelector(s);
+  const qq=(s)=>[...document.querySelectorAll(s)];
+  const seg=(g,v)=>q(`#seg-${g} button[data-v="${v}"]`).click();
+  const pill=()=>q('#app .prefpill').click();
+  const item=(n)=>qq('#app .menu-item')[n].click();
+  const grab=()=>({html:document.getElementById('app').innerHTML,
+    h:Math.round(q('#app .fbody').getBoundingClientRect().height),
+    cap:document.getElementById('cap').innerHTML});
+  const out={};
+  q('#mreset').click();
+  out['mode-head']=grab();
+  seg('mode','multi');                       out['multi-cards']=grab();
+  seg('mlay','lanes');                       out['multi-lanes']=grab();
+  seg('mstate','measured');                  out['multi-measured']=grab();
+  seg('mstate','asbuilt');                   out['multi-asbuilt']=grab();
+  seg('mstate','clean'); seg('units','2');   out['multi-2u-lanes']=grab();
+  seg('mlay','cards');                       out['multi-2u-cards']=grab();
+  seg('units','1'); seg('mlay','lanes'); seg('width','560'); out['multi-560-lanes']=grab();
+  seg('mlay','cards');                       out['multi-560-cards']=grab();
+  seg('width','830'); seg('mode','normal');  out['normal-strip']=grab();
+  seg('nlay','quiet');                       out['normal-quiet']=grab();
+  seg('nlay','strip'); seg('mode','head');
+  pill();                                    out['switch-list']=grab();
+  item(2);                                   out['switch-headpick']=grab();
+  q('#app .dlgx').click();
+  pill(); item(0); q('#app .btn.primary').click(); out['switch-refused']=grab();
+  q('#app .dlgx').click();
+  q('#mloaded').click();
+  pill(); item(0); q('#app .btn.primary').click(); out['switch-pending']=grab();
+  q('#mreset').click();
+  window.__report=JSON.stringify(out);
+})();
+"""
+
 EXPECT = {"multiace-f2-iterations.html": 16, "multiace-toolhead-card.html": 18,
-          "multiace-cabinet.html": 5, "multiace-actions.html": 19}
+          "multiace-cabinet.html": 5, "multiace-actions.html": 19,
+          "multiace-modes.html": 15}
 
 # The actions study has an axis the others had not: WIDTH. One copy per option with the
 # others at rest - and the two sheet copies are opened the way a person opens them, by

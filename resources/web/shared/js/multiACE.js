@@ -230,10 +230,13 @@ export const NOT_DECLARED = 'not enabled for this toolhead';
  * @param loaded  whether the head holds filament. Passed in rather than read: a feeder
  *                head's answer lives in `print_task_config`, which is not multiACE's.
  */
-export function aceVerbs(ace, head, slot, loaded) {
+export function aceVerbs(ace, head, slot, loaded, unitIndex) {
   const h = (ace.heads || [])[head];
   if (!h) return [];
-  const unit = h.source === 'ace' ? (ace.units || [])[h.unitIndex] : null;
+  // Which unit the bay is in. In head mode a card draws one cabinet and this is always the
+  // head's own; in multi a card draws slot `head` of every unit, so the caller has to say.
+  const uIdx = unitIndex == null ? h.unitIndex : unitIndex;
+  const unit = h.source === 'ace' ? (ace.units || [])[uIdx] : null;
   const list = [];
 
   // A stock feeder has no second bay, so swap and both background verbs are not
@@ -258,16 +261,46 @@ export function aceVerbs(ace, head, slot, loaded) {
   const fed = h.bay;
   const bay = slot == null ? null : (unit.bays || [])[slot];
   const empty = !loaded;
-  const same = loaded && slot != null && fed != null && slot === fed;
+  // Feeding means the same BAY of the same UNIT. In head mode there is only ever one unit
+  // on a card so the second half is free; in multi it is the whole difference between the
+  // bay that is feeding and its neighbour on the next cabinet.
+  const same = loaded && slot != null && fed != null && slot === fed && uIdx === h.unitIndex;
   const there = slot == null ? true : !!(bay && bay.occupied);
-  const bgOk = (ace.bgHeads || []).indexOf(head) >= 0;
+  /*
+   * Outside head mode a bay is NOT free to feed any head.
+   *
+   * `cmd_ACE_LOAD_HEAD`'s non-head branch is `slot = gcmd.get_int('SLOT', head)`: bay s is
+   * plumbed to head s, one lane each. The machine will not refuse a `SLOT=` naming somebody
+   * else's lane - it will ask the ACE to push filament somewhere it is not routed - so the
+   * refusal has to be here. HelixScreen reached the same rule independently and calls it
+   * PARALLEL against head mode's HUB.
+   *
+   * A bay that is not this head's lane is not a verb of any kind, so it is left out rather
+   * than listed and greyed: there is no macro that would make it one.
+   *
+   * It takes the SLOTTED verbs and only those. `Unload` addresses the head and has nothing
+   * to do with which bay was asked about - and the measured machine reaches exactly that
+   * state, with `head_source[3]` naming a bay off head 3's own lane, so a blanket refusal
+   * here emptied the toolhead menu on the one head that had filament in it.
+   */
+  const lanes = ace.mode !== 'head';
+  const offLane = lanes && slot != null && h.lane != null && slot !== h.lane;
+  /*
+   * The background family is head mode only, and says so in its own words.
+   *
+   * `ace_bg_swap` refuses outside head mode with "v0 requires head mode (1:1 ACE per
+   * head)" - the gate is the MODE, not the per-head declaration, and `ACE_BG_SET_HEAD`
+   * would not lift it. A refusal a verb row cannot lift is not a verb row, so in multi
+   * these are absent rather than greyed.
+   */
+  const bgOk = !lanes && (ace.bgHeads || []).indexOf(head) >= 0;
   const gate = { macro: ACE.BG_SET_HEAD, args: { HEAD: head, ENABLE: 1 } };
 
-  if (empty) {
+  if (empty && !offLane) {
     list.push({ name: 'Load', macro: ACE.LOAD_HEAD, slotted: true,
                 args: { HEAD: head, ACE: unit.index, SLOT: slot },
                 off: there ? null : 'that bay is empty' });
-  } else if (!same) {
+  } else if (!empty && !same && !offLane) {
     /*
      * A swap is an UNLOAD and then a LOAD, and deliberately NOT `ACE_SWAP_HEAD`.
      *
@@ -300,19 +333,23 @@ export function aceVerbs(ace, head, slot, loaded) {
                         { macro: ACE.LOAD_HEAD,
                           args: { HEAD: head, ACE: unit.index, SLOT: slot } }],
                 off: there ? null : 'that bay is empty' });
-    list.push({ name: 'Background swap', macro: ACE.BG_SWAP, slotted: true, bg: true,
-                args: { HEAD: head, SLOT: slot, ACE: unit.index },
-                off: !there ? 'that bay is empty' : bgOk ? null : NOT_DECLARED,
-                gate: bgOk ? null : gate });
+    if (!lanes) {
+      list.push({ name: 'Background swap', macro: ACE.BG_SWAP, slotted: true, bg: true,
+                  args: { HEAD: head, SLOT: slot, ACE: unit.index },
+                  off: !there ? 'that bay is empty' : bgOk ? null : NOT_DECLARED,
+                  gate: bgOk ? null : gate });
+    }
   }
   if (!empty) {
     // An ACE pulls the filament back into its bay, which a stock feeder cannot - that is
     // what RETRACT_LENGTH is for, and why this verb is not called `Unload` here.
     list.push({ name: 'Unload and retract', macro: ACE.UNLOAD_HEAD, slotted: false,
                 args: { HEAD: head, RETRACT_LENGTH: null } });
-    list.push({ name: 'Background unload', macro: ACE.BG_UNLOAD, slotted: false, bg: true,
-                args: { HEAD: head },
-                off: bgOk ? null : NOT_DECLARED, gate: bgOk ? null : gate });
+    if (!lanes) {
+      list.push({ name: 'Background unload', macro: ACE.BG_UNLOAD, slotted: false, bg: true,
+                  args: { HEAD: head },
+                  off: bgOk ? null : NOT_DECLARED, gate: bgOk ? null : gate });
+    }
   }
   return list.map(withCmd);
 }
@@ -599,6 +636,41 @@ export function lastPrinterError(raw) {
   return null;
 }
 
+/**
+ * What multiACE said about a mode switch, which is the only place it says it.
+ *
+ * A `normal` transition with filament in any head answers `ok` and changes nothing: the
+ * `SET_ACE_MODE` macro's own guard prints the reason and returns. Those are `//` NOTES, not
+ * `!!` errors, so lastPrinterError() above cannot see them - it reads the error channel and
+ * this is on the note one. Captured verbatim on 2026-09-01:
+ *
+ *     // Cannot switch mode! Filament still loaded in: E0, E1, E3
+ *     // Please unload all toolheads first, then try again.
+ *
+ * Both lines, in order, because the macro prints the reason and then what to do about it -
+ * and a dialog that quotes the first without the second answers half the question.
+ */
+export function aceModeRefusal(raw) {
+  const list = raw && raw.result && Array.isArray(raw.result.gcode_store)
+    ? raw.result.gcode_store : [];
+  const note = (e) => {
+    const m = String((e || {}).message || '');
+    return /^\/\//.test(m) ? m.replace(/^\/\/\s*/, '').trim() : null;
+  };
+  for (let i = list.length - 1; i >= 0; i--) {
+    const t = note(list[i]);
+    if (!t || !/^Cannot switch mode/i.test(t)) continue;
+    const out = [t];
+    for (let k = i + 1; k < list.length; k += 1) {
+      const n = note(list[k]);
+      if (!n) break;
+      out.push(n);
+    }
+    return out;
+  }
+  return null;
+}
+
 export function aceOverridesUrl(device) {
   const ip = device && device[DEVICE.IP];
   if (!ip) return null;
@@ -779,11 +851,12 @@ export function parseAce(objects) {
     const o = (objects || {})['ace'];
     const present = !!o && typeof o === 'object' && !Array.isArray(o);
     if (!present) {
-      return { present: false, mode: null, unitCount: 0, activeUnit: 0,
+      return { present: false, mode: null, savedMode: null, aceHeads: [],
+               unitCount: 0, activeUnit: 0,
                swapping: false, swapPhase: null, lastSwap: null, bgHeads: [], bgVersion: null,
                units: [], heads: TOOLHEADS.map((_k, i) => ({
                  index: i, source: 'feeder', unitIndex: null, unitId: null,
-                 bay: null, loaded: null })),
+                 bay: null, lane: null, loaded: null })),
                apiVersion: null,
                settings: { confirmCommands: false, spoolmanUrl: '', spoolmanAuto: false,
                            purgeMatrix: false, spoolMode: null, bound: 0 } };
@@ -799,8 +872,9 @@ export function parseAce(objects) {
     const units = [];
     for (let i = 0; i < count; i += 1) units.push(aceUnit(rawUnits[i] || {}, i));
 
+    const activeUnit = Number(o.active_device) || 0;
     const heads = TOOLHEADS.map((_k, i) => {
-      const src = headSource(o, i, units.length);
+      const src = headSource(o, i, units.length, activeUnit);
       const from = mapAt(o.head_source, i);
       const loaded = spoolOf(from);
       if (src.source === 'ace' && loaded && units[src.unitIndex]) {
@@ -833,8 +907,29 @@ export function parseAce(objects) {
        */
       apiVersion: numOrNull(o.api_version),
       mode: o.mode || null,
+      /*
+       * The mode the machine will be in after a restart, when that is not the one it is
+       * reporting.
+       *
+       * A normal transition swaps three Klipper extras on disk and then RAISES - so it
+       * writes the saved `ace__mode` immediately, fails the RPC on purpose, and goes on
+       * reporting the old `ace.mode` until the power cycle. The disagreement between the
+       * two IS the pending state, and there is nothing else that says a restart is owed.
+       * `save_variables` is a Klipper object like any other and rides in the same
+       * sw_GetMachineState call, so this costs no request.
+       */
+      savedMode: savedAceMode(objects),
+      /*
+       * Which heads the ACE drives, straight from the machine.
+       *
+       * `[h for h in range(4) if self.head_uses_ace(h)]`, computed live from the mode.
+       * Carried whole as well as being resolved per head, because it is the one field that
+       * answers "what does this mode mean here" without re-deriving anything.
+       */
+      aceHeads: Array.isArray(o.ace_heads)
+        ? o.ace_heads.map(Number).filter(Number.isInteger) : [],
       unitCount: units.length,
-      activeUnit: Number(o.active_device) || 0,
+      activeUnit,
       swapping: !!o.swap_in_progress || (o.swap_phase && o.swap_phase !== 'idle'),
       swapPhase: nonEmpty(o.swap_phase),
       lastSwap: o.last_swap_result != null ? o.last_swap_result : null,
@@ -902,6 +997,95 @@ function parseBgSwap(objects) {
            bgBusy: ints(o.busy) };
 }
 
+/**
+ * The saved mode, out of `save_variables` - a different object, answering a different
+ * question from `ace.mode`.
+ */
+function savedAceMode(objects) {
+  const sv = (objects || {})['save_variables'];
+  const vars = sv && typeof sv === 'object' ? (sv.variables || sv) : null;
+  return vars && typeof vars === 'object' ? nonEmpty(vars.ace__mode) : null;
+}
+
+/**
+ * What sending `SET_ACE_MODE` actually does, which is three different things.
+ *
+ * Read out of `cmd_ACE_RUN_MODE_SWITCH` and the `SET_ACE_MODE` macro, and measured on
+ * 2026-09-01 by running the live pair on a machine with filament in three heads:
+ *
+ *   multi <-> head     **live.** Both are the ACE file variant, so the switch is a
+ *                      SAVE_VARIABLE and a re-read; the console says "No reboot needed."
+ *                      and `ace.mode` has already moved by the next read. Filament may
+ *                      stay loaded - the macro's `needs_unload` guard is only on the
+ *                      other transition.
+ *   normal <-> either  **a restart, reported as a failure.** It runs `ace_mode_switch.sh`
+ *                      to swap `filament_feed.py`, `extruder.py` and
+ *                      `filament_switch_sensor.py`, then raises
+ *                      `gcmd.error('... Please reboot the printer to activate!')` and a
+ *                      `RAISE_EXCEPTION ID=6666`. So a SUCCESSFUL mode change arrives at
+ *                      the page as a rejected `sw_SendGCodes`. It is also refused outright
+ *                      when any head holds filament, and says so only on the console.
+ *
+ * This is the one control on the panel whose success looks exactly like a failure, which
+ * is why what it needs is a value rather than a branch buried in the caller.
+ */
+export function aceModeChange(from, to) {
+  const restart = from !== to && (from === 'normal' || to === 'normal');
+  return { live: !restart, needsRestart: restart, needsEmpty: restart };
+}
+
+/**
+ * The mode a restart would land in, when the machine is not in it yet.
+ *
+ * Null whenever the two agree, which is every ordinary moment - so a caller can ask this
+ * without first asking whether a switch has been attempted.
+ */
+export function acePendingMode(ace) {
+  const saved = ace && ace.savedMode;
+  return (saved && ace.mode && saved !== ace.mode) ? saved : null;
+}
+
+/**
+ * What a head may be told to use, in the mode the machine is actually in.
+ *
+ * Not one list with everything greyed. `ACE_SET_HEAD_FEEDER` and `ACE_SET_HEAD_ACE` are
+ * documented "head mode only" and the plugin means it - `head_is_feeder()` returns False
+ * outright otherwise, so setting it changes nothing anyone can see. But
+ * `ACE_SET_HEAD_MANUAL` is legal in **every** mode, and the panel used to disable the whole
+ * control outside head mode, which took hand-feeding away in the two modes where it still
+ * works.
+ *
+ * In multi the lane is plumbing rather than a choice, so the list is the lane or the hand
+ * - and the lane option names every bay in it, because with a splitter on the head slot
+ * `i` of EVERY unit reaches it. "Bay A1" over a card drawing A1 *and* B1 named one bay of
+ * a set.
+ */
+export function aceSourceOptions(ace, head) {
+  const manual = { value: 'manual', label: 'Hand-fed' };
+  const feeder = { value: 'feeder', label: 'Default feeder' };
+  if (!ace || !ace.present) return [feeder, manual];
+  if (ace.mode === 'head') {
+    return [feeder]
+      .concat((ace.units || []).map((u) => ({ value: `ace:${u.index}`, label: `ACE ${u.id}` })))
+      .concat([manual]);
+  }
+  if (ace.mode === 'normal') return [feeder, manual];
+  return [{ value: 'lane', label: aceLaneLabel(ace, head) }, manual];
+}
+
+/** Every bay plumbed to one head in multi: slot `head` of each unit. */
+export function aceLaneBays(ace, head) {
+  if (!ace || ace.mode === 'head') return [];
+  return (ace.units || []).map((u) => ({ unit: u, slot: head }));
+}
+
+export function aceLaneLabel(ace, head) {
+  const ids = (ace.units || []).map((u) => aceBayAddr(u.index, head));
+  if (!ids.length) return `Lane ${head + 1}`;
+  return ids.length > 2 ? `Bays ${ids[0]}…${ids[ids.length - 1]}`
+                        : `Bay ${ids.join(' · ')}`;
+}
+
 export function parseAceOverrides(raw) {
   const map = (raw && typeof raw === 'object' && raw.overrides) ? raw.overrides : raw;
   return (map && typeof map === 'object' && !Array.isArray(map)) ? map : null;
@@ -957,21 +1141,79 @@ function mapAt(m, i) {
 }
 
 /**
- * What feeds one head, resolved in the only order that is true.
+ * What feeds one head — and the resolution order is the MODE's, not one order for all
+ * three.
  *
- * Written one rule per line, because the fallbacks are the whole point: `head_ace`
- * answers for every head whether or not that head is on an ACE, and whether or not the
- * unit it names exists.
+ * **`ace_heads` is the machine's own answer to "is this head ACE-driven"**, computed live
+ * from the mode by `head_uses_ace()` and sitting in the object all along. This function
+ * used to rebuild it, and rebuilt it wrong: it tested `head_feeder` first in every mode,
+ * and the plugin consults that map ONLY in head mode — `head_is_feeder()` returns False
+ * outright otherwise. Measured 2026-09-01 by switching a live machine to `multi` and back:
+ * `head_feeder` reads `{0,1,2 true, 3 false}` in BOTH modes, left untouched by the switch,
+ * so in multi the panel drew three stock feeders on a machine whose every head is
+ * ACE-driven. Third time in five rounds the panel re-derived something the machine states.
+ *
+ * `ace_heads` says WHETHER, not WHICH, so the mode still decides the second half:
+ *
+ *   head    ONE head is on the cabinet and all four of its bays feed it — a hub. The
+ *           wiring is `head_ace`, and `head_source[i].slot` is the bay doing it.
+ *   multi   EVERY head is on a cabinet and bay i is plumbed to head i — four parallel
+ *           lanes. `cmd_ACE_LOAD_HEAD`'s non-head branch is `slot = gcmd.get_int('SLOT',
+ *           head)` with `ace_index` defaulting to `self._active_device_index`, so the lane
+ *           is the head index and the unit is the ACTIVE one until a load records
+ *           otherwise. `head_ace` is not consulted at all — it reads `{0:0, 1:1, 2:2, 3:0}`
+ *           on a one-unit machine, naming units that do not exist.
+ *   normal  no head is on a cabinet, `ace_heads` is empty, and every head is a feeder head.
+ *
+ * `head_manual` is still asked separately and first: a manual head is simply ABSENT from
+ * `ace_heads` (`head_uses_ace` returns False for one), which cannot be told apart from a
+ * feeder head without asking.
  */
-function headSource(o, i, unitCount) {
-  const none = { source: 'feeder', unitIndex: null, unitId: null, bay: null };
-  if (mapAt(o.head_manual, i)) return { source: 'manual', unitIndex: null, unitId: null, bay: null };
-  if (mapAt(o.head_feeder, i)) return none;
-  const u = Number(mapAt(o.head_ace, i));
-  if (!Number.isInteger(u) || u < 0 || u >= unitCount) return none;
+function headSource(o, i, unitCount, activeUnit) {
+  const none = { source: 'feeder', unitIndex: null, unitId: null, bay: null, lane: null };
+  if (mapAt(o.head_manual, i)) {
+    return { source: 'manual', unitIndex: null, unitId: null, bay: null, lane: null };
+  }
+  const mode = nonEmpty(o.mode);
+  const listed = Array.isArray(o.ace_heads) ? o.ace_heads.map(Number) : null;
+  /*
+   * The machine's list where it publishes one - except in `normal`, where the mode is the
+   * outer authority and the list is not.
+   *
+   * `head_uses_ace()` has no branch for normal: it returns False for a manual head, tests
+   * `head_feeder` in head mode, and otherwise returns **True**. So a normal-mode machine
+   * publishes `ace_heads: [0,1,2,3]` - every head ACE-driven in the mode whose whole
+   * definition is that none of them is. multiACE's own config comment settles the meaning
+   * ("0 ACE heads = normal"), the mode is what the switch actually changes, and normal has
+   * never been observed on hardware - so it is read from the mode and the list is not
+   * trusted there. Where the plugin publishes no list at all, its own one-liner is used, so
+   * an older multiACE still resolves rather than reading as all-feeders.
+   */
+  const onAce = mode === 'normal' ? false
+              : listed ? listed.indexOf(i) >= 0
+              : mode === 'head' ? !mapAt(o.head_feeder, i)
+              : true;
+  if (!onAce || !unitCount) return none;
+
   const from = mapAt(o.head_source, i);
   const slot = from && Number.isInteger(Number(from.slot)) ? Number(from.slot) : null;
-  return { source: 'ace', unitIndex: u, unitId: aceUnitId(u), bay: slot };
+  const fromUnit = from && Number.isInteger(Number(from.ace_index)) ? Number(from.ace_index)
+                                                                    : null;
+  let u;
+  if (mode === 'head') {
+    u = Number(mapAt(o.head_ace, i));
+    if (!Number.isInteger(u) || u < 0 || u >= unitCount) return none;
+  } else {
+    // The unit a load would actually go to. Where nothing has been recorded that is the
+    // active one, which is what the macro defaults `ACE=` to — and it is why
+    // `active_device` starts mattering outside head mode and does not in it.
+    u = fromUnit == null ? Number(activeUnit) : fromUnit;
+    if (!Number.isInteger(u) || u < 0 || u >= unitCount) u = 0;
+  }
+  // Which bay is PLUMBED to this head, as against which one is feeding it. Only multi has
+  // one: in head mode any of the unit's four may feed, so there is nothing to name.
+  const lane = mode === 'head' ? null : i;
+  return { source: 'ace', unitIndex: u, unitId: aceUnitId(u), bay: slot, lane };
 }
 
 /**

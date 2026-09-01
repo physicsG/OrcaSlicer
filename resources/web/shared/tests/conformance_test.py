@@ -430,6 +430,29 @@ check("a colour normaliser exists and is used",
       and "cssColor" in part_src("filament", "view"),
       "assigning an ARGB int to style.background is silently dropped")
 
+# The two dryer arguments the machine disagreed with, and both answered `ok` first.
+#
+# These used to be checked by reading the macro line off the dryer dialog against a real
+# printer. The copy pass replaced that line with prose - a dialog says what a control is,
+# not what it sends - and took the only check of either fact with it, silently, because
+# the assertion that broke was in a hardware suite nobody had re-run. They live here now:
+# it is the call site that has to be right, and this is the suite that reads call sites.
+fil_cmds = part_src("filament", "commands")
+check("the dryer sends MINUTES, which is what ACE_DRY reads",
+      re.search(r"DURATION:\s*Math\.round\(hours\s*\*\s*DRY_MINUTES_PER_HOUR\)", fil_cmds)
+      is not None and "DRY_MINUTES_PER_HOUR = 60" in
+      open(os.path.join(SHARED, "js", "multiACE.js"), encoding="utf-8").read(),
+      "measured: DURATION=3 came back as 180 and DURATION=240 as 14400. The dialog "
+      "offers HOURS, so sending its number unconverted asks for four minutes of drying "
+      "and the machine answers `ok`")
+# `THRESHOLD:` as a KEY, because that is the only way one gets sent - aceLine() renders
+# an object's keys as `KEY=value`. The word itself is in the file, in the comment that
+# says why it is not used, and a check that cannot tell those apart is a check that
+# punishes writing the reason down.
+check("automatic drying uses ENABLE and RH_START, never THRESHOLD",
+      "RH_START" in fil_cmds and "ENABLE: 1" in fil_cmds and "THRESHOLD:" not in fil_cmds,
+      "measured: ACE_SET_AUTO_DRY THRESHOLD=52 returns `ok` and changes nothing")
+
 # the control panel needs `toolhead`, which was never subscribed
 sub_block = js_block(src, "SUBSCRIBE_OBJECTS") or ""
 state_src = open(os.path.join(SHARED, "js", "state.js"), encoding="utf-8").read()

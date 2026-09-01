@@ -129,6 +129,10 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
           // question: not what the ACE is, but which head may run a background swap.
           if (params.objects && 'ace_bg_swap' in params.objects && printer.aceBg)
             objs.ace_bg_swap = printer.aceBg;
+          // And `save_variables`, a third object for one field: the mode multiACE has
+          // SAVED, which is not the mode it is running until the machine is restarted.
+          if (params.objects && 'save_variables' in params.objects && printer.saveVars)
+            objs.save_variables = { variables: printer.saveVars };
           return ok(statusEnvelope(objs, 'query'));
         }
         case 'sw_SubscribeMachineState': {
@@ -170,12 +174,21 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
           printer.speedFactor = (Number(params.percentage) || 100) / 100; return ok({});
         case 'sw_ControlPurifier':
           if (params.mode != null) printer.purifierMode = params.mode; return ok({});
-        case 'sw_SendGCodes':
+        case 'sw_SendGCodes': {
           printer.gcodeLog.push(params.script);
           // The macros the Filament panel sends actually move the simulated ACE, so a
           // control that waits to be told it happened has something to be told.
-          if (printer.gcode) String(params.script).split('\n').forEach((l) => printer.gcode(l));
+          let raised = null;
+          if (printer.gcode) {
+            String(params.script).split('\n')
+              .forEach((l) => { raised = printer.gcode(l) || raised; });
+          }
+          // A macro that RAISES is an outcome and not a transport failure. SET_ACE_MODE's
+          // normal transition succeeds AND raises, which is the whole reason this arm
+          // exists: the page has to see the refusal to recognise the success.
+          if (raised) return fail(raised);
           return ok({ executed: params.script });
+        }
 
         /* ---- bringing a session up ------------------------------------- */
         // Mirrors the real sequence: the printer shows a PIN, the page hands it
@@ -416,6 +429,12 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
     // HTTP, so with no printer there is nothing to answer it. Same seam as the camera's
     // frames.
     aceOverrides: () => printer.aceOverrides,
+    // Klipper's console, in Moonraker's own `server.gcode_store` shape. Same seam and the
+    // same reason: it is an HTTP GET against the printer, and a refused mode switch says
+    // so here and nowhere else.
+    gcodeStore: (n) => ({
+      result: { gcode_store: printer.console.slice(-(Number(n) || 20)) },
+    }),
     stop() { clearInterval(timer); },
   };
 }
@@ -675,6 +694,23 @@ export function makePrinter() {
      * the state the simulator opens in.
      */
     aceBg: { version: 'v0.9', enabled_heads: [], busy: [], state: {} },
+    /*
+     * `save_variables`, for one field: the mode multiACE has SAVED, which is a different
+     * question from the mode it is running.
+     *
+     * A normal-mode switch writes this immediately, swaps three Klipper extras on disk and
+     * then raises - so `ace.mode` goes on reporting the old mode until the machine is
+     * restarted, and the disagreement between the two is the only thing that says a restart
+     * is owed. Read off the machine on 2026-09-01, where the two agreed; they disagree here
+     * the moment a normal switch is sent.
+     */
+    saveVars: { ace__mode: 'head', ace__revision: 62 },
+    /*
+     * Klipper's console, which is where a refused mode switch says so and nowhere else.
+     * `//` is a note and `!!` an error; the two are different channels and the page reads
+     * both, for different things.
+     */
+    console: [],
     // And what is IN each bay, which the ace object does not carry. Null is a printer
     // with no override store, where every occupied bay stays unnamed.
     aceOverrides: mockAceOverrides(),
@@ -707,6 +743,67 @@ export function makePrinter() {
   p.fanMain = 0.85;
   p.fanCavity = 0.4;
 
+  p.say = (line) => {
+    p.console.push({ message: line, time: 1000 + p.console.length, type: 'response' });
+    if (p.console.length > 60) p.console.shift();
+  };
+
+  /**
+   * Which heads the ACE drives, computed the way the plugin computes it - QUIRK INCLUDED.
+   *
+   * `head_uses_ace()` has no branch for normal mode: manual is False, head mode tests
+   * `head_feeder`, and everything else returns True. So a normal-mode machine publishes
+   * `ace_heads: [0,1,2,3]`, naming every head in the mode whose definition is that none of
+   * them is ACE-driven. That is what the source says and it has never been observed, so it
+   * is what the simulator answers - a simulator can only be wrong in the ways it was
+   * written to be wrong, and tidying this one up here would hide whether the page reads the
+   * MODE for normal rather than the list.
+   */
+  const aceHeadsNow = (ace) => [0, 1, 2, 3].filter((h) => {
+    if (ace.head_manual[h]) return false;
+    if (ace.mode === 'head') return !ace.head_feeder[h];
+    return true;
+  });
+
+  /*
+   * Entering head mode clears every feeder head's display identity - multiACE's own
+   * `_clear_filament_display`: empty type, empty vendor, `FILAMENT_COLOR_RGBA=00000000` -
+   * while the filament stays physically in the head. It does not touch `filament_exist`,
+   * which is why the panel has to ask the sensor about occupancy and the record about
+   * identity, and why they can disagree.
+   */
+  p.wipeFeederHeads = () => {
+    [0, 1, 2, 3].forEach((h) => {
+      if (p.ace.head_manual[h] || !p.ace.head_feeder[h]) return;
+      p.filamentType[h] = '';
+      p.filamentVendor[h] = '';
+      p.filamentSubType[h] = '';
+      p.filamentColorRgba[h] = '00000000';
+      p.filamentOfficial[h] = false;
+    });
+  };
+
+  /*
+   * And entering multi pushes each BAY's identity onto its lane's head - measured
+   * 2026-09-01, where `filament_type` went from `["","","","PETG"]` to four PETGs and
+   * `filament_exist` from `[T,T,F,T]` to all true, including a head whose extruder is
+   * empty. In multi the U1's display model mirrors the bays, and it believes the mode's
+   * claim instantly whether or not the tubes agree.
+   */
+  p.pushLanesToHeads = () => {
+    const unit = p.ace.aces[p.ace.active_device] || p.ace.aces[0];
+    const store = p.aceOverrides || {};
+    [0, 1, 2, 3].forEach((h) => {
+      const o = store[`${unit ? unit.idx : 0}_${h}`] || {};
+      const raw = (unit && unit.slots && unit.slots[h]) || {};
+      p.filamentType[h] = o.material || raw.material || 'PETG';
+      p.filamentVendor[h] = o.brand || raw.brand || 'Generic';
+      p.filamentSubType[h] = o.subtype || raw.subtype || '';
+      p.filamentColorRgba[h] = `${(o.color || '8FA7C8').replace('#', '')}FF`;
+      p.filamentExist[h] = true;
+    });
+  };
+
   /**
    * What an ACE macro does to the simulated machine.
    *
@@ -729,28 +826,83 @@ export function makePrinter() {
     const unit = Number(a.ACE);
     const slot = Number(a.SLOT);
     switch (name) {
-      case 'SET_ACE_MODE':
-        if (a.MODE) ace.mode = String(a.MODE).toLowerCase();
+      /*
+       * The mode, and all three of the things sending it does. Measured on
+       * 811002511261022618B3 on 2026-09-01 by switching a live machine to `multi` and back.
+       *
+       *   multi <-> head     LIVE. Exactly two keys of the 38 move - `mode` and
+       *                      `ace_heads` - and `head_feeder`, `head_ace` and `head_source`
+       *                      are left byte-identical, just ignored. Filament may stay
+       *                      loaded: the macro's `needs_unload` guard is only on the other
+       *                      transition. Entering multi PUSHES each bay's identity onto its
+       *                      lane's head in `print_task_config`; entering head wipes the
+       *                      feeder heads back out again.
+       *   normal <-> either  refused outright with filament in any head, on the console and
+       *                      nowhere else - the RPC still answers `ok`. Otherwise it swaps
+       *                      three Klipper extras, writes the saved `ace__mode`, and RAISES:
+       *                      `ace.mode` goes on reporting the old mode until a restart.
+       */
+      case 'SET_ACE_MODE': {
+        // The macro's own four words, and its own aliasing: `single` is accepted and
+        // treated as `multi`. Written out here rather than imported from the page's model,
+        // because this is the printer's side and it should not agree with the page by
+        // sharing a constant with it.
+        let to = String(a.MODE || '').toLowerCase();
+        if (to === 'single') to = 'multi';
+        if (['normal', 'multi', 'head'].indexOf(to) < 0) break;
+        const restart = (to === 'normal') !== (ace.mode === 'normal');
+        if (restart) {
+          const loaded = [0, 1, 2, 3].filter((h) => p.filamentExist[h]);
+          if (loaded.length) {
+            p.say(`// Cannot switch mode! Filament still loaded in: `
+                + `${loaded.map((h) => `E${h}`).join(', ')}`);
+            p.say('// Please unload all toolheads first, then try again.');
+            return;                      // `ok` on the wire, and nothing happened
+          }
+          // The saved variable moves NOW and `ace.mode` does not - which is the whole of
+          // the restart-pending state, and the only thing that reports it.
+          p.saveVars.ace__mode = to;
+          p.say(`[multiACE] Switched to ${to.toUpperCase()} mode. Please reboot!`);
+          // Returned rather than thrown: it is the macro's own outcome and has to reach the
+          // page as a refused sw_SendGCodes, which is what the real one does.
+          return `[multiACE] Switched to ${to.toUpperCase()} mode. `
+               + 'Please reboot the printer to activate!';
+        }
+        const was = ace.mode;
+        ace.mode = to;
+        p.saveVars.ace__mode = to;
+        ace.ace_heads = aceHeadsNow(ace);
+        if (to === 'head' && was !== 'head') p.wipeFeederHeads();
+        if (to === 'multi' && was !== 'multi') p.pushLanesToHeads();
+        p.say(`// Switching to ${to.toUpperCase()} mode...`);
+        p.say(`[multiACE] Switched to ${to.toUpperCase()} mode. No reboot needed.`);
         break;
+      }
+      // Each of the three re-computes `ace_heads`, because the machine does: it is derived
+      // live from the mode and the wiring rather than stored, so a simulator that leaves it
+      // where it was would let a page that reads it go on drawing the state before.
       case 'ACE_SET_HEAD_MANUAL':
         if (Number.isInteger(head)) {
           ace.head_manual[head] = a.ENABLE !== '0';
           if (ace.head_manual[head]) ace.head_feeder[head] = false;
+          ace.ace_heads = aceHeadsNow(ace);
         }
         break;
       case 'ACE_SET_HEAD_FEEDER':
         if (Number.isInteger(head)) {
           ace.head_feeder[head] = a.ENABLE !== '0';
           if (ace.head_feeder[head]) ace.head_manual[head] = false;
+          ace.ace_heads = aceHeadsNow(ace);
         }
         break;
       case 'ACE_SET_HEAD_ACE':
         // Binding a head to a unit is the one that has to clear the other two, because
-        // head_feeder is what the resolver reads FIRST.
+        // head_feeder is what head mode's resolver reads FIRST.
         if (Number.isInteger(head) && Number.isInteger(unit)) {
           ace.head_ace[head] = unit;
           ace.head_feeder[head] = false;
           ace.head_manual[head] = false;
+          ace.ace_heads = aceHeadsNow(ace);
         }
         break;
       case 'ACE_LOAD_HEAD':

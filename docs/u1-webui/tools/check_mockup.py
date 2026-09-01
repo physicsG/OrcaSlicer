@@ -1880,6 +1880,184 @@ CHECKS["ace-visual-standard.html"] = r"""
 })();
 """
 
+CHECKS["multiace-modes.html"] = r"""
+(function(){
+  const out=[];
+  try{
+  const say=(n,g,w)=>out.push(`${g===w?'PASS':'FAIL'}  ${n}`+(g===w?'':`   got ${JSON.stringify(g)} want ${JSON.stringify(w)}`));
+  const q=(s)=>document.querySelector(s);
+  const qq=(s)=>[...document.querySelectorAll(s)];
+  const R=(e)=>e?e.getBoundingClientRect():null;
+  const H=()=>Math.round(R(q('#app .fbody')).height);
+  const seg=(g,v)=>{const b=q(`#seg-${g} button[data-v="${v}"]`);
+                    if(!b) throw new Error('no control '+g+'/'+v); b.click();};
+  const pill=()=>q('#app .prefpill');
+  const opts=(i)=>[...qq('#app .srcsel')[i].options].map(o=>o.textContent);
+  const BUDGET=456;
+  q('#mreset').click();
+
+  say('title', document.title, 'Three Modes, One Cabinet');
+  say('no horizontal page scroll', document.documentElement.scrollWidth <= window.innerWidth+1, true);
+  say('body font names Plex', /Plex/.test(getComputedStyle(document.body).fontFamily), true);
+  let dup=0; const seen={};
+  qq('[id]').forEach(e=>{ if(seen[e.id]) dup++; seen[e.id]=1; });
+  say('no duplicate ids', dup, 0);
+  say('the static block exists for the no-script path', !!q('.staticwrap'), true);
+
+  // ---- head mode: the settled reference ----
+  say('head: panel is 830 wide', Math.round(R(q('#app .u1')).width), 830);
+  say('head: the pill reports the mode', pill().textContent.indexOf('head')>=0, true);
+  say('head: four cards, one on the cabinet', qq('#app .tp').length===4 && qq('#app .tp.viaace').length===1, true);
+  say('head: the cabinet holds four bays', qq('#app .tp.viaace .bay').length, 4);
+  say('head: A2 is the fed bay, as measured', qq('#app .tp.viaace .bay')[1].classList.contains('fed'), true);
+  say('head: the selector offers feeder, ACE and hand-fed', opts(0).join('/'), 'Default feeder/ACE A/Hand-fed');
+  say('head: body fits the 456 budget', H()<=BUDGET, true);
+
+  // ---- multi, lanes, clean (cards is the settled default, so lanes is asked for) ----
+  seg('mode','multi');
+  say('multi: the pill follows', pill().textContent.indexOf('multi')>=0, true);
+  say('multi: cards is the default drawing - it is the settled one',
+      q('#seg-mlay button[aria-pressed="true"]').dataset.v, 'cards');
+  seg('mlay','lanes');
+  say('multi lanes: the cabinet is drawn once', qq('#app .cab').length, 1);
+  say('multi lanes: four heads in a row', qq('#app .mlay .laneh').length, 4);
+  say('multi lanes: the selector loses the feeder', opts(0).join('/'), 'Bay A1/Hand-fed');
+  say('multi lanes: no card offers another lane', qq('#app .srcsel option').length, 8);
+  const cores=()=>qq('#app .fan path').filter(p=>p.getAttribute('stroke-width')==='2.6');
+  say('multi lanes clean: three cores for three loaded heads', cores().length, 3);
+  // lane truth: core i leaves bay i and lands on lane i - start x equals its bay centre
+  const bayx=(k)=>{const b=qq('#app .cab .bay')[k],m=q('#app .mlay');
+    return Math.round(R(b).left+R(b).width/2-R(m).left);};
+  const startx=(p)=>Math.round(Number(p.getAttribute('d').match(/^M([\d.]+)/)[1]));
+  // cores are appended in head order (0, 1, 3), and clean means head i eats bay i -
+  // so pair them exactly: a cross-lane core would start at somebody else's bay
+  const cleanOk=cores().every((p,n)=>Math.abs(startx(p)-bayx([0,1,3][n]))<2);
+  say('multi lanes clean: every core starts at its own bay', cleanOk, true);
+  say('multi lanes: body fits', H()<=BUDGET, true);
+
+  // ---- multi, cards, clean ----
+  seg('mlay','cards');
+  say('multi cards: the unit band sits above the grid',
+      !!q('#app .fbody > .bandrow + .lay'), true);
+  say('multi cards: one bay per card, four in all', qq('#app .tp .bay').length, 4);
+  say('multi cards: body fits', H()<=BUDGET, true);
+
+  // ---- multi, as measured: the cross-lane truth ----
+  seg('mlay','lanes'); seg('mstate','measured');
+  say('measured lanes: exactly one core - one recorded feed', cores().length, 1);
+  say('measured lanes: the core leaves bay A2, not toolhead 4\'s own lane',
+      Math.abs(startx(cores()[0])-bayx(1))<2, true);
+  seg('mlay','cards');
+  const lent=q('#app .bay.lent');
+  say('measured cards: A2 is drawn once, on its own lane\'s card, marked',
+      !!lent && lent.title.indexOf('feeding Toolhead 4')>=0, true);
+  const chip=q('#app .fromchip');
+  say('measured cards: toolhead 4 names what is in it and where from',
+      !!chip && chip.textContent.indexOf('from A2')>=0, true);
+  say('measured cards: no bay is drawn twice',
+      qq('#app .tp .bay').filter(b=>b.title.indexOf('A2')===0).length, 1);
+
+  // ---- multi, as the shipped model reads it: the bug, drawn ----
+  seg('mstate','asbuilt');
+  say('as-built: the exhibit is labelled wrong', !!q('#app .exnote') &&
+      q('#app .exnote').textContent.indexOf('WRONG IN THIS MODE')>=0, true);
+  say('as-built: it draws the head-mode picture on a multi machine',
+      qq('#app .feed').length===3 && qq('#app .cab').length===1, true);
+  say('as-built: the pill still says multi', pill().textContent.indexOf('multi')>=0, true);
+
+  // ---- two units: the splitter picture ----
+  seg('mstate','clean'); seg('mlay','lanes'); seg('units','2');
+  say('2u lanes: two cabinets', qq('#app .cab').length, 2);
+  say('2u lanes: body fits', H()<=BUDGET, true);
+  seg('mlay','cards');
+  say('2u cards: one bay per unit per card', qq('#app .tp .bay').length, 8);
+  say('2u cards: two unit bands', qq('#app .ustrip.band').length, 2);
+  say('2u cards: the selector names the lane SET, not one bay of it',
+      opts(0).join('/'), 'Bay A1 · B1/Hand-fed');
+  say('2u cards: body fits', H()<=BUDGET, true);
+
+  // ---- 560, the single-column reality ----
+  seg('units','1'); seg('mlay','lanes'); seg('width','560');
+  say('560 lanes: the panel is 560', Math.round(R(q('#app .u1')).width), 560);
+  say('560 lanes: the cabinet is not clipped',
+      R(q('#app .cab .top')).right <= R(q('#app .u1')).right+1, true);
+  say('560 lanes: body fits', H()<=BUDGET, true);
+  seg('mlay','cards');
+  const clip=qq('#app .tp').filter(tp=>{const box=tp.querySelector('.acebox,.bays');
+    return box && R(box).right > R(tp).right+1;}).length;
+  say('560 cards: no card clips its box', clip, 0);
+  say('560 cards: body fits', H()<=BUDGET, true);
+
+  // ---- normal ----
+  seg('width','830'); seg('mode','normal');
+  say('normal: the pill follows', pill().textContent.indexOf('normal')>=0, true);
+  say('normal strip: the unit band carries Dry', !!q('#app .ustrip.band .drybtn'), true);
+  say('normal: four feeder cards, no cabinet', qq('#app .feed').length===4 && qq('#app .cab').length===0, true);
+  say('normal: the selector is feeder or hand-fed', opts(0).join('/'), 'Default feeder/Hand-fed');
+  say('normal: body fits', H()<=BUDGET, true);
+  seg('nlay','quiet');
+  say('normal quiet: no unit band, no Dry anywhere', !q('#app .ustrip.band') && !q('#app .drybtn'), true);
+
+  // ---- the switch, run from the panel's own pill ----
+  seg('mode','head');
+  pill().click();
+  say('the mode list opens with three entries', qq('#app .menu-item').length, 3);
+  say('every entry names its macro', qq('#app .menu-item .mcmd').every(c=>c.textContent.indexOf('SET_ACE_MODE')===0), true);
+  say('the current mode is marked', qq('#app .menu-item')[2].querySelector('.now').textContent, '●');
+  qq('#app .menu-item')[1].click();   // Multi - the live pair
+  say('multi applies live, no dialog', pill().textContent.indexOf('multi')>=0 && !q('#app .dlg'), true);
+  say('the console line is the confirmation', q('#log').textContent.indexOf('No reboot needed')>=0, true);
+  pill().click(); qq('#app .menu-item')[2].click();   // Head - asks which head
+  say('head asks which head, current marked', qq('#app .hrow').length===4 &&
+      qq('#app .hrow')[3].textContent.indexOf('on the cabinet now')>=0, true);
+  say('the head picker names the line it would send',
+      q('#app .dlgcmd').textContent, 'SET_ACE_MODE MODE=head HEAD=3');
+  qq('#app .hrow')[1].click();
+  say('picking a head moves the line', q('#app .dlgcmd').textContent.indexOf('HEAD=1')>=0, true);
+  qq('#app .hrow')[3].click(); q('#app .btn.primary').click();
+  say('head applies live from multi', pill().textContent.indexOf('head')>=0, true);
+  // refusal: filament is loaded, and the machine's own sentences are shown
+  pill().click(); qq('#app .menu-item')[0].click();   // Normal
+  say('normal opens a confirm that names the restart',
+      q('#app .dlg .dlgnote').textContent.indexOf('restart')>=0, true);
+  q('#app .btn.primary').click();
+  say('refused: the machine\'s first sentence, verbatim',
+      q('#app .dlgcon').textContent.indexOf('Cannot switch mode! Filament still loaded in: E0, E1, E3')>=0, true);
+  say('refused: and the second', q('#app .dlgcon').textContent.indexOf('Please unload all toolheads first')>=0, true);
+  q('#app .dlgx').click();
+  // pending: unloaded, the success that arrives as an error
+  q('#mloaded').click();
+  pill().click(); qq('#app .menu-item')[0].click(); q('#app .btn.primary').click();
+  say('pending: the pill draws the disagreement',
+      pill().textContent.indexOf('head → normal · restart to finish')>=0, true);
+  say('pending: the banner is the exception\'s own message',
+      q('#app .banner').textContent.indexOf('Please reboot!')>=0, true);
+  say('pending: the panel still draws the OLD mode - ace.mode has not moved',
+      q('#app .u1').dataset.mode, 'head');
+  q('#mreboot').click();
+  say('the restart finishes it', pill().textContent.indexOf('normal')>=0 && !q('#app .banner'), true);
+  q('#mreset').click();
+  say('reset restores the measured machine', pill().textContent.indexOf('head')>=0, true);
+
+  // ---- both themes resolve; the panel does not follow ----
+  const lum=(c)=>{const m=c.match(/\d+/g);if(!m)return -1;const [r,g,b]=m.map(Number);
+    return (0.2126*r+0.7152*g+0.0722*b)/255;};
+  const docBgL=lum(getComputedStyle(document.body).backgroundColor);
+  document.documentElement.setAttribute('data-theme','dark');
+  const docBgD=lum(getComputedStyle(document.body).backgroundColor);
+  say('dark: the document darkens', docBgD < docBgL, true);
+  say('dark: the panel stays a fixed light design',
+      lum(getComputedStyle(q('#app .panel-body')).backgroundColor) > 0.95, true);
+  document.documentElement.removeAttribute('data-theme');
+  let bad=0; qq('table').forEach(t=>{
+    if(t.scrollWidth > t.parentElement.clientWidth+1 &&
+       getComputedStyle(t.parentElement).overflowX!=='auto') bad++; });
+  say('no table overflows unscrollably', bad, 0);
+  }catch(e){ out.push('FAIL  check threw: '+(e&&e.message||e)); }
+  window.__report = out.join('\n');
+})();
+"""
+
 CHECK = CHECKS.get(os.path.basename(PATH))
 if CHECK is None:
     print(f"no checks for {os.path.basename(PATH)}. Known: {', '.join(sorted(CHECKS))}")

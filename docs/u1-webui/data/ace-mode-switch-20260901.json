@@ -1,0 +1,1126 @@
+{
+ "_provenance": {
+  "captured": "2026-09-01",
+  "machine": "811002511261022618B3",
+  "firmware_u1": "1.5.2",
+  "multiace": "0.99.8b+9ba137e1",
+  "route": "Moonraker HTTP :7125, printer idle",
+  "method": "SET_ACE_MODE MODE=multi, dump, SET_ACE_MODE MODE=head; restored byte-identical (humidity noise aside)",
+  "note": "the live head<->multi switch skips the needs_unload guard (SET_ACE_MODE macro: the guard fires only on a normal transition); three heads held filament throughout"
+ },
+ "diff_keys_head_to_multi": [
+  "mode",
+  "ace_heads"
+ ],
+ "console": {
+  "to_multi": [
+   "// Switching to MULTI mode...",
+   "[multiACE] Switched to MULTI mode. No reboot needed."
+  ],
+  "to_head": [
+   "// Switching to HEAD mode...",
+   "[multiACE] Switched to HEAD mode. No reboot needed."
+  ],
+  "same_mode": [
+   "// Already in HEAD mode (re-syncing)...",
+   "[multiACE] Switched to HEAD mode. No reboot needed."
+  ],
+  "refused_normal_transition": [
+   "// Cannot switch mode! Filament still loaded in: E0, E1, E3",
+   "// Please unload all toolheads first, then try again."
+  ]
+ },
+ "print_task_config": {
+  "in_head_mode": {
+   "filament_type": [
+    "",
+    "",
+    "",
+    "PETG"
+   ],
+   "filament_vendor": [
+    "",
+    "",
+    "",
+    "Kingroon"
+   ],
+   "filament_exist": [
+    true,
+    true,
+    false,
+    true
+   ],
+   "filament_edit": [
+    true,
+    true,
+    false,
+    true
+   ],
+   "filament_official": [
+    false,
+    false,
+    false,
+    false
+   ],
+   "filament_color_rgba": [
+    "00000000",
+    "00000000",
+    "00000000",
+    "8FA7C8FF"
+   ]
+  },
+  "in_multi_mode": {
+   "filament_type": [
+    "PETG",
+    "PETG",
+    "PETG",
+    "PETG"
+   ],
+   "filament_vendor": [
+    "Kingroon",
+    "Kingroon",
+    "Generic",
+    "Kingroon"
+   ],
+   "filament_exist": [
+    true,
+    true,
+    true,
+    true
+   ],
+   "filament_edit": [
+    true,
+    true,
+    true,
+    true
+   ],
+   "filament_official": [
+    false,
+    false,
+    false,
+    false
+   ],
+   "filament_color_rgba": [
+    "83AFFFFF",
+    "8FA7C8FF",
+    "632C2CFF",
+    "8FA7C8FF"
+   ]
+  },
+  "back_in_head_mode": {
+   "filament_type": [
+    "",
+    "",
+    "",
+    "PETG"
+   ],
+   "filament_vendor": [
+    "",
+    "",
+    "",
+    "Kingroon"
+   ],
+   "filament_exist": [
+    true,
+    true,
+    false,
+    true
+   ],
+   "filament_edit": [
+    true,
+    true,
+    false,
+    true
+   ],
+   "filament_official": [
+    false,
+    false,
+    false,
+    false
+   ],
+   "filament_color_rgba": [
+    "00000000",
+    "00000000",
+    "00000000",
+    "8FA7C8FF"
+   ]
+  }
+ },
+ "ace_head_mode": {
+  "api_version": 1,
+  "auto_dry_masters": [
+   0
+  ],
+  "status": "ready",
+  "temp": 27,
+  "dryer_status": {
+   "status": "stop",
+   "target_temp": 0,
+   "duration": 0,
+   "remain_time": 0
+  },
+  "gate_status": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "active_device": 0,
+  "device_count": 1,
+  "ace_head": 3,
+  "ace_heads": [
+   3
+  ],
+  "mode": "head",
+  "pickup_cleaning": false,
+  "confirm_commands": false,
+  "spoolman_url": "http://192.168.2.30:7912",
+  "spoolman_auto": false,
+  "airprint_detection": true,
+  "quad_replenish": false,
+  "purge_matrix": true,
+  "settings_volatile": [],
+  "spools": {
+   "2": {
+    "spoolman_id": "2",
+    "material": "PETG",
+    "vendor": "Kingroon",
+    "color": "141E2C",
+    "label": "Black",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1000.0,
+    "density": 1.27,
+    "sku": "SM2",
+    "subtype": "",
+    "id": "2"
+   },
+   "3": {
+    "spoolman_id": "3",
+    "material": "PLA",
+    "vendor": "Snapmaker",
+    "color": "080A0D",
+    "label": "Black",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 294.7,
+    "density": 1.24,
+    "sku": "SM3",
+    "subtype": "",
+    "id": "3"
+   },
+   "4": {
+    "spoolman_id": "4",
+    "material": "PLA",
+    "vendor": "Snapmaker",
+    "color": "E2DEDB",
+    "label": "White",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 500.0,
+    "density": 1.24,
+    "sku": "SM4",
+    "subtype": "",
+    "id": "4"
+   },
+   "5": {
+    "spoolman_id": "5",
+    "material": "PLA",
+    "vendor": "ColorFabb",
+    "color": "6E6F7F",
+    "label": "BronzeFill",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 750.0,
+    "density": 1.24,
+    "sku": "SM5",
+    "subtype": "",
+    "id": "5"
+   },
+   "6": {
+    "spoolman_id": "6",
+    "material": "PLA",
+    "vendor": "Jayo",
+    "color": "F44336",
+    "label": "Brick Red",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1099.3,
+    "density": 1.24,
+    "sku": "SM6",
+    "subtype": "",
+    "id": "6"
+   },
+   "7": {
+    "spoolman_id": "7",
+    "material": "PLA",
+    "vendor": "Forshape",
+    "color": "FFFFDC",
+    "label": "Light Gold",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1000.0,
+    "density": 1.24,
+    "sku": "SM7",
+    "subtype": "",
+    "id": "7"
+   },
+   "8": {
+    "spoolman_id": "8",
+    "material": "PLA",
+    "vendor": "Snapmaker",
+    "color": "F4C032",
+    "label": "Yellow",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 500.0,
+    "density": 1.24,
+    "sku": "SM8",
+    "subtype": "",
+    "id": "8"
+   },
+   "9": {
+    "spoolman_id": "9",
+    "material": "PLA",
+    "vendor": "Jayo",
+    "color": "FFFFFF",
+    "label": "Oreo Marble",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1100.0,
+    "density": 1.24,
+    "sku": "SM9",
+    "subtype": "",
+    "id": "9"
+   },
+   "10": {
+    "spoolman_id": "10",
+    "material": "PETG",
+    "vendor": "Kingroon",
+    "color": "8FA7C8",
+    "label": "Gray",
+    "used_mm": 155.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 997.72657575,
+    "density": 1.27,
+    "sku": "SM10",
+    "subtype": "",
+    "id": "10"
+   },
+   "11": {
+    "spoolman_id": "11",
+    "material": "PLA",
+    "vendor": "Jayo",
+    "color": "3B5759",
+    "label": "Olive Green",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1100.0,
+    "density": 1.24,
+    "sku": "SM11",
+    "subtype": "",
+    "id": "11"
+   },
+   "12": {
+    "spoolman_id": "12",
+    "material": "PLA",
+    "vendor": "Snapmaker",
+    "color": "E72F1D",
+    "label": "Red",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 500.0,
+    "density": 1.24,
+    "sku": "SM12",
+    "subtype": "",
+    "id": "12"
+   },
+   "13": {
+    "spoolman_id": "13",
+    "material": "PLA",
+    "vendor": "Jayo",
+    "color": "D3C5A3",
+    "label": "Wood",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1100.0,
+    "density": 1.24,
+    "sku": "SM13",
+    "subtype": "Wood",
+    "id": "13"
+   },
+   "14": {
+    "spoolman_id": "14",
+    "material": "PLA",
+    "vendor": "Jayo",
+    "color": "FCECD6",
+    "label": "Maple Wood",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1100.0,
+    "density": 1.24,
+    "sku": "SM14",
+    "subtype": "Wood",
+    "id": "14"
+   },
+   "17": {
+    "spoolman_id": "18",
+    "material": "PETG",
+    "vendor": "Kingroon",
+    "color": "1E49D1",
+    "label": "Blue",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1000.0,
+    "density": 1.27,
+    "sku": "SM18",
+    "subtype": "",
+    "id": "17"
+   },
+   "18": {
+    "spoolman_id": "19",
+    "material": "PETG",
+    "vendor": "Kingroon",
+    "color": "FFFFFF",
+    "label": "White",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1000.0,
+    "density": 1.27,
+    "sku": "SM19",
+    "subtype": "",
+    "id": "18"
+   },
+   "19": {
+    "spoolman_id": "20",
+    "material": "PLA",
+    "vendor": "GST3D",
+    "color": "6D1D32",
+    "label": "Red",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1000.0,
+    "density": 1.24,
+    "sku": "SM20",
+    "subtype": "",
+    "id": "19"
+   },
+   "20": {
+    "spoolman_id": "21",
+    "material": "PLA",
+    "vendor": "Eryone",
+    "color": "000000",
+    "label": "Black",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 940.9,
+    "density": 1.24,
+    "sku": "SM21",
+    "subtype": "",
+    "id": "20"
+   },
+   "21": {
+    "spoolman_id": "22",
+    "material": "PETG",
+    "vendor": "Kingroon",
+    "color": "2E8C94",
+    "label": "Green",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 227.9,
+    "density": 1.27,
+    "sku": "SM22",
+    "subtype": "",
+    "id": "21"
+   },
+   "22": {
+    "spoolman_id": "23",
+    "material": "PETG",
+    "vendor": "Kingroon",
+    "color": "BD4068",
+    "label": "Red",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 250.0,
+    "density": 1.27,
+    "sku": "SM23",
+    "subtype": "",
+    "id": "22"
+   }
+  },
+  "spool_binding": {},
+  "spool_mode": "spoolman",
+  "spoollink": false,
+  "spoollink_agent": true,
+  "quad_first": true,
+  "swap_phase": "idle",
+  "last_swap_result": null,
+  "event_seq": 0,
+  "head_source": {
+   "0": null,
+   "1": null,
+   "2": null,
+   "3": {
+    "ace_index": 0,
+    "slot": 1,
+    "type": "PETG",
+    "subtype": "Basic",
+    "color": "8FA7C8",
+    "brand": "Kingroon"
+   }
+  },
+  "head_manual": {
+   "0": false,
+   "1": false,
+   "2": false,
+   "3": false
+  },
+  "head_feeder": {
+   "0": true,
+   "1": true,
+   "2": true,
+   "3": false
+  },
+  "head_reader_spool": {
+   "0": 0,
+   "1": 0,
+   "2": 0,
+   "3": 0
+  },
+  "head_tag_seen": {},
+  "head_ace": {
+   "0": 0,
+   "1": 1,
+   "2": 2,
+   "3": 0
+  },
+  "swap_in_progress": false,
+  "calibration": {
+   "state": "idle",
+   "session_id": 0,
+   "ace": null,
+   "slot": null,
+   "head": null,
+   "scope": "ace",
+   "protocol": "",
+   "commanded_feed_mm": 0,
+   "commanded_retract_mm": 0,
+   "load_length_mm": null,
+   "swap_retract_length_mm": null,
+   "retract_length_mm": null,
+   "decoder_span": null,
+   "feed_decoder_span": null,
+   "return_decoder_span": null,
+   "decoder_return_delta": null,
+   "park_reference": "ace_preload",
+   "tip_position_mm": null,
+   "verify_phase": "unavailable",
+   "verify_position_mm": null,
+   "verify_paused_from": null,
+   "verify_feed_actual_mm": null,
+   "verify_feed_delta_mm": null,
+   "verify_fine_offset_mm": 0,
+   "verify_fine_limit_mm": 50,
+   "verify_decoder_span": null,
+   "verify_move_seq": 0,
+   "toolhead_sensor": null,
+   "max_feed_mm": 0,
+   "speed_mm_s": 0,
+   "previous_load_length": null,
+   "previous_swap_retract_length": null,
+   "previous_retract_length": null,
+   "error": null
+  },
+  "calibration_unload": {
+   "active": false,
+   "head": null,
+   "ace": null,
+   "slot": null,
+   "cancel_requested": false
+  },
+  "aces": [
+   {
+    "idx": 0,
+    "connected": true,
+    "protocol": "v2",
+    "model": "ACE 2 Pro",
+    "firmware": "V1.1.26",
+    "status": "ready",
+    "temp": 27,
+    "humidity": 44,
+    "auto_dry": {
+     "enabled": false,
+     "rh_start": 45.0,
+     "rh_end": 35.0,
+     "temp": 50,
+     "master": -1,
+     "add_time": 60
+    },
+    "auto_dry_running": false,
+    "dryer_status": {
+     "status": "stop",
+     "target_temp": 0,
+     "duration": 0,
+     "remain_time": 0
+    },
+    "gate_status": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "feed_assist": -1,
+    "serial_path": "/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3.1.1:1.0",
+    "fw_hold": false,
+    "slots": [
+     {
+      "index": 0,
+      "status": "unknown",
+      "sku": "",
+      "material": "",
+      "subtype": "",
+      "rfid": 0,
+      "brand": "",
+      "color": [
+       0,
+       0,
+       0
+      ]
+     },
+     {
+      "index": 1,
+      "status": "unknown",
+      "sku": "",
+      "material": "",
+      "subtype": "",
+      "rfid": 0,
+      "brand": "",
+      "color": [
+       0,
+       0,
+       0
+      ]
+     },
+     {
+      "index": 2,
+      "status": "unknown",
+      "sku": "",
+      "material": "",
+      "subtype": "",
+      "rfid": 0,
+      "brand": "",
+      "color": [
+       0,
+       0,
+       0
+      ]
+     },
+     {
+      "index": 3,
+      "status": "unknown",
+      "sku": "",
+      "material": "",
+      "subtype": "",
+      "rfid": 0,
+      "brand": "",
+      "color": [
+       0,
+       0,
+       0
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "ace_multi_mode": {
+  "api_version": 1,
+  "auto_dry_masters": [
+   0
+  ],
+  "status": "ready",
+  "temp": 27,
+  "dryer_status": {
+   "status": "stop",
+   "target_temp": 0,
+   "duration": 0,
+   "remain_time": 0
+  },
+  "gate_status": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "active_device": 0,
+  "device_count": 1,
+  "ace_head": 3,
+  "ace_heads": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "mode": "multi",
+  "pickup_cleaning": false,
+  "confirm_commands": false,
+  "spoolman_url": "http://192.168.2.30:7912",
+  "spoolman_auto": false,
+  "airprint_detection": true,
+  "quad_replenish": false,
+  "purge_matrix": true,
+  "settings_volatile": [],
+  "spools": {
+   "2": {
+    "spoolman_id": "2",
+    "material": "PETG",
+    "vendor": "Kingroon",
+    "color": "141E2C",
+    "label": "Black",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1000.0,
+    "density": 1.27,
+    "sku": "SM2",
+    "subtype": "",
+    "id": "2"
+   },
+   "3": {
+    "spoolman_id": "3",
+    "material": "PLA",
+    "vendor": "Snapmaker",
+    "color": "080A0D",
+    "label": "Black",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 294.7,
+    "density": 1.24,
+    "sku": "SM3",
+    "subtype": "",
+    "id": "3"
+   },
+   "4": {
+    "spoolman_id": "4",
+    "material": "PLA",
+    "vendor": "Snapmaker",
+    "color": "E2DEDB",
+    "label": "White",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 500.0,
+    "density": 1.24,
+    "sku": "SM4",
+    "subtype": "",
+    "id": "4"
+   },
+   "5": {
+    "spoolman_id": "5",
+    "material": "PLA",
+    "vendor": "ColorFabb",
+    "color": "6E6F7F",
+    "label": "BronzeFill",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 750.0,
+    "density": 1.24,
+    "sku": "SM5",
+    "subtype": "",
+    "id": "5"
+   },
+   "6": {
+    "spoolman_id": "6",
+    "material": "PLA",
+    "vendor": "Jayo",
+    "color": "F44336",
+    "label": "Brick Red",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1099.3,
+    "density": 1.24,
+    "sku": "SM6",
+    "subtype": "",
+    "id": "6"
+   },
+   "7": {
+    "spoolman_id": "7",
+    "material": "PLA",
+    "vendor": "Forshape",
+    "color": "FFFFDC",
+    "label": "Light Gold",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1000.0,
+    "density": 1.24,
+    "sku": "SM7",
+    "subtype": "",
+    "id": "7"
+   },
+   "8": {
+    "spoolman_id": "8",
+    "material": "PLA",
+    "vendor": "Snapmaker",
+    "color": "F4C032",
+    "label": "Yellow",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 500.0,
+    "density": 1.24,
+    "sku": "SM8",
+    "subtype": "",
+    "id": "8"
+   },
+   "9": {
+    "spoolman_id": "9",
+    "material": "PLA",
+    "vendor": "Jayo",
+    "color": "FFFFFF",
+    "label": "Oreo Marble",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1100.0,
+    "density": 1.24,
+    "sku": "SM9",
+    "subtype": "",
+    "id": "9"
+   },
+   "10": {
+    "spoolman_id": "10",
+    "material": "PETG",
+    "vendor": "Kingroon",
+    "color": "8FA7C8",
+    "label": "Gray",
+    "used_mm": 155.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 997.72657575,
+    "density": 1.27,
+    "sku": "SM10",
+    "subtype": "",
+    "id": "10"
+   },
+   "11": {
+    "spoolman_id": "11",
+    "material": "PLA",
+    "vendor": "Jayo",
+    "color": "3B5759",
+    "label": "Olive Green",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1100.0,
+    "density": 1.24,
+    "sku": "SM11",
+    "subtype": "",
+    "id": "11"
+   },
+   "12": {
+    "spoolman_id": "12",
+    "material": "PLA",
+    "vendor": "Snapmaker",
+    "color": "E72F1D",
+    "label": "Red",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 500.0,
+    "density": 1.24,
+    "sku": "SM12",
+    "subtype": "",
+    "id": "12"
+   },
+   "13": {
+    "spoolman_id": "13",
+    "material": "PLA",
+    "vendor": "Jayo",
+    "color": "D3C5A3",
+    "label": "Wood",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1100.0,
+    "density": 1.24,
+    "sku": "SM13",
+    "subtype": "Wood",
+    "id": "13"
+   },
+   "14": {
+    "spoolman_id": "14",
+    "material": "PLA",
+    "vendor": "Jayo",
+    "color": "FCECD6",
+    "label": "Maple Wood",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1100.0,
+    "density": 1.24,
+    "sku": "SM14",
+    "subtype": "Wood",
+    "id": "14"
+   },
+   "17": {
+    "spoolman_id": "18",
+    "material": "PETG",
+    "vendor": "Kingroon",
+    "color": "1E49D1",
+    "label": "Blue",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1000.0,
+    "density": 1.27,
+    "sku": "SM18",
+    "subtype": "",
+    "id": "17"
+   },
+   "18": {
+    "spoolman_id": "19",
+    "material": "PETG",
+    "vendor": "Kingroon",
+    "color": "FFFFFF",
+    "label": "White",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1000.0,
+    "density": 1.27,
+    "sku": "SM19",
+    "subtype": "",
+    "id": "18"
+   },
+   "19": {
+    "spoolman_id": "20",
+    "material": "PLA",
+    "vendor": "GST3D",
+    "color": "6D1D32",
+    "label": "Red",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 1000.0,
+    "density": 1.24,
+    "sku": "SM20",
+    "subtype": "",
+    "id": "19"
+   },
+   "20": {
+    "spoolman_id": "21",
+    "material": "PLA",
+    "vendor": "Eryone",
+    "color": "000000",
+    "label": "Black",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 940.9,
+    "density": 1.24,
+    "sku": "SM21",
+    "subtype": "",
+    "id": "20"
+   },
+   "21": {
+    "spoolman_id": "22",
+    "material": "PETG",
+    "vendor": "Kingroon",
+    "color": "2E8C94",
+    "label": "Green",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 227.9,
+    "density": 1.27,
+    "sku": "SM22",
+    "subtype": "",
+    "id": "21"
+   },
+   "22": {
+    "spoolman_id": "23",
+    "material": "PETG",
+    "vendor": "Kingroon",
+    "color": "BD4068",
+    "label": "Red",
+    "used_mm": 0.0,
+    "spoolman_synced_mm": 0.0,
+    "weight_g": 250.0,
+    "density": 1.27,
+    "sku": "SM23",
+    "subtype": "",
+    "id": "22"
+   }
+  },
+  "spool_binding": {},
+  "spool_mode": "spoolman",
+  "spoollink": false,
+  "spoollink_agent": true,
+  "quad_first": true,
+  "swap_phase": "idle",
+  "last_swap_result": null,
+  "event_seq": 0,
+  "head_source": {
+   "0": null,
+   "1": null,
+   "2": null,
+   "3": {
+    "ace_index": 0,
+    "slot": 1,
+    "type": "PETG",
+    "subtype": "Basic",
+    "color": "8FA7C8",
+    "brand": "Kingroon"
+   }
+  },
+  "head_manual": {
+   "0": false,
+   "1": false,
+   "2": false,
+   "3": false
+  },
+  "head_feeder": {
+   "0": true,
+   "1": true,
+   "2": true,
+   "3": false
+  },
+  "head_reader_spool": {
+   "0": 0,
+   "1": 0,
+   "2": 0,
+   "3": 0
+  },
+  "head_tag_seen": {},
+  "head_ace": {
+   "0": 0,
+   "1": 1,
+   "2": 2,
+   "3": 0
+  },
+  "swap_in_progress": false,
+  "calibration": {
+   "state": "idle",
+   "session_id": 0,
+   "ace": null,
+   "slot": null,
+   "head": null,
+   "scope": "ace",
+   "protocol": "",
+   "commanded_feed_mm": 0,
+   "commanded_retract_mm": 0,
+   "load_length_mm": null,
+   "swap_retract_length_mm": null,
+   "retract_length_mm": null,
+   "decoder_span": null,
+   "feed_decoder_span": null,
+   "return_decoder_span": null,
+   "decoder_return_delta": null,
+   "park_reference": "ace_preload",
+   "tip_position_mm": null,
+   "verify_phase": "unavailable",
+   "verify_position_mm": null,
+   "verify_paused_from": null,
+   "verify_feed_actual_mm": null,
+   "verify_feed_delta_mm": null,
+   "verify_fine_offset_mm": 0,
+   "verify_fine_limit_mm": 50,
+   "verify_decoder_span": null,
+   "verify_move_seq": 0,
+   "toolhead_sensor": null,
+   "max_feed_mm": 0,
+   "speed_mm_s": 0,
+   "previous_load_length": null,
+   "previous_swap_retract_length": null,
+   "previous_retract_length": null,
+   "error": null
+  },
+  "calibration_unload": {
+   "active": false,
+   "head": null,
+   "ace": null,
+   "slot": null,
+   "cancel_requested": false
+  },
+  "aces": [
+   {
+    "idx": 0,
+    "connected": true,
+    "protocol": "v2",
+    "model": "ACE 2 Pro",
+    "firmware": "V1.1.26",
+    "status": "ready",
+    "temp": 27,
+    "humidity": 43,
+    "auto_dry": {
+     "enabled": false,
+     "rh_start": 45.0,
+     "rh_end": 35.0,
+     "temp": 50,
+     "master": -1,
+     "add_time": 60
+    },
+    "auto_dry_running": false,
+    "dryer_status": {
+     "status": "stop",
+     "target_temp": 0,
+     "duration": 0,
+     "remain_time": 0
+    },
+    "gate_status": [
+     1,
+     1,
+     1,
+     1
+    ],
+    "feed_assist": -1,
+    "serial_path": "/dev/serial/by-path/platform-fed00000.usb-usb-0:1.3.1.1:1.0",
+    "fw_hold": false,
+    "slots": [
+     {
+      "index": 0,
+      "status": "unknown",
+      "sku": "",
+      "material": "",
+      "subtype": "",
+      "rfid": 0,
+      "brand": "",
+      "color": [
+       0,
+       0,
+       0
+      ]
+     },
+     {
+      "index": 1,
+      "status": "unknown",
+      "sku": "",
+      "material": "",
+      "subtype": "",
+      "rfid": 0,
+      "brand": "",
+      "color": [
+       0,
+       0,
+       0
+      ]
+     },
+     {
+      "index": 2,
+      "status": "unknown",
+      "sku": "",
+      "material": "",
+      "subtype": "",
+      "rfid": 0,
+      "brand": "",
+      "color": [
+       0,
+       0,
+       0
+      ]
+     },
+     {
+      "index": 3,
+      "status": "unknown",
+      "sku": "",
+      "material": "",
+      "subtype": "",
+      "rfid": 0,
+      "brand": "",
+      "color": [
+       0,
+       0,
+       0
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

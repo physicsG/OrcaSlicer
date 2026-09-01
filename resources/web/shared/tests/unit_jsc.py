@@ -546,6 +546,162 @@ def main():
           not any(v[1] for v in bg2) and bg2[0][2].startswith("ACE_BG_SWAP"),
           f"got {bg2}")
 
+    # --- the three modes, which decide what the same four bays ARE ---------
+    # Every measurement behind this panel was taken in `head` mode, and the model was
+    # written from those readings. A mode is not a display preference: it is how many
+    # heads the ACE drives, and it changes the meaning of three fields at once. The two
+    # payloads below are the same machine minutes apart - 811002511261022618B3 on
+    # 2026-09-01, switched to multi and back over Moonraker HTTP - so the diff between
+    # them is exactly the diff the printer produced, not one composed here.
+    print("\n== multiACE: the three modes ==")
+
+    # As measured: switching to multi moved TWO of the 38 keys. head_feeder, head_ace and
+    # head_source were left byte-identical, and that is the whole trap.
+    MULTI = json.dumps({"ace": {
+        "mode": "multi", "device_count": 1, "api_version": 1, "active_device": 0,
+        "ace_heads": [0, 1, 2, 3],
+        "head_manual": {"0": False, "1": False, "2": False, "3": False},
+        "head_feeder": {"0": True, "1": True, "2": True, "3": False},
+        "head_ace": {"0": 0, "1": 1, "2": 2, "3": 0},
+        "head_source": {"3": {"ace_index": 0, "slot": 1, "type": "PETG",
+                              "subtype": "Basic", "color": "8FA7C8", "brand": "Kingroon"}},
+        "aces": [{"idx": 0, "connected": True, "protocol": "v2", "model": "ACE 2 Pro",
+                  "slots": [{"index": k, "status": "ready", "material": "", "brand": "",
+                             "rfid": 0, "color": [0, 0, 0]} for k in range(4)]}],
+    }})
+
+    def src(raw, i, field):
+        return js(ctxA, f"JSON.stringify(parseAce({raw}).heads[{i}].{field})").to_string()
+
+    check("head mode: head_feeder is the answer, and three heads are on stock feeders",
+          [json.loads(src(RAW, i, "source")) for i in range(4)]
+          == ["feeder", "feeder", "feeder", "ace"],
+          f'got {[json.loads(src(RAW, i, "source")) for i in range(4)]}')
+    # The bug this fixes. head_feeder still reads {0,1,2 true} in the multi payload -
+    # the switch does not touch it - and the plugin's head_is_feeder() returns False
+    # outright outside head mode, so the panel drew three feeders on a machine whose
+    # every head is ACE-driven.
+    check("multi: ace_heads is read, so every head is ACE-driven despite head_feeder",
+          [json.loads(src(MULTI, i, "source")) for i in range(4)] == ["ace"] * 4,
+          f'got {[json.loads(src(MULTI, i, "source")) for i in range(4)]}')
+    check("and head_feeder really is unchanged in that payload",
+          json.loads(MULTI)["ace"]["head_feeder"] == json.loads(RAW)["ace"]["head_feeder"],
+          "the two payloads must differ only where the machine differed")
+    # head_ace is not the wiring outside head mode: it reads {0:0,1:1,2:2,3:0} with ONE
+    # unit, so heads 1 and 2 name units that do not exist. The unit is head_source's
+    # where a load has been recorded and the ACTIVE one otherwise, which is what
+    # cmd_ACE_LOAD_HEAD's non-head branch defaults ACE= to.
+    check("multi: the unit is the recorded one or the active one, never head_ace",
+          [json.loads(src(MULTI, i, "unitIndex")) for i in range(4)] == [0, 0, 0, 0],
+          f'got {[json.loads(src(MULTI, i, "unitIndex")) for i in range(4)]}')
+    check("multi: every head has a LANE, and it is its own index",
+          [json.loads(src(MULTI, i, "lane")) for i in range(4)] == [0, 1, 2, 3],
+          f'got {[json.loads(src(MULTI, i, "lane")) for i in range(4)]}')
+    check("head mode: no head has one, because any bay may feed the one head",
+          [json.loads(src(RAW, i, "lane")) for i in range(4)] == [None] * 4,
+          f'got {[json.loads(src(RAW, i, "lane")) for i in range(4)]}')
+    # head_source survives the switch, so the machine reported a bay feeding a head it is
+    # not lane-wired to. The mode is a claim about tubes and nothing verifies it: the
+    # panel keeps the record and does not round it to the mode's rule.
+    check("multi: a recorded feed off the lane is kept, not tidied to the lane",
+          json.loads(src(MULTI, 3, "bay")) == 1 and json.loads(src(MULTI, 3, "lane")) == 3,
+          f'got bay {src(MULTI, 3, "bay")} lane {src(MULTI, 3, "lane")}')
+
+    # `normal` is the one mode never observed on hardware, and its list cannot be trusted:
+    # head_uses_ace() has NO branch for it - manual is False, head mode tests head_feeder,
+    # everything else returns True - so a normal machine would publish ace_heads [0,1,2,3],
+    # naming every head in the mode whose definition is that none of them is.
+    NORMAL = MULTI.replace('"mode": "multi"', '"mode": "normal"')
+    check("normal: the MODE decides, not ace_heads, which would claim all four",
+          [json.loads(src(NORMAL, i, "source")) for i in range(4)] == ["feeder"] * 4,
+          f'got {[json.loads(src(NORMAL, i, "source")) for i in range(4)]}')
+
+    def mverbs(head, slot, loaded, unit=0, raw=MULTI):
+        out = js(ctxA, f"JSON.stringify(aceVerbs(parseAce({raw}), {head}, {slot},"
+                       f" {str(loaded).lower()}, {unit}).map(v => [v.name, v.slotted, v.cmd]))")
+        return json.loads(out.to_string())
+
+    # A bay is not free to feed any head outside head mode: cmd_ACE_LOAD_HEAD's non-head
+    # branch is `slot = gcmd.get_int('SLOT', head)`, and the machine will NOT refuse a
+    # SLOT naming somebody else's lane - it will push filament somewhere it is not routed.
+    check("multi: a head's own lane is loadable",
+          [v[0] for v in mverbs(2, 2, False)] == ["Load"],
+          f"got {[v[0] for v in mverbs(2, 2, False)]}")
+    check("multi: another head's lane is not a verb at all, not a greyed one",
+          [v for v in mverbs(2, 0, False) if v[1]] == [],
+          f"got {mverbs(2, 0, False)}")
+    # ...but the verbs that address the HEAD survive the question, because they have
+    # nothing to do with which bay was asked about. The measured machine reaches exactly
+    # that state, so a blanket refusal emptied the menu on its one loaded head.
+    check("multi: and the head's own verbs are unaffected by an off-lane bay",
+          [v[0] for v in mverbs(3, 1, True)] == ["Unload and retract"],
+          f"got {[v[0] for v in mverbs(3, 1, True)]}")
+    # ace_bg_swap refuses outside head mode in its own words - "v0 requires head mode
+    # (1:1 ACE per head)" - and the gate is the MODE, which ACE_BG_SET_HEAD cannot lift.
+    check("multi: no background verb is offered, because none can be made available",
+          all("Background" not in v[0]
+              for h in range(4) for v in mverbs(h, h, True)),
+          "the mode is not a refusal a verb row can lift")
+    check("head mode still offers them, refused and naming the macro that declares a head",
+          any("Background" in v[0] for v in verbs(3, 0, True)),
+          f"got {names(verbs(3, 0, True))}")
+
+    # The switch itself, which is the one control whose success arrives as a failure.
+    def change(a, b):
+        return json.loads(js(ctxA, f"JSON.stringify(aceModeChange('{a}','{b}'))").to_string())
+
+    check("multi <-> head is live, and needs no unload",
+          change("head", "multi")["live"] and change("multi", "head")["live"]
+          and not change("head", "multi")["needsEmpty"],
+          f'got {change("head", "multi")}')
+    check("anything through normal needs every head empty and a restart",
+          all(change(a, b)["needsRestart"] and change(a, b)["needsEmpty"]
+              for a, b in [("head", "normal"), ("normal", "multi"), ("normal", "head")]),
+          "a normal transition swaps three Klipper extras and raises")
+    check("the restart is owed exactly while the saved mode and the running one disagree",
+          [json.loads(js(ctxA, "JSON.stringify(acePendingMode("
+                               f"{{mode:'head',savedMode:{v}}}))").to_string())
+           for v in ("'normal'", "'head'", "null")] == ["normal", None, None],
+          "ace.mode vs save_variables.ace__mode is the only thing that says so")
+
+    # And the refusal, which the RPC never carries: the guard prints `//` NOTES and
+    # returns `ok`. Captured verbatim on 2026-09-01.
+    STORE = json.dumps({"result": {"gcode_store": [
+        {"message": "SET_ACE_MODE MODE=normal"},
+        {"message": "// Cannot switch mode! Filament still loaded in: E0, E1, E3"},
+        {"message": "// Please unload all toolheads first, then try again."}]}})
+    said = json.loads(js(ctxA, f"JSON.stringify(aceModeRefusal({STORE}))").to_string())
+    check("the refusal is read off the note channel, both lines and in order",
+          said == ["Cannot switch mode! Filament still loaded in: E0, E1, E3",
+                   "Please unload all toolheads first, then try again."],
+          f"got {said}")
+    check("and a console with no refusal in it says so rather than guessing",
+          js(ctxA, 'JSON.stringify(aceModeRefusal({result:{gcode_store:'
+                   '[{message:"// Switching to MULTI mode..."}]}}))').to_string() == "null",
+          "a note that is not the refusal must not be reported as one")
+
+    # The selector's options are the mode's, because two of the three setters are
+    # documented head-mode-only and the third - ACE_SET_HEAD_MANUAL - is not.
+    def opts(raw, head=0):
+        return json.loads(js(ctxA, f"JSON.stringify(aceSourceOptions(parseAce({raw}), {head})"
+                                   ".map(o => o.label))").to_string())
+
+    check("head mode offers the feeder, each unit by name, and the hand",
+          opts(RAW) == ["Default feeder", "ACE A", "Hand-fed"], f"got {opts(RAW)}")
+    check("multi offers the lane and the hand, because the lane is plumbing",
+          opts(MULTI, 1) == ["Bay A2", "Hand-fed"], f"got {opts(MULTI, 1)}")
+    check("normal offers the feeder and the hand, and never fully disables",
+          opts(NORMAL) == ["Default feeder", "Hand-fed"], f"got {opts(NORMAL)}")
+    # With a splitter on the head, slot i of EVERY unit reaches it - so naming one bay of
+    # the set was naming one bay of a set. Reported from the two-unit drawing.
+    _two = json.loads(MULTI)
+    _two["ace"]["device_count"] = 2
+    _two["ace"]["aces"] = [_two["ace"]["aces"][0],
+                           dict(_two["ace"]["aces"][0], idx=1, model="ACE Pro")]
+    TWO = json.dumps(_two)
+    check("and with two units the lane option names both bays, not the first",
+          opts(TWO, 0) == ["Bay A1 · B1", "Hand-fed"], f"got {opts(TWO, 0)}")
+
     # --- and what the machine says it is doing about it --------------------
     # `channel_state` is the U1's own and is already on the subscription; `swap_phase` is
     # multiACE's and has never been captured on hardware. The classification below is

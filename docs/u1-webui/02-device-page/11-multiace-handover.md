@@ -100,7 +100,7 @@ renders into a `Gtk.OffscreenWindow` with the compositor off, through cairo, on 
 It is still the weaker half: the seam through a spool looked three pixels out and measured
 exactly right.
 
-Six interactive studies in this directory hold every decision, each one checked in
+Seven interactive studies in this directory hold every decision, each one checked in
 WebKitGTK.
 
 | study | answers | checks |
@@ -110,6 +110,7 @@ WebKitGTK.
 | [multiace-toolhead-card.html](multiace-toolhead-card.html) | What goes under the header: filament, box, tube, marker | 81 |
 | [multiace-cabinet.html](multiace-cabinet.html) | **The settled card**, and its five states | 104 |
 | [multiace-actions.html](multiace-actions.html) | **What can be done to a filament**, and the card at any width you drag it to | 103 |
+| [multiace-modes.html](multiace-modes.html) | **The three modes** — the panel in each, multi's two drawings, and the switch's own lifecycle | 67 |
 | [camera-layout-ace-mockup.html](camera-layout-ace-mockup.html) | The earlier layout/camera study, incl. the first ACE pass | 94 |
 
 ```bash
@@ -787,11 +788,15 @@ unmeasured; that still needs one real swap.
 
 **This is the next session's work, and it is not a polish item.** Every measurement behind
 this panel was taken on a machine in **`head`** mode, and the model was written from those
-readings. `multi` and `normal` have never been observed at all — not on hardware, not in
-the simulator, which is hard-coded `mode: 'head'`. What follows is read out of multiACE's
-own source and cross-checked against HelixScreen, so it is evidence, but it is **not
-measurement** and it should be treated the way every other unmeasured claim in this
-document has been: confirmed on the machine before it is trusted.
+readings. What follows was read out of multiACE's own source and cross-checked against
+HelixScreen; **on 2026-09-01 the live half was then measured** — the machine was switched
+to `multi` and back over Moonraker HTTP and both payloads captured
+([`data/ace-mode-switch-20260901.json`](../data/ace-mode-switch-20260901.json)), and the
+source reading held. `normal` is still unobserved (it needs a reboot each way and every
+head unloaded), and the simulator is still hard-coded `mode: 'head'`. The drawings for all
+three modes are settled in a seventh study,
+**[multiace-modes.html](multiace-modes.html)** — 67 checks, 15 pre-rendered states — and
+*[What the modes study answered](#what-the-modes-study-answered)* below holds the results.
 
 The short version: **in `multi` mode the panel will draw the wrong sources and offer loads
 the hardware cannot perform.** That second half is why this is first.
@@ -937,20 +942,34 @@ curl -s 'http://<ip>:7125/printer/objects/query?ace' > /tmp/ace-multi.json
 curl -s http://<ip>:7125/printer/gcode/script --data-urlencode 'script=SET_ACE_MODE MODE=head'
 ```
 
-What the diff has to answer, and none of it is guessable:
+**Run on 2026-09-01, and every question answered.** The machine was idle with filament in
+three heads; the round trip took minutes, moved nothing, and restored the baseline
+byte-identical (humidity noise aside). Both payloads, the `print_task_config` snapshots
+and the console lines are in
+[`data/ace-mode-switch-20260901.json`](../data/ace-mode-switch-20260901.json). The whole
+`head → multi` diff is **two keys**:
 
-| | |
-|---|---|
-| `ace_heads` | does it become `[0,1,2,3]`? |
-| `head_feeder` | is it left stale, or rewritten? |
-| `head_ace` | left stale, or rewritten to identity? |
-| `head_source` | cleared, or carried across the switch? |
-| `print_task_config` | is the head-mode wipe symmetric — does going *to* multi wipe anything? |
-| `active_device` | does it start mattering? |
-| `gate_status` / `slots` | unchanged, presumably — confirm |
+| | asked | measured |
+|---|---|---|
+| `ace_heads` | does it become `[0,1,2,3]`? | **yes** — `[3]` ↔ `[0,1,2,3]`, exactly the mode |
+| `head_feeder` | left stale, or rewritten? | **left byte-identical** — still `{0,1,2 true, 3 false}` in multi, just ignored. Which confirms claim 1: a panel reading it in multi draws three feeder cards on a machine whose every head is ACE-driven |
+| `head_ace` | left stale, or rewritten to identity? | **left byte-identical** |
+| `head_source` | cleared, or carried? | **carried** — head 3 still names `{ace_index:0, slot:1}` in multi: a bay feeding a head it is not lane-wired to, which multi's own rule says cannot happen. The record of fact survives the change of claim, and the panel must draw the record |
+| `print_task_config` | is the wipe symmetric? | **no — entering multi *populates*.** All four heads got bay identities pushed (`filament_type` all `PETG`, `filament_exist` all true — including a head with an empty extruder and two holding feeder filament). In multi the U1's display model mirrors **the bays**. Entering head wipes it back |
+| `active_device` | does it start mattering? | unchanged (`0`); it is the unit-picking half of multi (`ACE_SWITCH`), so it matters only with `device_count > 1` |
+| `gate_status` / `slots` | unchanged, presumably | **unchanged**, confirmed |
 
-Then the same three states through `run_webkit.py --real --drive`, read-only, and the
-answers into `mockhost.js` so the simulator can hold two modes rather than one.
+Also captured verbatim, off the gcode store: the live switch's console voice — `//
+Switching to MULTI mode...` then `[multiACE] Switched to MULTI mode. No reboot needed.` —
+the same-mode answer `// Already in HEAD mode (re-syncing)...`, and the refusal for a
+normal transition with filament loaded: `// Cannot switch mode! Filament still loaded in:
+E0, E1, E3` · `// Please unload all toolheads first, then try again.` And the
+`needs_unload` guard is **only** on normal transitions — it is right there in the
+`SET_ACE_MODE` macro — which is what made the live round trip safe with filament in place.
+
+Still to do from the original plan: the same states through `run_webkit.py --real
+--drive`, read-only, and the payloads into `mockhost.js` so the simulator can hold two
+modes rather than one.
 
 ### What to build, once it is measured
 
@@ -970,7 +989,60 @@ answers into `mockhost.js` so the simulator can hold two modes rather than one.
 **Do not ship any of it on the source reading alone.** The last five rounds each turned on
 a field meaning something other than its name — `filament_edit` was a latch, `head_ace` is
 not what feeds a head, `ACE_SWAP_HEAD` is the print's — and this section is currently in
-exactly the state those were in before someone asked the machine.
+exactly the state those were in before someone asked the machine. *(The machine has now
+been asked for the live half — the table above — and the reading held. `normal` remains
+source-only.)*
+
+### What the modes study answered
+
+**[multiace-modes.html](multiace-modes.html)** — the seventh study, 67 checks, 15
+pre-rendered states, and the first drawn from **two real payloads of the same machine**:
+`head` and `multi`, captured minutes apart on 2026-09-01. Its rig teleports between
+modes; the panel's own pill runs the real switch flow, and the machine strip below plays
+the printer's side (filament loaded, the restart). Everything below is measured in
+WebKitGTK, not judged.
+
+- **Multi draws as CARDS — settled with the user, 2026-09-01.** Two honest drawings were
+  weighed: **lanes** (the cabinet once, four tubes fanning to four heads — the topology
+  as a picture, 271 px, and the measured cross-lane feed draws as a visible crossing) and
+  **cards** (the settled 2×2 frame kept — each card holds only its own lane's bays, the
+  unit row a shared band above the grid, 437 px). Lanes is the nicer picture with one
+  unit; with more, cards win, and one drawing serves both — so cards. Lanes stays in the
+  study as the picture that explains the mode. Both fit at 830, 708 and 560; asserted.
+- **The selector names the lane SET, not one bay of it** — the user caught this on the
+  two-unit card: *"Bay A1"* sat over a card drawing A1 *and* B1, and with a splitter on
+  the head both are plumbed to it. The option now reads *Bay A1 · B1* (eliding past two
+  units); which bay is actually feeding stays the fed ring's job.
+- **A bay is drawn once, on the card of the head it is plumbed to.** In the measured
+  state the cards drawing puts A2 on toolhead 2's card marked *feeding Toolhead 4*, and
+  toolhead 4 carries a chip naming what is in it and where from. No bay appears twice —
+  asserted.
+- **The as-built exhibit is in the study, labelled `WRONG IN THIS MODE`:** today's
+  `headSource()`, fed the real multi payload, resolves three feeder cards and one four-bay
+  cabinet — the head-mode picture under a pill saying `multi`.
+- **The selector's options are the mode's** — head: feeder / ACE / hand-fed; multi: the
+  lane / hand-fed; normal: feeder / hand-fed. `ACE_SET_HEAD_MANUAL` is legal in every
+  mode, so the selector never fully disables again — the verbs study's blanket disable
+  outside head mode was over-broad and this corrects it. Both background verbs are simply
+  absent in multi: `ace_bg_swap` refuses outside head mode in its own words (*"v0
+  requires head mode (1:1 ACE per head)"*), and a mode change is not a refusal a verb
+  row can lift.
+- **Normal draws as the STRIP — settled with the user, 2026-09-01** — the unit band
+  (badge, humidity, **Dry**) below the grid, so drying stays controllable while the
+  cabinet feeds nothing; **quiet** is rejected. It fits only after normal's cards drop
+  the second header line — measured 497 against 456 with it, 443 without, and the line
+  had nothing to say: it exists to name which unit feeds the head, and in normal nothing
+  ACE-feeds anything. Two units share one band row — stacked bands measured 475. **Head
+  mode is confirmed as-is** — it was the starting point of the whole panel.
+- **The switch is drawn as three outcomes, and the pending state has a mechanism:**
+  live (console line as confirmation), refused (the machine's own two console sentences,
+  verbatim, in the dialog), and restart-pending — drawn from the **disagreement between
+  `ace.mode` and the saved `ace__mode`**, both already readable in one
+  `sw_GetMachineState` call, with the banner showing exception 6666's own message and the
+  panel honestly still drawing the old mode.
+- **Choosing Head always asks which head** — also from head mode, because that is how the
+  coupled head gets *moved*; the picker's command line carries `SET_ACE_MODE MODE=head
+  HEAD=n`. That closes the `HEAD=` gap noted below at the drawing level.
 
 ---
 

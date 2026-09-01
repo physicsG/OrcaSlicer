@@ -2,9 +2,15 @@
 
 Where this work stands, what is proven and what is not, and what to pick up next.
 
-Last verified against hardware: **2026-08-28**, a Snapmaker U1 (`811002511261022618B3`)
+Last verified against hardware: **2026-09-01**, a Snapmaker U1 (`811002511261022618B3`)
 on the LAN at `192.168.2.242`, through Orca 2.3.6 built from this branch and through
-`run_webkit.py --real`, which reaches the printer with no Orca at all.
+`run_webkit.py --real`, which reaches the printer with no Orca at all. That day's pass
+was over Moonraker HTTP: the live `head ↔ multi` mode switch, run and restored —
+[02-device-page/11-multiace-handover.md](02-device-page/11-multiace-handover.md#start-here-the-panel-has-only-ever-been-right-in-one-of-the-three-modes)
+has the results, [data/ace-mode-switch-20260901.json](data/ace-mode-switch-20260901.json)
+the payloads, and
+[02-device-page/multiace-modes.html](02-device-page/multiace-modes.html) — the seventh
+study — the drawings for all three modes.
 
 ## What exists
 

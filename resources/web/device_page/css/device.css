@@ -657,6 +657,62 @@ body {
   position: relative;
 }
 
+/* ---- multi mode: the lane, and the unit row that left the card -------
+   In multi, bay i is plumbed to head i, so a card holds slot i of every cabinet rather
+   than one cabinet's four - the same drawing, one bay wide, once per unit. The unit's own
+   row then belongs to the PANEL rather than to any card, which is what the band is; in
+   normal mode the same band sits below the grid instead, because an idle cabinet still
+   reports humidity and can still dry.
+
+   Measured in WebKitGTK at 1920x1080 against the same 456 budget: multi 437, normal 443.
+   Both fit only because the card's second header line goes with the unit row - four
+   copies of `Feeder · channel 1` put normal at 497. */
+.ace-lanes {
+  display: flex; gap: 12px; justify-content: center; align-items: flex-start;
+  position: relative;
+}
+.ace-band { display: flex; gap: 10px; min-width: 0; }
+.ace-band .ace-strip { flex: 1; min-width: 0; height: 22px; margin: 0; padding: 0 6px; }
+.ace-grid + .ace-band { margin-top: 6px; }
+.ace-band + .ace-grid { margin-top: 2px; }
+
+/* A bay of this head's lane that another head is recorded as being fed from. Only
+   reachable on a machine whose tubes do not match its mode - which is the machine this was
+   measured on - so it is drawn rather than assumed away. The note is absolute: it must not
+   move the spool off the line its three neighbours sit on. */
+.ace-bay.is-lent .ace-chip { background: #B7BDC6; }
+.ace-lent {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  top: calc(var(--disc) + var(--bay-gap) + var(--pillh) + 2px);
+  font: 10px/13px var(--sans); color: var(--ink-dim); white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Where the filament came from, when that is not this head's own lane. `head_source`
+   survives a mode switch, so a machine plumbed for head mode and put into multi reports
+   exactly this - and the panel draws the machine's record rather than the mode's claim. */
+.ace-from {
+  align-self: center; margin-top: 2px; height: 16px;
+  display: inline-flex; align-items: center; gap: 5px; padding: 0 7px;
+  border-radius: 8px; background: var(--pill);
+  font: 10.5px/1 var(--sans); color: var(--ink-dim); white-space: nowrap;
+}
+.ace-from-dot {
+  width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+  background: #B7BDC6;
+}
+
+/* The head picker in the mode dialog: which toolhead is on the cabinet. */
+.hrow {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; margin-bottom: 6px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+  font: 12.5px/1 var(--sans); color: var(--ink); cursor: pointer; text-align: left;
+}
+.hrow:hover { border-color: var(--accent); }
+.hrow[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.hrow .hsub { margin-left: auto; font: 10.5px/1 var(--mono); color: var(--ink-dim); }
+
 .ace-bay {
   position: relative; display: block; cursor: pointer;
   border: 0; background: none; padding: 0;

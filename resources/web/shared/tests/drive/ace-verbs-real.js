@@ -25,6 +25,22 @@
 
   (async () => {
     try {
+      /*
+       * Wait for the session, which this script never did.
+       *
+       * Its sibling ace-real.js has always had this and this one has not, so against a
+       * real printer it read `ace` before the connect had finished, found nothing, and
+       * walked off the end of an empty model - which is why the harness's own answer was
+       * "the driving script never reported" rather than a failure it could name. The
+       * handover predicted it in the right words and the wrong place: this section had
+       * "not yet been run on the machine".
+       */
+      for (let i = 0; i < 40 && !(P && P.bridge); i += 1) await wait(400);
+      for (let i = 0; i < 40 && !P.state.lastUpdate; i += 1) await wait(500);
+      // `ace` is not on the subscription, so a session being up does not mean it is here.
+      for (let i = 0; i < 20 && !P.state.ace().present; i += 1) {
+        await P.session.refreshAce(); await wait(400);
+      }
       const ace = P.state.ace();
       say('the machine has multiACE', ace.present, true);
 

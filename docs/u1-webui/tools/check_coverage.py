@@ -281,9 +281,13 @@ ACE_MACROS = {
         "macro does to a head mid-retract has never been measured, and a cancel that "
         "leaves filament somewhere unnamed is worse than finishing.",
     "ACE_SWITCH":
-        "NOT BUILT  switches the ACTIVE unit, which only matters in multi mode. The "
-        "panel is head-major: every card names its own unit, so there is no such thing "
-        "as the active one on it.",
+        "NOT BUILT  switches the ACTIVE unit, which only matters in multi mode - and the "
+        "old reason (that the panel is head-major, so there is no such thing as the "
+        "active one) expired when multi was built: outside head mode the active unit IS "
+        "what a load defaults ACE= to, and the panel reads it. What it still has no need "
+        "of is a control that changes it: with one unit there is nothing to switch to, "
+        "and with two the panel picks the unit by naming ACE= on the load rather than by "
+        "moving a global first. Revisit on a machine that actually has two.",
     "ACE_CALIBRATION_START":
         "not in v1  bowden calibration is a guided physical procedure - feed, mark, "
         "return - and a panel that starts it without walking someone through it is worse "

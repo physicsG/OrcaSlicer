@@ -44,7 +44,8 @@ import { cssColor, isDarkColor } from '../../../../../shared/js/protocol.js';
 import { ACE_MODES, ACE_MODE_LABELS, DRY_TEMPS, DRY_HOURS, DRY_LIMITS,
          DRY_MINUTES_PER_HOUR, AUTO_DRY_THRESHOLDS, NOT_DECLARED,
          aceBadge, aceGlyphSquare, aceBayAddr, humidityLevel, mergeAceBays,
-         aceVerbs, channelStep, channelWord, headOccupied }
+         aceVerbs, channelStep, channelWord, headOccupied,
+         aceSourceOptions, aceModeChange, acePendingMode }
   from '../../../../../shared/js/multiACE.js';
 import { keyedList, rebuildOn } from '../../../core/render.js';
 import { openDialog, closeDialog, openMenu } from '../../../core/overlay.js';
@@ -108,17 +109,68 @@ function headProv(f) {
  * the panel body
  * ---------------------------------------------------------------- */
 
+/**
+ * Which shape the body takes, and the machine decides all of it.
+ *
+ * Four, not two, because a mode is not a display preference - it is how many heads the ACE
+ * drives, and it changes what the same four bays physically are:
+ *
+ *   slots   no `ace` object. A stock U1 has no ACE to describe.
+ *   hub     head mode. One head is on the cabinet and any of its four bays may feed it, so
+ *           the cabinet belongs to that card and its unit row sits in that card's header.
+ *   lanes   multi mode. Bay i is plumbed to head i, so the cabinet belongs to the PANEL:
+ *           its row is drawn once above the grid and each card holds only its own lane.
+ *   nolane  normal mode. Nothing is ACE-fed. The unit row goes below the grid, because an
+ *           idle cabinet still reports humidity and can still dry - which is most of what
+ *           an idle cabinet is for - and a control that vanishes leaves no way to find out
+ *           why it is not there.
+ */
+function shapeOf(ace) {
+  if (!ace.present) return 'slots';
+  if (ace.mode === 'multi') return 'lanes';
+  if (ace.mode === 'normal') return 'nolane';
+  return 'hub';
+}
+
 export function renderFilament(root, ctx) {
   const ace = ctx.state.ace();
   const slots = ctx.state.filaments();
-  // One guard, and it is the one render.js provides: the two shapes share no children,
+  const shape = shapeOf(ace);
+  // One guard, and it is the one render.js provides: the four shapes share no children,
   // so switching between them has to clear rather than reconcile.
-  rebuildOn(root, ace.present ? 'ace' : 'slots', (r) => {
-    r.appendChild(el('div', ace.present ? 'ace-grid' : 'slot-row'));
+  rebuildOn(root, shape, (r) => {
+    if (shape === 'slots') { r.appendChild(el('div', 'slot-row')); return; }
+    if (shape === 'lanes') r.appendChild(el('div', 'ace-band'));
+    r.appendChild(el('div', 'ace-grid'));
+    if (shape === 'nolane') r.appendChild(el('div', 'ace-band'));
   });
-  const host = root.firstElementChild;
-  if (!ace.present) { renderSlots(host, slots, ctx.handlers); return; }
-  renderCards(host, ace, slots, ctx);
+  if (shape === 'slots') { renderSlots(root.firstElementChild, slots, ctx.handlers); return; }
+  const band = root.querySelector('.ace-band');
+  if (band) renderBand(band, ace, ctx);
+  renderCards(root.querySelector('.ace-grid'), ace, slots, ctx);
+}
+
+/**
+ * The unit's own row, where the unit is the PANEL's rather than one card's.
+ *
+ * Same row as a head-mode card's second line - badge, name, humidity, the Dry chip - drawn
+ * once because in these two modes every card is on the same cabinet or none is. Nothing
+ * here is about a toolhead, which is why it can leave the cards.
+ */
+function renderBand(band, ace, ctx) {
+  keyedList(band, ace.units, {
+    key: (u) => u.index,
+    sig: (u) => [u.id, u.model, u.humidity, u.temperature, u.connected,
+                 u.dryer.running, u.dryer.doneMin, u.dryer.totalMin,
+                 mergeAceBays(u, ctx.store.aceBays)
+                   .map((b) => `${b.occupied ? 1 : 0}${b.color || ''}`).join(''),
+                ].join('|'),
+    create: (u) => {
+      const s = unitStrip(ctx, u, [], mergeAceBays(u, ctx.store.aceBays));
+      s.classList.add('is-band');
+      return s;
+    },
+  });
 }
 
 /* ---------------------------------------------------------------- *
@@ -173,10 +225,18 @@ function renderSlots(root, slots, handlers) {
  * an ACE: four toolhead cards
  * ---------------------------------------------------------------- */
 
-/** What feeds head `i`, with anything asked for and not yet confirmed showing instead. */
+/**
+ * What feeds head `i`, with anything asked for and not yet confirmed showing instead.
+ *
+ * The vocabulary is the selector's, and the selector's is the mode's - see
+ * aceSourceOptions(). Outside head mode there is no choosing WHICH unit, so an ACE-fed
+ * head is on `lane` rather than on `ace:<n>`: the lane is plumbing, and naming a unit
+ * there would offer a choice the machine does not have.
+ */
 function askedSource(ace, pending, i) {
   const h = ace.heads[i];
-  const mirror = h.source === 'ace' ? `ace:${h.unitIndex}` : h.source;
+  const mirror = h.source !== 'ace' ? h.source
+               : ace.mode === 'head' ? `ace:${h.unitIndex}` : 'lane';
   return pending.resolve(`ace-src-${i}`, mirror);
 }
 
@@ -219,6 +279,12 @@ function cardSig(ace, slots, pending, i, overrides) {
     // with `filament_at_extruder` unchanged.
     (slots[i] && slots[i].feed && slots[i].feed.channelState) || '',
     ace.bgHeads.join(','),
+    // Which bay is plumbed here, and which head each of this card's bays is recorded as
+    // feeding. In lane mode the second one is drawn ON the card - a bay of this head's
+    // lane that another head is fed from wears the note saying so - and nothing else in
+    // this signature moves when a different head's `head_source` does.
+    h.lane == null ? '-' : `L${h.lane}`,
+    ace.heads.map((o) => (o.source === 'ace' && o.bay === h.lane ? o.unitIndex : '')).join(''),
     sp ? [sp.material || sp.type, sp.subType, sp.vendor, sp.color].join(',') : '-',
     /*
      * The two marks on the roll, which are not derivable from anything above it.
@@ -232,11 +298,15 @@ function cardSig(ace, slots, pending, i, overrides) {
      * missing while the menu - rebuilt on every click - had it.
      */
     slots[i] ? `${slots[i].tag ? 1 : 0}${slots[i].editable ? 1 : 0}` : '-',
-    u ? [u.id, u.model, u.humidity, u.temperature, u.dryer.running,
-         u.dryer.doneMin, u.dryer.totalMin,
-         mergeAceBays(u, overrides)
-           .map((b) => [b.occupied ? 1 : 0, b.material, b.color, b.source].join('')).join('/'),
-        ].join(':') : '-',
+    // In lane mode the card draws slot `lane` of EVERY unit, so every unit's bays are in
+    // the signature; in head mode it draws one cabinet and only that one is.
+    (h.lane == null ? (u ? [u] : []) : ace.units)
+      .map((x) => [x.id, x.model, x.humidity, x.temperature, x.dryer.running,
+                   x.dryer.doneMin, x.dryer.totalMin,
+                   mergeAceBays(x, overrides)
+                     .map((b) => [b.occupied ? 1 : 0, b.material, b.color, b.source].join(''))
+                     .join('/'),
+                  ].join(':')).join('#') || '-',
     pending.resolve(`ace-load-${i}`, h.bay == null ? '' : aceBayAddr(h.unitIndex, h.bay)).state,
   ].join('|');
 }
@@ -276,25 +346,40 @@ function sensorOf(f, occupied) {
 function card(ace, slots, ctx, i) {
   const h = ace.heads[i];
   const src = askedSource(ace, ctx.pending, i);
-  const onAce = String(src.value).startsWith('ace:');
-  const unit = onAce ? ace.units[Number(String(src.value).slice(4))] : null;
-  const shared = unit ? usersOf(ace, unit.index).filter((x) => x !== i) : [];
+  // `lane` is multi's answer and `ace:<n>` is head mode's, and they are different shapes:
+  // one card holds one cabinet's four bays, the other holds every cabinet's one bay.
+  const lane = src.value === 'lane';
+  const onAce = lane || String(src.value).startsWith('ace:');
+  const unit = lane ? ace.units[h.unitIndex]
+             : onAce ? ace.units[Number(String(src.value).slice(4))] : null;
+  // Sharing is a head-mode reading risk: one cabinet drawn on several cards, which is
+  // exactly what lane mode does on purpose and says with the band instead.
+  const shared = (unit && !lane) ? usersOf(ace, unit.index).filter((x) => x !== i) : [];
 
   const bays = unit ? mergeAceBays(unit, ctx.store.aceBays) : null;
 
   const c = el('div', 'ace-card');
-  if (unit) c.classList.add('is-ace');
+  if (onAce) c.classList.add('is-ace');
   if (shared.length) c.classList.add('is-shared');
   c.appendChild(cardHead(ace, ctx, i, src, unit, shared, bays));
 
   const body = el('div', 'ace-body');
-  const spool = unit ? h.loaded : slots[i];
+  const spool = onAce ? h.loaded : slots[i];
   // Whether anything is THERE is a different question from whether it has a name, and the
   // feeder box needs both - see the note in feeder(). Asked once, from the field that
   // answers it, rather than inferred from the identity that may have just been wiped.
   const occupied = headLoaded(ace, slots, i);
-  body.appendChild(unit ? cabinet(ctx, i, unit, bays, h.bay)
+  body.appendChild(lane ? laneBox(ctx, ace, i, h)
+                 : unit ? cabinet(ctx, i, unit, bays, h.bay)
                         : feeder(ctx, i, src.value, spool, occupied));
+  // Where the filament actually came from, when that is not this head's own lane.
+  //
+  // The measured machine is plumbed for head mode and was switched to multi, so
+  // `head_source[3]` still read `{ace_index: 0, slot: 1}` - bay A2 feeding Toolhead 4,
+  // which is Toolhead 2's lane. multi's own rule says that cannot happen; the machine's
+  // record says it did. The mode is a claim about tubes and nothing verifies it, so the
+  // panel draws the record and names it.
+  if (lane && h.bay != null && h.bay !== i) body.appendChild(fromChip(ace, h));
   body.appendChild(el('div', 'ace-lane'));
   body.appendChild(head(slots[i], i, unit, ctx, occupied));
 
@@ -329,7 +414,18 @@ function cardHead(ace, ctx, i, src, unit, shared, bays) {
   more.onclick = (e) => { e.stopPropagation(); openHeadMenu(more, ace, ctx, i, unit); };
   r1.appendChild(more);
   hd.appendChild(r1);
-  hd.appendChild(unit ? unitStrip(ctx, unit, shared, bays) : feederStrip(i, src.value));
+  /*
+   * The second line names WHICH unit feeds this head, and outside head mode there is no
+   * such thing to name: in multi every card is on the same cabinet, so its row is the
+   * panel's and is drawn once in the band; in normal nothing is ACE-fed at all.
+   *
+   * It is also height the budget has not got. Normal measured 497 against 456 with four
+   * copies of a line reading `Feeder · channel 1`, and `.panel-body` is `overflow: hidden`,
+   * so that would have been clipped rather than seen.
+   */
+  if (ace.mode === 'head') {
+    hd.appendChild(unit ? unitStrip(ctx, unit, shared, bays) : feederStrip(i, src.value));
+  }
   return hd;
 }
 
@@ -341,22 +437,19 @@ function cardHead(ace, ctx, i, src, unit, shared, bays) {
  */
 function sourceSelect(ace, ctx, i, src) {
   const sel = el('select', 'ace-src');
-  const opts = [['feeder', 'Default feeder']];
-  ace.units.forEach((u) => opts.push([`ace:${u.index}`, `ACE ${u.id}`]));
-  opts.push(['manual', 'Manual']);
-  opts.forEach(([v, t]) => {
-    const o = el('option', null, t);
-    o.value = v;
-    if (v === src.value) o.selected = true;
+  // The list is the MODE's - see aceSourceOptions(). It used to be one list disabled
+  // wholesale outside head mode, which took hand-feeding away in the two modes where
+  // `ACE_SET_HEAD_MANUAL` still works, and offered a choice of unit in the one mode where
+  // the lane is plumbing rather than a choice.
+  aceSourceOptions(ace, i).forEach(({ value, label }) => {
+    const o = el('option', null, label);
+    o.value = value;
+    if (value === src.value) o.selected = true;
     sel.appendChild(o);
   });
-  // Documented "head mode only". Disabled with the reason showing, never hidden: a
-  // control that vanishes leaves no way to find out why it is not there.
-  const off = ace.mode !== 'head';
-  sel.disabled = off;
-  sel.title = off ? `Head mode only — the machine is in ${ace.mode} mode`
-          : src.state === 'sent' ? 'Waiting for the machine'
-          : 'What feeds this toolhead';
+  sel.title = src.state === 'sent' ? 'Waiting for the machine'
+            : ace.mode === 'multi' ? `Bay ${i + 1} of every ACE feeds this toolhead`
+            : 'What feeds this toolhead';
   if (src.state) sel.dataset.pend = src.state;
   sel.setAttribute('aria-label', `Source for Toolhead ${i + 1}`);
   sel.onchange = () => ctx.handlers.setSource(i, sel.value);
@@ -459,6 +552,65 @@ function cabinet(ctx, i, u, unitBays, fedBay) {
   cab.appendChild(top);
   box.appendChild(cab);
   return box;
+}
+
+/**
+ * Multi mode's box: this head's LANE, which is slot `i` of every cabinet there is.
+ *
+ * The same cabinet drawing as head mode, one bay wide, once per unit - because that is
+ * what the hardware is. With a splitter on the head, slot i of each unit reaches it and
+ * the machine picks between them with `ACE_SWITCH`; with one unit there is one bay and no
+ * choosing at all.
+ *
+ * A bay is drawn ONCE, on the card of the head it is plumbed to. Drawing it again on the
+ * card of a head that happens to be fed from it would put one spool on the panel twice,
+ * which is the reading risk head mode's shared cabinet already answers with a dashed edge.
+ */
+function laneBox(ctx, ace, i, h) {
+  const box = el('div', 'ace-box');
+  const row = el('div', 'ace-lanes');
+  ace.units.forEach((u) => {
+    const b = mergeAceBays(u, ctx.store.aceBays)[i];
+    if (!b) return;
+    const fed = h.unitIndex === u.index && h.bay === i;
+    const cab = el('div', 'ace-cab');
+    const top = el('div', 'ace-cab-top');
+    const bays = el('div', 'ace-bays');
+    const node = bay(ctx, i, u, b, fed);
+    // A bay of THIS head's lane that another head is recorded as being fed from. Only
+    // reachable on a machine whose tubes do not match its mode, which is the machine the
+    // panel was measured on - so it is drawn rather than assumed away.
+    const other = ace.heads.find((o) => o.index !== i && o.source === 'ace'
+                                     && o.unitIndex === u.index && o.bay === i);
+    if (other) {
+      node.classList.add('is-lent');
+      node.appendChild(el('span', 'ace-lent', `→ Toolhead ${other.index + 1}`));
+      node.title = `${b.addr}: feeding Toolhead ${other.index + 1}`;
+      node.setAttribute('aria-label', node.title);
+    }
+    bays.appendChild(node);
+    top.appendChild(bays);
+    cab.appendChild(top);
+    row.appendChild(cab);
+  });
+  box.appendChild(row);
+  return box;
+}
+
+/** What is in the head, when it did not come from this head's own lane. */
+function fromChip(ace, h) {
+  const u = ace.units[h.unitIndex];
+  const b = u && (u.bays || [])[h.bay];
+  const c = el('span', 'ace-from');
+  const sw = el('span', 'ace-from-dot');
+  const col = h.loaded ? cssColor(h.loaded.color) : (b && b.known ? cssColor(b.color) : null);
+  if (col) sw.style.background = col;
+  c.appendChild(sw);
+  const mat = (h.loaded && (h.loaded.material || h.loaded.type)) || (b && b.material) || '';
+  c.appendChild(document.createTextNode(
+    `${mat ? `${mat} · ` : ''}from ${aceBayAddr(h.unitIndex, h.bay)}`));
+  c.title = `Loaded from ${aceBayAddr(h.unitIndex, h.bay)}, which is Toolhead ${h.bay + 1}'s lane`;
+  return c;
 }
 
 /**
@@ -864,6 +1016,11 @@ export function openAceSettings(anchor, ctx) {
  *
  * Cycling would send SET_ACE_MODE twice to get from normal to head, and a mode change is
  * not a thing to do twice by accident.
+ *
+ * Head asks WHICH head on the way, always - including from head mode, because that is how
+ * the coupled head gets moved. `SET_ACE_MODE MODE=head HEAD=n` writes
+ * `head_feeder[h] = (h != n)` for all four, and without the argument the mode keeps
+ * whatever wiring was there.
  */
 export function openAceModeMenu(anchor, ctx) {
   const ace = ctx.state.ace();
@@ -871,9 +1028,69 @@ export function openAceModeMenu(anchor, ctx) {
   openMenu(anchor, ACE_MODES.map((m) => ({
     label: ACE_MODE_LABELS[m] + (m === now ? '  ✓' : ''),
     glyph: aceGlyphSquare(),
-    muted: m === now,
-    onClick: () => { if (m !== now) ctx.handlers.setAceMode(m); },
+    // Head is never muted: from head mode it is the way to move the coupled head.
+    muted: m === now && m !== 'head',
+    title: aceModeChange(now, m).needsRestart
+      ? 'Needs every toolhead unloaded, then a restart' : null,
+    onClick: (m === now && m !== 'head') ? undefined : () => pickMode(ctx, ace, now, m),
   })), { head: 'ACE mode' });
+}
+
+/**
+ * Which head is on the cabinet, and then the switch.
+ *
+ * A restart-owing switch gets a confirmation of its own rather than going straight out:
+ * it needs every head unloaded and a power cycle, and it is the one control on this panel
+ * whose success arrives as an error.
+ */
+function pickMode(ctx, ace, from, to) {
+  const change = aceModeChange(from, to);
+  if (to !== 'head') {
+    if (change.live) { ctx.handlers.setAceMode(to); return; }
+    openDialog({
+      title: `Switch to ${ACE_MODE_LABELS[to]} mode`,
+      build: (bd) => {
+        bd.appendChild(el('p', 'ms-note',
+          'Every toolhead has to be unloaded first, and the printer restarted afterwards.'));
+        bd.appendChild(el('div', 'verb-cmd', `SET_ACE_MODE MODE=${to}`));
+      },
+      confirmLabel: 'Switch',
+      onConfirm: () => { ctx.handlers.setAceMode(to); return true; },
+    });
+    return;
+  }
+  let head = ace.heads.findIndex((h) => h.source === 'ace');
+  if (head < 0) head = ace.heads.length - 1;
+  openDialog({
+    title: 'Head mode',
+    build: (bd) => {
+      bd.appendChild(el('p', 'ms-note',
+        'One toolhead is on the cabinet; the other three keep their stock feeders.'));
+      const cmd = el('div', 'verb-cmd', `SET_ACE_MODE MODE=head HEAD=${head}`);
+      const rows = [];
+      ace.heads.forEach((h, k) => {
+        const r = el('button', 'hrow');
+        r.type = 'button';
+        r.setAttribute('aria-pressed', k === head ? 'true' : 'false');
+        r.appendChild(el('span', null, `Toolhead ${k + 1}`));
+        if (h.source === 'ace') r.appendChild(el('span', 'hsub', 'on the cabinet now'));
+        r.onclick = () => {
+          head = k;
+          rows.forEach((x, n) => x.setAttribute('aria-pressed', n === k ? 'true' : 'false'));
+          cmd.textContent = `SET_ACE_MODE MODE=head HEAD=${head}`;
+        };
+        rows.push(r);
+        bd.appendChild(r);
+      });
+      if (change.needsRestart) {
+        bd.appendChild(el('p', 'ms-note',
+          'Every toolhead has to be unloaded first, and the printer restarted afterwards.'));
+      }
+      bd.appendChild(cmd);
+    },
+    confirmLabel: 'Switch',
+    onConfirm: () => { ctx.handlers.setAceMode('head', head); return true; },
+  });
 }
 
 /** What the header reports about the machine, beside the panel's own title. */
@@ -888,8 +1105,21 @@ export function aceStatus(ctx) {
   return bits.join(' · ');
 }
 
+/**
+ * The pill, and the one state it has that is not simply the mode.
+ *
+ * A normal-mode switch writes the saved `ace__mode` and then raises, so `ace.mode` goes on
+ * reporting the old mode until the machine is restarted. The pill says both, because
+ * "Normal" alone would claim something that is not true yet and "Head" alone would hide a
+ * switch that worked.
+ */
 export function aceModeLabel(ctx) {
   const ace = ctx.state.ace();
+  const owed = acePendingMode(ace);
+  if (owed) {
+    return `ACE mode · ${ACE_MODE_LABELS[ace.mode] || '—'} → `
+         + `${ACE_MODE_LABELS[owed] || owed} · restart to finish`;
+  }
   const m = ctx.pending.resolve('ace-mode', ace.mode).value;
   return `ACE mode · ${ACE_MODE_LABELS[m] || '—'}`;
 }
@@ -931,7 +1161,9 @@ export function aceModeLabel(ctx) {
 function baySheet(ctx, i, u, b) {
   const ace = ctx.state.ace();
   const loaded = headLoaded(ace, ctx.state.filaments(), i);
-  const verbs = aceVerbs(ace, i, b.index, loaded)
+  // Which unit, because outside head mode a card draws one bay of each and the bay alone
+  // no longer says which cabinet it is in.
+  const verbs = aceVerbs(ace, i, b.index, loaded, u.index)
     .filter((v) => v.slotted && !/^(Swap|Background swap)/.test(v.name));
 
   openDialog({
@@ -942,7 +1174,8 @@ function baySheet(ctx, i, u, b) {
         // Not an error and not an empty dialog: say which state this is, because
         // "nothing to do here" is the answer. A head already holding filament is a swap,
         // and a swap is chosen at the toolhead.
-        bd.appendChild(el('p', 'ms-note', b.index === (ace.heads[i] || {}).bay
+        const h = ace.heads[i] || {};
+        bd.appendChild(el('p', 'ms-note', (b.index === h.bay && u.index === h.unitIndex)
           ? `Already feeding Toolhead ${i + 1}.`
           : `Toolhead ${i + 1} is loaded.`));
         return;
@@ -972,7 +1205,19 @@ function headSheet(ctx, i, unit) {
   const f = slots[i];
   const loaded = headLoaded(ace, slots, i);
   const spool = loaded ? (unit ? h.loaded || f : f) : null;
-  const bays = unit ? mergeAceBays(unit, ctx.store.aceBays) : [];
+  /*
+   * Which bays come to the sheet, and it is the same question the card's box answers.
+   *
+   * Head mode: this head's unit, all four - a hub, and the bay is the choice. Outside it:
+   * this head's LANE, one bay per unit - the bay index is fixed by the plumbing and what
+   * is left to choose is which cabinet. With one unit that is not a choice either, and the
+   * row is one button, which is honest rather than empty.
+   */
+  const bays = !unit ? []
+    : h.lane == null
+      ? mergeAceBays(unit, ctx.store.aceBays).map((b) => ({ b, unit }))
+      : ace.units.map((u) => ({ b: mergeAceBays(u, ctx.store.aceBays)[h.lane], unit: u }))
+                 .filter((x) => x.b);
 
   openDialog({
     title: `Toolhead ${i + 1}`,
@@ -982,10 +1227,11 @@ function headSheet(ctx, i, unit) {
       if (unit) {
         bd.appendChild(el('p', 'ms-note', h.bay == null ? 'Load from:' : 'Swap to:'));
         const row = el('div', 'pickrow');
-        bays.forEach((b, k) => {
+        bays.forEach(({ b, unit: bu }) => {
           // Each bay's own answer, from the same list the bay sheet reads. A bay that is
           // already feeding is not a verb, so its button says so and does nothing.
-          const v = aceVerbs(ace, i, k, loaded).filter((x) => x.slotted && !x.bg)[0];
+          const v = aceVerbs(ace, i, b.index, loaded, bu.index)
+            .filter((x) => x.slotted && !x.bg)[0];
           const btn = el('button', 'pickbay');
           btn.type = 'button';
           const d = el('span', 'pickdisc', b.addr);

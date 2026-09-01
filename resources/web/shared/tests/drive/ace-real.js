@@ -202,14 +202,22 @@
       say('the Dry chip opens the dialog on real readings', !!d, true);
       if (d) {
         const line = d.querySelector('.dry-cmd').textContent.trim();
-        info(`dialog would send: ${line}`);
-        // The panel offers hours; ACE_DRY takes minutes. Sending the panel's number
-        // unconverted asked for four MINUTES of drying and the machine answered `ok`.
-        say('the duration on the wire is minutes, not the hours on screen',
-            /DURATION=240\b/.test(line), true);
-        say('and automatic drying uses the arguments the machine reads',
-            /ACE_SET_AUTO_DRY ACE=0 ENABLE=[01]/.test(line) && !/THRESHOLD/.test(line),
-            true);
+        info(`dialog says: ${line}`);
+        /*
+         * What the dialog SAYS, which is no longer what it would send.
+         *
+         * These two lines used to assert `DURATION=240` and `ENABLE=`/`RH_START=` by
+         * reading the macro off this element - and the copy pass replaced it with prose,
+         * because a dialog says what a control is and the trace pane is where the wire
+         * belongs. Both facts still matter and are still checked; they moved to
+         * conformance_test.py, which reads the call site that has to be right. What is
+         * left for a HARDWARE run is that the sentence is built from this machine's own
+         * readings rather than from a default.
+         */
+        say('the dialog states the duration in hours, as it offers them',
+            /for \d+ h/.test(line), true);
+        say('and says whether automatic drying is on, in words',
+            /automatically/.test(line), true);
         say('and the droplet is drawn from a real humidity',
             !!d.querySelector('.dry-drop svg rect'), true);
         $('.dialog-x').click(); await wait(60);

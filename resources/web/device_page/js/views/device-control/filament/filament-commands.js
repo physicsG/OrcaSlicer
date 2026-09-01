@@ -34,7 +34,7 @@ import { machineActivity, isBusy } from '../../../../../shared/js/activity.js';
 // Everything about the ACE comes from one module - see shared/js/multiACE.js for why.
 import { ACE, FEEDER, DRY_MINUTES_PER_HOUR, aceUnitId, aceLine, aceOverridesUrl,
          parseAceOverrides, aceGlyph, channelStep, channelWord,
-         gcodeStoreUrl, lastPrinterError }
+         gcodeStoreUrl, lastPrinterError, aceModeChange, aceModeRefusal }
   from '../../../../../shared/js/multiACE.js';
 import { openDialog, openBlockingDialog, numberField, toggleField }
   from '../../../core/overlay.js';
@@ -146,8 +146,77 @@ export function create(deps) {
                  `${t}: ACE ${aceUnitId(unit)}`, `ace-src-${i}`, source);
   }
 
-  const setAceMode = (mode) =>
-    macro(line(ACE.SET_MODE, { MODE: mode }), `ACE mode: ${mode}`, 'ace-mode', mode);
+  /**
+   * The mode, and the three different things sending it can do.
+   *
+   * This is the one control on the panel whose SUCCESS arrives as a FAILURE, so it is the
+   * one that cannot go through `macro()`.
+   *
+   *   multi <-> head     live, and ordinary. Held pending against `ace.mode`, which moves
+   *                      within a read - measured 2026-09-01 on a machine with filament in
+   *                      three heads, because that transition has no unload guard.
+   *   normal <-> either  swaps three Klipper extras on disk and then RAISES on purpose:
+   *                      `gcmd.error('... Please reboot the printer to activate!')`. The
+   *                      request is therefore NOT sent through send(), which would report
+   *                      the raise as a failed command. And it is not tracked pending
+   *                      against `ace.mode` either: that field will not move until the
+   *                      machine is restarted, so a pending value would sit out its clock
+   *                      and report itself lost on a switch that worked. What reports it
+   *                      instead is the saved `ace__mode` disagreeing with `ace.mode`,
+   *                      which the pill draws.
+   *   refused            with filament in any head the macro's guard prints two `//` notes
+   *                      and returns, so the RPC answers `ok` for a switch that did not
+   *                      happen. The reason exists only on the console.
+   *
+   * `HEAD=` is passed for head mode, which the panel never used to send: it writes
+   * `head_feeder[h] = (h != n)` for all four, and without it the mode keeps whatever
+   * wiring was there.
+   */
+  async function setAceMode(mode, head) {
+    const from = state.ace().mode;
+    const args = { MODE: mode };
+    if (mode === 'head' && head != null) args.HEAD = head;
+    const script = line(ACE.SET_MODE, args);
+    const label = `ACE mode: ${mode}`;
+    if (aceModeChange(from, mode).live) {
+      macro(script, label, 'ace-mode', mode);
+      return true;
+    }
+
+    let raised = null;
+    try {
+      await deps.bridge.request(CMD.SEND_GCODES, { script });
+    } catch (e) {
+      raised = (e && e.message) ? String(e.message) : 'refused';
+    }
+    confirmAce();
+
+    // An `ok` here is not a yes: the guard prints and returns. Only the console knows.
+    const said = raised ? null : aceModeRefusal(await gcodeStore(20));
+    if (said) {
+      openDialog({
+        title: 'The printer refused',
+        build: (bd) => {
+          const box = el('div', 'verb-cmd');
+          said.forEach((s) => box.appendChild(el('div', null, s)));
+          bd.appendChild(box);
+        },
+        confirmLabel: 'Close',
+        cancel: false,
+        onConfirm: () => true,
+      });
+      return false;
+    }
+    // A raise that says `reboot` is the success. Anything else really is a failure.
+    if (raised && !/reboot/i.test(raised)) {
+      setStatus(`${label} failed: ${raised}`, 'err');
+      return false;
+    }
+    setStatus(raised || `Switched to ${mode} mode. Restart the printer to activate.`);
+    await session.refreshAce();
+    render();
+    return true;
+  }
 
   /* ---- loading, unloading, swapping -------------------------------- */
   /*
@@ -245,14 +314,19 @@ export function create(deps) {
    * macro that declines is an `ok` here, and the console is the only place the reason
    * exists.
    */
-  async function printerSaid() {
+  async function gcodeStore(n) {
+    // With no printer there is nothing to answer an HTTP GET, so the simulator does - the
+    // same seam the override store and the camera's frames use.
+    if (deps.mock && deps.mock.gcodeStore) return deps.mock.gcodeStore(n);
     try {
-      const url = gcodeStoreUrl(store.device, 30);
+      const url = gcodeStoreUrl(store.device, n);
       if (!url) return null;
       const r = await fetch(url, { cache: 'no-store' });
-      return r.ok ? lastPrinterError(await r.json()) : null;
+      return r.ok ? await r.json() : null;
     } catch (e) { return null; }        // an unreachable Moonraker is not the fault here
   }
+
+  async function printerSaid() { return lastPrinterError(await gcodeStore(30)); }
 
   function runFilamentAction({ title, script, head, waiting, kind }) {
     const dlg = openBlockingDialog({ title, message: waiting });
@@ -543,7 +617,7 @@ export function create(deps) {
 
     syncBays: () => syncBays(),
     setSource: (i, source) => setSource(i, source),
-    setAceMode: (m) => setAceMode(m),
+    setAceMode: (m, head) => setAceMode(m, head),
     unloadAllHeads: () => unloadAllHeads(),
     runVerb: (v) => runVerb(v),
     declareBgHead: (i) => declareBgHead(i),

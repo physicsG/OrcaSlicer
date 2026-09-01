@@ -267,9 +267,11 @@ CHECKS = r"""
         'feeder,feeder,feeder,ace:0');
     say('and head_ace naming a unit that is not attached draws no cabinet',
         document.querySelectorAll('#filament .ace-cab').length, 1);
+    // One word for one thing: the card's own strip has always said `Hand-fed`, and the
+    // list saying `Manual` for the same source was two vocabularies for one control.
     say('the source is a list that can name WHICH ace, not an icon triple',
         [...cards[0].querySelectorAll('.ace-src option')].map((o) => o.textContent).join(' · '),
-        'Default feeder · ACE A · Manual');
+        'Default feeder · ACE A · Hand-fed');
 
     // One centred axis: the bays, the merge and the inlet share the card's centre line,
     // so the tube that matters is vertical.

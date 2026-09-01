@@ -335,11 +335,18 @@ export function createSession({ bridge, state, store, setStatus, render, refresh
    * were read on the machine - and one request that asks for two objects costs what one
    * that asks for one does. A firmware without the plugin's bg module answers with
    * nothing for it, and every background verb stays refused, which is the safe way round.
+   *
+   * And `save_variables` is a THIRD, for one field: `ace__mode`, the mode multiACE has
+   * saved. A normal-mode switch writes that immediately, then swaps three Klipper extras
+   * on disk and RAISES - so `ace.mode` goes on reporting the old mode until the machine is
+   * restarted. The disagreement between the two is the only thing that says a restart is
+   * owed, and it costs nothing to carry it in a call that was already being made.
    */
   async function refreshAce() {
     try {
       const snap = await bridge().request(CMD.GET_MACHINE_STATE,
-                                          { objects: { ace: null, ace_bg_swap: null } });
+                                          { objects: { ace: null, ace_bg_swap: null,
+                                                       save_variables: null } });
       state.applyPayload(snap);
     } catch (e) {
       /* no multiACE, or no printer; either way the panel degrades rather than fails */
