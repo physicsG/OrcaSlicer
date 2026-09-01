@@ -478,6 +478,11 @@ export class MachineState {
     // as the machine going backwards. And a person waiting for a toolhead does not want
     // an axis-by-axis account; they want to know it is working and will take a moment.
     // One step, named for what is happening.
+    //
+    // The clearing is this path's, NOT a general fact about G28: it is the toolchange's
+    // `G28 X Y` under a homing_override. A plain G28 on this firmware leaves the field
+    // alone - measured reading "xyz" unchanged across all 42 seconds of one - which is
+    // why nothing may treat it as a progress signal. See `home` in control-commands.js.
     const homing = running && hasHomed && homed !== 'xyz';
     const engaging = TOOLHEADS.findIndex(
       (k) => (this.objects[k] || {}).activating_move === true);
@@ -493,6 +498,13 @@ export class MachineState {
     return {
       label,
       busy: calibrating || moving || running || engaging >= 0,
+      // Whether `label` NAMES what the machine is doing, or only reports that it is
+      // doing something. "Calibrating - probe xy offset" is worth putting in front of
+      // someone; "Moving" is not, when the dialog it would replace already says
+      // "Homing all axes". And motion starts and stops: across the measured 42s G28
+      // (see `home` in control-commands.js) the two generic labels alternated eight
+      // times, which reads as a machine changing its mind rather than one working.
+      vague: !(calibrating || engaging >= 0 || homing || msg),
       homing,
       homedAxes: hasHomed ? homed : null,
       calibrationStep: calibrating ? step : null,

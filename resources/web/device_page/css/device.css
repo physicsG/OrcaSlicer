@@ -1232,7 +1232,7 @@ body {
   position: relative;
   width: 100%; height: 100%;
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 14px;
+  align-items: center; justify-content: center;
   background: #000; overflow: hidden;
 }
 
@@ -1305,7 +1305,16 @@ body {
 /* While it is playing the picture is the point, so the control keeps out of the way
    until the pointer asks for it. */
 .cam-view:not(:hover) .cam-play[data-on="1"] { opacity: 0; }
-.cam-view .cam-msg { position: relative; color: #FFFFFF; font-size: 13px; }
+/* The caption is hung BELOW the centred button rather than sharing a column with it.
+   In the flow it was a second flex child, so the pair got centred together and the play
+   button sat 19px above where the stop button lands - measured 397 against 416 in a
+   1920x1080 window. The two states now put the control in the same place, which is what
+   makes the toggle read as one control changing rather than two controls swapping.
+   The 42px is the button's own half-height plus the 14px that used to be the gap. */
+.cam-view .cam-msg {
+  position: absolute; left: 0; right: 0; top: calc(50% + 42px);
+  text-align: center; color: #FFFFFF; font-size: 13px;
+}
 .tl-none { color: #6B7280; font-size: 11px; }
 .tl-dur {
   position: absolute; right: 6px; bottom: 6px;
@@ -1506,6 +1515,9 @@ body {
   border-radius: 50%;
   animation: spin 900ms linear infinite;
 }
+/* The footer's, next to a line of 12px text rather than alone in a dialog. */
+.spinner.sm { width: 13px; height: 13px; border-width: 2px; margin: 0; }
+.spinner[hidden] { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
 
@@ -1894,27 +1906,27 @@ text.step {
    element styled this way must opt back in or setting .hidden in JS does nothing. Same
    trap as .fault, which is the second time this has cost an hour. */
 .stor-foot[hidden] { display: none; }
+/* The footer itself is no longer hidden - the count in it is wanted whenever there is
+   anything to count - so it is the button that comes and goes. `.btn` sets no `display`
+   today, which is the only reason [hidden] reaches it; this is here so that stays true
+   if it ever gains one. */
+.stor-more[hidden] { display: none; }
 
-/* A log or a gcode has no picture, so it does not get a picture's worth of card.
-   Same grid, same card, laid out sideways: glyph, name and size, one action. */
-.stor-grid[data-kind="logs"], .stor-grid[data-kind="gcodes"] {
+/* A log has no picture, so it does not get a picture's worth of card. Same grid, same
+   card, laid out sideways: glyph, name and size, one action. */
+.stor-grid[data-kind="logs"] {
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 }
-.stor-grid[data-kind="logs"] .stor-card,
-.stor-grid[data-kind="gcodes"] .stor-card {
+.stor-grid[data-kind="logs"] .stor-card {
   display: grid; grid-template-columns: 44px 1fr auto; align-items: center;
   gap: 10px; padding: 8px 10px;
 }
-.stor-grid[data-kind="logs"] .stor-shot,
-.stor-grid[data-kind="gcodes"] .stor-shot {
+.stor-grid[data-kind="logs"] .stor-shot {
   aspect-ratio: 1 / 1; border: 0; border-radius: 6px; background: var(--pill);
 }
-.stor-grid[data-kind="logs"] .stor-info,
-.stor-grid[data-kind="gcodes"] .stor-info { padding: 0; }
-.stor-grid[data-kind="logs"] .stor-actions,
-.stor-grid[data-kind="gcodes"] .stor-actions { padding: 0; margin: 0; }
-.stor-grid[data-kind="logs"] .stor-actions .btn,
-.stor-grid[data-kind="gcodes"] .stor-actions .btn { flex: 0 0 auto; }
+.stor-grid[data-kind="logs"] .stor-info { padding: 0; }
+.stor-grid[data-kind="logs"] .stor-actions { padding: 0; margin: 0; }
+.stor-grid[data-kind="logs"] .stor-actions .btn { flex: 0 0 auto; }
 
 /* The chamber light, while the printer has not yet echoed it. Same pulse as a sent
    temperature, for the same reason: the control is showing a request, not a reading. */

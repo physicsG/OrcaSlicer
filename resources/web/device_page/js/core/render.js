@@ -57,8 +57,20 @@ export function keyedList(root, items, { key, sig, create, update }) {
   }
 
   let prev = null;
+  const used = new Set();
   (items || []).forEach((it, i) => {
-    const k = String(key(it, i));
+    // A key the caller did not make unique. Two nodes cannot share one, so the second
+    // is created fresh every frame while the first stays unreachable - not in `have`,
+    // so the sweep below cannot see it either. It leaks one node per duplicate per
+    // repaint, silently and without limit: Storage's grid drew 72 cards for 60
+    // recordings before the key that caused it was fixed.
+    //
+    // The key is still the caller's business - see cardKey in storage-view.js for what
+    // a right one costs - but getting it wrong should cost a rebuilt card, which is
+    // what this makes it, and not an unbounded DOM.
+    let k = String(key(it, i));
+    if (used.has(k)) k = `${k}#${i}`;
+    used.add(k);
     const s = sig ? String(sig(it, i)) : null;
     let n = have.get(k);
     if (n) {

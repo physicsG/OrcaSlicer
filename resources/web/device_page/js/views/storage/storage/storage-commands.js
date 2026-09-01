@@ -1,7 +1,7 @@
 /*
- * commands/storage.js - Commands Storage issues, across all four of its kinds.
+ * commands/storage.js - Commands Storage issues, across all three of its kinds.
  *
- * Recordings, finished prints and two file roots are four different sources behind one
+ * Recordings, finished prints and a file root are three different sources behind one
  * grid, so this is where they are made to look alike.
  *
  * Thumbnails have two commands and only one of them returns bytes:
@@ -29,10 +29,26 @@ export function create(deps) {
   const { state, store, pending, session, cmd,
           send, setpoint, setStatus, render } = deps;
 
-  const HISTORY_PAGE = 20;
+  /**
+   * How many rows the first read asks for, and therefore how much of the grid is full
+   * when it arrives.
+   *
+   * Measured in a 1920x1080 window: the grid is 1584x939 and a card is 214x259, so 7
+   * columns of 3 whole rows are on screen with a fourth part-shown - 21 cards before
+   * anything is scrolled. The first read asked for 20 prints and 24 recordings, so a
+   * full screen was never what came back; the answer to "what is on this printer"
+   * arrived a row short of the space it had. At 2560x1440 the same arithmetic gives 11
+   * columns and 5 rows, which is where 60 comes from.
+   *
+   * It is one number for all three sources because they draw into the same grid. Only
+   * Prints can fetch a second page - the other two have no cursor to carry - so for
+   * them this is not a page size but the whole list, which is the other reason it is
+   * not 20.
+   */
+  const PAGE = 60;
 
   /** The root each file-backed kind reads from. */
-  const STORAGE_ROOT = { gcodes: 'gcodes', logs: 'logs' };
+  const STORAGE_ROOT = { logs: 'logs' };
 
   /** Watch a machine-file transfer until it stops moving. */
   async function pollTransfer() {
@@ -51,22 +67,23 @@ export function create(deps) {
   /**
    * What Storage is showing, in the one shape its grid reads.
    *
-   * Four different sources - recordings, store.history, and two file roots - normalised here
-   * rather than in the renderer, so the store.view stays one thing.
+   * Three different sources - recordings, store.history and a file root - normalised
+   * here rather than in the renderer, so the store.view stays one thing.
    */
   function storageData() {
-    if (store.storageKind === 'timelapses') {
-      return { items: store.cam.timelapses || [], loading: false, error: store.cam.error || '' };
-    }
-    if (store.storageKind === 'prints') {
-      return { items: store.history.items || [], loading: store.history.loading,
-               error: store.history.error, hasMore: store.history.hasMore };
-    }
-    return { items: store.files.items || [], loading: store.files.loading, error: store.files.error };
+    const src = store.storageKind === 'timelapses' ? store.timelapses
+              : store.storageKind === 'prints' ? store.history
+              : store.files;
+    return { items: src.items || [], loading: src.loading, error: src.error,
+             hasMore: !!src.hasMore, loadingMore: store.storageMore };
   }
 
   function openStorage(kind) {
     store.storageKind = kind;
+    // A page in flight for the kind being left must not append into the one being
+    // opened. It cannot be cancelled - the request is already out - so the flag it
+    // would raise is cleared here and its append is guarded by the page number.
+    store.storageMore = false;
     // No cache to bust: the rebuild guard is keyed on `kind:shape`, so changing kind
     // rebuilds by construction rather than by remembering to invalidate something.
     if (kind === 'timelapses') cmd.loadTimelapses();
@@ -83,12 +100,34 @@ export function create(deps) {
 
     reloadStorage: () => openStorage(store.storageKind),
 
-    loadMoreStorage: (n) => (store.storageKind === 'prints' ? cmd.loadHistory(n) : null),
+    /**
+     * The next page, for whichever kind is showing.
+     *
+     * All three sources page - `start`/`limit` for history, `page_index`/`page_rows`
+     * for recordings, `page_number`/`files_per_page` for files - and only history had
+     * it wired, so the other two showed their first page and no way to ask for a
+     * second. Where the cursor comes from is each source's own business, which is why
+     * this takes no argument: it used to be handed a count of the cards on screen,
+     * which is the DOM answering a question about the store.
+     */
+    loadMoreStorage: () => {
+      if (store.storageMore) return null;
+      const kind = store.storageKind;
+      if (kind === 'prints') return cmd.loadHistory(store.history.items.length);
+      if (kind === 'timelapses') return cmd.loadTimelapses(store.timelapses.page + 1);
+      return cmd.openRoot(store.files.root, store.files.page + 1);
+    },
 
     /** The one useful action from an idle job card: go and find something to print. */
 
-    openRoot: async (root) => {
-      store.files = { loading: true, error: '', root: root || store.files.root, roots: store.files.roots, items: [] };
+    openRoot: async (root, page = 0) => {
+      const f = store.files;
+      if (page === 0) {
+        store.files = { loading: true, error: '', root: root || f.root, roots: f.roots,
+                        items: [], hasMore: false, page: 0 };
+      } else {
+        store.storageMore = true;
+      }
       render();
       try {
         if (!store.files.roots.length) {
@@ -96,26 +135,34 @@ export function create(deps) {
           store.files.roots = Array.isArray(r) ? r : (r && (r.roots || r.result)) || [];
           if (!store.files.root) {
             const first = store.files.roots[0];
-            store.files.root = typeof first === 'string' ? first : (first && (first.name || first.root)) || 'gcodes';
+            store.files.root = typeof first === 'string' ? first : (first && (first.name || first.root)) || 'logs';
           }
         }
         // Firmware builds differ on which listing command answers; try the paged
         // one first and fall back to the directory walk.
         let items = [];
+        // The walk has no page to ask for, so it answers the first read and nothing
+        // after it. Saying so is what keeps the button off a list that cannot grow.
+        let paged = true;
         try {
-          const page = await deps.bridge.request(CMD.FILE_LIST_PAGE,
-            { root: store.files.root, page_number: 0, files_per_page: 50 });
-          items = (page && (page.files || page.items || page.result)) || (Array.isArray(page) ? page : []);
+          const got = await deps.bridge.request(CMD.FILE_LIST_PAGE,
+            { root: store.files.root, page_number: page, files_per_page: PAGE });
+          items = (got && (got.files || got.items || got.result)) || (Array.isArray(got) ? got : []);
         } catch {
+          paged = false;
           const dir = await deps.bridge.request(CMD.FILES_GET_DIRECTORY,
             { path: store.files.root, extended: true });
           items = (dir && (dir.files || dir.result)) || [];
         }
-        store.files.items = Array.isArray(items) ? items : [];
+        items = Array.isArray(items) ? items : [];
+        store.files.items = page === 0 ? items : store.files.items.concat(items);
+        store.files.page = page;
+        store.files.hasMore = paged && items.length >= PAGE;
       } catch (e) {
         store.files.error = `could not read the machine: ${e.message}`;
       }
       store.files.loading = false;
+      store.storageMore = false;
       render();
     },
 
@@ -135,35 +182,46 @@ export function create(deps) {
 
     loadHistory: async (start = 0) => {
       store.history.loading = start === 0;
+      store.storageMore = start > 0;
       store.history.error = '';
       render();
       try {
         const r = await deps.bridge.request(CMD.PRINT_HISTORY,
-                                       { start, limit: HISTORY_PAGE, order: 'desc' });
+                                       { start, limit: PAGE, order: 'desc' });
         const jobs = (r && (r.jobs || r.items)) || (Array.isArray(r) ? r : []);
         store.history.items = start === 0 ? jobs : store.history.items.concat(jobs);
-        store.history.hasMore = jobs.length >= HISTORY_PAGE;
+        store.history.hasMore = jobs.length >= PAGE;
       } catch (e) {
         store.history.error = `could not read print history: ${e.message}`;
         if (start === 0) store.history.items = [];
       }
       store.history.loading = false;
+      store.storageMore = false;
       render();
     },
 
-    loadTimelapses: async () => {
+    loadTimelapses: async (page = 0) => {
+      const t = store.timelapses;
+      t.loading = page === 0;
+      store.storageMore = page > 0;
+      t.error = '';
+      render();
       try {
         const r = await deps.bridge.request(CMD.TIMELAPSE_LIST,
-          { page_index: 0, page_rows: 24, thumbnail_direct: true });
+          { page_index: page, page_rows: PAGE, thumbnail_direct: true });
         // `instances` is the printer's own name for the list, and the reply is now
         // unwrapped from its JSON-RPC envelope before it gets here (see unwrapRpc).
-        store.cam.timelapses = (r && (r.instances || r.list || r.items))
-                      || (Array.isArray(r) ? r : []);
-        store.cam.error = '';
+        const got = (r && (r.instances || r.list || r.items))
+                 || (Array.isArray(r) ? r : []);
+        t.items = page === 0 ? got : t.items.concat(got);
+        t.page = page;
+        t.hasMore = got.length >= PAGE;
       } catch (e) {
-        store.cam.timelapses = [];
-        store.cam.error = `could not list recordings: ${e.message}`;
+        if (page === 0) t.items = [];
+        t.error = `could not list recordings: ${e.message}`;
       }
+      t.loading = false;
+      store.storageMore = false;
       render();
     },
 

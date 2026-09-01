@@ -33,8 +33,18 @@ export function createStore() {
     /** Which destination the rail is on. */
     view: 'control',
 
-    /** Which of Storage's four kinds is showing. */
+    /** Which of Storage's three kinds is showing. */
     storageKind: 'timelapses',
+
+    /**
+     * Whether a FURTHER page is in flight, as opposed to a first one.
+     *
+     * Separate from each source's own `loading`, because the two mean different things
+     * on screen: a first read has nothing to show and replaces the grid, while a
+     * further one has everything already and must not disturb it - it only puts a
+     * spinner in the footer where the button was.
+     */
+    storageMore: false,
 
     /**
      * Which toolhead jog and extrude are aimed at.
@@ -102,12 +112,23 @@ export function createStore() {
      * camera name to hang it off.
      */
     cam: { mode: 'live', streaming: false, frameUrl: null,
-           timelapses: [], error: '',
+           error: '',
            cams: [], caps: null, transport: 'auto',
            view: 'single', picked: [], fps: 15, focus: 0, frames: {} },
 
-    /** A machine-file listing, for Storage's two file-backed kinds. */
-    files: { loading: false, error: '', root: '', roots: [], items: [] },
+    /**
+     * Recordings, from the printer's camera service. Paged on `page_index`.
+     *
+     * These lived in `cam` next to the live view, and shared `cam.error` with it: a
+     * failed listing printed "could not list recordings" across the camera viewport,
+     * and starting the camera wiped Storage's error. Two panels, two subjects, one
+     * field. They are Storage's, and this is Storage's slice.
+     */
+    timelapses: { loading: false, error: '', items: [], hasMore: false, page: 0 },
+
+    /** A machine-file listing, for Storage's file-backed kind. Paged on `page_number`. */
+    files: { loading: false, error: '', root: '', roots: [], items: [],
+             hasMore: false, page: 0 },
 
     /** Finished prints, from Moonraker's history store. Paged, so `start` appends. */
     history: { loading: false, error: '', items: [], hasMore: false },

@@ -111,6 +111,36 @@ Also load-bearing, and both counter-intuitive:
 - Certificates are **never persisted**: `SSWCP.cpp` blanks them
   (`info.ca = /* auth_info["ca"] */ "";`). Every start re-runs the key exchange.
 
+### Two more the machine settled, 2026-09-01
+
+Both were built, checked green offline, and wrong. They are here because the shape of
+the mistake repeats: a field that is *usually* true after an operation is not a field
+that says the operation finished.
+
+- **`homed_axes` does not report homing.** A G28 was watched end to end (42 s, sampled
+  every 200 ms) and it read `"xyz"` from the first sample to the last — the machine was
+  already homed and this firmware's G28 never clears it. Used as the wait's `done()` it
+  was true before the machine moved, and being tested first it beat every other check,
+  so the dialog shut over a bed that then travelled for another fourteen seconds. Nor
+  can `live_velocity` patch it: it reads exactly `0` for two seconds at a time between
+  the homing moves, eight times across those 42 s. `idle_timeout` bracketed the
+  operation exactly — `Ready`, `Printing` for forty seconds, `Ready` — and is what the
+  wait ends on now. The toolchange trace in `state.js` *does* show `homed_axes`
+  clearing; that is `G28 X Y` under a homing_override, a different path, and reading it
+  as a general fact is what cost two attempts. `drive/homing-real.js` presses the real
+  button; `drive/homing.js` replays the trace offline.
+- **A recording has no unique name.** Sixty recordings carry `date_index`, `gcode_name`,
+  `gcode_path`, `generate_date`, `thumbnail_base64`, `thumbnail_path`, `timelapse_dir`,
+  `unix_timestamp_s`, `video_duration`, `video_file_size`, `video_local_url_suffix`,
+  `video_path` — and no `name`, no `id`. So Storage keyed its cards on `gcode_name`,
+  which repeats whenever a file is recorded twice: 48 distinct keys across 60
+  recordings, one of them four times. Two nodes cannot share one key, so the grid drew
+  **72 cards for 60 items** and grew at every repaint. `date_index` is unique across all
+  sixty and is what the printer addresses a recording by. `keyedList` no longer leaks on
+  a duplicate key either. Only hardware has enough recordings to show this; the
+  simulator holds three. `drive/storage-real.js` is the witness,
+  `drive/storage-paging.js` poses the collision offline.
+
 ## Not verified
 
 Everything below was built against the simulator in `shared/js/mockhost.js`, which was

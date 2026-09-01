@@ -1,5 +1,5 @@
 /*
- * Storage's DOM: one scrolling grid, one card, four kinds of thing on the machine.
+ * Storage's DOM: one scrolling grid, one card, three kinds of thing on the machine.
  */
 'use strict';
 
@@ -21,39 +21,30 @@ const JOB_STATUS = {
 /**
  * One scrolling grid for everything the printer is holding.
  *
- * Time-lapses, finished prints, print files and logs were four different shapes behind
- * three different tabs on two different panels. They are all "things on the machine you
- * might want to look at", so they get one view, one picker, and one card - normalised
- * here rather than four renderers kept in step by hand.
- *
- * The same rebuild guard as the task lists: this repaints on every state push, and
- * rebuilding threw away the scroll position.
- */
-
-/**
- * One scrolling grid for everything the printer is holding.
- *
- * Time-lapses, finished prints, print files and logs were four different shapes behind
- * three different tabs on two different panels. They are all "things on the machine you
- * might want to look at", so they get one view, one picker, and one card - normalised
- * here rather than four renderers kept in step by hand.
+ * Recordings, finished prints and logs were different shapes behind different tabs on
+ * two different panels. They are all "things on the machine you might want to look at",
+ * so they get one view, one picker, and one card - normalised here rather than three
+ * renderers kept in step by hand.
  *
  * The same rebuild guard as the task lists: this repaints on every state push, and
  * rebuilding threw away the scroll position.
  */
 export function renderStorage(root, kind, data, handlers, device) {
   const items = data.items || [];
-  // What the body *is*, rather than what it contains: four shapes, and only a change of
-  // shape needs the chrome rebuilt. The old guard hashed the item COUNT and so never
-  // repainted a list whose contents changed without its length - a print going from
-  // in_progress to completed left the old badge on screen.
+  // What the body *is*, rather than what it contains: four shapes of body, and only a
+  // change of shape needs the chrome rebuilt. The old guard hashed the item COUNT and
+  // so never repainted a list whose contents changed without its length - a print
+  // going from in_progress to completed left the old badge on screen.
   const shape = data.loading ? 'loading'
               : data.error ? 'error'
               : items.length ? 'grid' : 'empty';
 
   rebuildOn(root, `${kind}:${shape}`, () => {
     if (shape === 'loading') {
-      root.appendChild(el('div', 'cam-msg', 'Reading the machine\u2026'));
+      const wrap = el('div', 'stor-empty');
+      wrap.appendChild(el('div', 'spinner'));
+      wrap.appendChild(el('div', 'cam-msg', 'Reading the machine\u2026'));
+      root.appendChild(wrap);
       return;
     }
     if (shape === 'error') {
@@ -77,8 +68,11 @@ export function renderStorage(root, kind, data, handlers, device) {
     root.appendChild(grid);
     const foot = el('div', 'stor-foot');
     foot.appendChild(el('span', null, ''));
-    const more = el('button', 'btn', 'Load more');
-    more.onclick = () => handlers.loadMoreStorage(root.querySelectorAll('.stor-card').length);
+    foot.appendChild(el('div', 'spinner sm'));
+    const more = el('button', 'btn stor-more', 'Load more');
+    // No argument: where the next page starts is the store's business, not a count of
+    // the cards that happen to be on screen.
+    more.onclick = () => handlers.loadMoreStorage();
     foot.appendChild(more);
     root.appendChild(foot);
   });
@@ -94,33 +88,44 @@ export function renderStorage(root, kind, data, handlers, device) {
     create: (it) => storageCard(kind, it, handlers, device),
   });
 
+  // The count says how much of the machine you are looking at, so it shows whenever
+  // anything does. Only the button depends on there being more to fetch - and hiding
+  // the whole footer on `hasMore` hid the count for every kind that never sets it,
+  // which is every kind but Prints, and for Prints too once the last page was in.
+  //
+  // A further page does not replace the grid, so there is nothing on screen to say it
+  // is happening: the spinner stands where the button was, in the one place a person
+  // is already looking after pressing it.
   const foot = root.querySelector('.stor-foot');
-  foot.hidden = !data.hasMore;
+  foot.querySelector('.stor-more').hidden = !data.hasMore || !!data.loadingMore;
+  foot.querySelector('.spinner').hidden = !data.loadingMore;
   text(foot.querySelector('span'), `${items.length} shown`);
 }
 
 /**
  * What makes two entries the same entry across frames.
  *
- * Falls back to the index, because none of the four sources promises an id: history
- * rows have a filename that repeats across reprints, and a log file has only its path.
- * An index-keyed list still reconciles correctly for the one mutation that happens here
- * - "load more" appending to the end.
- */
-
-/**
- * What makes two entries the same entry across frames.
+ * `date_index` is first because a RECORDING has no other identity, and the one it was
+ * falling through to is not one. Measured on 811002511261022618B3 (2026-09-01): sixty
+ * recordings carry `date_index`, `gcode_name`, `gcode_path`, `generate_date`,
+ * `thumbnail_base64`, `thumbnail_path`, `timelapse_dir`, `unix_timestamp_s`,
+ * `video_duration`, `video_file_size`, `video_local_url_suffix`, `video_path` - and no
+ * `name`, no `id`. So the key was `gcode_name`, and a file recorded more than once
+ * repeats it: 48 distinct keys across 60 recordings, one of them four times over. Two
+ * nodes under one key cannot both be addressed, so the grid drew 72 cards for 60
+ * recordings and would have grown at every repaint. `date_index` is unique across all
+ * sixty, and is what the printer itself addresses a recording by - it is half of what
+ * TIMELAPSE_DELETE takes.
  *
- * Falls back to the index, because none of the four sources promises an id: history
- * rows have a filename that repeats across reprints, and a log file has only its path.
- * An index-keyed list still reconciles correctly for the one mutation that happens here
- * - "load more" appending to the end.
+ * Then the index, because neither remaining source promises an id either: history rows
+ * have a filename that repeats across reprints, and a log file has only its path. An
+ * index-keyed list still reconciles correctly for the one mutation that happens here -
+ * "load more" appending to the end.
  */
 function cardKey(it, i) {
-  return it.job_id || it.id || it.path || it.filename || it.gcode_name || `#${i}`;
+  return it.job_id || it.id || it.date_index || it.path || it.filename
+      || it.gcode_name || `#${i}`;
 }
-
-/** What has to change before a card is worth rebuilding. */
 
 /** What has to change before a card is worth rebuilding. */
 function cardSig(kind, it) {
@@ -132,7 +137,6 @@ function cardSig(kind, it) {
 const EMPTY_TEXT = {
   timelapses: 'No recordings on this printer',
   prints: 'No completed prints on this printer',
-  gcodes: 'No print files on this machine',
   logs: 'No files in this folder',
 };
 
@@ -201,19 +205,14 @@ function storageCard(kind, it, handlers, device) {
     act.appendChild(again);
 
   } else {
-    // gcodes and logs are both plain files; only what you can do with them differs.
+    // A log is a plain file: a name, a size, a date, and one thing to do with it.
     const path = it.path || it.filename || it.name || '';
-    shot.appendChild(icon(kind === 'logs' ? 'iconModelFileFolder' : 'iconFile', 'stor-glyph'));
+    shot.appendChild(icon('iconLog', 'stor-glyph'));
     body.appendChild(el('span', 'stor-name', path.split('/').pop() || path));
     const bits = [];
     if (it.size != null) bits.push(fmtSize(it.size));
     if (it.modified) bits.push(new Date(Number(it.modified) * 1000).toLocaleDateString());
     body.appendChild(el('span', 'stor-sub', bits.join(' \u00B7 ')));
-    if (kind === 'gcodes') {
-      const print = el('button', 'btn primary', 'Print');
-      print.onclick = () => handlers.printFile(path);
-      act.appendChild(print);
-    }
     const info = el('button', 'btn', 'Details');
     info.onclick = () => handlers.fileDetails(path);
     act.appendChild(info);

@@ -986,8 +986,8 @@ check("an empty homed_axes counts as 'not homed', not 'unknown'",
 check("bed buttons are disabled rather than silently refused",
       "b.disabled = blocked" in ui_src,
       "a button that looks live and does nothing is worse than one plainly disabled")
-check("homing observes homed_axes rather than assuming",
-      "refreshWaitState" in cmd_src["control"] and "allHomed === true" in cmd_src["control"],
+check("the wait fetches homed_axes rather than assuming it",
+      "refreshWaitState" in cmd_src["control"],
       "homed_axes is not on the stream, so the wait has to fetch it to see the change")
 
 # machine_state_manager reads {main_state: 0, action_code: 0} straight through a manual
@@ -1000,9 +1000,32 @@ check("a wait takes 'busy' from every source, not just machine_state_manager",
 check("the wait re-reads the objects the stream does not carry",
       "refreshWaitState" in cmd_src["control"] and "lastPoll" in cmd_src["control"],
       "toolhead and extruder_offset_calibration are not subscribed")
-check("homing finishes on the machine reporting homed, not on a busy->idle edge",
-      "done: () => state.toolhead().allHomed === true" in cmd_src["control"],
-      "the edge never came, because nothing ever reported busy")
+# This check used to hold the opposite, and hardware overturned it. A real G28 was
+# watched end to end (811002511261022618B3, 2026-09-01, 42s, sampled every 200ms) and
+# `homed_axes` read "xyz" from the first sample to the last - the machine was already
+# homed and this firmware's G28 does not clear it. So `allHomed === true` was true
+# before the machine moved, and it is tested before anything else, which closed the
+# dialog at once. `idle_timeout` bracketed the operation exactly instead: Ready,
+# Printing for forty seconds, Ready.
+#
+# So the rule is the other way round, and it is about what a `done` predicate MAY be:
+# a field the machine sets when the work is finished, not one that merely tends to be
+# true afterwards. Homing has none, and passing none is how it says so.
+check("homing ends on the machine going quiet, not on homed_axes",
+      "done: () => state.toolhead().allHomed === true" not in cmd_src["control"]
+      and "if (done && done())" in cmd_src["control"]
+      and "else if (sawBusy)" in cmd_src["control"],
+      "homed_axes read 'xyz' for all 42s of a measured G28: as a done() it is true "
+      "before the machine has moved, and it wins the race against every other test")
+check("and a toolchange still ends on its own goal, which it really has",
+      'done: () => state.toolhead().activeIndex === idx' in cmd_src["control"]
+      and 'done: () => state.toolhead().activeIndex == null' in cmd_src["control"],
+      "extruder*.state going ACTIVATE is set by the change completing; dropping done() "
+      "for these would make a 31s toolchange wait on idle_timeout for no reason")
+check("a wait shows its own line rather than 'Moving' and 'Working'",
+      "reason.vague" in cmd_src["control"] and "vague:" in state_src,
+      "motion starts and stops - the two generic labels alternated eight times across "
+      "the measured G28, which reads as a machine changing its mind")
 check("homing is what the wait reports during a toolchange",
       "Homing axes" in state_src and "homed_axes" in state_src,
       "homed_axes walking '' -> z -> y -> xy is the only thing that reports the long "

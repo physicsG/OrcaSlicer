@@ -77,8 +77,8 @@ function pillBtn(spec, ctx) {
  * `is-active` follows the state rather than the click. Moving it in the click handler
  * was almost right and quietly wrong: anything that changed the selection *without* a
  * click left the wrong tab lit. The job card's "choose a file to print" does exactly
- * that - it opens Storage on gcodes - and the header went on highlighting time-lapses
- * over a grid of print files.
+ * that - it opens Storage on another kind - and the header went on highlighting
+ * time-lapses over a grid of something else.
  */
 function tabGroup(spec, ctx, into) {
   const made = [];

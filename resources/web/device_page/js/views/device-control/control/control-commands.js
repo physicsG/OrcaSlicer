@@ -57,6 +57,19 @@ export function create(deps) {
    */
   const TOOL_ACTION_HARD_CAP_MS = 10 * 60 * 1000;
 
+  /**
+   * `done` is OPTIONAL, and homing is why.
+   *
+   * An action with a goal the machine reports - a toolchange, a park - ends when that
+   * field says so, and waiting past it would only be waiting. An action with no such
+   * field ends on the one thing every action has: the machine having been working and
+   * having stopped. That is the `sawBusy` branch below, and for those actions it is not
+   * a fallback but the whole signal.
+   *
+   * Passing a `done` that is not really one is worse than passing none, because it wins
+   * the race: it is tested first, so a field that is already true closes the dialog
+   * before the machine has moved. That is exactly what `home` did with `homed_axes`.
+   */
   function runToolAction({ title, script, waiting, done, gaveUp, settle }) {
     const dlg = openBlockingDialog({ title, message: waiting });
     let refused = null;
@@ -75,12 +88,6 @@ export function create(deps) {
       let sawBusy = false;
       let lastPoll = 0;
       for (;;) {
-        if (done()) {
-          if (settle) await settle();
-          dlg.close(); render(); return;
-        }
-        if (refused) { dlg.fail(`The printer refused the command: ${refused.message}`); return; }
-
         // Every source that answers, not just machine_state_manager - which reads
         // {main_state: 0, action_code: 0} straight through a manual toolchange on this
         // firmware, so a wait that trusted it alone saw silence and gave up on work that
@@ -88,7 +95,16 @@ export function create(deps) {
         // and physical motion.
         const act = state.activity();
         const reason = state.busyReason();
-        const label = machineActivity(act) || reason.label;
+
+        if (done && done()) {
+          if (settle) await settle();
+          dlg.close(); render(); return;
+        }
+        if (refused) { dlg.fail(`The printer refused the command: ${refused.message}`); return; }
+
+        // The action's own line is the more useful one when all the machine will say is
+        // that it is busy - see `vague` in busyReason().
+        const label = machineActivity(act) || (reason.vague ? null : reason.label);
         if (label) {
           if (label !== lastLabel) { dlg.update(label); lastLabel = label; }
         } else if (lastLabel) {
@@ -100,8 +116,10 @@ export function create(deps) {
           sawBusy = true;
           quietDeadline = Date.now() + TOOL_CHANGE_TIMEOUT_MS;
         } else if (sawBusy) {
-          // it was working and has stopped: for an operation with nothing on the stream
-          // to confirm it - homing - that transition is the completion signal.
+          // It was working and has stopped. `sawBusy` is what keeps this from firing in
+          // the seconds before the machine picks the command up: idle_timeout was still
+          // "Ready" for the first 1.6s of the measured G28, and closing there would be
+          // the same bug from the other end.
           if (settle) await settle();
           dlg.close(); render(); return;
         }
@@ -171,15 +189,41 @@ export function create(deps) {
      * toolchange does, then refreshes the one field that cannot arrive on its own.
      */
 
+    /**
+     * Homing has no goal field, and `homed_axes` is not one.
+     *
+     * It looked like one, and this wait used it twice - first alone, then guarded by a
+     * stillness check - and closed early both times. A real G28 was watched end to end
+     * on 811002511261022618B3 (2026-09-01, 42 s, sampled every 200 ms) and settles it:
+     *
+     *       0.0s  homed_axes "xyz"   idle_timeout "Ready"     vel 0     <- G28 sent
+     *       1.6s  homed_axes "xyz"   idle_timeout "Printing"  vel 0
+     *       5.5s  homed_axes "xyz"                            vel 40
+     *      27.6s  homed_axes "xyz"                            vel 0     z 309
+     *      41.7s  homed_axes "xyz"   idle_timeout "Ready"     vel 0     <- done
+     *
+     * `homed_axes` NEVER MOVED. It read "xyz" for the whole procedure, because the
+     * machine was already homed and this firmware's G28 does not clear it - so the
+     * predicate was true on the first poll and the dialog shut over a machine that had
+     * not started. (The toolchange trace in state.js's busyReason does show it clearing;
+     * that is `G28 X Y` under a homing_override, and it is a different path.)
+     *
+     * `live_velocity` cannot patch it either: it reads exactly 0 for two seconds at a
+     * time between the homing moves, eight times across those 42 seconds. Any stillness
+     * window short enough to be responsive fits inside one of those gaps.
+     *
+     * `idle_timeout` bracketed the operation exactly - Ready, Printing for forty
+     * seconds, Ready - and `busyReason()` already reads it. So the answer is to pass no
+     * done() at all and let the wait end where the evidence is: the machine having been
+     * working and having stopped.
+     */
     home: () => runToolAction({
       title: 'Homing',
       script: 'G28',
       waiting: 'Homing all axes\u2026',
-      // The wait polls `toolhead`, so homing does have a completion signal after all:
-      // the machine reporting xyz homed. Relying on a busy->idle transition instead was
-      // wrong here, because machine_state_manager never reports busy on this firmware,
-      // so the transition never came and a finished home was called a timeout.
-      done: () => state.toolhead().allHomed === true,
+      // One more read on the way out: the wait polls `toolhead` about once a second, and
+      // what the jog guard needs is `homed_axes` as it stands when the machine stopped.
+      settle: () => session.refreshToolhead(),
       gaveUp: 'Homing did not finish in time.',
     }),
 

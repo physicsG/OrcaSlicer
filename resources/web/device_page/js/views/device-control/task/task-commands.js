@@ -64,7 +64,9 @@ export function create(deps) {
 
     /* ---- machine store.files ---- */
 
-    showFiles: () => { store.storageKind = 'gcodes'; cmd.showView('storage'); },
+    // Storage's Prints, since the print-files tab that used to be the target was the
+    // same list twice - see KINDS in storage-panel.js. Reprint is the verb there.
+    showFiles: () => { store.storageKind = 'prints'; cmd.showView('storage'); },
 
     /* ---- print job ---- */
 
