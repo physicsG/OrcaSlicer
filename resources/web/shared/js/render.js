@@ -13,6 +13,9 @@
  * those was noticed separately and fixed with a guard invented on the spot - which is
  * how there came to be four disciplines rather than one.
  *
+ * SHARED by both surfaces - see shared/dom.js on why these moved out of the Device
+ * page's core/.
+ *
  * The rule these primitives encode: **build structure once, then write only what
  * differs.** Structure changes are keyed by a signature, so they happen when the shape
  * genuinely changes rather than on every tick; lists are reconciled by key, so a list

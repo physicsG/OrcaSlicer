@@ -62,11 +62,11 @@ js/views/device-control/camera/
 | `js/page-commands.js` | The few commands that belong to no single panel |
 | `js/views/<destination>/<panel>/` | One directory per panel — see above |
 | `js/core/store.js` | **What the page remembers** — view, tab, fetched lists, chosen tool |
-| `js/core/pending.js` | What was asked for and not yet confirmed. Neither state nor store |
-| `js/core/render.js` | The one update discipline: rebuild on a signature, reconcile by key |
-| `js/core/dom.js` | `$`, `el`, `icon` — the three primitives every view builds with |
+| `../shared/js/pending.js` | What was asked for and not yet confirmed. Neither state nor store. **Shared** — the print dialog uses it too |
+| `../shared/js/render.js` | The one update discipline: rebuild on a signature, reconcile by key. **Shared** |
+| `../shared/js/dom.js` | `$`, `el`, `icon` — the three primitives every view builds with. **Shared** |
 | `js/core/session.js` | Having a printer on the other end: connect, staleness, retry, the stream |
-| `js/core/connection.js` | The connect path itself: pairing, mTLS, the MQTT engine |
+| `../shared/js/connection.js` | The connect path itself: pairing, mTLS, the MQTT engine |
 | `js/core/overlay.js` | Menus, dialogs and popovers |
 | `js/core/diag.js` | The `?diag=1` beacon |
 | `js/core/mock.js` | Installs the shared simulator, so the page runs with no hardware |

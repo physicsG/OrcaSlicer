@@ -71,10 +71,10 @@ they are three because they answer three different questions:
 The third exists separately for a reason worth carrying: **a request stored in the thing
 that mirrors the machine gets overwritten by the next push.** That bug was found in three
 unrelated controls before it got one mechanism —
-[`core/pending.js`](../../resources/web/device_page/js/core/pending.js).
+[`shared/pending.js`](../../resources/web/shared/js/pending.js).
 
 Two more single-answer modules, each replacing several hand-rolled ones:
-[`core/render.js`](../../resources/web/device_page/js/core/render.js) (build once, key
+[`shared/render.js`](../../resources/web/shared/js/render.js) (build once, key
 structural change on a signature, reconcile lists by key) and
 [`core/session.js`](../../resources/web/device_page/js/core/session.js) (connect,
 staleness, retry, heartbeat, the state stream — no panel reads any of it).
@@ -1106,7 +1106,7 @@ carrying:
   it timed out and reported itself lost, because nothing pushes the object that would
   confirm it.
 - **Fifteen macros, none awaited.** `ACE_BG_UNLOAD`'s own help says ~3 min, so every one
-  goes through `core/pending.js` and is confirmed against machine state.
+  goes through `shared/pending.js` and is confirmed against machine state.
 - **`check_coverage.py` now has a second surface.** The panel's controls are not bridge
   commands at all, so the old accounting could not see them and a macro deliberately not
   offered would have been silent rather than merely unbuilt. All 21 ACE macros are now
@@ -1191,12 +1191,39 @@ Then, in rough order of value:
    is Orca's own Bonjour sweep, so the MQTT probes cannot reach it; it needs the app.
 4. **`sw_SetSubscribeFilter` fails at boot** and is fired best-effort. Worth confirming
    it is genuinely optional rather than papered over.
-5. **The print-processing popup has never been driven against hardware**, and has not had
-   the restructure either — it still shares `shared/` but keeps its own flat `app.js`.
-   Its send path (`sw_GetPrintZip` → `sw_StartLocalPrint` → the close protocol) is
-   unproven. The primitives the Device page grew (`pending`, `render`, the panel
-   contract) are the obvious things to lift across, and doing so is what would prove
-   they generalise.
+5. **The print-processing popup is rebuilt, and has not met a connected printer.**
+   It is the shipped dialog now, recovered widget by widget from `main.dart.js` and
+   specified in
+   [original-dialog-mockup.html](03-print-processing/original-dialog-mockup.html), which
+   cites the source for every measurement. The page is restructured the way the Device
+   page is - a registry, a folder per panel, its own commands module each - and the
+   primitives it needed moved to `shared/`: `dom`, `render`, `pending`, the modal sheet
+   and the trace pane. **The simulated U1 and Orca are one host for both surfaces**, so
+   the two cannot be shown machines that disagree; the file's filaments and the machine's
+   come from one model, which is what makes the match test mean anything.
+   What the old page had wrong, and why, is
+   [04-requirements.md](03-print-processing/04-requirements.md).
+
+   **It runs outside Orca both ways.** `--page` against the simulator, and `--real
+   --gcode <file>` against a printer with `u1_bridge.py` answering Orca's half out of a
+   real sliced plate - the filament list, the weights and the embedded thumbnail all come
+   from the file rather than a fixture. `sw_StartLocalPrint` is gated behind
+   `--allow-print`.
+
+   **It has now run end to end against 811002511261022618B3** - upload, start, print,
+   cancel - which settled the send contract Orca's source does not contain and found a
+   bug the simulator could not: an identity fallback that placed two filaments on
+   toolheads the picker itself refuses. The account is
+   [03-print-processing/05-hardware-e2e.md](03-print-processing/05-hardware-e2e.md) and
+   the procedure is the `u1-hardware-test` skill.
+
+   A cancel that worked reported failure, and the reason turned out to be the client's
+   own clock: Klipper runs G-code sequentially, so a command queues behind whatever is in
+   flight - measured at **dwell + ~250 ms** with `G4` blocking the queue. `sswcp.js` now
+   waits 80 s for a `PRINTER_BACKED` command and 15 s for one Orca answers, which is the
+   split `u1_bridge.py` already made. No plate has been left to run, and the cloud path is
+   untouched.
+
 6. **`sw_DeleteMachineFile` is implemented in Orca and unreferenced here.** Storage
    deliberately has no delete for print files — Delete sat a few pixels from a one-click
    Print and only one of them is reversible. If it is wanted, that should be a considered

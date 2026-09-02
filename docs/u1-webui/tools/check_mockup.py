@@ -2058,6 +2058,191 @@ CHECKS["multiace-modes.html"] = r"""
 })();
 """
 
+CHECKS["original-dialog-mockup.html"] = r"""
+(function(){
+  const out=[];
+  try{
+  const say=(n,g,w)=>out.push(`${g===w?'PASS':'FAIL'}  ${n}`+(g===w?'':`   got ${JSON.stringify(g)} want ${JSON.stringify(w)}`));
+  const q=(s)=>document.querySelector(s);
+  const qq=(s)=>[...document.querySelectorAll(s)];
+  const R=(e)=>e?e.getBoundingClientRect():null;
+  const W=(s)=>Math.round(R(q(s)).width), H=(s)=>Math.round(R(q(s)).height);
+  const seg=(g,v)=>{const b=q(`#seg-${g} button[data-v="${v}"]`);
+                    if(!b) throw new Error('no control '+g+'/'+v); b.click();};
+  const dlg=()=>R(q('#dlg'));
+  const at=(e)=>{const r=R(e),d=dlg();return [Math.round(r.left-d.left),Math.round(r.top-d.top)];};
+
+  say('title', document.title, 'The Upload and Print dialog, as shipped');
+  say('no horizontal page scroll', document.documentElement.scrollWidth <= window.innerWidth+1, true);
+  let dup=0; const seen={};
+  qq('[id]').forEach(e=>{ if(seen[e.id]) dup++; seen[e.id]=1; });
+  say('no duplicate ids', dup, 0);
+
+  // ---- the dialog is the size WebPreprintDialog opens ----
+  say('dialog is 714 wide', Math.round(dlg().width), 714);
+  say('dialog is 750 tall', Math.round(dlg().height), 750);
+
+  // ---- the four cards, against the capture ----
+  // preuploadandprint.png: card 1 border rows at y=16..142, card 2 top at y=152.
+  seg('route','print'); seg('data','four'); seg('dev','one');
+  say('four sections on path=4', qq('#dlg .card').length, 4);
+  const c=qq('#dlg .card');
+  say('card width 680, as captured (x=16..696)', Math.round(R(c[0]).width), 680);
+  say('first card sits 16 below the top (B.aE)', at(c[0])[1], 17);   // +1 dialog border
+  say('cards are 8 apart (B.aB)',
+      Math.round(R(c[1]).top - R(c[0]).bottom), 8);
+  say('card border is 2px (A.de(ax.ry,-1,2))',
+      getComputedStyle(c[0]).borderTopWidth, '2px');
+  say('card padding is 12 (B.ch)', getComputedStyle(c[0]).paddingTop, '12px');
+  say('title column clamps to its 120 minimum (B.m4)',
+      Math.round(R(q('#dlg .card > .title')).width), 120);
+
+  // ---- Model Information ----
+  say('thumbnail is 100x100 (A.cR ... 100, 100)',
+      [W('#dlg .mi svg'),H('#dlg .mi svg')].join('x'), '100x100');
+  const facts=qq('#dlg .facts .f').map(e=>e.textContent.split(':')[0]);
+  say('three facts, in the shipped order', facts.join('/'),
+      'Filename/Estimated Time/Estimated Materials');
+  say('materials is two decimals (toStringAsFixed(2))',
+      /31\.40 g$/.test(qq('#dlg .facts .f')[2].textContent), true);
+
+  // ---- Select Printer ----
+  say('printer dropdown is 300x50 (A.a2l(50,300,...))',
+      [W('#dlg .picker'),H('#dlg .picker')].join('x'), '300x50');
+
+  // ---- Edit Filament: the part no screenshot ever showed ----
+  say('one card per file filament', qq('#dlg .fcard').length, 4);
+  say('filament card is 80x100 (A.A0(...,80,100,8,...))',
+      [W('#dlg .fcard'),H('#dlg .fcard')].join('x'), '80x100');
+  say('card radius 8', getComputedStyle(q('#dlg .fcard')).borderTopLeftRadius, '8px');
+  // flex 3 : 1px rule : flex 4 over 100px of card, less 2px border
+  const sh=H('#dlg .fcard .swatch'), ph=H('#dlg .fcard .pickrow');
+  say('colour block takes 3 of the 7 parts', Math.abs(sh-42)<=4, true);
+  say('picker takes 4 of the 7 parts', Math.abs(ph-56)<=4, true);
+  say('a 1px rule between them', H('#dlg .fcard .rule'), 1);
+  say('target disc is 28 (A.aJO(...,28,...,28))', W('#dlg .fcard .disc'), 28);
+  say('grid gap is 12 both ways (Wrap 12/12)',
+      getComputedStyle(q('#dlg .grid')).gap, '12px');
+  // a segmented spool paints one band per colour, a gradient paints none
+  say('mode 0 paints one band per colour',
+      qq('#dlg .fcard')[3].querySelectorAll('.swatch .bands span').length, 3);
+
+  // ---- an unassigned filament ----
+  seg('data','mismatch');
+  say('an unassigned card is bordered in the warning colour',
+      qq('#dlg .fcard.unset').length, 1);
+  say('and shows ! where the toolhead number goes',
+      q('#dlg .fcard.unset .disc .n').textContent, '!');
+  say('mode 1 paints a gradient rather than bands',
+      /linear-gradient/.test(getComputedStyle(
+        qq('#dlg .fcard')[3].querySelector('.swatch')).backgroundImage), true);
+
+  // ---- the fifth section: A.R5 ----
+  // The plate wants 0.4 and every head has 0.4 or 0.2, so 0.4 IS present: no banner.
+  say('no banner while the plate nozzle is one the machine has',
+      qq('#dlg .nozwarn').length, 0);
+
+  // ---- Print Preferences ----
+  seg('data','four');
+  say('three preferences', qq('#dlg .pref').length, 3);
+  say('preference row is 220x20 (B.VS max)',
+      [W('#dlg .pref'),H('#dlg .pref')].join('x'), '220x20');
+  say('they stack one per line at this width',
+      at(qq('#dlg .pref')[0])[1] !== at(qq('#dlg .pref')[1])[1], true);
+  say('12 between rows (runSpacing)',
+      Math.round(R(qq('#dlg .pref')[1]).top - R(qq('#dlg .pref')[0]).bottom), 12);
+  say('only the first carries a help icon',
+      qq('#dlg .pref .help').length, 1);
+  say('toggle is 18x18', [W('#dlg .pref .box'),H('#dlg .pref .box')].join('x'), '18x18');
+  qq('#dlg .pref')[2].click();
+  say('a checked toggle turns B.fx green',
+      getComputedStyle(qq('#dlg .pref')[2].querySelector('.box')).backgroundColor,
+      'rgb(76, 175, 80)');
+  qq('#dlg .pref')[2].click();
+
+  // ---- the send bar ----
+  say('progress bar is 8 tall', H('#dlg .track'), 8);
+  say('Send is 120x40', [W('#dlg .send'),H('#dlg .send')].join('x'), '120x40');
+  say('Send is #2196F3 when live',
+      getComputedStyle(q('#dlg .send')).backgroundColor, 'rgb(33, 150, 243)');
+  say('bar padding is 16 (B.bV)', getComputedStyle(q('#dlg .sendbar')).padding, '16px');
+  say('percent reads zero decimals', q('#dlg .pct').textContent, '0%');
+
+  // ---- path=5 drops the print half ----
+  seg('route','upload');
+  say('upload-only keeps two sections', qq('#dlg .card').length, 2);
+  say('and names them', qq('#dlg .card > .title').length ? 
+      qq('#dlg .card > .title').map(e=>e.firstChild.textContent).join('/') : '',
+      'Model Information/Select Printer');
+
+  // ---- the three dropdown menus ----
+  // DropdownButton2 geometry: MenuItemStyleData(height,padding) + DropdownStyleData
+  // (maxHeight,width,padding,decoration,elevation,offset). Every number is a constant.
+  seg('data','four'); seg('dev','one');
+
+  seg('menu','printer');
+  const pm=q('#dlg .menu.m-printer');
+  say('printer menu is 300 wide', Math.round(R(pm).width), 300);
+  say('printer items are 50 tall (B.aqV)', Math.round(R(pm.children[0]).height), 50);
+  say('printer item padding is 16 (B.c8)', getComputedStyle(pm.children[0]).paddingLeft, '16px');
+  say('the saved devices plus the synthetic add-device row', pm.children.length, 3);
+  say('the connected one carries a green check',
+      getComputedStyle(pm.querySelector('.tick')).color, 'rgb(76, 175, 80)');
+  say('add device carries no Lan Mode label',
+      pm.children[2].querySelector('.lan'), null);
+
+  seg('menu','head');
+  const hm=q('#dlg .menu.m-head');
+  say('toolhead menu is 200 wide', Math.round(R(hm).width), 200);
+  say('toolhead items are 48 tall (B.aqU)', Math.round(R(hm.children[0]).height), 48);
+  say('toolhead menu caps at 300', parseInt(getComputedStyle(hm).maxHeight,10), 300);
+  say('and is radius 8', getComputedStyle(hm).borderTopLeftRadius, '8px');
+  // offset (-50, 0) off the trigger's left edge. The trigger sits inside a flex
+  // row, so its left edge is fractional; allow the one pixel that costs.
+  say('offset is -50 from the trigger (B.asz)',
+      Math.abs((R(hm).left - R(q('#trg-head')).left) + 50) <= 1, true);
+  say('one item per toolhead', hm.children.length, 4);
+  // a head matches on type AND nozzle; head 3 is NONE, head 4 has a 0.2 nozzle
+  say('two heads are unpickable', qq('#dlg .menu.m-head .mitem[aria-disabled="true"]').length, 2);
+  say('a NONE head gets its own tooltip', hm.children[2].title, 'dialog_filament_type_none_tips');
+  say('a wrong-nozzle head gets the other', hm.children[3].title, 'dialog_filament_type_not_match_tips');
+  say('a matching head has no tooltip', hm.children[0].title, '');
+  say('the assigned head carries a check', !!hm.children[0].querySelector('.tick'), true);
+  say('every unpickable head carries a warning',
+      qq('#dlg .menu.m-head .mitem[aria-disabled="true"] .warnic').length, 2);
+
+  seg('menu','plate');
+  say('opening the plate menu switches Model Information to its partitions layout',
+      q('#seg-mi button[aria-pressed="true"]').dataset.v, 'multi');
+  const qm=q('#dlg .menu.m-plate');
+  say('plate items are 80 tall (B.aqW)', Math.round(R(qm.children[0]).height), 80);
+  say('plate item padding is LTRB(8,6,8,6) (B.rT)',
+      [getComputedStyle(qm.children[0]).paddingTop,
+       getComputedStyle(qm.children[0]).paddingLeft].join('/'), '6px/8px');
+  say('plate menu caps at 480', parseInt(getComputedStyle(qm).maxHeight,10), 480);
+  say('and rounds only its bottom corners (B.VC)',
+      [getComputedStyle(qm).borderTopLeftRadius,
+       getComputedStyle(qm).borderBottomLeftRadius].join('/'), '0px/4px');
+  say('plate menu is as wide as its button',
+      Math.round(R(qm).width), Math.round(R(q('#trg-plate')).width));
+  say('the plate button is 90 tall', Math.round(R(q('#trg-plate')).height), 90);
+  say('the selected plate carries a check', !!qm.children[0].querySelector('.tick'), true);
+  say('a plate row lists its filaments as chips',
+      qm.children[0].querySelectorAll('.chip').length, 4);
+  seg('menu','none');
+  say('closing removes every menu', qq('#dlg .menu').length, 0);
+
+  // ---- as captured: no filament data ----
+  seg('mi','single'); seg('route','print'); seg('data','empty');
+  say('with no filament requirements the grid is empty, as both captures show',
+      qq('#dlg .fcard').length, 0);
+  say('but the section is still drawn', qq('#dlg .card').length, 4);
+
+  }catch(e){ out.push('FAIL  check threw: '+(e&&e.message||e)); }
+  window.__report = out.join('\n');
+})();
+"""
+
 CHECK = CHECKS.get(os.path.basename(PATH))
 if CHECK is None:
     print(f"no checks for {os.path.basename(PATH)}. Known: {', '.join(sorted(CHECKS))}")

@@ -63,15 +63,44 @@ def member_bodies(lines, cls):
         yield name, "\n".join(lines[i:end])
 
 
+def method_constants(text):
+    """`static const std::string METHOD_X = "printer.y";` -> {"METHOD_X": "printer.y"}.
+
+    Not every method name is a literal at the call site. Some are hoisted to a file-scope
+    constant and the call reads `send_to_request(METHOD_START_LOCAL_PRINT, ...)`, which a
+    search for a quoted string right after the paren cannot see.
+
+    `sw_StartLocalPrint` was the one that mattered: it came out with `method: null` and
+    the honest reason "no JSON-RPC method found behind async_start_local_print", so
+    u1_bridge refused to forward it and the send path stopped one command short of
+    starting a print. The reason was true and the conclusion was wrong - the method is
+    `server.files.start_local_print`, three lines above the call.
+    """
+    return dict(re.findall(
+        r'\bconst\s+std::string\s+(\w+)\s*=\s*"([^"]+)"\s*;', text))
+
+
 def moonraker_methods():
     """async_* -> {method, params, forwarded}."""
+    src = read(MOONRAKER)
+    consts = method_constants("\n".join(src))
     out = {}
-    for name, body in member_bodies(read(MOONRAKER), "Moonraker_Mqtt"):
+    for name, body in member_bodies(src, "Moonraker_Mqtt"):
         if not name.startswith("async_"):
             continue
         m = (re.search(r'method\s*=\s*"([^"]+)"', body)
              or re.search(r'send_to_request\(\s*"([^"]+)"', body))
         if not m:
+            # ...or the method is one of those constants, named rather than quoted.
+            named = (re.search(r'\bmethod\s*=\s*(\w+)\s*;', body)
+                     or re.search(r'send_to_request\(\s*(\w+)\s*,', body))
+            if named and named.group(1) in consts:
+                keys = sorted(set(re.findall(r'params\[\s*"([^"]+)"\s*\]', body)))
+                cand = {"method": consts[named.group(1)], "params": keys,
+                        "forwarded": not keys}
+                prev = out.get(name)
+                if prev is None or (cand["forwarded"] and not prev["forwarded"]):
+                    out[name] = cand
             continue
         keys = sorted(set(re.findall(r'params\[\s*"([^"]+)"\s*\]', body)))
         # `send_to_request(method, params_from_caller, ...)` with no params[...] of its

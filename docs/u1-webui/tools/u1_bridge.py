@@ -33,7 +33,11 @@ import glob
 import json
 import socket
 import os
+import zipfile
+import hashlib
+import base64
 import queue
+import re
 import ssl
 import sys
 import tempfile
@@ -205,13 +209,205 @@ def tls_context(ca, cert, key, tmp):
 
 # ----------------------------------------------------------------------------- host
 
+
+class PreprintJob:
+    """Orca's half of the print dialog, read out of a real sliced .gcode.
+
+    The dialog asks Orca four things about the job - which file, what filaments it needs,
+    whether the preset matches the machine, and where to fetch the packaged file - and
+    outside Orca there is no sliced plate to ask. There IS a .gcode, and Orca's own
+    slicer wrote everything the dialog wants into its trailing comment block:
+
+        ; filament_type = PLA;PLA;PETG;ABS
+        ; filament colour = #E03131;#1971C2;...
+        ; filament used [g] = 12.40,9.10,...
+        ; nozzle_diameter = 0.4,0.4,0.4,0.4
+        ; estimated printing time (normal mode) = 1h 13m 32s
+        ; printer_model = Snapmaker U1
+        ; thumbnail begin 512x512 ...  (base64, one comment per line)
+
+    So this parses rather than invents, which is the difference between exercising the
+    dialog and exercising a fixture. A field the file does not carry is left out of the
+    reply, exactly as the C++ leaves it out - `sw_GetFileFilamentMapping` builds its
+    response key by key from whatever the config has.
+    """
+
+    # `; key = value` at the end of an Orca/PrusaSlicer gcode.
+    _KV = re.compile(r"^;\s*([^=;]+?)\s*=\s*(.*)$")
+
+    def __init__(self, path, log=_log):
+        self.path = os.path.abspath(path)
+        self.log = log
+        self.name = os.path.basename(self.path)
+        self.size = os.path.getsize(self.path)
+        self.meta, self.thumbnails = self._parse()
+        self.zip_path = None
+        # What the page reported through the close protocol, so a drive script can read
+        # back what the dialog actually said rather than trusting that it said it.
+        self.preprint_status = None
+        self.mapping_outcome = None
+        self.closed = False
+        self.started_with = None
+
+    # ---- parsing ---------------------------------------------------------
+
+    def _parse(self):
+        """Read the trailing comment block and any embedded thumbnails.
+
+        Only the tail is read: a sliced plate is tens of megabytes of moves and the
+        metadata is in the last few kilobytes. The thumbnails are near the HEAD, so
+        they get their own bounded scan.
+        """
+        meta = {}
+        with open(self.path, "rb") as fh:
+            fh.seek(max(0, self.size - 65536))
+            tail = fh.read().decode("utf-8", "replace")
+        for line in tail.splitlines():
+            m = self._KV.match(line)
+            if m:
+                meta[m.group(1).strip()] = m.group(2).strip()
+
+        thumbs = []
+        with open(self.path, "rb") as fh:
+            head = fh.read(2 * 1024 * 1024).decode("utf-8", "replace")
+        cur = None
+        for line in head.splitlines():
+            t = line.strip()
+            if t.startswith("; thumbnail begin"):
+                bits = t.split()
+                dims = bits[3] if len(bits) > 3 else "0x0"
+                w, _, h = dims.partition("x")
+                cur = {"w": w, "h": h, "b64": []}
+            elif t.startswith("; thumbnail end"):
+                if cur:
+                    thumbs.append(cur)
+                cur = None
+            elif cur is not None and t.startswith(";"):
+                cur["b64"].append(t[1:].strip())
+        return meta, thumbs
+
+    def _list(self, key, sep=None):
+        raw = self.meta.get(key)
+        if raw is None:
+            return None
+        # Orca writes filament_type with ';' and the numeric lists with ','.
+        parts = raw.split(sep) if sep else re.split(r"[;,]", raw)
+        return [p.strip() for p in parts if p.strip() != ""]
+
+    def _seconds(self):
+        """`estimated printing time (normal mode) = 1h 13m 32s` -> 4412."""
+        raw = self.meta.get("estimated printing time (normal mode)") \
+            or self.meta.get("estimated printing time")
+        if not raw:
+            return None
+        total = 0
+        for n, unit in re.findall(r"(\d+)\s*([dhms])", raw):
+            total += int(n) * {"d": 86400, "h": 3600, "m": 60, "s": 1}[unit]
+        return total or None
+
+    # ---- what the dialog asks --------------------------------------------
+
+    def active_file(self, is_zip=False):
+        if is_zip:
+            return {"file_name": os.path.splitext(self.name)[0] + ".zip",
+                    "file_path": self.zip(), "origin_size": self.size, "metadata": {}}
+        return {"filename": self.name, "metadata": {}}
+
+    def filament_mapping(self):
+        """`sw_GetFileFilamentMapping`'s reply, key for key as SSWCP.cpp:3039 builds it.
+
+        PARALLEL ARRAYS. There is no `filaments[]` here and there never has been.
+        """
+        out = {"filename": self.name, "filepath": self.path}
+
+        types = self._list("filament_type")
+        if types:
+            out["filament_type"] = types
+
+        colors = self._list("filament colour") or self._list("filament_colour")
+        if colors:
+            out["filament_color_rgba"] = colors
+            out["filament_color"] = [
+                int(c.lstrip("#")[:6], 16) if re.fullmatch(r"#?[0-9a-fA-F]{6,8}", c) else 0
+                for c in colors]
+
+        used_g = self._list("filament used [g]", sep=",")
+        if used_g:
+            out["filament_weight"] = [float(x) for x in used_g]
+            out["filament_weight_total"] = round(sum(out["filament_weight"]), 4)
+        used_mm = self._list("filament used [mm]", sep=",")
+        if used_mm:
+            out["filament_used_mm"] = [float(x) for x in used_mm]
+
+        nozzles = self._list("nozzle_diameter", sep=",")
+        if nozzles:
+            # The reply carries them per FILAMENT; a single-value header means one
+            # nozzle for all of them, which is what the C++ ends up with too.
+            n = len(types or nozzles)
+            out["nozzle_diameters"] = (nozzles * n)[:n] if len(nozzles) == 1 else nozzles
+            out["nozzle_info"] = sorted(set(nozzles))
+
+        secs = self._seconds()
+        if secs:
+            out["estimated_time"] = secs
+        model = self.meta.get("printer_model") or self.meta.get("printer_settings_id")
+        if model:
+            out["machine_model"] = model
+
+        if self.thumbnails:
+            t = self.thumbnails[-1]           # the largest Orca wrote
+            out["thumbnails"] = [{"url": "data:image/png;base64," + "".join(t["b64"]),
+                                  "width": int(t["w"] or 0), "height": int(t["h"] or 0)}]
+        else:
+            out["thumbnails"] = []
+
+        # Orca's own filament->extruder map lives in its config, which this host does not
+        # have; identity is what the popup falls back to when the key is absent.
+        return out
+
+    def zip(self):
+        """Package the gcode the way `generate_zip_path` / `create_zip_with_miniz` do.
+
+        One entry, named after the DISPLAY name. Cached, because the real one is too -
+        `get_or_create_zip_json` reuses an existing zip rather than rebuilding it.
+        """
+        if self.zip_path and os.path.exists(self.zip_path):
+            return self.zip_path
+        out = os.path.join(tempfile.gettempdir(),
+                           os.path.splitext(self.name)[0] + ".zip")
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+            z.write(self.path, arcname=self.name)
+        self.zip_path = out
+        self.log(f"[bridge] packaged {self.name} -> {out} "
+                 f"({os.path.getsize(out)} bytes)")
+        return out
+
+    def checksum(self):
+        h = hashlib.sha256()
+        with open(self.path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        return base64.b64encode(h.digest()).decode()
+
+
 class Bridge:
-    def __init__(self, send, log=_log, devices=None, trace=120):
+    def __init__(self, send, log=_log, devices=None, trace=120, gcode=None,
+                 allow_print=False):
         # send(msg, as_string=True) - the WCP envelope travels as a JSON string, which
         # is what send_to_js posts; the legacy `command` messages travel as an object.
         self.send, self.log = send, log
         self.trace = trace         # how much of each command's params to log
         self.devices = devices if devices is not None else orca_devices()
+        # The print dialog's Orca half. `gcode` is a real sliced file; everything the
+        # dialog asks about the job is read out of it rather than invented. Without one,
+        # those commands refuse in as many words - see PreprintJob.
+        self.job = PreprintJob(gcode, log=log) if gcode else None
+        # sw_StartLocalPrint STARTS A PRINT on a real machine. Off unless asked for.
+        self.allow_print = allow_print
+        # How a local path becomes a URL the page can fetch. run_webkit already serves
+        # resources/ over HTTP and passes a function in; without one, sw_GetFileStream
+        # says so rather than handing back a URL that goes nowhere.
+        self.file_url = None
         self.clients = {}          # id -> Client
         self.subs = {}             # (client id, topic) -> [event_id]
         self.status_events = []    # from sw_SubscribeMachineState
@@ -261,6 +457,17 @@ class Bridge:
             "sw_GetCache": self._get_cache,
             "sw_SetCache": self._set_cache,
             "sw_RemoveCache": self._remove_cache,
+            # ---- the print dialog's Orca half. Everything here is answered out of
+            # the .gcode handed to --gcode, so the dialog sees a real plate rather than
+            # a fixture; without one they refuse and say why.
+            "sw_GetActiveFile": self._active_file,
+            "sw_GetFileFilamentMapping": self._file_filament_mapping,
+            "sw_GetFileStream": self._file_stream,
+            "sw_GetPrintZip": self._print_zip,
+            "sw_GetPrintLegal": self._print_legal,
+            "sw_FinishPreprint": self._finish_preprint,
+            "sw_SetFilamentMappingComplete": self._mapping_complete,
+            "sw_FinishFilamentMapping": self._finish_mapping,
             # Orca answers this about itself, so the honest answer here is us.
             "sw_GetSoftwareInfo": lambda s, p, e: self._ok(
                 s, {"version": "u1_bridge", "build_number": ""}),
@@ -322,6 +529,23 @@ class Bridge:
 
         if cmd in REFUSED:
             return self._err(seqid, -1, f"{cmd}: {REFUSED[cmd]}")
+
+        # The one command on this host that MOVES A MACHINE. Everything else here reads,
+        # lists or subscribes; this one starts a print, and a suite that can start a
+        # print is a suite that will, on somebody's bed, at 3am. Off unless asked for.
+        if cmd in ("sw_StartLocalPrint", "sw_StartCloudPrint") and not self.allow_print:
+            return self._err(seqid, -1,
+                             f"{cmd} would START A PRINT on the real machine. "
+                             f"Pass --allow-print to let it through; without it the "
+                             f"dialog's send path is exercised right up to this point.")
+        if cmd == "sw_StartLocalPrint":
+            # Its own precondition, enforced here too - a host that accepted `{}` is how
+            # the reconstruction came to send `{}` and never find out.
+            if params.get("type") is None or params.get("path") is None:
+                return self._err(seqid, -1, "param [type] or [path] required!")
+            if self.job:
+                self.job.started_with = {"type": params.get("type"),
+                                         "path": params.get("path")}
 
         entry = self.table.get(cmd)
         if entry and entry.get("method"):
@@ -534,6 +758,110 @@ class Bridge:
             d["connected"] = up
             self.log(f"[bridge] {d.get('dev_name')} at {d.get('ip')}: "
                      f"{'reachable' if up else 'not answering'}")
+
+    # ---- the print dialog's Orca half -----------------------------------
+    #
+    # These are answered by ORCA, never by the printer, so none of them is forwarded and
+    # none comes back in a JSON-RPC envelope. What they say about the JOB comes out of
+    # the real .gcode passed to --gcode. Without one they refuse in as many words: to
+    # the page a silent refusal and an unimplemented command look identical, and being
+    # able to tell them apart is the whole point of running outside Orca.
+
+    def _need_job(self, seqid, cmd):
+        if self.job:
+            return True
+        self._err(seqid, -1,
+                  f"{cmd} needs a sliced plate, which lives inside Orca. "
+                  f"Pass --gcode <file.gcode> to answer it from a real one.")
+        return False
+
+    def _active_file(self, seqid, params, event_id):
+        if not self._need_job(seqid, "sw_GetActiveFile"):
+            return
+        self._ok(seqid, self.job.active_file(bool(params.get("is_zip"))))
+
+    def _file_filament_mapping(self, seqid, params, event_id):
+        if not self._need_job(seqid, "sw_GetFileFilamentMapping"):
+            return
+        reply = self.job.filament_mapping()
+        self.log(f"[bridge] mapping: {len(reply.get('filament_type') or [])} filament(s), "
+                 f"{len(reply.get('thumbnails') or [])} thumbnail(s)")
+        self._ok(seqid, reply)
+
+    def _file_stream(self, seqid, params, event_id):
+        """The right door for the file: a URL, a size and a SHA-256.
+
+        Orca returns a localhost URL on its own page server. This host serves the zip
+        over the same HTTP server the page itself came from - run_webkit passes one in -
+        so the page's `fetch` works unchanged.
+        """
+        if not self._need_job(seqid, "sw_GetFileStream"):
+            return
+        want_zip = bool(params.get("is_zip"))
+        path = self.job.zip() if want_zip else self.job.path
+        name = os.path.basename(path)
+        if not self.file_url:
+            self._err(seqid, -1, "no local file server to hand the page a URL from")
+            return
+        self._ok(seqid, {"file_name": name,
+                         "file_url": self.file_url(path),
+                         "origin_size": os.path.getsize(path),
+                         "checksum": self.job.checksum()})
+
+    def _print_zip(self, seqid, params, event_id):
+        """The other door, implemented honestly so its cost is visible.
+
+        `m_res_data["content"] = res["zip_data"]` where zip_data is a std::vector<char>,
+        which nlohmann serialises as ONE JSON INTEGER PER BYTE. This sends the same
+        shape; a 12 MB zip really does cross as ~40 MB of JSON here too.
+        """
+        if not self._need_job(seqid, "sw_GetPrintZip"):
+            return
+        path = self.job.zip()
+        data = open(path, "rb").read()
+        self.log(f"[bridge] sw_GetPrintZip: {len(data)} bytes as a JSON array of "
+                 f"integers - this is the door the dialog should NOT use")
+        self._ok(seqid, {"name": os.path.basename(path), "content": list(data)})
+
+    def _print_legal(self, seqid, params, event_id):
+        """Orca compares the EDITED printer preset against the connected model.
+
+        Outside Orca there is no edited preset; the plate's own `printer_model` is what
+        it was sliced for, which is the same question asked of the file instead of the
+        application.
+        """
+        if not self._need_job(seqid, "sw_GetPrintLegal"):
+            return
+        preset = self.job.meta.get("printer_model") \
+            or self.job.meta.get("printer_settings_id") or ""
+        connected = params.get("connected_model") or ""
+        self._ok(seqid, {"preset_model": preset, "legal": preset == connected})
+
+    # The close protocol. There is no modal to end here, so these RECORD what the page
+    # reported - which is what a drive script needs to check the ordering.
+    def _finish_preprint(self, seqid, params, event_id):
+        if self.job:
+            self.job.preprint_status = params.get("status")
+        self.log(f"[bridge] sw_FinishPreprint status={params.get('status')!r}")
+        self._ok(seqid, {})
+
+    def _mapping_complete(self, seqid, params, event_id):
+        status = params.get("status")
+        if status not in ("success", "canceled"):
+            # Orca raises a native "setting failed" dialog and records nothing.
+            self._err(seqid, -1, f"setting failed (status {status!r})")
+            return
+        if self.job:
+            self.job.mapping_outcome = status
+        self.log(f"[bridge] sw_SetFilamentMappingComplete status={status!r} "
+                 f"- recorded, dialog NOT closed")
+        self._ok(seqid, {})
+
+    def _finish_mapping(self, seqid, params, event_id):
+        if self.job:
+            self.job.closed = True
+        self.log("[bridge] sw_FinishFilamentMapping - this is the one that closes it")
+        self._ok(seqid, {})
 
     def _get_devices(self, seqid, params, event_id):
         if event_id:

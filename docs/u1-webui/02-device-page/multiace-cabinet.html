@@ -1359,7 +1359,7 @@ function fieldEl(label,vals,key,suffix,min,max){
   return f;
 }
 /* Repaint the highlight without a full render, so the field does not lose focus
-   mid-keystroke. This is the same reason core/render.js exists on the real page. */
+   mid-keystroke. This is the same reason shared/render.js exists on the real page. */
 function repaintPresets(f,key,vals,suffix){
   const ck=key+'Custom', custom=DRYSET[ck]!=='';
   [...f.querySelectorAll('.vseg span')].forEach((x,i)=>{
@@ -1860,7 +1860,7 @@ chips and one empty field sit in the same group, because it is one choice.</p>
     which is the habit the rest of this panel keeps: every control names its macro.</li>
 <li><b>The highlight repaints without a full render</b>, so the field does not lose focus
     mid-keystroke. That is the same reason
-    <a href="../../../resources/web/device_page/js/core/render.js"><code>core/render.js</code></a>
+    <a href="../../../resources/web/shared/js/render.js"><code>shared/render.js</code></a>
     exists on the real page.</li>
 </ul>
 

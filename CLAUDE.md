@@ -248,6 +248,51 @@ with `js/core/` for what every view needs (`dom`, `render`, `pending`, `store`,
 rail, the trace pane and shared art. A panel is handed **its own commands and nothing
 else**. Full rationale: [docs/u1-webui/02-device-page/09-restructure.md](docs/u1-webui/02-device-page/09-restructure.md).
 
+### The print-processing popup (`resources/web/print_processing/`)
+
+The other embedded surface, **rebuilt from the shipped one** rather than from a design.
+The widget tree is all in `main.dart.js` and the constants resolve, so
+[the specification](docs/u1-webui/03-print-processing/original-dialog-mockup.html) is
+measurement: `B.ch = EdgeInsets.all(12)`, `B.m4 = BoxConstraints(120,180,0,inf)`, the
+80 x 100 filament card, the three dropdowns' item heights and offsets. `check_mockup.py`
+holds the mockup to those numbers and `drive/print-dialog.js` holds the page to the same
+ones after a real layout.
+
+**Three things the shipped dialog does that no screenshot showed**, because both captures
+were taken with the filament section empty: Edit Filament is a **Wrap of 80 x 100 cards**,
+not rows; there is a **fifth section**, a nozzle-mismatch banner (`A.R5`); and **a
+toolhead whose type or nozzle does not match is passed `enabled: false` and cannot be
+picked at all** - half opacity, a warning icon and one of two tooltips. That last one is
+behaviour, and the drive script checks it by clicking a refused item and asserting
+nothing moved.
+
+**The two sources are never derived from each other.** The FILE's filaments come from
+`sw_GetFileFilamentMapping` - **parallel arrays**, and the plate thumbnail - and the
+MACHINE's from `print_task_config` plus each extruder's `nozzle_diameter`. The bundle
+names `sw_GetMachineFilamentMapping` for the machine side and Orca does not implement it.
+A file filament's nozzle is the one **inferred** thing here: `nozzle_diameters` is
+per-extruder and `filament_type` per-filament, and a real plate reports seven of one and
+four of the other.
+
+**One mock for both surfaces**, in `shared/js/mockhost.js`: the U1 *and* Orca's half of
+this dialog, with the file's filaments and the machine's on one `printer` object. A
+surface-local mock that invented both lists could never report a mismatch - it would be
+testing its own fixture. It also enforces the host's preconditions, so
+`sw_StartLocalPrint` refuses `{}` there exactly as the C++ does.
+
+**Testing it against a real U1** needs a real plate, because outside Orca there is none:
+
+```bash
+R=resources/web/shared/tests
+python3 $R/run_webkit.py --real --size 714x750 --watch \
+    --gcode ~/models/plate_1.gcode --page web/print_processing/index.html
+```
+
+`u1_bridge.py` parses the file's own trailing metadata to answer Orca's half.
+`sw_StartLocalPrint` is refused unless `--allow-print` is passed: it starts a print, and a
+suite that can start a print is a suite that will. The whole account is
+[resources/web/print_processing/README.md](resources/web/print_processing/README.md).
+
 Iterate on it with `run_webkit.py`, which drives the real page in **WebKitGTK — the
 engine Orca's own webview uses**. It needs a display (WSLg provides one); playwright and
 the vendored chromium do not work here.
@@ -274,8 +319,11 @@ python3 resources/web/shared/tests/run_webkit.py --original --sn <SN> --watch
 - `--size WxH` sets the window, which the Device page's layout depends on - see above.
 - Committed drive scripts live in `resources/web/shared/tests/drive/`: the DOM walker,
   the camera panel against the simulator and against a printer, the multiACE filament
-  card, and the no-printer branch. See its README - they were re-written from scratch
-  every time before.
+  card, the no-printer branch, and the print-dialog mockups. See its README - they were
+  re-written from scratch every time before.
+- `--page PATH` loads any other surface under `resources/` instead of the Device page,
+  which is how the print-dialog mockups are driven:
+  `--page 'web/print_processing/mockups/option-b.html?scenario=mismatch'`.
 - `--drive FILE` runs JavaScript in the live page; the script reports by setting
   `window.__report`. This is how hardware behaviour gets measured rather than assumed.
 - `--device-ip` points the saved device somewhere unroutable, to exercise the page with

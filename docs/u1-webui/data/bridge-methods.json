@@ -602,11 +602,10 @@
   "params": []
  },
  "sw_StartLocalPrint": {
-  "forwarded": false,
+  "forwarded": true,
   "handler": "async_start_local_print",
-  "method": null,
-  "params": [],
-  "why": "no JSON-RPC method found behind async_start_local_print"
+  "method": "server.files.start_local_print",
+  "params": []
  },
  "sw_StartMachineFind": {
   "forwarded": false,

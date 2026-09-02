@@ -2475,7 +2475,7 @@ function fieldEl(label,vals,key,suffix,min,max){
   return f;
 }
 /* Repaint the highlight without a full render, so the field does not lose focus
-   mid-keystroke. This is the same reason core/render.js exists on the real page. */
+   mid-keystroke. This is the same reason shared/render.js exists on the real page. */
 function repaintPresets(f,key,vals,suffix){
   const ck=key+'Custom', custom=DRYSET[ck]!=='';
   [...f.querySelectorAll('.vseg span')].forEach((x,i)=>{

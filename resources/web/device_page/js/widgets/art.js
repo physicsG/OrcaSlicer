@@ -4,7 +4,7 @@
  */
 'use strict';
 
-import { el } from '../core/dom.js';
+import { el } from '../../../shared/js/dom.js';
 
 export function illustration(root) {
   const wrap = el('div');

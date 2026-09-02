@@ -4,6 +4,11 @@
  * These lived inside the one big ui.js, where only that file could reach them. Every
  * panel's view needs the same three, and a second copy is how two spellings of `icon()`
  * start.
+ *
+ * SHARED by both surfaces. They grew on the Device page; the print dialog is the
+ * second page to build with them, which is the only way to find out whether they
+ * generalise. `icon()` resolves against the PAGE, not against this file, so each
+ * surface brings its own icons/ directory.
  */
 'use strict';
 

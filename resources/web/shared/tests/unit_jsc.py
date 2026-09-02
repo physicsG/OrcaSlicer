@@ -858,7 +858,7 @@ def main():
     # it is worth testing as itself rather than only through one of its customers. It
     # touches nothing but a Map and a clock, so there is nothing to stub but the clock.
     print("\n== pending: request against mirror ==")
-    ctxp = new_ctx(os.path.join(WEB, "device_page", "js", "core", "pending.js"))
+    ctxp = new_ctx(os.path.join(SHARED, "js", "pending.js"))
     js(ctxp, """
       var NOW = 1000000;
       var fired = [];
@@ -919,7 +919,7 @@ def main():
     print("\n== the temperature row ==")
     # The temperature row is the Control panel's DOM, which lives with the rest of that
     # panel now rather than in one shared ui.js.
-    ctx4 = new_ctx(os.path.join(WEB, "device_page", "js", "core", "pending.js"),
+    ctx4 = new_ctx(os.path.join(SHARED, "js", "pending.js"),
                    os.path.join(WEB, "device_page", "js", "views", "device-control",
                                 "control", "control-view.js"))
     # ui.js is written against a DOM there is none of here. The row functions touch four

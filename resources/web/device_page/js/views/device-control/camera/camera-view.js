@@ -11,14 +11,14 @@
  */
 'use strict';
 
-import { $, el } from '../../../core/dom.js';
+import { $, el } from '../../../../../shared/js/dom.js';
 import { DEVICE, MOONRAKER_HTTP_PORT, CAMERA_FRAME_ROOT, CAMERA_FRAME_FILE,
          CAMERA_TRANSPORT, CAMERA_TRANSPORT_ORDER, CAMERA_TRANSPORT_TEXT,
          CAMERA_VIEW, CAMERA_VIEW_TILES, CAMERA_FPS_CHOICES,
          transportUsable, cameraLabel, snapshotUrl }
   from '../../../../../shared/js/protocol.js';
 import { illustration } from '../../../widgets/art.js';
-import { rebuildOn, text } from '../../../core/render.js';
+import { rebuildOn, text } from '../../../../../shared/js/render.js';
 import { openPopover } from '../../../core/overlay.js';
 
 /**

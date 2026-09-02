@@ -23,9 +23,9 @@
  */
 'use strict';
 
-import { $, el } from '../../../core/dom.js';
+import { $, el } from '../../../../../shared/js/dom.js';
 import { PRINT_STATE } from '../../../../../shared/js/protocol.js';
-import { rebuildOn, text, attr } from '../../../core/render.js';
+import { rebuildOn, text, attr } from '../../../../../shared/js/render.js';
 
 /**
  * What the header badge says.

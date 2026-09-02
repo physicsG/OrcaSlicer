@@ -12,7 +12,7 @@
 
 import { CMD }
   from '../../../../../shared/js/protocol.js';
-import { openDialog } from '../../../core/overlay.js';
+import { openDialog } from '../../../../../shared/js/dialog.js';
 import { pickThumb } from '../../../core/thumbs.js';
 
 export function create(deps) {

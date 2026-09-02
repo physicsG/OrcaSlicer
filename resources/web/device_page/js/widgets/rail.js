@@ -3,9 +3,9 @@
  */
 'use strict';
 
-import { $ } from '../core/dom.js';
+import { $ } from '../../../shared/js/dom.js';
 import { DEVICE, deviceLabel } from '../../../shared/js/protocol.js';
-import { data } from '../core/render.js';
+import { data } from '../../../shared/js/render.js';
 
 /**
  * The selector names the machine even when it is not connected — Orca keeps

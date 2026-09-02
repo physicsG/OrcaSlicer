@@ -549,7 +549,7 @@ body {
 .ace-src:hover:not(:disabled) { color: var(--accent); }
 .ace-src:disabled { opacity: .42; cursor: not-allowed; }
 .ace-src:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-/* Held on screen until the machine agrees it happened - see core/pending.js. */
+/* Held on screen until the machine agrees it happened - see shared/pending.js. */
 .ace-src[data-pend="sent"] { box-shadow: inset 0 0 0 1px var(--accent); }
 .ace-src[data-pend="lost"] { box-shadow: inset 0 0 0 1px var(--warn); }
 

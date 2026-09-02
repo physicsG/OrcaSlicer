@@ -14,25 +14,25 @@ import { CMD, SUBSCRIBE_OBJECTS, NAMED, LIMITS, TASK_CONFIG, PRINT_PREFERENCES,
          asDeviceList, deviceLabel, DEVICE, hasTlsMaterial,
          CAMERA_DOMAIN, CAMERA_INTERVAL, cssColor, timelapseUrl }
   from '../../shared/js/protocol.js';
-import { openMenu, openDialog, openBlockingDialog, toggleField, numberField }
-  from './core/overlay.js';
-import { connect as connectDevice, disconnect as disconnectDevice } from './core/connection.js';
+import { openMenu } from './core/overlay.js';
+import { openDialog, openBlockingDialog, toggleField, numberField } from '../../shared/js/dialog.js';
+import { connect as connectDevice, disconnect as disconnectDevice } from '../../shared/js/connection.js';
 import { Sswcp, isTimeout } from '../../shared/js/sswcp.js';
 import { MachineState } from '../../shared/js/state.js';
 import { machineActivity, isBusy } from '../../shared/js/activity.js';
 import { installMock } from './core/mock.js';
-import { Pending } from './core/pending.js';
+import { Pending } from '../../shared/js/pending.js';
 import { createStore } from './core/store.js';
 import { createSession } from './core/session.js';
 import { createOrcaSync } from './core/orcasync.js';
 import { DIAG, createLog } from './core/diag.js';
 import { mountBuildBadge } from '../../shared/js/buildinfo.js';
-import { $ } from './core/dom.js';
+import { $ } from '../../shared/js/dom.js';
 import { renderRail } from './widgets/rail.js';
-import { makeTrace } from './widgets/trace.js';
+import { makeTrace } from '../../shared/js/trace.js';
 import { buildShell, paint } from './shell.js';
 // aliased: this file has its own render()
-import * as renderPrims from './core/render.js';
+import * as renderPrims from '../../shared/js/render.js';
 import * as cmdPage from './page-commands.js';
 import * as cmdControl from './views/device-control/control/control-commands.js';
 import * as cmdTask from './views/device-control/task/task-commands.js';

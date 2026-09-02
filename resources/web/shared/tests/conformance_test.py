@@ -253,7 +253,7 @@ def all_views():
     return "\n".join(out)
 
 
-cfile = os.path.join(JS, "core", "connection.js")
+cfile = os.path.join(SHARED, "js", "connection.js")
 if os.path.exists(cfile):
     conn_src = open(cfile, encoding='utf-8').read()
 check("connection.js exists", bool(conn_src))
@@ -389,13 +389,35 @@ print("\n== response shapes vs the wire ==")
 SRC_CPP = os.path.join(ROOT, "src", "slic3r", "GUI", "SSWCP.cpp")
 cpp = open(SRC_CPP, encoding="utf-8", errors="replace").read()
 
-starts = [(m.group(1), m.end()) for m in
-          re.finditer(r"void\s+SSWCP_\w+::(sw_\w+)\s*\([^)]*\)\s*\{", cpp)]
+def _body(text, open_brace):
+    """The handler's own body, by brace matching.
+
+    This used to run from one `sw_*` signature to the next, which is not the same thing:
+    the regex only sees handlers NAMED sw_*, so anything else declared between two of
+    them landed inside the earlier one's span. `sw_GetFileStream` was classified
+    printer-backed on the strength of an `on_mqtt_msg_arrived` inside `test_mqtt_request`
+    six functions further down - and because PRINTER_BACKED was written from this same
+    derivation, the check agreed with itself. Both branches of that handler build
+    `m_res_data` and call `send_to_js()`; nothing about it is a printer reply, and a
+    client that unwrapped it would have looked one level too deep for `file_url`.
+    """
+    depth, i = 0, open_brace
+    while i < len(text):
+        c = text[i]
+        if c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                return text[open_brace:i + 1]
+        i += 1
+    return text[open_brace:]
+
+
 derived = set()
-for i, (name, pos) in enumerate(starts):
-    end = starts[i + 1][1] if i + 1 < len(starts) else len(cpp)
-    if "on_mqtt_msg_arrived" in cpp[pos:end]:
-        derived.add(name)
+for m in re.finditer(r"void\s+SSWCP_\w+::(sw_\w+)\s*\([^)]*\)\s*\{", cpp):
+    if "on_mqtt_msg_arrived" in _body(cpp, m.end() - 1):
+        derived.add(m.group(1))
 
 listed = set(re.findall(r"'(sw_\w+)'",
              re.search(r"export const PRINTER_BACKED = new Set\(\[(.*?)\]\);",
@@ -472,8 +494,8 @@ panel_src = {n: part_src(n, "panel") for n in PANEL_NAMES}
 # Every panel's declaration, concatenated: several checks below ask "does any control
 # on the page do X", and a panel module is where that is now written down.
 panels_all = "\n".join(panel_src.values())
-pending_src = open(os.path.join(JS, "core", "pending.js"), encoding="utf-8").read()
-render_src = open(os.path.join(JS, "core", "render.js"), encoding="utf-8").read()
+pending_src = open(os.path.join(SHARED, "js", "pending.js"), encoding="utf-8").read()
+render_src = open(os.path.join(SHARED, "js", "render.js"), encoding="utf-8").read()
 # Having a printer on the other end of the bridge - the connect path, staleness, retry,
 # the heartbeat and the state stream - left app.js for its own module.
 session_src = open(os.path.join(JS, "core", "session.js"), encoding="utf-8").read()

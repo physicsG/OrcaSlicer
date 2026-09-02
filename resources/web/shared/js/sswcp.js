@@ -18,7 +18,39 @@
  */
 'use strict';
 
-const TIMEOUT_MS = 15000;
+import { PRINTER_BACKED } from './protocol.js';
+
+/**
+ * How long to wait for a reply.
+ *
+ * TWO clocks, because there are two very different things being waited for, and using
+ * one number for both is a mistake this project has now made twice at two layers.
+ *
+ * A command Orca answers out of its own state comes back in milliseconds or not at all;
+ * 15 s is generous. A command that reaches the PRINTER is queued, and Klipper runs
+ * G-code sequentially - it answers when the queue drains, not when it is asked.
+ *
+ * Measured on 811002511261022618B3, with `G4` blocking the queue by a known amount and
+ * nothing else running:
+ *
+ *     queue empty        sw_MachinePrintCancel   197 ms
+ *     behind G4 P3000                           3323 ms
+ *     behind G4 P6000                           6213 ms
+ *
+ * The round trip is the queue plus about a quarter of a second, every time. So a cancel
+ * sent to a print that has just started waits for the homing move - which is exactly
+ * what happened: the machine reached `cancelled` in ~10 s while the client gave up at
+ * 15 and reported a failure on a cancel that had worked.
+ *
+ * `u1_bridge.py` learned this once already and set its own RPC_TIMEOUT to 80 s, after a
+ * 31 s toolchange came back as "the printer refused the command". This is the same
+ * lesson one layer up, and PRINTER_BACKED is exactly the set it applies to: those are
+ * the commands whose replies come back through the printer's own envelope.
+ */
+const TIMEOUT_MS = 15000;          // Orca answers it, or nothing does
+const PRINTER_TIMEOUT_MS = 80000;  // the printer answers it, when it gets to it
+
+const timeoutFor = (cmd) => (PRINTER_BACKED.has(cmd) ? PRINTER_TIMEOUT_MS : TIMEOUT_MS);
 
 /** Orca's success code. 200, not 0 - see the note above. */
 export const OK_CODE = 200;
@@ -138,11 +170,12 @@ export class Sswcp {
       header: { seqid },
       payload: { cmd, event_id: null, params, metadata: null },
     };
+    const wait = timeoutFor(cmd);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this._pending.delete(seqid);
-        reject(new Error(`${cmd} timed out after ${TIMEOUT_MS}ms`));
-      }, TIMEOUT_MS);
+        reject(new Error(`${cmd} timed out after ${wait}ms`));
+      }, wait);
       this._pending.set(seqid, { resolve, reject, timer, cmd });
       try {
         this._post(packet);
@@ -171,7 +204,8 @@ export class Sswcp {
       const timer = setTimeout(() => {
         this._pending.delete(seqid);
         // The ack is best-effort: some builds push before acking. Keep the
-        // subscription alive rather than tearing it down on a slow ack.
+        // subscription alive rather than tearing it down on a slow ack. A subscription
+        // ack is not queued behind machine work, so it keeps the short clock.
         resolve({ eventId, ack: null, cancel: () => this.cancel(eventId) });
       }, TIMEOUT_MS);
       this._pending.set(seqid, {

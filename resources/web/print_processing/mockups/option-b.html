@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Print processing — Option B</title>
+<link rel="stylesheet" href="../../shared/css/base.css">
+<link rel="stylesheet" href="mockup.css">
+<link rel="stylesheet" href="option-b.css">
+</head>
+<body class="mock-dialog">
+
+<!--
+  OPTION B - the match sheet.
+
+  The dialog exists to answer one question: which loaded filament prints which filament in
+  the file. So that question is the page, and everything else is trim - the plate and its
+  numbers become a header strip, the three preferences a footer row.
+
+  Both sides are drawn, and the line between them is the assignment. Click a file
+  filament, then a toolhead, or use the select.
+
+  The bet: showing the destination is worth more than the four-card layout, and an
+  operator standing at the printer is matching spools, not reading a form.
+-->
+
+<div class="dlg-title">
+  <span id="title">Print Preprocessing</span>
+  <span class="sub" id="subtitle"></span>
+  <span class="spacer"></span>
+  <span class="sub" id="printer-name"></span>
+</div>
+
+<div class="dlg-body">
+  <div class="strip" id="strip"></div>
+  <p class="legal note bad" id="legal" hidden></p>
+
+  <div class="match" id="match">
+    <div class="col">
+      <h3>In this file</h3>
+      <div class="lane" id="lane-file"></div>
+    </div>
+    <svg class="wires" id="wires" aria-hidden="true"></svg>
+    <div class="col">
+      <h3>In the printer</h3>
+      <div class="lane" id="lane-head"></div>
+    </div>
+  </div>
+
+  <p class="hint" id="hint"></p>
+</div>
+
+<div class="dlg-foot">
+  <div class="foot-prefs" id="foot-prefs"></div>
+  <div class="bar">
+    <div class="bar-track"><div class="bar-fill" id="fill"></div></div>
+    <div class="bar-label"><span id="stage">Ready</span><b id="pct"></b></div>
+  </div>
+  <button class="primary" id="send">Send</button>
+</div>
+
+<script type="module" src="option-b.js"></script>
+</body>
+</html>

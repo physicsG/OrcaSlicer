@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Upload and Print dialog, as shipped</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Roboto:wght@400;500;600;800&display=swap">
+<style>
+/* ------------------------------------------------------------------ *
+ * The specification mockup for the reconstruction of the SHIPPED print
+ * dialog. Everything inside `.dlg` is a measurement, not a preference:
+ * either a constant read out of main.dart.js or a pixel read off
+ * screenshots/preuploadandprint.png. The page around it is annotation.
+ * ------------------------------------------------------------------ */
+:root {
+  --pg:    #f1f3f5;
+  --panel: #ffffff;
+  --ink:   #1b2430;
+  --ink-2: #4a5867;
+  --muted: #7c8b9d;
+  --line:  #d9dee4;
+  --accent:#0f6e7b;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* --- the dialog's own palette, measured --- */
+  --f-bg:      #ffffff;   /* page + card fill                              */
+  --f-border:  #d9d9d9;   /* card border, 2px          (A.de(ax.ry,-1,2))  */
+  --f-title:   #4b4b4b;   /* section titles                                */
+  --f-body:    #4b4b4b;   /* body text (ax.k3)                             */
+  --f-hint:    #999999;   /* placeholder (ax.k3 @ 204/255)                 */
+  --f-blue:    #2196f3;   /* Send button              measured #2196F3     */
+  --f-green:   #4caf50;   /* checked toggle           B.fx = 0xFF4CAF50    */
+  --f-track:   #eeeeee;   /* progress track           B.bQ = 0xFFEEEEEE    */
+  --f-warn:    #ff3b30;   /* ax.fy                    B.YP = 0x0DFF3B30    */
+  --f-warn-bg: rgba(255,59,48,.051);        /* B.YP: alpha 13/255          */
+  --f-thumb:   #eeeeee;   /* thumbnail placeholder ground                  */
+  --f-divider: #e0e0e0;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--pg); color: var(--ink);
+  font-family: var(--sans); font-size: 14px; line-height: 1.6;
+}
+.wrap { max-width: 1140px; margin: 0 auto; padding: 40px 24px 80px; }
+h1 { font-size: 26px; font-weight: 600; letter-spacing: -.01em; margin: 0 0 10px; }
+h2 { font-size: 17px; font-weight: 600; margin: 44px 0 8px; }
+p  { margin: 0 0 14px; max-width: 76ch; color: var(--ink-2); }
+code { font-family: var(--mono); font-size: .88em; background: #e6eaee; padding: 1px 5px; border-radius: 4px; color: var(--ink); }
+a { color: var(--accent); }
+.eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 12px; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center;
+            padding: 12px 16px; background: var(--panel); border: 1px solid var(--line);
+            border-radius: 8px; margin: 20px 0 26px; }
+.controls .lbl { font-family: var(--mono); font-size: 10.5px; letter-spacing: .09em;
+                 text-transform: uppercase; color: var(--muted); }
+.seg { display: flex; border: 1px solid #c3ced9; border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: 12.5px; padding: 5px 11px; border: 0;
+              border-right: 1px solid #c3ced9; background: #fff; color: var(--ink-2); cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 500; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.row { display: flex; gap: 34px; align-items: flex-start; flex-wrap: wrap; }
+.shot { flex: none; }
+.shot .cap { font-family: var(--mono); font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+.notes { flex: 1 1 320px; min-width: 0; }
+
+.tscroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+table.spec { border-collapse: collapse; font-size: 12.5px; background: var(--panel);
+             width: 100%; min-width: 460px; }
+table.spec th { text-align: left; font-family: var(--mono); font-size: 10px; letter-spacing: .07em;
+                text-transform: uppercase; color: var(--muted); background: #e9edf1;
+                padding: 7px 11px; white-space: nowrap; }
+table.spec td { padding: 6px 11px; border-top: 1px solid var(--line); vertical-align: top; }
+table.spec td:first-child { font-family: var(--mono); font-size: 11.5px; white-space: nowrap; }
+table.spec td.v { font-family: var(--mono); font-size: 11.5px; white-space: nowrap; color: var(--ink); }
+
+/* =================================================================== *
+ * THE DIALOG. WebPreprintDialog opens 714 x 750 DIP.
+ * =================================================================== */
+.dlg {
+  width: 714px; height: 750px;
+  background: var(--f-bg);
+  border: 1px solid #c8ced4;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  font-family: Roboto, "IBM Plex Sans", system-ui, sans-serif;
+  color: var(--f-body);
+  box-shadow: 0 2px 6px rgba(0,0,0,.10), 0 18px 40px rgba(0,0,0,.13);
+  position: relative;
+}
+/* the scrolling body; 16px inset measured off the capture (card left edge x=16) */
+.dlg-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 16px; }
+.sp16 { height: 16px; }   /* B.aE */
+.sp8  { height: 8px;  }   /* B.aB */
+.sp20 { height: 20px; }   /* B.eS */
+
+/* every section is one Container: 2px border, radius 8, EdgeInsets.all(12) */
+.card {
+  border: 2px solid var(--f-border);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  align-items: flex-start;        /* B.a6 = CrossAxisAlignment.start */
+  background: var(--f-bg);
+}
+/* A.eQ(B.m4, ...) -> ConstrainedBox(minWidth 120, maxWidth 180) */
+.card > .title {
+  flex: none; min-width: 120px; max-width: 180px;
+  display: flex; align-items: center; gap: 4px;
+  font-size: 14px; font-weight: 600; color: var(--f-title); line-height: 1.3;
+}
+.card > .gap { flex: none; width: 12px; }    /* B.bA */
+.card > .content { flex: 1; min-width: 0; }
+
+/* --- Model Information ------------------------------------------- */
+.mi { display: flex; align-items: flex-start; }
+.thumb {
+  flex: none; width: 100px; height: 100px; border-radius: 16px;
+  background: var(--f-thumb); object-fit: cover; display: block;
+}
+.mi .gap20 { flex: none; width: 20px; }      /* B.lr */
+.facts { flex: 1; min-width: 0; }
+.facts .s13 { height: 13px; }                /* B.ayg */
+.facts .s10 { height: 10px; }                /* B.c_  */
+.facts .f { font-size: 14px; color: var(--f-body); line-height: 1.2;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --- Select Printer ---------------------------------------------- */
+.sp { display: flex; align-items: center; }
+.sp .cover { flex: none; width: 100px; height: 100px; border-radius: 16px;
+             background: var(--f-thumb); display: grid; place-items: center; }
+.sp .gap20 { flex: none; width: 20px; }
+.picker {
+  width: 300px; height: 50px;                /* A.a2l(50, 300, ...) */
+  border: 1px solid #777; border-radius: 0;  /* A.de(B.bQ,-1,1) over a flat field */
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 10px 0 14px; background: #fff; cursor: pointer;
+  font: inherit; text-align: left; color: var(--f-body);
+}
+.picker .ph { flex: 1; min-width: 0; font-size: 12px; color: var(--f-hint);
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker .nm { flex: 1; min-width: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.picker .dcover { flex: none; width: 24px; height: 24px; border-radius: 4px; background: var(--f-thumb); }
+.picker .lan { font-size: 12px; color: var(--f-body); opacity: .75; }
+.picker .caret { flex: none; color: #757575; }
+
+/* --- Edit Filament ------------------------------------------------ */
+.refresh { flex: none; width: 20px; height: 20px; padding: 0; border: 0; background: none;
+           cursor: pointer; color: var(--f-body); display: grid; place-items: center; }
+.grid { display: flex; flex-wrap: wrap; gap: 12px; }   /* Wrap spacing 12 / runSpacing 12 */
+.fcard {
+  flex: none; width: 80px; height: 100px;   /* A.aD(80,80,100,100) */
+  border: 1px solid var(--f-border); border-radius: 8px;
+  display: flex; flex-direction: column; overflow: hidden; background: #fff;
+}
+.fcard.unset { border-color: var(--f-warn); }
+.fcard .swatch {
+  flex: 3 1 0; min-height: 0; position: relative;
+  border-top-left-radius: 7px; border-top-right-radius: 7px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 3px 2px; overflow: hidden;
+}
+.fcard .swatch .bands { position: absolute; inset: 0; display: flex; }
+.fcard .swatch .bands span { flex: 1; }
+.fcard .swatch .t { position: relative; font-size: 12px; font-weight: 500; line-height: 1.15;
+                    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fcard .swatch .g { position: relative; font-size: 12px; font-weight: 400; line-height: 1.15; margin-top: 1px; }
+.fcard .rule { flex: none; height: 1px; background: var(--f-divider); }
+.fcard .pickrow { flex: 4 1 0; min-height: 0; display: flex; align-items: center; gap: 6px;
+                  padding: 0 4px 0 6px; cursor: pointer; background: none; border: 0; font: inherit; }
+.disc { flex: none; width: 28px; height: 28px; border-radius: 50%; position: relative;
+        display: grid; place-items: center; overflow: hidden; border: 1px solid var(--f-border); }
+.disc .bands { position: absolute; inset: 0; display: flex; }
+.disc .bands span { flex: 1; }
+.disc .n { position: relative; font-size: 12px; font-weight: 800; line-height: 1; }
+.fcard .caret { flex: none; margin-left: auto; color: #757575; }
+.empty-note { font-size: 13px; color: var(--f-hint); }
+
+/* --- Print Preferences -------------------------------------------- */
+/* Wrap(runSpacing 12, spacing 170) of ConstrainedBox(152..220 x 20) */
+.prefs { display: flex; flex-wrap: wrap; row-gap: 12px; column-gap: 170px; }
+.pref { flex: none; width: 220px; height: 20px; display: flex; align-items: center; gap: 4px;
+        background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-align: left; }
+.pref .pl { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: var(--f-body);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pref .help { flex: none; color: #9e9e9e; display: grid; place-items: center; }
+.pref .box { flex: none; width: 18px; height: 18px; border-radius: 9px;
+             border: 2px solid var(--f-border); background: #fff;
+             display: grid; place-items: center; }
+.pref[aria-pressed="true"] .box { background: var(--f-green); border-color: var(--f-green); }
+
+/* --- the nozzle-mismatch banner (A.R5) ---------------------------- */
+.nozwarn { display: flex; align-items: flex-start; gap: 4px;
+           padding: 18px 12px; border-radius: 4px; background: var(--f-warn-bg); width: 100%; }
+.nozwarn .ic { flex: none; color: var(--f-warn); margin-top: 1px; }
+.nozwarn .tx { flex: 1; font-size: 12px; font-weight: 400; line-height: 1.35; color: var(--f-warn); }
+
+/* --- the three dropdown menus ------------------------------------- *
+   Geometry is DropdownButton2's: MenuItemStyleData(height, padding) gives the row,
+   DropdownStyleData(maxHeight, width, padding, decoration, elevation, offset) the
+   surface. All six numbers per menu are resolved constants; see the table. */
+.menu {
+  position: absolute; z-index: 20;
+  background: #fff; overflow-y: auto; overflow-x: hidden;
+}
+.menu.m-printer {                       /* B.aqV / bEo(...,0,null,B.o,B.a4,null,300) */
+  width: 300px; border: 1px solid rgba(0,0,0,.118); border-radius: 0;
+}
+.menu.m-head {                          /* B.aqU / bEo(...,8,300,B.asz,null,HI,200)  */
+  width: 200px; max-height: 300px; border-radius: 8px;
+  box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14),
+              0 3px 14px 2px rgba(0,0,0,.12);           /* Material elevation 8 */
+  scrollbar-width: thin;
+}
+.menu.m-head::-webkit-scrollbar { width: 6px; }         /* HI: thickness 6 */
+.menu.m-head::-webkit-scrollbar-thumb { background: rgba(0,0,0,.32); border-radius: 40px; }
+.menu.m-plate {                         /* B.aqW / bEo(...,4,480,B.as3,B.a4,null,null) */
+  max-height: 480px; border: 1px solid rgba(0,0,0,.118);
+  border-radius: 0 0 4px 4px;                            /* B.VC */
+  box-shadow: 0 4px 8px rgba(0,0,0,.26);                 /* B.Wq: blur 8, dy 4 */
+}
+.menu .mitem { display: flex; align-items: center; width: 100%; background: none;
+               border: 0; font: inherit; text-align: left; color: var(--f-body); cursor: pointer; }
+.menu .mitem:hover { background: rgba(0,0,0,.04); }
+.menu.m-printer .mitem { height: 50px; padding: 0 16px; gap: 12px; }
+.menu.m-head    .mitem { height: 48px; padding: 0 16px; gap: 8px; }
+.menu.m-plate   .mitem { height: 80px; padding: 6px 8px; }
+.menu .mitem[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.menu .dcover { flex: none; width: 24px; height: 24px; border-radius: 4px; background: var(--f-thumb); }
+.menu .nm { font-size: 14px; }
+.menu .lan { font-size: 12px; color: var(--f-body); }
+.menu .grow { flex: 1; min-width: 0; }
+.menu .tick { flex: none; color: var(--f-green); display: grid; place-items: center; }
+.menu .warnic { flex: none; color: var(--f-warn); display: grid; place-items: center; }
+.menu .htype { flex: 1; min-width: 0; font-size: 14px;
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu .htype.bad { color: var(--f-warn); }
+.menu .disc .n { font-size: 14px; font-weight: 600; }
+
+/* the plate row - shared by the closed button and the open menu's items */
+.plate { display: flex; flex-direction: column; justify-content: center; gap: 4px;
+         width: 100%; min-width: 0; }
+.plate .pn { font-size: 12px; font-weight: 500; color: var(--f-body); }
+.plate .meta { display: flex; align-items: center; font-size: 12px; color: var(--f-body); }
+.plate .meta .ic { display: grid; place-items: center; color: var(--f-body); }
+.plate .meta .g4 { width: 4px; } .plate .meta .g8 { width: 8px; }
+.plate .chips { display: flex; flex-wrap: wrap; row-gap: 4px; column-gap: 6px; }
+.plate .chip { font-size: 10px; line-height: 1.25; padding: 3px; border-radius: 2px; }
+.platebtn { height: 90px; border: 1px solid var(--f-track); padding: 6px 8px;
+            background: #fff; display: flex; align-items: center; gap: 8px;
+            width: 100%; font: inherit; text-align: left; cursor: pointer; }
+.platebtn .caret { flex: none; color: #757575; margin-left: auto; }
+.menu-note { position: absolute; z-index: 21; font-family: var(--mono); font-size: 10px;
+             color: #fff; background: rgba(20,28,38,.86); padding: 3px 7px; border-radius: 4px;
+             pointer-events: none; white-space: nowrap; }
+
+/* --- the send bar ------------------------------------------------- */
+.sendbar { flex: none; display: flex; align-items: center; padding: 16px; }  /* B.bV */
+.sendbar .track { flex: 1; height: 8px; border-radius: 4px; background: var(--f-track); overflow: hidden; }
+.sendbar .fill { height: 100%; background: var(--f-blue); width: 0; }
+.sendbar .s5  { flex: none; width: 5px; }
+.sendbar .s30 { flex: none; width: 30px; }
+.sendbar .s10 { flex: none; width: 10px; }
+.sendbar .pct { font-size: 14px; color: var(--f-body); font-variant-numeric: tabular-nums; }
+.sendbar .send { flex: none; width: 120px; height: 40px; border: 0; border-radius: 4px;
+                 background: var(--f-blue); color: #fff; font: inherit; font-size: 14px;
+                 font-weight: 500; letter-spacing: .02em; cursor: pointer; }
+.sendbar .send[data-state="disabled"] { background: #bdbdbd; cursor: not-allowed; }
+
+.legend { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.7; }
+.legend b { color: var(--ink-2); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<p class="eyebrow">Snapmaker U1 · reconstruction specification</p>
+<h1>The Upload and Print dialog, as shipped</h1>
+<p>
+  This is what <code>?path=4</code> and <code>?path=5</code> actually draw, rebuilt from
+  <code>main.dart.js</code> and checked against
+  <code>screenshots/preuploadandprint.png</code>. It is the target for the
+  reconstruction — the same exercise the Device page went through, before any design
+  question is opened.
+</p>
+<p>
+  <strong>The Edit Filament section has never been seen with data in it.</strong> Both
+  captures were taken with no filament requirements loaded, so the card was empty. The
+  bundle says it is a <em>wrap of 80 × 100 cards</em>, one per file filament, each a
+  colour block over a toolhead picker — not the row-per-filament grid the current
+  reconstruction draws. Switch “Filament data” below.
+</p>
+
+<div class="controls">
+  <span class="lbl">Route</span>
+  <div class="seg" id="seg-route">
+    <button type="button" data-v="print" aria-pressed="true">?path=4 · upload and print</button>
+    <button type="button" data-v="upload" aria-pressed="false">?path=5 · upload only</button>
+  </div>
+  <span class="lbl">Filament data</span>
+  <div class="seg" id="seg-data">
+    <button type="button" data-v="empty" aria-pressed="true">none (as captured)</button>
+    <button type="button" data-v="four" aria-pressed="false">four filaments</button>
+    <button type="button" data-v="mismatch" aria-pressed="false">one unassignable</button>
+  </div>
+  <span class="lbl">Open menu</span>
+  <div class="seg" id="seg-menu">
+    <button type="button" data-v="none" aria-pressed="true">closed</button>
+    <button type="button" data-v="printer" aria-pressed="false">printer</button>
+    <button type="button" data-v="head" aria-pressed="false">toolhead</button>
+    <button type="button" data-v="plate" aria-pressed="false">plate</button>
+  </div>
+  <span class="lbl">Model info</span>
+  <div class="seg" id="seg-mi">
+    <button type="button" data-v="single" aria-pressed="true">one plate</button>
+    <button type="button" data-v="multi" aria-pressed="false">partitions</button>
+  </div>
+  <span class="lbl">Printer</span>
+  <div class="seg" id="seg-dev">
+    <button type="button" data-v="none" aria-pressed="true">not chosen</button>
+    <button type="button" data-v="one" aria-pressed="false">U1 selected</button>
+  </div>
+</div>
+
+<div class="row">
+  <div class="shot">
+    <div class="dlg" id="dlg"></div>
+    <p class="cap">714 × 750 — the size WebPreprintDialog opens</p>
+  </div>
+  <div class="notes">
+    <h2 style="margin-top:0">Where each number came from</h2>
+    <div class="tscroll"><table class="spec">
+      <thead><tr><th>Thing</th><th>Value</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>card border</td><td class="v">2 px #D9D9D9</td><td>capture y=16–17; <code>A.de(ax.ry,−1,2)</code></td></tr>
+        <tr><td>card radius</td><td class="v">8</td><td><code>A.aU(8)</code></td></tr>
+        <tr><td>card padding</td><td class="v">12</td><td><code>B.ch = EdgeInsets.all(12)</code></td></tr>
+        <tr><td>title column</td><td class="v">120–180</td><td><code>B.m4 = BoxConstraints(120,180,0,∞)</code></td></tr>
+        <tr><td>title → content</td><td class="v">12</td><td><code>B.bA = SizedBox(w 12)</code></td></tr>
+        <tr><td>between cards</td><td class="v">8</td><td><code>B.aB</code>; capture 143→152</td></tr>
+        <tr><td>above first card</td><td class="v">16</td><td><code>B.aE</code>; capture card top y=16</td></tr>
+        <tr><td>thumbnail</td><td class="v">100 × 100, r16</td><td><code>A.cR(url,…,100,…,100)</code>, <code>A.aU(16)</code></td></tr>
+        <tr><td>thumb → facts</td><td class="v">20</td><td><code>B.lr</code></td></tr>
+        <tr><td>fact spacing</td><td class="v">13, 10, 10</td><td><code>B.ayg</code>, <code>B.c_</code></td></tr>
+        <tr><td>printer dropdown</td><td class="v">300 × 50</td><td><code>A.a2l(50,300,…)</code></td></tr>
+        <tr><td>filament card</td><td class="v">80 × 100, r8</td><td><code>A.A0(…,80,100,8,…)</code></td></tr>
+        <tr><td>card split</td><td class="v">flex 3 / rule / flex 4</td><td><code>A.bH(stack,3)</code>, <code>A.bH(picker,4)</code></td></tr>
+        <tr><td>filament grid</td><td class="v">Wrap, 12 / 12</td><td><code>A.mO(…,12,12,…)</code> via <code>aiy.y</code></td></tr>
+        <tr><td>target disc</td><td class="v">28</td><td><code>A.aJO(…,28,…,28)</code></td></tr>
+        <tr><td>preference row</td><td class="v">152–220 × 20</td><td><code>B.VS</code></td></tr>
+        <tr><td>preference wrap</td><td class="v">run 12, gap 170</td><td><code>A.mO(…,12,170,…)</code></td></tr>
+        <tr><td>toggle</td><td class="v">18, r9, 2px</td><td><code>A.a3(…,18,…,18)</code>, <code>A.aU(9)</code></td></tr>
+        <tr><td>toggle checked</td><td class="v">#4CAF50</td><td><code>B.fx = 0xFF4CAF50</code></td></tr>
+        <tr><td>progress bar</td><td class="v">8 tall, r4</td><td>capture y=710–717; <code>A.a99(…,8,…)</code></td></tr>
+        <tr><td>Send button</td><td class="v">120 × 40 #2196F3</td><td><code>A.al(120,40,…)</code>; capture</td></tr>
+        <tr><td>bar padding</td><td class="v">16</td><td><code>B.bV</code></td></tr>
+        <tr><td>bar spacing</td><td class="v">5 / 30 / 10</td><td><code>B.RH</code>, <code>B.ay6</code>, <code>B.RG</code></td></tr>
+        <tr><td>mismatch banner</td><td class="v">rgba(255,59,48,.05)</td><td><code>B.YP = 0x0DFF3B30</code></td></tr>
+        <tr><td>printer menu</td><td class="v">w300, item 50, elev 0, (0,0)</td><td><code>B.aqV = MenuItemStyle(50, B.c8)</code>; <code>bEo(…,0,null,B.o,B.a4,null,300)</code></td></tr>
+        <tr><td>toolhead menu</td><td class="v">w200, maxH 300, item 48, elev 8, (−50,0), r8</td><td><code>B.aqU = MenuItemStyle(48, B.c8)</code>; <code>bEo(…,8,300,B.asz,null,HI,200)</code></td></tr>
+        <tr><td>toolhead scrollbar</td><td class="v">6 wide, r40, always shown</td><td><code>A.HI(thumbVisibility true, thickness 6, radius B.l5)</code></td></tr>
+        <tr><td>plate menu</td><td class="v">w=button, maxH 480, item 80, elev 4, (0,−2)</td><td><code>B.aqW = MenuItemStyle(80, B.rT)</code>; <code>bEo(…,4,480,B.as3,B.a4,…)</code></td></tr>
+        <tr><td>plate menu radius</td><td class="v">0 / 0 / 4 / 4</td><td><code>B.VC = BorderRadius(O, O, 4, 4)</code></td></tr>
+        <tr><td>plate button</td><td class="v">90 tall, pad LTRB(8,6,8,6)</td><td><code>A.a2l(90, null, B.rT, …)</code></td></tr>
+        <tr><td>plate chip</td><td class="v">10px, pad 3, r2</td><td><code>A.aj4.a8F</code>; #E5E5E5 outline under 1.5 contrast</td></tr>
+        <tr><td>Send button states</td><td class="v">blue / amber / green / red / grey</td><td><code>A.Jb.aKO</code>: <code>B.eM #2196F3</code>, <code>B.iZ #FF9800</code>, <code>B.fx #4CAF50</code>, <code>B.oL #F44336</code>, <code>B.ci #9E9E9E</code></td></tr>
+        <tr><td>empty grid slot</td><td class="v">80 × 100, invisible</td><td><code>B.aya = SizedBox(80,100)</code></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</div>
+
+<h2>What the bundle says that no screenshot showed</h2>
+<div class="tscroll"><table class="spec">
+  <thead><tr><th>Behaviour</th><th>Evidence</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>There is a <b>fifth section</b>: a nozzle-mismatch banner under Print Preferences.</td>
+      <td><code>A.R5</code> — draws <code>nozzle_mismatch_tip</code> when the plate's nozzle set is not a subset of the machine's. Silent when either list is empty.</td>
+    </tr>
+    <tr>
+      <td>A toolhead whose <b>type or nozzle does not match is not selectable</b> — the menu item is disabled, drawn at 50% with a warning icon and a tooltip.</td>
+      <td><code>A.aJQ.$1</code>: <code>r = type == type &amp;&amp; nozzleDiameter == nozzleDiameter</code>, then <code>A.bEn(item, r, index)</code> — <code>r</code> is the enabled flag.</td>
+    </tr>
+    <tr>
+      <td>Two distinct tooltips: <code>dialog_filament_type_none_tips</code> when the head reads <code>NONE</code>, <code>dialog_filament_type_not_match_tips</code> otherwise.</td>
+      <td><code>A.aJQ.$1</code></td>
+    </tr>
+    <tr>
+      <td>An <b>unassigned</b> filament card is bordered in the warning colour and shows <code>!</code> where the toolhead number goes.</td>
+      <td><code>A.A0.E</code>: <code>s ? ""+(a2+1) : "!"</code>, border <code>s ? ax.to : ax.fy</code>.</td>
+    </tr>
+    <tr>
+      <td>Filament colour is <b>three</b> paint modes, not one: a solid, a row of equal bands (mode 0), or a linear gradient (mode 1). Alpha 0 draws a hatch, not black.</td>
+      <td><code>A.abX</code> — <code>Ek</code> / <code>VO</code> / the gradient branch, off <code>filamentColorMulti.mode</code>.</td>
+    </tr>
+    <tr>
+      <td>A file filament with no material used is <b>dropped</b> from the grid.</td>
+      <td><code>A.bEE</code>: keep when <code>used &gt; 0 || usedMm &gt; 0 || usedMm === −1</code>.</td>
+    </tr>
+    <tr>
+      <td>Estimated Materials is <b>two decimals</b>; the percentage is zero.</td>
+      <td><code>toStringAsFixed(2) + " g"</code>; <code>toStringAsFixed(0) + "%"</code>.</td>
+    </tr>
+    <tr>
+      <td>The printer list appends a synthetic <b>“add device”</b> row, and each row can carry a <b>“Lan Mode”</b> label and a green check on the connected one.</td>
+      <td><code>A.bbC.$3</code>, <code>A.bbz</code>.</td>
+    </tr>
+    <tr>
+      <td>Refresh on Edit Filament is <b>debounced</b>.</td>
+      <td><code>A.Nc("refreshFilament", B.d0, …)</code>.</td>
+    </tr>
+    <tr>
+      <td>Auto Leveling writes <code>bed_level</code> — not <code>auto_bed_leveling</code>.</td>
+      <td><code>A.bc_.$1</code></td>
+    </tr>
+    <tr>
+      <td>Model Information has a <b>second layout</b> for multi-plate files: a plate dropdown with per-plate time, weight, nozzle and filament chips.</td>
+      <td><code>A.J9.aFv</code> / <code>A.aj4</code>, off <code>partitions</code>.</td>
+    </tr>
+    <tr>
+      <td>The Send button has an <b>8-state</b> colour machine and shows a spinner while working.</td>
+      <td><code>A.Jb.aKO</code> — states 1 / 2,3,4 / 5 / 6 / 7,0.</td>
+    </tr>
+  </tbody>
+</table></div>
+
+<h2>Not drawn here</h2>
+<p class="legend">
+  <b>Icons</b> are Material Icons codepoints (<code>57686 check</code>, <code>58123 help</code>,
+  <code>57912 warning</code>, <code>61757 caret</code>); the shapes below are stand-ins.<br>
+  <b>One deliberate departure in the rebuild.</b> This page draws a device row the way the
+  bundle does — cover, name, “Lan Mode”, check — so two saved records with the same name
+  are two identical rows. The reconstruction adds the address under the name, and the
+  serial when that is what tells two rows apart; see <code>deviceMeta()</code> in
+  <code>print_processing/js/views/printer/printer-view.js</code>. Everything else on that
+  page is this one.<br>
+  <b>The spinner</b> in the Send button while a send is in flight
+  (<code>B.ayd = SizedBox(16,16, CircularProgressIndicator(strokeWidth 2))</code>), and the
+  five button colours behind its eight states, are recovered but not animated here.<br>
+  <b>The empty-target disc</b> — a circle with a −45° slash over a grey vertical gradient
+  (<code>A.a6K.aF3</code>) — is only reachable when the widget is built disabled, which this
+  surface never does.<br>
+  <b>Dark theme</b>: the dialog reads <code>Theme.of(context)</code> throughout; only the light
+  values are measured, because only the light one was captured.
+</p>
+
+<script>
+'use strict';
+/* --------------------------------------------------------------------------
+ * The dialog, rebuilt from the widget tree in main.dart.js. Structure follows
+ * A.bi3 exactly:
+ *
+ *   [ SizedBox(16), J9 ModelInformation, SizedBox(8), Vn SelectPrinter ]
+ *   if (withPrintSetup) += [ SizedBox(8),  J8 EditFilament,
+ *                            SizedBox(8),  Ja PrintPreferences,
+ *                            SizedBox(8),  R5 nozzle banner,
+ *                            SizedBox(20) ]
+ *   += SizedBox(20)
+ * -------------------------------------------------------------------------- */
+const S = { route: 'print', data: 'empty', dev: 'none', menu: 'none', mi: 'single' };
+
+/* Icons: Material codepoints, drawn as SVG stand-ins. */
+const IC = {
+  caret: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>',
+  caret16: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>',
+  check14: '<svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>',
+  check20: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>',
+  help20: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26A1.96 1.96 0 0014 9a2 2 0 10-4 0H8a4 4 0 118 0c0 .88-.36 1.68-.93 2.25z"/></svg>',
+  warn14: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>',
+  refresh20: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A8 8 0 1019.73 14h-2.08A6 6 0 1112 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>',
+  check18: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>',
+  warn16: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>',
+  caret24: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>',
+  time12: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 11h-6v-2h4V6h2v7z"/></svg>',
+  weight12: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a3 3 0 00-2.83 4H6l-3 14h18L18 7h-3.17A3 3 0 0012 3zm0 2a1 1 0 110 2 1 1 0 010-2z"/></svg>',
+  nozzle12: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M6 3h12v5l-3 3v6l-3 4-3-4v-6L6 8z"/></svg>',
+  gcode: '<svg width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#eee"/><g fill="#c9c9c9"><path d="M22 62h56v6H22z"/><circle cx="38" cy="44" r="12"/><path d="M50 56l14-18 12 18z"/></g><text x="50" y="84" font-family="Roboto,sans-serif" font-size="9" fill="#adadad" text-anchor="middle">G-code</text></svg>',
+  box: '<svg width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#eee"/><g fill="none" stroke="#c9c9c9" stroke-width="3"><path d="M50 28l22 12v24L50 76 28 64V40z"/><path d="M28 40l22 12 22-12M50 52v24"/></g></svg>'
+};
+
+/* The file's filaments. Keys are the bundle's own: A.A0 reads filamentType, used,
+   filamentColor and filamentColorMulti off each map entry. */
+const FILE_FILAMENTS = {
+  four: [
+    { key: '0', filamentType: 'PLA',  used: 12.4, filamentColor: '#D8452F', nozzleDiameter: '0.4', target: 0 },
+    { key: '1', filamentType: 'PLA',  used: 9.1,  filamentColor: '#2F6FE0', nozzleDiameter: '0.4', target: 1 },
+    { key: '2', filamentType: 'PETG', used: 6.7,  filamentColor: '#2E9E5B', nozzleDiameter: '0.4', target: 2 },
+    { key: '3', filamentType: 'PLA',  used: 3.2,
+      filamentColorMulti: { mode: 0, colors: ['#E9A21B', '#B02E8A', '#1B9AA5'] },
+      nozzleDiameter: '0.4', target: 3 }
+  ],
+  mismatch: [
+    { key: '0', filamentType: 'PLA',  used: 12.4, filamentColor: '#D8452F', nozzleDiameter: '0.4', target: 0 },
+    { key: '1', filamentType: 'PLA',  used: 9.1,  filamentColor: '#2F6FE0', nozzleDiameter: '0.4', target: 1 },
+    { key: '2', filamentType: 'PETG', used: 6.7,  filamentColor: '#2E9E5B', nozzleDiameter: '0.4', target: null },
+    { key: '3', filamentType: 'PLA',  used: 3.2,
+      filamentColorMulti: { mode: 1, colors: ['#E9A21B', '#E9601B'] },
+      nozzleDiameter: '0.4', target: 3 }
+  ],
+  empty: []
+};
+
+/* The machine's toolheads, as A.aJQ reads them. */
+const HEADS = [
+  { index: 0, filamentType: 'PLA',  nozzleDiameter: '0.4', filamentColor: '#D8452F' },
+  { index: 1, filamentType: 'PLA',  nozzleDiameter: '0.4', filamentColor: '#2F6FE0' },
+  { index: 2, filamentType: 'NONE', nozzleDiameter: '0.4', filamentColor: null },
+  { index: 3, filamentType: 'PLA',  nozzleDiameter: '0.2', filamentColor: '#E9A21B' }
+];
+
+const PREFS = { flow_calibrate: false, time_lapse_camera: false, bed_level: false };
+
+/* The saved devices, as A.bbC reads them: every saved machine, then a synthetic
+   "add device" row appended at the end. `fx` marks the connected one. */
+const DEVICES = [
+  { y: 'u1-workshop', name: 'U1 (workshop)', lan: true,  fx: true  },
+  { y: 'u1-bench',    name: 'U1 (bench)',    lan: false, fx: false },
+  { y: 'add device',  name: 'add device',    lan: false, fx: false }
+];
+
+/* A.xR(name, pics, secs, weight, filaments, nozzle) - one per partition. */
+const PLATES = [
+  { name: 'Plate 1', secs: 4412, weight: 31.4, nozzle: 0.4, filaments: [
+      { type: 'PLA', g: 12.4, color: '#D8452F' }, { type: 'PLA', g: 9.1, color: '#2F6FE0' },
+      { type: 'PETG', g: 6.7, color: '#2E9E5B' }, { type: 'PLA', g: 3.2, color: '#E9A21B' }] },
+  { name: 'Plate 2', secs: 1980, weight: 8.9,  nozzle: 0.4, filaments: [
+      { type: 'PLA', g: 8.9, color: '#D8452F' }] },
+  { name: 'Plate 3', secs: 7345, weight: 52.7, nozzle: 0.2, filaments: [
+      { type: 'PETG', g: 40.1, color: '#2E9E5B' }, { type: 'PLA', g: 12.6, color: '#2F6FE0' }] }
+];
+let PLATE = 0;
+
+const el = (t, c, x) => { const n = document.createElement(t); if (c) n.className = c;
+                          if (x != null) n.textContent = x; return n; };
+const html = (t, c, s) => { const n = el(t, c); n.innerHTML = s; return n; };
+
+/* A.abX: 0 colours = nothing, 1 = solid (alpha 0 draws a hatch), many = bands (mode 0)
+   or a linear gradient (mode 1). */
+function paintColours(node, colors, mode) {
+  if (!colors || !colors.length) return;
+  if (colors.length === 1) { node.style.background = colors[0]; return; }
+  if (mode === 1) { node.style.background = 'linear-gradient(90deg,' + colors.join(',') + ')'; return; }
+  const bands = el('div', 'bands');
+  colors.forEach(c => { const s = el('span'); s.style.background = c; bands.appendChild(s); });
+  node.insertBefore(bands, node.firstChild);
+}
+const coloursOf = (f) => (f.filamentColorMulti && f.filamentColorMulti.colors
+                          && f.filamentColorMulti.colors.length)
+  ? f.filamentColorMulti.colors
+  : (f.filamentColor ? [f.filamentColor] : []);
+const modeOf = (f) => (f.filamentColorMulti ? (f.filamentColorMulti.mode || 0) : 0);
+
+/* A.aZU(secs, humanReadable) */
+function dur(secs) {
+  const h = Math.floor(secs / 3600), m = Math.round((secs % 3600) / 60);
+  return h ? h + 'h ' + m + 'm' : m + 'm';
+}
+
+function lum(hex) {
+  if (!hex) return 1;
+  const x = hex.replace('#', '');
+  const r = parseInt(x.slice(0,2),16), g = parseInt(x.slice(2,4),16), b = parseInt(x.slice(4,6),16);
+  return (0.299*r + 0.587*g + 0.114*b) / 255;
+}
+
+/* A.Iv — pick a readable ink for a background. */
+function ink(hex) {
+  if (!hex) return '#4b4b4b';
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+  return (0.299*r + 0.587*g + 0.114*b) > 150 ? '#1b1b1b' : '#ffffff';
+}
+
+function section(title, extraTitleNode) {
+  const card = el('div', 'card');
+  const t = el('div', 'title');
+  t.appendChild(el('span', null, title));
+  if (extraTitleNode) t.appendChild(extraTitleNode);
+  card.appendChild(t);
+  card.appendChild(el('div', 'gap'));
+  const c = el('div', 'content');
+  card.appendChild(c);
+  return { card, content: c };
+}
+
+/* --- A.J9 Model Information --------------------------------------------- */
+/* A.J9 has TWO layouts and picks on `partitions`: aFq (below) when the file has none,
+   aFv when it does - a plate dropdown in place of the three text facts. */
+function modelInformation() {
+  if (S.mi === 'multi') return modelInformationPlates();
+  const { card, content } = section('Model Information');
+  const row = el('div', 'mi');
+  row.appendChild(html('div', null, IC.gcode).firstChild);
+  row.appendChild(el('div', 'gap20'));
+  const facts = el('div', 'facts');
+  facts.appendChild(el('div', 's13'));
+  facts.appendChild(el('div', 'f', 'Filename: benchy_4colour.gcode'));
+  facts.appendChild(el('div', 's10'));
+  facts.appendChild(el('div', 'f', 'Estimated Time: ' + (S.data === 'empty' ? 'N/A' : '1h 14m')));
+  facts.appendChild(el('div', 's10'));
+  /* toStringAsFixed(2) + " g" */
+  facts.appendChild(el('div', 'f', 'Estimated Materials: ' + (S.data === 'empty' ? 'N/A' : '31.40 g')));
+  row.appendChild(facts);
+  content.appendChild(row);
+  return card;
+}
+
+/* A.aj4.a8O - the plate row. One layout, drawn both as the closed button and as
+   every item in the open menu. */
+function plateRow(p) {
+  const w = el('div', 'plate');
+  w.appendChild(el('div', 'pn', p.name));
+  const meta = el('div', 'meta');
+  const add = (icon, text, gapAfter) => {
+    meta.appendChild(html('span', 'ic', icon));
+    meta.appendChild(el('span', 'g4'));
+    meta.appendChild(el('span', null, text));
+    if (gapAfter) meta.appendChild(el('span', 'g8'));
+  };
+  add(IC.time12, p.secs <= 0 ? '-' : dur(p.secs), true);
+  add(IC.weight12, p.weight.toFixed(0) + 'g', true);      /* toStringAsFixed(0) + "g" */
+  add(IC.nozzle12, p.nozzle != null ? p.nozzle.toFixed(1) + 'mm' : '-', false);
+  w.appendChild(meta);
+  if (p.filaments.length) {
+    const chips = el('div', 'chips');
+    p.filaments.forEach(f => {
+      /* A.aj4.a8F: "<type> | <used>g" at 10px, padding all(3), radius 2, on the
+         filament's own colour; a 1px #E5E5E5 outline when contrast is under 1.5. */
+      const c = el('span', 'chip', f.type + ' | ' + f.g.toFixed(0) + 'g');
+      c.style.background = f.color;
+      c.style.color = ink(f.color);
+      if (lum(f.color) > 0.72) c.style.boxShadow = 'inset 0 0 0 1px #E5E5E5';
+      chips.appendChild(c);
+    });
+    w.appendChild(chips);
+  }
+  return w;
+}
+
+function modelInformationPlates() {
+  const { card, content } = section('Model Information');
+  const row = el('div', 'mi');
+  row.appendChild(html('div', null, IC.gcode).firstChild);
+  row.appendChild(el('div', 'gap20'));
+  const holder = el('div', 'facts');
+  if (PLATES.length === 1) {
+    const b = el('div', 'platebtn');
+    b.appendChild(plateRow(PLATES[0]));
+    holder.appendChild(b);
+  } else {
+    const b = el('button', 'platebtn');
+    b.type = 'button';
+    b.id = 'trg-plate';
+    b.appendChild(plateRow(PLATES[PLATE]));
+    b.appendChild(html('span', 'caret', IC.caret24));
+    b.onclick = () => setMenu(S.menu === 'plate' ? 'none' : 'plate');
+    holder.appendChild(b);
+  }
+  row.appendChild(holder);
+  content.appendChild(row);
+  return card;
+}
+
+/* --- A.Vn Select Printer ------------------------------------------------- */
+function selectPrinter() {
+  const { card, content } = section('Select Printer');
+  const row = el('div', 'sp');
+  row.appendChild(html('div', 'cover', IC.box));
+  row.appendChild(el('div', 'gap20'));
+  const pick = el('button', 'picker');
+  pick.type = 'button';
+  pick.id = 'trg-printer';
+  if (S.dev === 'one') {
+    /* A.bbw, the selectedItemBuilder: the same row WITHOUT the check, padded
+       LTRB(16,8,16,8) rather than the item's LTRB(0,8,0,8). */
+    const nm = el('div', 'nm');
+    nm.appendChild(el('span', 'dcover'));
+    nm.appendChild(el('span', null, DEVICES[0].name));
+    nm.appendChild(el('span', 'lan', 'Lan Mode'));
+    pick.appendChild(nm);
+  } else {
+    pick.appendChild(el('div', 'ph', 'Click to select printer'));
+  }
+  pick.appendChild(html('span', 'caret', IC.caret));
+  pick.onclick = () => setMenu(S.menu === 'printer' ? 'none' : 'printer');
+  row.appendChild(pick);
+  content.appendChild(row);
+  return card;
+}
+
+/* --- A.J8 / A.aiy Edit Filament ------------------------------------------ */
+function editFilament() {
+  const refresh = html('button', 'refresh', IC.refresh20);
+  refresh.type = 'button';
+  refresh.title = 'refreshFilament (debounced)';
+  const { card, content } = section('Edit Filament', refresh);
+
+  const list = FILE_FILAMENTS[S.data] || [];
+  if (!list.length) { content.appendChild(el('div', 'empty-note', ' ')); return card; }
+
+  const grid = el('div', 'grid');
+  list.forEach(f => {
+    const c = el('div', 'fcard' + (f.target == null ? ' unset' : ''));
+
+    const sw = el('div', 'swatch');
+    const cols = coloursOf(f);
+    paintColours(sw, cols, modeOf(f));
+    const fg = ink(cols[0]);
+    const t = el('div', 't', f.filamentType || '---'); t.style.color = fg;
+    const g = el('div', 'g', f.used + 'g');            g.style.color = fg;
+    sw.appendChild(t); sw.appendChild(g);
+    c.appendChild(sw);
+
+    c.appendChild(el('div', 'rule'));
+
+    const pr = el('button', 'pickrow'); pr.type = 'button';
+    if (f.key === '0') pr.id = 'trg-head';         /* the one this mockup opens */
+    pr.onclick = () => setMenu(S.menu === 'head' ? 'none' : 'head');
+    const disc = el('div', 'disc');
+    const head = f.target == null ? null : HEADS[f.target];
+    if (head && head.filamentColor) paintColours(disc, [head.filamentColor], 0);
+    const n = el('div', 'n', f.target == null ? '!' : String(f.target + 1));
+    n.style.color = f.target == null ? 'var(--f-warn)' : ink(head && head.filamentColor);
+    disc.appendChild(n);
+    pr.appendChild(disc);
+    pr.appendChild(html('span', 'caret', IC.caret16));
+    c.appendChild(pr);
+
+    grid.appendChild(c);
+  });
+  content.appendChild(grid);
+  return card;
+}
+
+/* --- A.Ja Print Preferences ---------------------------------------------- */
+function printPreferences() {
+  const { card, content } = section('Print Preferences');
+  const wrap = el('div', 'prefs');
+  [['flow_calibrate', 'Extrusion Flow Calibration', true],
+   ['time_lapse_camera', 'Time-lapse Camera', false],
+   ['bed_level', 'Auto Leveling', false]].forEach(([k, label, hasHelp]) => {
+    const b = el('button', 'pref'); b.type = 'button';
+    b.setAttribute('aria-pressed', PREFS[k] ? 'true' : 'false');
+    b.appendChild(el('span', 'pl', label));
+    if (hasHelp) b.appendChild(html('span', 'help', IC.help20));
+    const box = el('span', 'box');
+    if (PREFS[k]) box.innerHTML = IC.check14;
+    b.appendChild(box);
+    b.onclick = () => { PREFS[k] = !PREFS[k]; paint(); };
+    wrap.appendChild(b);
+  });
+  content.appendChild(wrap);
+  return card;
+}
+
+/* --- A.R5 the nozzle-mismatch banner ------------------------------------- */
+function nozzleBanner() {
+  /* Silent unless BOTH lists are non-empty and the plate's set is not contained
+     in the machine's. c8l returns true (no banner) when the machine list is empty. */
+  const list = FILE_FILAMENTS[S.data] || [];
+  if (!list.length) return null;
+  const want = new Set(list.map(f => f.nozzleDiameter));
+  const have = new Set(HEADS.map(h => h.nozzleDiameter));
+  let contained = true;
+  want.forEach(w => { if (!have.has(w)) contained = false; });
+  if (contained) return null;
+  const b = el('div', 'nozwarn');
+  b.appendChild(html('span', 'ic', IC.warn14));
+  b.appendChild(el('span', 'tx', 'nozzle_mismatch_tip'));
+  return b;
+}
+
+/* ======================================================================== *
+ * The three dropdown menus.
+ *
+ * DropdownButton2 geometry, all resolved:
+ *
+ *   menu      item h  item pad        width  maxH   elev  offset     radius
+ *   printer   50      LTRB(16,0,16,0) 300    -      0     (0,0)      0
+ *   toolhead  48      LTRB(16,0,16,0) 200    300    8     (-50,0)    8
+ *   plate     80      LTRB(8,6,8,6)   button 480    4     (0,-2)     0/0/4/4
+ *
+ * Every one of those is B.aqV / B.aqU / B.aqW for the item and the bEo(...) call
+ * for the surface; nothing here is a guess about how a menu ought to look.
+ * ======================================================================== */
+
+/* A.bbz - one saved device. */
+function printerMenu() {
+  const m = el('div', 'menu m-printer');
+  DEVICES.forEach(d => {
+    const it = el('button', 'mitem'); it.type = 'button';
+    it.appendChild(el('span', 'dcover'));
+    it.appendChild(el('span', 'nm', d.name));
+    /* the "Lan Mode" label is suppressed on the synthetic add-device row */
+    if (d.lan && d.y !== 'add device') it.appendChild(el('span', 'lan', 'Lan Mode'));
+    it.appendChild(el('span', 'grow'));
+    if (d.fx) it.appendChild(html('span', 'tick', IC.check20));   /* B.a73 */
+    it.onclick = () => setMenu('none');
+    m.appendChild(it);
+  });
+  return m;
+}
+
+/* A.aJQ - one toolhead, rated against the file filament being assigned. */
+function headMenu(fil) {
+  const m = el('div', 'menu m-head');
+  HEADS.forEach(h => {
+    /* r: the match. Type AND nozzle, both, and the file must declare a nozzle. */
+    const ok = h.filamentType === fil.filamentType
+            && fil.nozzleDiameter != null
+            && String(fil.nozzleDiameter) === String(h.nozzleDiameter);
+    const it = el('button', 'mitem'); it.type = 'button';
+    it.setAttribute('aria-disabled', ok ? 'false' : 'true');
+    it.title = ok ? ''
+      : (h.filamentType === 'NONE' ? 'dialog_filament_type_none_tips'
+                                   : 'dialog_filament_type_not_match_tips');
+    const disc = el('div', 'disc');
+    if (h.filamentColor) paintColours(disc, [h.filamentColor], 0);
+    const n = el('div', 'n', String(h.index + 1));
+    n.style.color = ink(h.filamentColor);
+    disc.appendChild(n);
+    it.appendChild(disc);
+    const t = el('span', 'htype' + (ok ? '' : ' bad'), h.filamentType);
+    it.appendChild(t);
+    if (fil.target === h.index) it.appendChild(html('span', 'tick', IC.check20));
+    if (!ok) it.appendChild(html('span', 'warnic', IC.warn16));
+    if (ok) it.onclick = () => { fil.target = h.index; setMenu('none'); };
+    m.appendChild(it);
+  });
+  return m;
+}
+
+/* A.bbN - one plate. Same row as the button, plus a check on the selected one. */
+function plateMenu() {
+  const m = el('div', 'menu m-plate');
+  PLATES.forEach((p, i) => {
+    const it = el('button', 'mitem'); it.type = 'button';
+    it.appendChild(plateRow(p));
+    if (i === PLATE) it.appendChild(html('span', 'tick', IC.check18));   /* B.a74 */
+    it.onclick = () => { PLATE = i; setMenu('none'); };
+    m.appendChild(it);
+  });
+  return m;
+}
+
+/* Anchor an open menu to its trigger, applying the offset the bundle gives it. */
+function placeMenu() {
+  if (S.menu === 'none') return;
+  const dlg = document.getElementById('dlg');
+  const spec = {
+    printer: { trg: '#trg-printer', build: printerMenu,  dx: 0,   dy: 0,  note: 'B.aqV 50 · w300 · elev 0 · offset (0,0)' },
+    head:    { trg: '#trg-head',    build: null,         dx: -50, dy: 0,  note: 'B.aqU 48 · w200 · maxH 300 · elev 8 · offset (-50,0)' },
+    plate:   { trg: '#trg-plate',   build: plateMenu,    dx: 0,   dy: -2, note: 'B.aqW 80 · w=button · maxH 480 · elev 4 · offset (0,-2)' }
+  }[S.menu];
+  const trg = dlg.querySelector(spec.trg);
+  if (!trg) return;
+
+  let menu;
+  if (S.menu === 'head') {
+    const list = FILE_FILAMENTS[S.data] || [];
+    if (!list.length) return;
+    menu = headMenu(list[0]);
+  } else {
+    menu = spec.build();
+  }
+  if (S.menu === 'plate') menu.style.width = trg.getBoundingClientRect().width + 'px';
+
+  dlg.appendChild(menu);
+  const d = dlg.getBoundingClientRect(), t = trg.getBoundingClientRect();
+  let left = t.left - d.left + spec.dx;
+  let top  = t.bottom - d.top + spec.dy;
+  /* keep it inside the dialog, the way a real menu is constrained to the screen */
+  const w = menu.getBoundingClientRect().width, h = menu.getBoundingClientRect().height;
+  left = Math.max(4, Math.min(left, d.width - w - 4));
+  if (top + h > d.height - 4) top = Math.max(4, t.top - d.top - h - spec.dy);
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+
+  const note = el('div', 'menu-note', spec.note);
+  dlg.appendChild(note);
+  const nw = note.getBoundingClientRect().width;
+  if (left + w + 6 + nw <= d.width - 4) {
+    note.style.left = (left + w + 6) + 'px';
+    note.style.top = top + 'px';
+  } else {
+    note.style.left = Math.max(4, Math.min(left, d.width - nw - 4)) + 'px';
+    note.style.top = Math.min(d.height - 22, top + h + 4) + 'px';
+  }
+}
+
+function setMenu(v) {
+  S.menu = v;
+  document.querySelectorAll('#seg-menu button').forEach(b =>
+    b.setAttribute('aria-pressed', b.dataset.v === v ? 'true' : 'false'));
+  paint();
+}
+
+/* --- A.Jb the send bar ---------------------------------------------------- */
+function sendBar() {
+  const bar = el('div', 'sendbar');
+  const track = el('div', 'track');
+  track.appendChild(el('div', 'fill'));
+  bar.appendChild(track);
+  bar.appendChild(el('div', 's5'));
+  bar.appendChild(el('div', 'pct', '0%'));
+  bar.appendChild(el('div', 's30'));
+  const btn = el('button', 'send', 'Send');
+  if (S.dev !== 'one') btn.dataset.state = 'disabled';
+  bar.appendChild(btn);
+  bar.appendChild(el('div', 's10'));
+  return bar;
+}
+
+/* --- assemble ------------------------------------------------------------- */
+function paint() {
+  const dlg = document.getElementById('dlg');
+  dlg.innerHTML = '';
+  const body = el('div', 'dlg-body');
+  body.appendChild(el('div', 'sp16'));
+  body.appendChild(modelInformation());
+  body.appendChild(el('div', 'sp8'));
+  body.appendChild(selectPrinter());
+  if (S.route === 'print') {
+    body.appendChild(el('div', 'sp8'));
+    body.appendChild(editFilament());
+    body.appendChild(el('div', 'sp8'));
+    body.appendChild(printPreferences());
+    const nb = nozzleBanner();
+    if (nb) { body.appendChild(el('div', 'sp8')); body.appendChild(nb); }
+    body.appendChild(el('div', 'sp20'));
+  }
+  body.appendChild(el('div', 'sp20'));
+  dlg.appendChild(body);
+  dlg.appendChild(sendBar());
+  placeMenu();
+}
+
+function wire(id, key) {
+  const seg = document.getElementById(id);
+  seg.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    S[key] = b.dataset.v;
+    seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    paint();
+  });
+}
+wire('seg-route', 'route');
+wire('seg-data', 'data');
+wire('seg-dev', 'dev');
+wire('seg-mi', 'mi');
+wire('seg-menu', 'menu');
+
+/* A menu can only open over the thing that owns it, so opening one puts the dialog
+   into the state that has that thing: the toolhead menu needs filament data, the
+   plate menu needs the partitions layout, and neither exists on ?path=5. */
+document.getElementById('seg-menu').addEventListener('click', () => {
+  if (S.menu === 'head') {
+    if (S.route !== 'print') { S.route = 'print'; sync('seg-route', 'print'); }
+    if (S.data === 'empty') { S.data = 'four'; sync('seg-data', 'four'); }
+  }
+  if (S.menu === 'plate' && S.mi !== 'multi') { S.mi = 'multi'; sync('seg-mi', 'multi'); }
+  paint();
+});
+function sync(id, v) {
+  document.querySelectorAll('#' + id + ' button').forEach(b =>
+    b.setAttribute('aria-pressed', b.dataset.v === v ? 'true' : 'false'));
+}
+
+paint();
+window.__mockup = { S, HEADS, FILE_FILAMENTS, DEVICES, PLATES, paint, setMenu };
+</script>
+</body>
+</html>

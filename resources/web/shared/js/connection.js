@@ -1,6 +1,12 @@
 /*
  * connection.js - bring an MQTT session to the printer up.
  *
+ * SHARED by both surfaces. It grew on the Device page, and the print dialog needs the
+ * same thing for the same reason: `sw_GetMachineState` answers out of a Moonraker host
+ * that something has to attach first. Inside Orca the Device tab usually has, and the
+ * popup inherits it; opened on its own - or run outside Orca against u1_bridge.py -
+ * nothing has, and every state command comes back "no engine attached yet".
+ *
  * The page owns the transport; Orca owns the socket. Every step below is a
  * bridge command, and the whole sequence is recovered from SSWCP.cpp and
  * MoonRaker.cpp - see docs/u1-webui/02-device-page/06-connection.md
@@ -25,7 +31,7 @@
 'use strict';
 
 import { CMD, DEVICE, PAIR_PORT, LAN_AUTH_CODE, MQTT_KEEPALIVE, hasTlsMaterial }
-  from '../../../shared/js/protocol.js';
+  from './protocol.js';
 
 /*
  * Cloud hosts. The `.com` / `.cn` split is region selection; Orca appends the

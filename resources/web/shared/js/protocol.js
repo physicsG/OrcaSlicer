@@ -123,7 +123,15 @@ export const CMD = {
   // ---- print-processing popup only (?path=4 / ?path=5) ------------------
   GET_ACTIVE_FILE: 'sw_GetActiveFile',
   GET_PRINT_LEGAL: 'sw_GetPrintLegal',             // { connected_model } -> { legal, preset_model }
-  GET_PRINT_ZIP: 'sw_GetPrintZip',                 // -> { name, content }
+  // The RIGHT door for the file: { is_zip } -> { file_name, file_url, origin_size,
+  // checksum }. `file_url` is a localhost URL on Orca's own page HTTP server - the one
+  // already serving this document - so the page fetches the zip rather than being
+  // handed it. NOT printer-backed: both branches build m_res_data and send_to_js().
+  GET_FILE_STREAM: 'sw_GetFileStream',
+  // The other one, kept named because it is what the reconstruction used to call:
+  // `content` comes from a std::vector<char>, which serialises as one JSON integer per
+  // byte. A 12 MB zip crosses as ~40 MB of JSON.
+  GET_PRINT_ZIP: 'sw_GetPrintZip',                 // -> { name, content: number[] }
   GET_FILE_FILAMENT_MAPPING: 'sw_GetFileFilamentMapping',   // { filename }
   UPDATE_MACHINE_FILAMENT_INFO: 'sw_UpdateMachineFilamentInfo',
   SET_FILAMENT_MAPPING_COMPLETE: 'sw_SetFilamentMappingComplete', // { status }
@@ -609,6 +617,15 @@ export const PURIFIER_MODES = { 0: 'Off', 1: 'Recirculation Mode', 2: 'Exhaust M
  *
  * Derived from SSWCP.cpp by finding every handler whose body reaches
  * `on_mqtt_msg_arrived`, and re-derived by the conformance suite so it cannot drift.
+ *
+ * Two were wrong until the derivation learned to end a handler at its own closing brace
+ * rather than at the next `sw_*` signature: `sw_GetFileStream` and
+ * `sw_UnsubscribeCacheKeys` both build `m_res_data` and call `send_to_js()`, and were
+ * credited with an `on_mqtt_msg_arrived` belonging to a function declared between them
+ * and the next handler the regex could see. The list and the check were written from the
+ * same derivation, so they agreed with each other and not with the C++. `sw_GetFileStream`
+ * is the one that would have bitten: it is how the print dialog fetches the file, and a
+ * client unwrapping it looks one level too deep for `file_url`.
  */
 export const PRINTER_BACKED = new Set([
   'sw_BedMesh_AbortProbeMesh', 'sw_CameraStartMonitor', 'sw_CameraStopMonitor',
@@ -617,14 +634,14 @@ export const PRINTER_BACKED = new Set([
   'sw_ControlPurifier', 'sw_DefectDetactionConfig', 'sw_DeleteCameraTimelapse',
   'sw_DeleteMachineFile', 'sw_FileGetStatus', 'sw_FilesThumbnailsBase64',
   'sw_GetCameraTimelapseInstance', 'sw_GetDeviceDataStorageSpace', 'sw_GetFileListPage',
-  'sw_GetFileStream', 'sw_GetMachineObjects', 'sw_GetMachineState', 'sw_GetPrintHistory', 'sw_GetPrintInfo',
+  'sw_GetMachineObjects', 'sw_GetMachineState', 'sw_GetPrintHistory', 'sw_GetPrintInfo',
   'sw_GetSystemInfo', 'sw_MachineFilesGetDirectory', 'sw_MachineFilesMetadata',
   'sw_MachineFilesRoots', 'sw_MachineFilesThumbnails', 'sw_MachineHeartbeat',
   'sw_MachinePrintCancel', 'sw_MachinePrintPause', 'sw_MachinePrintResume',
   'sw_MachinePrintStart', 'sw_PrinterDefectDetection', 'sw_PullCloudFile', 'sw_SendGCodes',
   'sw_ServerClientManagerSetUserinfo', 'sw_SetDeviceName', 'sw_SetMachineSubscribeFilter',
   'sw_StartCloudPrint', 'sw_StartLocalPrint', 'sw_SystemGetDeviceInfo',
-  'sw_UnSubscribeMachineState', 'sw_UnsubscribeCacheKeys',
+  'sw_UnSubscribeMachineState',
   'sw_UploadAsyncTimelapseInstance', 'sw_UploadCameraTimelapse', 'sw_exception_query'
 ]);
 

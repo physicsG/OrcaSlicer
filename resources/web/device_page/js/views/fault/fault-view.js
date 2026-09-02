@@ -3,9 +3,9 @@
  */
 'use strict';
 
-import { $, el, icon } from '../../core/dom.js';
+import { $, el, icon } from '../../../../shared/js/dom.js';
 import { lookupFault } from '../../../../shared/js/errors.js';
-import { rebuildOn, data } from '../../core/render.js';
+import { rebuildOn, data } from '../../../../shared/js/render.js';
 
 /**
  * A fault comes from `server.exception.query`, and from nothing else.

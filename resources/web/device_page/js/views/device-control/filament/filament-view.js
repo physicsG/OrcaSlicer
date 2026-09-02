@@ -38,7 +38,7 @@
  */
 'use strict';
 
-import { el, icon } from '../../../core/dom.js';
+import { el, icon } from '../../../../../shared/js/dom.js';
 import { cssColor, isDarkColor } from '../../../../../shared/js/protocol.js';
 // Everything about the ACE comes from one module - see shared/js/multiACE.js for why.
 import { ACE_MODES, ACE_MODE_LABELS, DRY_TEMPS, DRY_HOURS, DRY_LIMITS,
@@ -47,8 +47,9 @@ import { ACE_MODES, ACE_MODE_LABELS, DRY_TEMPS, DRY_HOURS, DRY_LIMITS,
          aceVerbs, channelStep, channelWord, headOccupied,
          aceSourceOptions, aceModeChange, acePendingMode }
   from '../../../../../shared/js/multiACE.js';
-import { keyedList, rebuildOn } from '../../../core/render.js';
-import { openDialog, closeDialog, openMenu } from '../../../core/overlay.js';
+import { keyedList, rebuildOn } from '../../../../../shared/js/render.js';
+import { openMenu } from '../../../core/overlay.js';
+import { openDialog, closeDialog } from '../../../../../shared/js/dialog.js';
 
 /** The toolhead artwork, at half. 64x140 becomes 32x70, which is what fits twice over. */
 const HEAD_SCALE = 0.5;
@@ -1476,7 +1477,7 @@ function openDryer(ctx, u) {
         inp.setAttribute('aria-label', `${label}, custom value, ${min} to ${max}`);
         inp.title = `${min}–${max}${suffix}`;
         // Repainted without rebuilding, so the field does not lose focus mid-keystroke -
-        // the same reason core/render.js exists on the rest of the page.
+        // the same reason shared/render.js exists on the rest of the page.
         inp.oninput = () => { set[`${key}Custom`] = inp.value.trim(); paint(); };
         inp.onchange = () => {
           if (inp.value.trim() !== '') {
