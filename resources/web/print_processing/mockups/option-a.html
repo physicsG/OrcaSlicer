@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Print processing — Option A</title>
+<link rel="stylesheet" href="../../shared/css/base.css">
+<link rel="stylesheet" href="mockup.css">
+<link rel="stylesheet" href="option-a.css">
+</head>
+<body class="mock-dialog">
+
+<!--
+  OPTION A - the shipped shape, corrected.
+
+  Four cards in the order and with the labels the Flutter popup uses, so nobody has to
+  relearn the dialog. What changes is what is IN them: the real plate thumbnail, per
+  filament grams and length, the nozzle the file was sliced for, and a destination that
+  says what is in the toolhead rather than only its number.
+
+  The bet: the popup is a confirmation step, not a workbench, and familiarity is worth
+  more than a better layout.
+-->
+
+<div class="dlg-title">
+  <span id="title">Print Preprocessing</span>
+  <span class="sub" id="subtitle"></span>
+  <span class="spacer"></span>
+</div>
+
+<div class="dlg-body">
+  <section class="card" id="c-model"><h2>Model Information</h2><div class="card-body"></div></section>
+  <section class="card" id="c-printer"><h2>Select Printer</h2><div class="card-body"></div></section>
+  <section class="card" id="c-filament"><h2>Edit Filament<span class="spacer"></span>
+    <button class="ghost tiny" id="refresh" title="Re-read the file's filaments">Refresh</button></h2>
+    <div class="card-body"></div></section>
+  <section class="card" id="c-prefs"><h2>Print Preferences</h2><div class="card-body"></div></section>
+</div>
+
+<div class="dlg-foot">
+  <div class="bar">
+    <div class="bar-track"><div class="bar-fill" id="fill"></div></div>
+    <div class="bar-label"><span id="stage">Ready</span><b id="pct"></b></div>
+  </div>
+  <button class="primary" id="send">Send</button>
+</div>
+
+<script type="module" src="option-a.js"></script>
+</body>
+</html>

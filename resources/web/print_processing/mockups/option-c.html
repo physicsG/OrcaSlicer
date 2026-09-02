@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Print processing — Option C</title>
+<link rel="stylesheet" href="../../shared/css/base.css">
+<link rel="stylesheet" href="mockup.css">
+<link rel="stylesheet" href="option-c.css">
+</head>
+<body class="mock-dialog">
+
+<!--
+  OPTION C - the preflight.
+
+  The dialog answers one question - "can this plate print on this machine, and what will
+  it do" - as a run of checks that resolve themselves. Each is one line when it is fine
+  and opens where it needs a decision, so the screen is short when nothing is wrong and
+  long exactly where something is.
+
+  This is the option that USES sw_GetPrintLegal, nozzle_diameters and filament_exist for
+  something. In the other two they are a sentence of prose.
+
+  The bet: most sends are fine and want one glance; the ones that are not want the
+  problem in front of them, not a form to hunt through.
+-->
+
+<div class="dlg-title">
+  <span id="title">Print Preprocessing</span>
+  <span class="sub" id="subtitle"></span>
+  <span class="spacer"></span>
+  <span class="sub" id="summary"></span>
+</div>
+
+<div class="dlg-body">
+  <div class="checks" id="checks"></div>
+</div>
+
+<div class="dlg-foot">
+  <div class="bar">
+    <div class="bar-track"><div class="bar-fill" id="fill"></div></div>
+    <div class="bar-label"><span id="stage">Ready</span><b id="pct"></b></div>
+  </div>
+  <button class="primary" id="send">Send</button>
+</div>
+
+<script type="module" src="option-c.js"></script>
+</body>
+</html>

@@ -87,6 +87,13 @@ earlier documentation and client had it as `0` — see
 
 ## Honest limits
 
+**Read [04-requirements.md](04-requirements.md) first.** The limits below were the known
+ones; a later read of the host's own handlers found that the filament card is built on a
+reply shape `sw_GetFileFilamentMapping` has never returned, and that the send would fail
+on its first command. Three [mockups](../../../resources/web/print_processing/mockups/)
+answer the design question that follows.
+
+
 - The printer picker is a stub: `sw_GetLocalDevices` is not wired, so "Click to select
   printer" resolves from `sw_GetConnectedMachine` only.
 - Upload progress is simulated locally, not driven by a real host progress channel.

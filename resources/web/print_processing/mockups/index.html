@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Print dialog — three designs</title>
+<link rel="stylesheet" href="../../shared/css/base.css">
+<style>
+body { margin: 0; }
+.top {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.top h1 { margin: 0; font-size: 15px; font-weight: 600; }
+.top .grow { flex: 1; }
+.ctl { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+.ctl select, .ctl button {
+  font: inherit; font-size: 12px; padding: 5px 8px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--ink); cursor: pointer;
+}
+.ctl button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-in); }
+
+.why {
+  margin: 0; padding: 9px 16px 11px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+  font-size: 12.5px; color: var(--ink-2); line-height: 1.5;
+}
+.why b { color: var(--ink); }
+
+.deck { display: flex; gap: 18px; padding: 18px 16px 26px; align-items: flex-start;
+        overflow-x: auto; }
+.slot { flex: none; width: 714px; }
+.slot.hidden { display: none; }
+.slot > header { margin-bottom: 8px; }
+.slot h2 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+.slot h2 .k { color: var(--accent); font-family: var(--mono); font-size: 12px; margin-right: 6px; }
+.slot .bet { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.slot .frame {
+  width: 714px; height: 750px;
+  border: 1px solid var(--line); border-radius: 10px;
+  overflow: hidden; background: var(--panel);
+  box-shadow: 0 1px 2px rgba(0,0,0,.10), 0 14px 34px rgba(0,0,0,.12);
+}
+.slot iframe { width: 714px; height: 750px; border: 0; display: block; }
+.slot .costs { margin: 9px 0 0; padding-left: 17px; font-size: 12px; color: var(--ink-2); line-height: 1.55; }
+.slot .costs li + li { margin-top: 3px; }
+.slot .costs .against { color: var(--warn); }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>Print dialog — three designs</h1>
+  <div class="ctl">
+    <label for="scenario">Scenario</label>
+    <select id="scenario">
+      <option value="ready">Everything matches</option>
+      <option value="mismatch">Plate and machine disagree</option>
+      <option value="wrongmodel">Sliced for another printer</option>
+      <option value="noprinter">No printer connected</option>
+    </select>
+  </div>
+  <div class="ctl">
+    <label for="mode">Mode</label>
+    <select id="mode">
+      <option value="print">Upload and print (?path=4)</option>
+      <option value="upload">Upload only (?path=5)</option>
+    </select>
+  </div>
+  <div class="grow"></div>
+  <div class="ctl" id="focus">
+    <span>Show</span>
+    <button data-only="" class="on">All</button>
+    <button data-only="a">A</button>
+    <button data-only="b">B</button>
+    <button data-only="c">C</button>
+  </div>
+</div>
+
+<p class="why">
+  All three run on the <b>real</b> <code>sw_GetFileFilamentMapping</code> reply shape —
+  parallel arrays, the plate thumbnail, per-filament grams and the nozzle the file was
+  sliced for — and all three send through the corrected sequence
+  (<code>sw_GetFileStream</code> → upload → <code>sw_StartLocalPrint&nbsp;{type,&nbsp;path}</code> →
+  the close protocol). They are the same data and the same send. What differs is what the
+  dialog thinks it is <em>for</em>. Frames are the true 714 × 750 the host opens.
+</p>
+
+<div class="deck" id="deck">
+
+  <section class="slot" data-key="a">
+    <header>
+      <h2><span class="k">A</span>Faithful</h2>
+      <p class="bet">The shipped four cards, in the shipped order, with the fields the
+        host was already returning and the popup was not reading.</p>
+    </header>
+    <div class="frame"><iframe data-src="option-a.html" title="Option A"></iframe></div>
+    <ul class="costs">
+      <li>Nobody relearns the dialog; it is recognisably the same screen.</li>
+      <li>Every correction lands without a layout argument.</li>
+      <li class="against">The mapping — the only decision here — gets a quarter of the screen.</li>
+      <li class="against">A problem is a line of prose next to the control that caused it.</li>
+    </ul>
+  </section>
+
+  <section class="slot" data-key="b">
+    <header>
+      <h2><span class="k">B</span>Match sheet</h2>
+      <p class="bet">The mapping is the page: file filaments on the left, what is actually
+        loaded on the right, a wire between them. Everything else is trim.</p>
+    </header>
+    <div class="frame"><iframe data-src="option-b.html" title="Option B"></iframe></div>
+    <ul class="costs">
+      <li>The destination is drawn. Nobody has to remember what is in toolhead 3.</li>
+      <li>Reassigning is two clicks and the result is visible without reading.</li>
+      <li class="against">A dialog nobody recognises, for a step most people click through.</li>
+      <li class="against">The wires need real layout measurement; they are the fragile part.</li>
+    </ul>
+  </section>
+
+  <section class="slot" data-key="c">
+    <header>
+      <h2><span class="k">C</span>Preflight</h2>
+      <p class="bet">A run of checks that resolve themselves. One line each when fine,
+        open where a decision is needed. Send is gated on the checks, not on a guess.</p>
+    </header>
+    <div class="frame"><iframe data-src="option-c.html" title="Option C"></iframe></div>
+    <ul class="costs">
+      <li>Short when nothing is wrong, long exactly where something is.</li>
+      <li>The only design that uses <code>sw_GetPrintLegal</code> and the nozzle
+        diameters for anything.</li>
+      <li>“Send anyway” separates a substitution from an empty toolhead.</li>
+      <li class="against">Furthest from what shipped, and the most to get wrong.</li>
+      <li class="against">A checklist can read as an obstacle course on a good day.</li>
+    </ul>
+  </section>
+
+</div>
+
+<script type="module">
+/*
+ * The chooser. Scenario and mode are query parameters on the three frames, so a change
+ * here reloads all three into the same state - which is the only way to compare them.
+ */
+const deck = document.getElementById('deck');
+const scenario = document.getElementById('scenario');
+const mode = document.getElementById('mode');
+
+const url = new URL(location.href);
+scenario.value = url.searchParams.get('scenario') || 'ready';
+mode.value = url.searchParams.get('mode') || 'print';
+
+function load() {
+  const q = `?scenario=${scenario.value}&mode=${mode.value}`;
+  deck.querySelectorAll('iframe').forEach((f) => { f.src = f.dataset.src + q; });
+  const u = new URL(location.href);
+  u.searchParams.set('scenario', scenario.value);
+  u.searchParams.set('mode', mode.value);
+  history.replaceState(null, '', u);
+}
+
+scenario.onchange = load;
+mode.onchange = load;
+
+document.getElementById('focus').onclick = (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  document.querySelectorAll('#focus button').forEach((x) => x.classList.toggle('on', x === b));
+  const only = b.dataset.only;
+  deck.querySelectorAll('.slot').forEach((s) => {
+    s.classList.toggle('hidden', !!only && s.dataset.key !== only);
+  });
+};
+
+load();
+</script>
+</body>
+</html>

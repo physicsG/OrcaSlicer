@@ -501,6 +501,11 @@ def main():
     ap.add_argument("--drive", metavar="FILE",
                     help="run this JavaScript in the page instead of the built-in "
                          "checks; it reports by setting window.__report when done")
+    ap.add_argument("--page", metavar="PATH",
+                    help="load this path under resources/ instead of the Device page, "
+                         "e.g. web/print_processing/mockups/option-a.html?scenario="
+                         "mismatch. The built-in checks are the Device page's, so pass "
+                         "--drive with it, or --watch to look by hand.")
     ap.add_argument("--watch", type=float, nargs="?", const=0.0, default=None,
                     metavar="SECONDS",
                     help="leave the window open after the checks so it can be used by "
@@ -608,6 +613,11 @@ def main():
     bundle = f"http://127.0.0.1:{port}/web/flutter_web/index.html?path="
     if args.original:
         url = bundle + (args.prime or "2")
+    elif args.page:
+        # Any other surface served out of resources/ - the mockups, chiefly. The bridge
+        # and the simulator are still installed, so a page that speaks to window.wx gets
+        # answered; a page that does not simply ignores them.
+        url = f"http://127.0.0.1:{port}/" + args.page.lstrip("/")
     else:
         url = f"http://127.0.0.1:{port}/web/device_page/index.html"
         if not args.real:

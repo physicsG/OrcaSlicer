@@ -1,0 +1,57 @@
+/* Option A - the shipped four cards, corrected. */
+
+.model-row { display: flex; gap: 12px; align-items: flex-start; }
+.model-row .thumb { width: 104px; height: 104px; }
+
+.facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: baseline; }
+.facts dt { font-size: 12px; color: var(--muted); }
+.facts dd { margin: 0; font-size: 13px; color: var(--ink); }
+.facts dd.mono { font-variant-numeric: tabular-nums; }
+
+.printer-row { display: flex; align-items: center; gap: 10px; }
+.printer-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.printer-pick:hover { border-color: var(--accent); }
+.printer-pick .caret { margin-left: auto; color: var(--muted); }
+.printer-pick .sub { font-size: 11px; color: var(--muted); }
+
+/* One row per file filament.
+   Fixed widths for the two right-hand columns: with `auto auto` the select and the
+   destination took 586 of 660 px between them and the filament's own name wrapped to
+   22px wide - which a screenshot shows as "a bit tight" and a DOM dump shows as a
+   22x57 box. Subtract two numbers. */
+.fil {
+  display: grid;
+  grid-template-columns: 22px minmax(140px, 1fr) 116px 176px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+}
+.fil + .fil { border-top: 1px solid var(--line); }
+.fil-name { font-size: 13px; color: var(--ink); }
+.fil-sub  { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fil-to   { font-size: 11px; color: var(--muted); }
+
+.dest { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.dest .dest-words { font-size: 11px; line-height: 1.25; min-width: 0; }
+.dest .dest-words b { display: block; font-weight: 600; font-size: 12px; color: var(--ink); }
+
+.verdicts { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+.verdict { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; }
+.verdict .dot { margin-top: 5px; }
+
+button.ghost.tiny { padding: 3px 9px; font-size: 11px; }

@@ -248,6 +248,32 @@ with `js/core/` for what every view needs (`dom`, `render`, `pending`, `store`,
 rail, the trace pane and shared art. A panel is handed **its own commands and nothing
 else**. Full rationale: [docs/u1-webui/02-device-page/09-restructure.md](docs/u1-webui/02-device-page/09-restructure.md).
 
+### The print-processing popup (`resources/web/print_processing/`)
+
+The other embedded surface, and the one being worked on now. **It is not shippable and
+the reason is not polish.** It reads `mapping.filaments[i]` — a shape
+`sw_GetFileFilamentMapping` has never returned; the reply is **parallel arrays**
+(`filament_type[]`, `filament_color_rgba[]`, `filament_weight[]`, `nozzle_diameters[]`,
+`filament_extruder_map`, and `thumbnails[]`, **the rendered plate**, which the popup draws
+as a grey box). Only its own mock returns `filaments[]`, so it renders four rows against
+the simulator and none against Orca — the failure this file already warns about, arrived
+at by writing the mock from the same head as the client instead of from the handler. The
+send would fail too: `sw_StartLocalPrint` refuses `{}` and wants `{ type, path }`. And the
+file is fetched with `sw_GetPrintZip`, which serialises a `std::vector<char>` — a 12 MB
+zip crosses as ~40 MB of JSON integers, where **`sw_GetFileStream` returns a URL, a size
+and a SHA-256** and the upload is the page's own multipart POST to `/server/files/upload`,
+so **the progress bar can be a byte count** instead of the `setTimeout` it is. All of it,
+with the C++ line numbers, is
+[docs/u1-webui/03-print-processing/04-requirements.md](docs/u1-webui/03-print-processing/04-requirements.md).
+
+**The shape is an open decision, and three are built** —
+[`print_processing/mockups/`](resources/web/print_processing/mockups/): *faithful* (the
+shipped four cards, corrected), *match sheet* (the mapping is the page, both sides drawn),
+*preflight* (checks that resolve themselves). All three run the same fixture and the same
+corrected send at the true 714 × 750, with `?scenario=` and `?mode=` switchable. Pick one
+before restructuring; the restructure then lifts the Device page's `registry.js`, panel
+folders and `pending`/`render` across, which is what would prove they generalise.
+
 Iterate on it with `run_webkit.py`, which drives the real page in **WebKitGTK — the
 engine Orca's own webview uses**. It needs a display (WSLg provides one); playwright and
 the vendored chromium do not work here.
@@ -274,8 +300,11 @@ python3 resources/web/shared/tests/run_webkit.py --original --sn <SN> --watch
 - `--size WxH` sets the window, which the Device page's layout depends on - see above.
 - Committed drive scripts live in `resources/web/shared/tests/drive/`: the DOM walker,
   the camera panel against the simulator and against a printer, the multiACE filament
-  card, and the no-printer branch. See its README - they were re-written from scratch
-  every time before.
+  card, the no-printer branch, and the print-dialog mockups. See its README - they were
+  re-written from scratch every time before.
+- `--page PATH` loads any other surface under `resources/` instead of the Device page,
+  which is how the print-dialog mockups are driven:
+  `--page 'web/print_processing/mockups/option-b.html?scenario=mismatch'`.
 - `--drive FILE` runs JavaScript in the live page; the script reports by setting
   `window.__report`. This is how hardware behaviour gets measured rather than assumed.
 - `--device-ip` points the saved device somewhere unroutable, to exercise the page with

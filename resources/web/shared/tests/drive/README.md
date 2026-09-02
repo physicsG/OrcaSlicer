@@ -25,6 +25,7 @@ nobody runs.
 | `homing-real.js` | The same dialog against a **real G28**, and the only witness that counts - this one MOVES THE MACHINE. Two attempts at this wait passed every offline check and closed the dialog over a moving bed; what settled it was pressing the button with the printer in sight. Needs `--real`, and Orca closed. Takes a minute. |
 | `orca-sync.js` | What the page sends to **Orca** rather than to the printer, and the three writes that were going to the wrong one of the two. Checks the filament inventory reaches Orca unprompted and in the exact shape `update_filament_info()` parses, that an unchanged one is not re-sent, that naming a filament and applying the print preferences send G-code macros, and that signing in opens Orca's own dialog rather than a form on this page. 22 checks. |
 | `task-card.js` | That the Printing Task panel is as tall as its card. It was pinned at 150 px against a 304 px card, and `.panel-body` hides its overflow — so the progress bar and both job buttons were cut off with nothing to say they had been. |
+| `print-mockups.js` | One of the three **print-dialog mockups**, in the dialog's own 714 × 750. Dumps the tree, then asserts what would be quietly wrong: the plate thumbnail visible without a click *and* decoded, a way to choose a destination per filament, Send agreeing with the scenario, and an edit reaching the model and repainting. Needs `--page`, not the Device page. It found a name column squeezed to 22 px and a lane that had fallen into the wire gutter — neither of which the screenshots showed. |
 
 ```bash
 R=resources/web/shared/tests
@@ -38,6 +39,8 @@ python3 $R/run_webkit.py --real --size 1920x1080 --drive $R/drive/camera-real.js
 python3 $R/run_webkit.py --size 1920x1080 --drive $R/drive/ace-panel.js
 python3 $R/run_webkit.py --size 1920x1080 --drive $R/drive/orca-sync.js
 python3 $R/run_webkit.py --real --size 1920x1080 --drive $R/drive/ace-real.js
+python3 $R/run_webkit.py --size 714x750 --drive $R/drive/print-mockups.js \
+    --page 'web/print_processing/mockups/option-b.html?scenario=mismatch'
 python3 $R/run_webkit.py --real --device-ip 192.0.2.1 --drive $R/drive/no-printer.js
 ```
 

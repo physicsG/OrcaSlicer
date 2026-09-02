@@ -1,0 +1,67 @@
+/* Option C - the preflight. */
+
+.checks { display: flex; flex-direction: column; gap: 0; }
+
+.chk {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  margin-bottom: 7px;
+  overflow: hidden;
+}
+.chk.bad  { border-color: var(--err); }
+.chk.warn { border-color: var(--warn); }
+
+.chk-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 11px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.chk-head:hover { background: var(--panel-2); }
+.chk-head .name { flex: none; width: 96px; font-size: 12px; color: var(--muted); }
+.chk-head .said { flex: 1; min-width: 0; font-size: 13px; }
+.chk-head .said.bad  { color: var(--err); }
+.chk-head .said.warn { color: var(--warn); }
+.chk-head .caret { flex: none; color: var(--muted); font-size: 11px; transition: transform .13s; }
+.chk[open-state="1"] .chk-head .caret { transform: rotate(90deg); }
+.chk-head .swatches { display: flex; gap: 3px; }
+.chk-head .row-thumb { flex: none; width: 30px; height: 30px; margin: -3px 0; }
+
+.chk-body {
+  padding: 0 11px 11px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.chk-body[hidden] { display: none; }
+
+/* the plate, opened */
+.plate-open { display: flex; gap: 12px; align-items: flex-start; }
+.plate-open .thumb { width: 132px; height: 132px; }
+.plate-open dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.plate-open dt { font-size: 11px; color: var(--muted); }
+.plate-open dd { margin: 0; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+/* a small table, used by nozzles and by the mapping */
+table.grid { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.grid th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 8px 5px 0;
+}
+table.grid td { padding: 5px 8px 5px 0; border-top: 1px solid var(--line); vertical-align: middle; }
+table.grid td.tight { width: 1%; white-space: nowrap; }
+table.grid .cellrow { display: flex; align-items: center; gap: 7px; }
+
+.printer-open { display: flex; align-items: center; gap: 10px; }

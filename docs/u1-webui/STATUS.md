@@ -1191,12 +1191,23 @@ Then, in rough order of value:
    is Orca's own Bonjour sweep, so the MQTT probes cannot reach it; it needs the app.
 4. **`sw_SetSubscribeFilter` fails at boot** and is fired best-effort. Worth confirming
    it is genuinely optional rather than papered over.
-5. **The print-processing popup has never been driven against hardware**, and has not had
-   the restructure either — it still shares `shared/` but keeps its own flat `app.js`.
-   Its send path (`sw_GetPrintZip` → `sw_StartLocalPrint` → the close protocol) is
-   unproven. The primitives the Device page grew (`pending`, `render`, the panel
-   contract) are the obvious things to lift across, and doing so is what would prove
-   they generalise.
+5. **The print-processing popup needs a shape chosen before it needs anything else.**
+   A read of the host's own handlers found more wrong than "unproven": it reads
+   `mapping.filaments[i]`, a shape `sw_GetFileFilamentMapping` has never returned — the
+   reply is parallel arrays, and it carries the **plate thumbnail**, per-filament grams,
+   and the nozzle diameters the file was sliced for, none of which is drawn. The send
+   would fail outright, because `sw_StartLocalPrint` refuses to run without
+   `{ type, path }` and the popup sends `{}`. And the file is being fetched through
+   `sw_GetPrintZip`, which serialises a `std::vector<char>` — a 12 MB zip crosses the
+   bridge as ~40 MB of JSON integers, where `sw_GetFileStream` returns a URL, a size and
+   a SHA-256. Everything is in
+   [03-print-processing/04-requirements.md](03-print-processing/04-requirements.md).
+   **Three interactive designs are built** and run on the corrected shape at the dialog's
+   true 714 × 750 —
+   [resources/web/print_processing/mockups/](../../resources/web/print_processing/mockups/):
+   faithful, match sheet, preflight. Pick one, then do the restructure with it; the
+   Device page's primitives (`pending`, `render`, the panel contract) are what lift
+   across, and doing so is what would prove they generalise.
 6. **`sw_DeleteMachineFile` is implemented in Orca and unreferenced here.** Storage
    deliberately has no delete for print files — Delete sat a few pixels from a one-click
    Print and only one of them is reversible. If it is wanted, that should be a considered
