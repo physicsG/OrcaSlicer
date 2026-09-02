@@ -105,8 +105,30 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
           const conn = printer.devices.find((d) => d.connected);
           return ok(conn ? conn : {});
         }
+        /*
+         * `machine.system_info`, in the shape the printer answers it - one `system_info`
+         * wrapper around `product_info` / `cpu_info` / `network` and the rest. Measured on
+         * 811002511261022618B3, 2026-09-01. This used to return a flat
+         * `{firmware_version, model, sn}`, which no U1 has ever sent, and a flat reply is
+         * why the one field only this call carries went unnoticed:
+         * `product_info.nozzle_diameter`, which Orca's filament record wants per slot.
+         */
         case 'sw_GetMachineSystemInfo':
-          return ok({ firmware_version: printer.firmware, model: 'Snapmaker U1', sn: printer.sn });
+          return ok({ system_info: {
+            product_info: {
+              machine_type: 'Snapmaker U1',
+              nozzle_diameter: printer.toolheads.map((t) => t.nozzle_diameter),
+              serial_number: printer.sn,
+              device_name: printer.name,
+              firmware_version: printer.firmware,
+              software_version: printer.firmware,
+            },
+            cpu_info: { cpu_count: 4, bits: '64bit', processor: 'aarch64',
+                        total_memory: 983540, memory_units: 'kB' },
+            network: { wlan0: { mac_address: '02:00:00:00:00:01',
+                                ip_addresses: [{ family: 'ipv4', address: '192.168.1.42',
+                                                 is_link_local: false }] } },
+          } });
         case 'sw_GetPrinterInfo':
           return ok({ state: 'ready', state_message: 'Printer is ready',
                       hostname: 'snapmaker-u1', software_version: printer.firmware });
@@ -188,6 +210,56 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
           // exists: the page has to see the refusal to recognise the success.
           if (raised) return fail(raised);
           return ok({ executed: params.script });
+        }
+
+        /*
+         * Orca's own filament record. NOT a printer command - it never leaves the host -
+         * and the reason it is answered here at all is that the page's only sign of
+         * getting it wrong is this reply.
+         *
+         * Validated exactly as `SSWCP_Instance::update_filament_info()` validates it,
+         * because being lax here is what let a flat `print_task_config` patch look like a
+         * working call for as long as it did: `objects` an array, `key` and `value`
+         * strings, `value` parsing to an object carrying the seven fields the C++ reads,
+         * and every array as long as `filament_official` - which the C++ loops over and
+         * indexes the rest with. Orca has no try/catch around any of that.
+         */
+        case 'sw_UpdateMachineFilamentInfo': {
+          const objs = params && params.objects;
+          if (!Array.isArray(objs) || !objs.length) {
+            return fail('param [objects] required or wrong type!');
+          }
+          const o = objs[0] || {};
+          if (typeof o.key !== 'string') return fail('param [key] required or wrong type!');
+          if (typeof o.value !== 'string') return fail('param [value] required or wrong type!');
+          const dev = printer.devices.find((d) => d.sn === o.key);
+          if (!dev) return fail('sn does not exist!');
+          if (!dev.connected) return fail('The machine is not connected!');
+          let v;
+          try { v = JSON.parse(o.value); } catch (e) { return fail('value parse failed'); }
+          const need = ['nozzle_diameters', 'filament_vendor', 'filament_type',
+                        'filament_sub_type', 'extruder_map_table', 'filament_official'];
+          const missing = need.filter((k) => !Array.isArray(v && v[k]));
+          if (!Array.isArray(v && v.filament_color) && !Array.isArray(v && v.filament_color_rgba)) {
+            missing.push('filament_color');
+          }
+          if (missing.length) return fail('value parse failed');
+          const n = v.filament_official.length;
+          const short = ['filament_vendor', 'filament_type', 'filament_sub_type',
+                         'filament_color_rgba', 'nozzle_diameters']
+            .filter((k) => Array.isArray(v[k]) && v[k].length && v[k].length < n);
+          if (short.length) {
+            // Out of range inside a wxWidgets event handler on the real host, so it is an
+            // error here rather than something the simulator quietly tolerates.
+            return fail(`arrays shorter than filament_official: ${short.join(', ')}`);
+          }
+          printer.orcaFilamentRecord = { sn: o.key, value: v };
+          // Counted, not just kept: `load_current_presets()` rebuilds every combo box in
+          // the sidebar, so "did it re-send an unchanged inventory" is a question a test
+          // has to be able to ask.
+          printer.orcaSyncCount = (printer.orcaSyncCount || 0) + 1;
+          log('mock-note', { orcaFilamentSync: o.key, slots: n });
+          return ok({});
         }
 
         /* ---- bringing a session up ------------------------------------- */
@@ -386,6 +458,26 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
           // Both open a native Orca dialog; there is nothing to simulate.
           return ok({ opened: true });
 
+        /*
+         * ---- the Snapmaker account -------------------------------------
+         *
+         * Orca answers `sw_UserLogin` and THEN opens a modal on id.snapmaker.com, so the
+         * reply says nothing about whether anyone signed in. Modelled the same way here -
+         * an immediate `ok`, and a session that appears a moment later - because that gap
+         * is the whole reason the page polls the state afterwards instead of reading the
+         * reply.
+         */
+        case 'sw_UserLogin':
+          setTimeout(() => {
+            printer.loginUser = { userid: 'mock-user-1', nickname: 'Mock Account' };
+          }, 900);
+          return ok({});
+        case 'sw_GetUserLoginState':
+          return ok(printer.loginUser
+            ? { status: 'online', userid: printer.loginUser.userid,
+                nickname: printer.loginUser.nickname, icon: '', token: '', account: '' }
+            : { status: 'offline' });
+
         /* ---- logging / telemetry the real page emits constantly -------- */
         case 'sw_FileLog': case 'sw_Log': case 'sw_UploadEvent': case 'sw_SetLogLevel':
           return ok({});
@@ -543,13 +635,23 @@ function mockAceOverrides() {
   };
 }
 
-/** `ACE_DRY TEMP=55 DURATION=4` -> {TEMP: '55', DURATION: '4'}. */
+/**
+ * `ACE_DRY TEMP=55 DURATION=4` -> {TEMP: '55', DURATION: '4'}.
+ *
+ * Quoted values are kept whole, quotes stripped: the shipped page writes
+ * `SET_PRINT_FILAMENT_CONFIG VENDOR='Kingroon Filament'`, and splitting on whitespace
+ * made that two arguments and a vendor of `'Kingroon`.
+ */
 function gcodeArgs(script) {
   const out = {};
-  String(script).trim().split(/\s+/).slice(1).forEach((tok) => {
-    const m = /^([A-Za-z_]+)=(.*)$/.exec(tok);
-    if (m) out[m[1].toUpperCase()] = m[2];
-  });
+  const re = /([A-Za-z_][A-Za-z0-9_]*)\s*=\s*('[^']*'|"[^"]*"|[^\s]*)/g;
+  const body = String(script).trim().replace(/^\S+\s*/, '');
+  let m;
+  while ((m = re.exec(body)) !== null) {
+    const v = m[2];
+    out[m[1].toUpperCase()] = (v.length > 1 && (v[0] === "'" || v[0] === '"'))
+      ? v.slice(1, -1) : v;
+  }
   return out;
 }
 
@@ -576,6 +678,10 @@ export function makePrinter() {
         link_mode: 'lan', nozzle_sizes: ['0.4', '0.4', '0.4', '0.4'] },
     ],
     firmware: '1.0.0-mock',
+    /** How many times Orca's filament record has been written. See sw_UpdateMachineFilamentInfo. */
+    orcaSyncCount: 0,
+    /** Who is signed in, or null. Orca's, not the printer's - see sw_UserLogin. */
+    loginUser: null,
     // What sw_GetSoftwareInfo reports - the real bundle's shipped values, so the
     // build badge shows the same number with or without a host.
     orcaVersion: '2.3.26',
@@ -609,6 +715,13 @@ export function makePrinter() {
     filamentVendor: ['Snapmaker', 'Snapmaker', 'Snapmaker', 'Generic'],
     filamentType: ['PLA', 'PLA', 'PETG', 'ABS'],
     filamentColorRgba: ['E03131FF', '1971C2FF', '2F9E44FF', 'F08C00FF'],
+    /*
+     * The three job toggles, mutable because SET_PRINT_PREFERENCES writes them. Keyed by
+     * the field name the machine REPORTS them under; the macro's own argument for the
+     * third one is `BED_LEVEL`, and the translation is the page's business, not this
+     * side's - see PRINT_PREFERENCES in protocol.js.
+     */
+    prefs: { flow_calibrate: true, time_lapse_camera: false, auto_bed_leveling: true },
     /** What multiACE does to a feeder head on entering head mode. */
     clearFilamentDisplay(head) {
       this.filamentVendor[head] = '';
@@ -820,6 +933,56 @@ export function makePrinter() {
     const line = String(script || '').trim();
     const name = line.split(/\s+/)[0].toUpperCase();
     const a = gcodeArgs(line);
+
+    /*
+     * Snapmaker's own print_task_config macros come FIRST, because they are the printer's
+     * and not multiACE's: a stock U1 with no ACE at all still answers them, and the guard
+     * below would otherwise drop every one of them on such a machine.
+     *
+     * None of the four appears in `printer.gcode.help`; all four were recovered from the
+     * shipped bundle. Absence from the help table is not evidence - the T-commands are not
+     * in it either.
+     */
+    switch (name) {
+      case 'SET_PRINT_FILAMENT_CONFIG': {
+        const ch = Number(a.CONFIG_EXTRUDER);
+        if (!Number.isInteger(ch) || ch < 0 || ch > 3) return;
+        // The machine's own gate, and the reason the panel reads `filament_edit`:
+        // an official slot is refused unless FORCE=1.
+        if (p.filamentOfficial[ch] && String(a.FORCE || '0') !== '1') {
+          return '[print_task_config] filament_config, official filament, not configurable!';
+        }
+        if (a.FILAMENT_TYPE !== undefined) p.filamentType[ch] = a.FILAMENT_TYPE;
+        if (a.VENDOR !== undefined) p.filamentVendor[ch] = a.VENDOR;
+        if (a.FILAMENT_SUBTYPE !== undefined) p.filamentSubType[ch] = a.FILAMENT_SUBTYPE;
+        if (a.FILAMENT_COLOR_RGBA !== undefined) {
+          p.filamentColorRgba[ch] = String(a.FILAMENT_COLOR_RGBA).toUpperCase();
+        }
+        // Every write clears the flag, in the firmware's own words - which is what makes
+        // `filament_edit` a latch rather than a property of the spool.
+        p.filamentOfficial[ch] = false;
+        return;
+      }
+      case 'SET_PRINT_PREFERENCES': {
+        const set = (arg, field) => {
+          if (a[arg] === undefined) return;
+          p.prefs[field] = a[arg] === '1' || String(a[arg]).toLowerCase() === 'true';
+        };
+        set('FLOW_CALIBRATE', 'flow_calibrate');
+        set('TIME_LAPSE_CAMERA', 'time_lapse_camera');
+        set('BED_LEVEL', 'auto_bed_leveling');
+        return;
+      }
+      // The two the print popup sends. Accepted and ignored here: nothing in this
+      // simulator reads the map back, and a handler that pretended to would be claiming
+      // more than has been measured.
+      case 'SET_PRINT_EXTRUDER_MAP':
+      case 'SET_PRINT_USED_EXTRUDERS':
+        return;
+      default:
+        break;
+    }
+
     const ace = p.ace;
     if (!ace) return;
     const head = Number(a.HEAD);
@@ -1075,11 +1238,29 @@ export function makePrinter() {
         filament_edit: p.filamentExist.map(
           (e, i) => e !== false && !p.filamentOfficial[i]),
         filament_exist: p.filamentExist.slice(),
-        extruders_used: [0, 1, 2, 3],
-        extruder_map_table: { 0: 0, 1: 1, 2: 2, 3: 3 },
-        flow_calibrate: true,
-        time_lapse_camera: false,
-        auto_bed_leveling: true,
+        filament_sku: [0, 0, 0, 0],
+        /*
+         * Both of these were the wrong SHAPE, and the shape is the half that matters to
+         * anything reading them off the wire. Read off 811002511261022618B3, 2026-09-01:
+         * `extruders_used` is one BOOLEAN per toolhead, and `extruder_map_table` is a
+         * flat array of THIRTY-TWO - one entry per possible tool, not one per slot. The
+         * simulator had them as four small integers and a four-key object, so a reader
+         * that indexes the table past the fourth entry, or treats it as an array at all,
+         * agreed with the mock and not with the printer.
+         */
+        extruders_used: [false, false, false, false],
+        extruder_map_table: Array.from({ length: 32 }, (_, i) => (i < 4 ? i : 0)),
+        flow_calibrate: p.prefs.flow_calibrate,
+        time_lapse_camera: p.prefs.time_lapse_camera,
+        auto_bed_leveling: p.prefs.auto_bed_leveling,
+        shaper_calibrate: false,
+        auto_replenish_filament: true,
+        can_auto_replenish: false,
+        auto_replenish_index: 0,
+        filament_color_multi: p.filamentColorRgba.map((h) => ({
+          nums: 1, alpha: parseInt(String(h).slice(6, 8), 16),
+          mode: 0, colors: [String(h).slice(0, 6)],
+        })),
       },
     };
     TOOLHEADS.forEach((k, i) => { objs[k] = Object.assign({}, p.toolheads[i]); });

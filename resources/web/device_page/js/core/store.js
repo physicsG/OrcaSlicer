@@ -83,6 +83,16 @@ export function createStore() {
     /** Machines LAN discovery has turned up. */
     found: [],
 
+    /**
+     * `machine.system_info`, as the printer answered it.
+     *
+     * Kept because of one field nothing else on the wire carries:
+     * `product_info.nozzle_diameter`. Orca's filament record wants a nozzle per slot
+     * and `print_task_config` has no such key on this firmware, so the sync in
+     * core/orcasync.js reads it from here. Null until it has been asked for.
+     */
+    systemInfo: null,
+
     /** `{ userid, nickname }` - the pairing request wants both. */
     loginUser: {},
 
