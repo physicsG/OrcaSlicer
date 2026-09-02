@@ -435,6 +435,12 @@ table.spec td.v { font-family: var(--mono); font-size: 11.5px; white-space: nowr
 <p class="legend">
   <b>Icons</b> are Material Icons codepoints (<code>57686 check</code>, <code>58123 help</code>,
   <code>57912 warning</code>, <code>61757 caret</code>); the shapes below are stand-ins.<br>
+  <b>One deliberate departure in the rebuild.</b> This page draws a device row the way the
+  bundle does — cover, name, “Lan Mode”, check — so two saved records with the same name
+  are two identical rows. The reconstruction adds the address under the name, and the
+  serial when that is what tells two rows apart; see <code>deviceMeta()</code> in
+  <code>print_processing/js/views/printer/printer-view.js</code>. Everything else on that
+  page is this one.<br>
   <b>The spinner</b> in the Send button while a send is in flight
   (<code>B.ayd = SizedBox(16,16, CircularProgressIndicator(strokeWidth 2))</code>), and the
   five button colours behind its eight states, are recovered but not animated here.<br>

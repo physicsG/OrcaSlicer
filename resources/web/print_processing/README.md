@@ -141,6 +141,25 @@ printer that answered.
 passed, so the send path is exercised right up to that command and stopped there. A suite
 that can start a print is a suite that will, on somebody's bed, at 3am.
 
+## Where this departs from the shipped dialog
+
+One place, deliberately, and it is worth listing because everything else is a
+reproduction.
+
+**The printer rows carry an address.** The shipped dialog draws a device as a cover, a
+name, a "Lan Mode" label and a check — so two saved records with the same name are two
+identical rows. That is not hypothetical: Orca's config routinely keeps a stale record
+beside a live one, and the machine this was built against has exactly that — two `U1 G`
+entries on the same address, differing only by serial (`811002511261022618B3` against a
+`moonraker` placeholder). Picking the wrong one connects to nothing, and the dialog can
+only report that the printer did not answer.
+
+The address is on the record already — `connection.js` refuses to connect without one —
+so drawing it costs a second line in a row that has 50 px for it. **The serial appears
+only when it is the thing that tells two rows apart**; where a name and an address are
+already unique it is noise, and it is not drawn. `deviceMeta()` in
+[`printer-view.js`](js/views/printer/printer-view.js) is that rule.
+
 ## The send
 
 Four things here are not what the previous reconstruction did, each read off the host:

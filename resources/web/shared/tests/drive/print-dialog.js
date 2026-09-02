@@ -76,6 +76,29 @@
     /* ---- Select Printer ---- */
     check('printer picker is 300x50 (A.a2l(50,300,...))',
           `${W('.picker')}x${H('.picker')}`, '300x50');
+    // The address, which the shipped dialog does not draw - see deviceMeta().
+    const meta0 = q('.picker .dev-meta');
+    check('the chosen printer shows its address',
+          !!meta0 && /\d+\.\d+\.\d+\.\d+/.test(meta0.textContent), true);
+    // The two simulated devices differ by name AND address, so nothing needs the serial.
+    check('and not its serial, which nothing here needs to be told apart',
+          !!meta0 && /U1MOCK/.test(meta0.textContent), false);
+
+    q('.picker').click();
+    const pmenu = q('.menu-printer');
+    check('the printer menu opens', !!pmenu, true);
+    if (pmenu) {
+      check('printer menu is 300 wide', Math.round(R(pmenu).width), 300);
+      check('items are 50 tall (B.aqV)', Math.round(R(pmenu.children[0]).height), 50);
+      check('the saved devices, plus the synthetic add-device row',
+            pmenu.children.length, pp.model.devices.length + 1);
+      const metas = qq('.menu-printer .dev-meta').map((n) => n.textContent);
+      check('every device row carries an address',
+            metas.length > 0 && metas.every((t) => /\d+\.\d+\.\d+\.\d+/.test(t)), true);
+      say(`  device rows: ${JSON.stringify(metas)}`);
+      check('the connected one carries a check', qq('.menu-printer .menu-tick').length, 1);
+    }
+    q('.picker').click();
 
     /* ---- Edit Filament: the part no screenshot ever showed ---- */
     check('one card per file filament',

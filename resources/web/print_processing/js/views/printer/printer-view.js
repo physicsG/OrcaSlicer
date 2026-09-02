@@ -13,12 +13,51 @@
 import { el } from '../../../../shared/js/dom.js';
 import { text } from '../../../../shared/js/render.js';
 import { openPicker, closePicker, isPickerOpen } from '../../widgets/picker.js';
+import { DEVICE } from '../../../../shared/js/protocol.js';
 
 const ADD_DEVICE = '__add_device__';
 
-const deviceId = (d) => String(d.dev_id || d.sn || d.ip || d.dev_name || '');
-const deviceName = (d) => d.dev_name || d.name || d.model_name || deviceId(d);
-const isLan = (d) => d.link_mode === 'lan' || d.protocol === 1;
+const deviceId = (d) => String(d[DEVICE.ID] || d[DEVICE.SN] || d[DEVICE.IP]
+                               || d[DEVICE.NAME] || '');
+const deviceName = (d) => d[DEVICE.NAME] || d.name || d[DEVICE.MODEL] || deviceId(d);
+const isLan = (d) => d[DEVICE.LINK_MODE] === 'lan' || d.protocol === 1;
+
+/**
+ * The line under a device's name.
+ *
+ * **This is a deliberate departure from the shipped dialog**, which draws a device as a
+ * cover, a name, a "Lan Mode" label and a check - and nothing else. Two saved records
+ * with the same name are then two identical rows, which is not a hypothetical: Orca's
+ * config routinely holds a stale record beside a live one, and the machine this was
+ * built against has exactly that. Picking the wrong one connects to nothing and the
+ * dialog can only say the printer did not answer.
+ *
+ * The address is on the record already - `connection.js` refuses to connect without it -
+ * so showing it costs a line that the row had room for.
+ *
+ * The serial only appears when it is the thing that TELLS TWO ROWS APART. On the machine
+ * above both records carry the same name AND the same address and differ only by SN
+ * (`811002511261022618B3` against a `moonraker` placeholder), so the address alone would
+ * have left the ambiguity exactly where it was. Where a name and an address are already
+ * unique the serial is noise, and it is not drawn.
+ */
+export function deviceMeta(d, all) {
+  const bits = [];
+  if (isLan(d)) bits.push('Lan Mode');
+  const ip = d[DEVICE.IP];
+  if (ip) bits.push(ip);
+  /*
+   * Compared by IDENTITY KEY, not by object identity. The selected device is usually a
+   * DIFFERENT OBJECT from its entry in the list - `sw_GetConnectedMachine` answers with
+   * its own copy - so `o !== d` counted a device as its own twin and printed the serial
+   * on a machine that had nothing to be told apart from.
+   */
+  const twin = (all || []).some(
+    (o) => deviceId(o) !== deviceId(d)
+        && deviceName(o) === deviceName(d) && o[DEVICE.IP] === ip);
+  if (twin && d[DEVICE.SN]) bits.push(d[DEVICE.SN]);
+  return bits.join(' · ');
+}
 
 export function mount(root, ctx) {
   const row = el('div', 'sp');
@@ -46,10 +85,17 @@ export function mount(root, ctx) {
       value: deviceId(d),
       build: (node) => {
         node.appendChild(el('span', 'menu-cover'));
-        node.appendChild(el('span', 'menu-name', deviceName(d)));
-        if (isLan(d)) node.appendChild(el('span', 'menu-lan', 'Lan Mode'));
+        const t = el('span', 'dev-text');
+        t.appendChild(el('span', 'dev-name', deviceName(d)));
+        const meta = deviceMeta(d, rows);
+        if (meta) {
+          const m = el('span', 'dev-meta', meta);
+          m.title = meta;
+          t.appendChild(m);
+        }
+        node.appendChild(t);
         node.appendChild(el('span', 'menu-grow'));
-        if (d.connected) node.appendChild(el('span', 'menu-tick'));
+        if (d[DEVICE.CONNECTED]) node.appendChild(el('span', 'menu-tick'));
       },
     }));
     // The bundle appends this row itself, with its own cover art, and treats picking it
@@ -70,13 +116,22 @@ export function mount(root, ctx) {
   };
 }
 
-export function update(root, { device, legal }) {
+export function update(root, { device, legal, devices }) {
   const body = root.querySelector('.picker-body');
   body.innerHTML = '';
   if (device) {
     body.appendChild(el('span', 'menu-cover'));
-    body.appendChild(el('span', 'menu-name', deviceName(device)));
-    if (isLan(device)) body.appendChild(el('span', 'menu-lan', 'Lan Mode'));
+    const t = el('span', 'dev-text');
+    t.appendChild(el('span', 'dev-name', deviceName(device)));
+    // The closed picker says the same thing the open one does. Choosing between two
+    // rows only to be shown a name that matches both of them is half an answer.
+    const meta = deviceMeta(device, devices);
+    if (meta) {
+      const m = el('span', 'dev-meta', meta);
+      m.title = meta;
+      t.appendChild(m);
+    }
+    body.appendChild(t);
     body.classList.remove('placeholder');
   } else {
     body.appendChild(el('span', 'picker-hint', 'Click to select printer'));
