@@ -37,8 +37,7 @@ import { ACE, FEEDER, DRY_MINUTES_PER_HOUR, aceUnitId, aceLine, aceOverridesUrl,
          parseAceOverrides, aceGlyph, channelStep, channelWord,
          gcodeStoreUrl, lastPrinterError, aceModeChange, aceModeRefusal }
   from '../../../../../shared/js/multiACE.js';
-import { openDialog, openBlockingDialog, numberField, toggleField }
-  from '../../../core/overlay.js';
+import { openDialog, openBlockingDialog, numberField, toggleField } from '../../../../../shared/js/dialog.js';
 import { el } from '../../../../../shared/js/dom.js';
 
 

@@ -14,8 +14,8 @@ import { CMD, SUBSCRIBE_OBJECTS, NAMED, LIMITS, TASK_CONFIG, PRINT_PREFERENCES,
          asDeviceList, deviceLabel, DEVICE, hasTlsMaterial,
          CAMERA_DOMAIN, CAMERA_INTERVAL, cssColor, timelapseUrl }
   from '../../shared/js/protocol.js';
-import { openMenu, openDialog, openBlockingDialog, toggleField, numberField }
-  from './core/overlay.js';
+import { openMenu } from './core/overlay.js';
+import { openDialog, openBlockingDialog, toggleField, numberField } from '../../shared/js/dialog.js';
 import { connect as connectDevice, disconnect as disconnectDevice } from './core/connection.js';
 import { Sswcp, isTimeout } from '../../shared/js/sswcp.js';
 import { MachineState } from '../../shared/js/state.js';
@@ -29,7 +29,7 @@ import { DIAG, createLog } from './core/diag.js';
 import { mountBuildBadge } from '../../shared/js/buildinfo.js';
 import { $ } from '../../shared/js/dom.js';
 import { renderRail } from './widgets/rail.js';
-import { makeTrace } from './widgets/trace.js';
+import { makeTrace } from '../../shared/js/trace.js';
 import { buildShell, paint } from './shell.js';
 // aliased: this file has its own render()
 import * as renderPrims from '../../shared/js/render.js';

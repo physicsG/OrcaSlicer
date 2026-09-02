@@ -30,6 +30,7 @@ from GdkPixbuf rather than WebKit's own snapshot API, which hands back a cairo s
 there is no pycairo here to receive.
 """
 import argparse
+import urllib.parse
 import functools
 import http.server
 import json
@@ -466,6 +467,26 @@ def serve(directory):
     return httpd.server_address[1]
 
 
+def _file_url_factory(port):
+    """Make a local path fetchable by the page, under the directory already served.
+
+    Orca's `make_wcp_download_url` base64s the path onto its own page server. Here the
+    harness already has one serving `resources/`, so the honest equivalent is to place
+    the file under it and hand back that URL - same origin as the page, same `fetch`.
+    """
+    drop = os.path.join(SERVE, "_bridge_files")
+    os.makedirs(drop, exist_ok=True)
+
+    def to_url(path):
+        import shutil                                              # noqa: PLC0415
+        name = os.path.basename(path)
+        dest = os.path.join(drop, name)
+        if os.path.abspath(path) != os.path.abspath(dest):
+            shutil.copy2(path, dest)
+        return f"http://127.0.0.1:{port}/_bridge_files/{urllib.parse.quote(name)}"
+    return to_url
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--shots", help="directory to write screenshots into")
@@ -501,6 +522,15 @@ def main():
     ap.add_argument("--drive", metavar="FILE",
                     help="run this JavaScript in the page instead of the built-in "
                          "checks; it reports by setting window.__report when done")
+    ap.add_argument("--gcode", metavar="FILE",
+                    help="with --real: answer the print dialog's Orca-side commands out "
+                         "of this sliced .gcode - the filament list, the thumbnail, the "
+                         "estimate and the packaged file all come from it. Without one "
+                         "those commands refuse and say why.")
+    ap.add_argument("--allow-print", action="store_true",
+                    help="let sw_StartLocalPrint through to the printer. It STARTS A "
+                         "PRINT. Without it the send path is exercised up to that "
+                         "command and refused there, which is what a suite wants.")
     ap.add_argument("--page", metavar="PATH",
                     help="load this path under resources/ instead of the Device page, "
                          "e.g. web/print_processing/mockups/option-a.html?scenario="
@@ -586,7 +616,17 @@ def main():
                 devices = [dict(d, ip=args.device_ip) for d in devices]
                 print(f"  pretending the printer is at {args.device_ip}")
         bridge = Bridge(send=to_page, devices=devices,
-                        trace=100000 if args.trace else 120)
+                        trace=100000 if args.trace else 120,
+                        gcode=args.gcode, allow_print=args.allow_print)
+        # sw_GetFileStream hands the page a URL rather than the bytes, and the page then
+        # fetches it - so the zip has to be reachable over HTTP. The harness is already
+        # serving resources/ ; this copies the packaged file in under a scratch path and
+        # returns its URL, which is the same shape as Orca's own page server.
+        bridge.file_url = _file_url_factory(port)
+        if args.gcode:
+            print(f"  print dialog reads its job from {args.gcode}")
+        if args.allow_print:
+            print("  --allow-print: sw_StartLocalPrint WILL reach the printer")
         if args.original:
             # Orca reaches the Device tab with a printer host already attached. The
             # bundle never brings one up itself - it makes its own MQTT clients for

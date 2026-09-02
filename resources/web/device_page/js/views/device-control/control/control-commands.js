@@ -17,7 +17,7 @@
 
 import { CMD, NAMED, LIMITS, PRINT_PREFERENCES, prefsLine }
   from '../../../../../shared/js/protocol.js';
-import { openDialog, openBlockingDialog, toggleField } from '../../../core/overlay.js';
+import { openDialog, openBlockingDialog, toggleField } from '../../../../../shared/js/dialog.js';
 import { isTimeout } from '../../../../../shared/js/sswcp.js';
 import { machineActivity, isBusy } from '../../../../../shared/js/activity.js';
 

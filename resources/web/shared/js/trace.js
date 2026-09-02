@@ -1,9 +1,16 @@
 /*
- * trace.js - the live WCP trace pane. A development aid, not part of the shipped page.
+ * trace.js - the live WCP trace pane.
+ *
+ * A development aid, not part of either shipped surface, and shared because both of them
+ * want the same one: `--watch` turns the terminal into a running list of what each click
+ * sent, and the pane is where that is read on screen.
+ *
+ * The Device page's own filament artwork used to live in this file and moved out with
+ * it - it is that page's drawing, not a trace concern.
  */
 'use strict';
 
-import { $, el } from '../../../shared/js/dom.js';
+import { el } from './dom.js';
 
 /* ---- trace ---------------------------------------------------------- */
 export function makeTrace(pane) {
@@ -20,11 +27,3 @@ export function makeTrace(pane) {
   };
 }
 
-/* ---- filament ------------------------------------------------------- */
-
-/**
- * Four slots, drawn on the bundle's own extruder artwork.
- *
- * Values come from `print_task_config` - the same object the print-processing
- * popup edits. See docs/u1-webui/00-shared/01-shared-models.md
- */

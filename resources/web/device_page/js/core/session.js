@@ -25,7 +25,7 @@
 
 import { CMD, SUBSCRIBE_OBJECTS, DEVICE, deviceLabel, hasTlsMaterial }
   from '../../../shared/js/protocol.js';
-import { openDialog } from './overlay.js';
+import { openDialog } from '../../../shared/js/dialog.js';
 import { connect as connectDevice, disconnect as disconnectDevice } from './connection.js';
 
 /**

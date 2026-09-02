@@ -123,7 +123,15 @@ export const CMD = {
   // ---- print-processing popup only (?path=4 / ?path=5) ------------------
   GET_ACTIVE_FILE: 'sw_GetActiveFile',
   GET_PRINT_LEGAL: 'sw_GetPrintLegal',             // { connected_model } -> { legal, preset_model }
-  GET_PRINT_ZIP: 'sw_GetPrintZip',                 // -> { name, content }
+  // The RIGHT door for the file: { is_zip } -> { file_name, file_url, origin_size,
+  // checksum }. `file_url` is a localhost URL on Orca's own page HTTP server - the one
+  // already serving this document - so the page fetches the zip rather than being
+  // handed it. NOT printer-backed: both branches build m_res_data and send_to_js().
+  GET_FILE_STREAM: 'sw_GetFileStream',
+  // The other one, kept named because it is what the reconstruction used to call:
+  // `content` comes from a std::vector<char>, which serialises as one JSON integer per
+  // byte. A 12 MB zip crosses as ~40 MB of JSON.
+  GET_PRINT_ZIP: 'sw_GetPrintZip',                 // -> { name, content: number[] }
   GET_FILE_FILAMENT_MAPPING: 'sw_GetFileFilamentMapping',   // { filename }
   UPDATE_MACHINE_FILAMENT_INFO: 'sw_UpdateMachineFilamentInfo',
   SET_FILAMENT_MAPPING_COMPLETE: 'sw_SetFilamentMappingComplete', // { status }

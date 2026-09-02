@@ -1,237 +1,290 @@
 /*
- * app.js - wiring for the print-processing popup.
+ * app.js - the print-processing popup.
  *
- * Startup mirrors the shipped popup's own order (docs:
- * 03-print-processing/02-lifecycle.md):
- *   1. sw_GetActiveFile               which file Orca is about to send
- *   2. sw_GetConnectedMachine         which printer is attached
- *   3. sw_GetPrintLegal               does the preset match that printer
- *   4. sw_GetFileFilamentMapping      what filaments the file needs
- *   5. sw_SetSubscribeFilter + sw_SubscribeMachineState
- *                                     so print_task_config stays live
+ * Orca opens this modal at ?path=4 or ?path=5 and the route decides one thing: whether
+ * the print half is drawn. Everything else is the same dialog.
  *
- * Two modes, matching Orca's two routes:
- *   ?mode=print   -> ?path=4  preUploadAndPrint  (filament + preferences shown)
- *   ?mode=upload  -> ?path=5  preUpload          (those sections hidden)
+ *   ?mode=print   ?path=4  preUploadAndPrint   (default)
+ *   ?mode=upload  ?path=5  preUpload
+ *   ?mock=1       force the simulator
+ *
+ * Startup reads the two sources this surface reconciles - the FILE from Orca, the
+ * MACHINE from the state stream - and then does nothing on its own until something
+ * changes. See core/session.js for why neither is derived from the other.
  */
 'use strict';
 
-import { CMD, SUBSCRIBE_OBJECTS, MAPPING_STATUS, PRINT_PREFERENCES, PRINT_TASK,
-         plainLine, prefsLine }
-  from '../../shared/js/protocol.js';
+import { CMD, PRINT_PREFERENCES } from '../../shared/js/protocol.js';
 import { Sswcp } from '../../shared/js/sswcp.js';
 import { MachineState } from '../../shared/js/state.js';
 import { mountBuildBadge } from '../../shared/js/buildinfo.js';
-import { installMock } from './mock.js';
-import * as ui from './ui.js';
+import { $, el } from '../../shared/js/dom.js';
+import { text, data } from '../../shared/js/render.js';
+import { Pending } from '../../shared/js/pending.js';
+import { installMock } from './core/mock.js';
+import { buildShell } from './core/shell.js';
+import { readJob, subscribeState, fileFilaments, machineToolheads,
+         nozzleMismatch, initialAssignment } from './core/session.js';
+import { runSend, close as closeDialog, SEND_STATE, BUSY } from './core/send.js';
+import { closePicker } from './widgets/picker.js';
+import { makeTrace } from '../../shared/js/trace.js';
+import { openDialog } from '../../shared/js/dialog.js';
+import { percent0 } from './widgets/format.js';
+import * as printerCmds from './views/printer/printer-commands.js';
+import * as filamentCmds from './views/filament/filament-commands.js';
+import * as prefCmds from './views/preferences/preferences-commands.js';
+import { MAPPING_STATUS } from '../../shared/js/protocol.js';
 
 const qs = new URLSearchParams(location.search);
-const wantMock = qs.get('mock') === '1';
-/** upload-only is ?path=5 in Orca; anything else is the print flow. */
-const MODE = qs.get('mode') === 'upload' ? 'upload' : 'print';
-const WITH_PRINT_SETUP = MODE === 'print';
+const ROUTE = qs.get('mode') === 'upload' ? 'upload' : 'print';
+const WITH_PRINT_SETUP = ROUTE === 'print';
+const WANT_MOCK = qs.get('mock') === '1';
 
 const state = new MachineState();
+/*
+ * A request is held until the machine reports it. `onChange` fires when one starts or is
+ * refused - the two moments there is something new to show and nothing on the state
+ * stream about to prompt a repaint.
+ */
+const pending = new Pending({ onChange: () => render() });
+
+/** Everything the panels read. One object, so a panel cannot reach past it. */
+const model = {
+  file: null, mapping: null, legal: null, device: null, devices: [],
+  filaments: [], toolheads: [], assignment: {}, prefs: {},
+  nozzleMismatch: false, errors: [],
+  send: { state: SEND_STATE.IDLE, progress: 0, detail: '' },
+};
+
 let bridge = null;
-let device = null;
-let legal = null;
-let file = { filename: '', predictionTime: 0, weight: 0 };
-let mapping = null;
-let prefs = {};
+let mounted = [];
 let trace = () => {};
-let uploadPct = 0;
 
-function setStatus(text, kind = '') {
-  const n = ui.$('#status');
-  n.textContent = text;
-  n.className = 'status ' + kind;
-}
+/* ---- the context every panel is handed ------------------------------- */
+const ctx = {
+  get: () => model,
+  dialog: () => document.body,
 
-async function boot() {
-  trace = ui.makeTrace(ui.$('#trace'));
-
-  let mock = null;
-  if (wantMock || !Sswcp.hasHost()) {
-    mock = installMock({ log: trace, onClose: (ok) => setStatus(
-      ok ? 'dialog closed: success' : 'dialog closed: canceled', ok ? 'ok' : 'warn') });
-    window.__preprint.mock = mock;
-    setStatus('simulated host (no Orca)', 'mock');
-  } else {
-    setStatus('connected to Orca', 'ok');
-  }
-  ui.$('#mode').textContent = (mock ? 'MOCK' : 'LIVE') + ' · '
-    + (WITH_PRINT_SETUP ? 'path=4 upload+print' : 'path=5 upload only');
-  ui.$('#mode').className = 'mode ' + (mock ? 'mock' : 'live');
-
-  bridge = new Sswcp({ log: trace });
-
-  try {
-    const f = await bridge.request(CMD.GET_ACTIVE_FILE, {});
-    if (f && f.filename) file.filename = f.filename;
-  } catch (e) { console.warn('[preprint] active file:', e.message); }
-
-  try {
-    device = await bridge.request(CMD.GET_CONNECTED_MACHINE, {});
-  } catch (e) {
-    console.warn('[preprint] no connected machine:', e.message);
-    setStatus('no connected machine', 'warn');
-  }
-
-  if (device) {
-    try {
-      legal = await bridge.request(CMD.GET_PRINT_LEGAL, {
-        connected_model: device.model_name || device.machineType || '',
-      });
-    } catch (e) { console.warn('[preprint] legality check:', e.message); }
-  }
-
-  if (WITH_PRINT_SETUP) await loadMapping();
-
-  // print_task_config arrives over the shared state subscription - the same
-  // objects and field filter the Device tab uses.
-  try {
-    await bridge.request(CMD.SET_SUBSCRIBE_FILTER, { objects: SUBSCRIBE_OBJECTS });
-    const snap = await bridge.request(CMD.GET_MACHINE_STATE, { objects: SUBSCRIBE_OBJECTS });
-    state.applyPayload(snap);
-    await bridge.subscribe(CMD.SUBSCRIBE_MACHINE_STATE, {}, (d) => state.applyPayload(d));
-  } catch (e) { console.warn('[preprint] state:', e.message); }
-
-  prefs = Object.assign({}, state.taskConfig());
-  state.onChange(render);
-  render();
-
-  mountBuildBadge(ui.$('#build-badge'), 'Print processing', bridge)
-    .then((info) => { window.__preprint.build = info; })
-    .catch(() => {});
-}
-
-async function loadMapping() {
-  try {
-    mapping = await bridge.request(CMD.GET_FILE_FILAMENT_MAPPING,
-                                   { filename: file.filename });
-    if (mapping) {
-      file.predictionTime = mapping.prediction_time ?? file.predictionTime;
-      file.weight = mapping.weight ?? file.weight;
-    }
-  } catch (e) {
-    console.warn('[preprint] filament mapping:', e.message);
-  }
-}
-
-/* ---- handlers ------------------------------------------------------ */
-
-const handlers = {
-  pickPrinter: () => setStatus('printer picker not implemented in this reconstruction', 'warn'),
-
-  refreshFilament: async () => { await loadMapping(); render(); },
-
-  /*
-   * Both of these write `print_task_config`, and both did it with
-   * `sw_UpdateMachineFilamentInfo` - which does not reach the printer. It is Orca's own
-   * filament record, it wants `{objects:[{key,value}]}`, and a flat patch fails its first
-   * `if`. The macros below are what the shipped popup sends for the same two actions,
-   * recovered from `setPrePrintConfiguration` in main.dart.js; it emits all three lines in
-   * one script, so they are joined the same way here.
-   */
-  assignSlot: (filamentIndex, toolhead) => {
-    if (!mapping || !mapping.filaments[filamentIndex]) return;
-    mapping.filaments[filamentIndex].extruder = toolhead;
-    // EXTRUDERS is the set of TOOLHEADS in use, not the file's filament indices - the
-    // bundle joins the map's values, and `extruders_used` on the machine is one flag per
-    // toolhead. De-duplicated because two filaments can share one head.
-    const heads = [...new Set(mapping.filaments.map((f) => Number(f.extruder) || 0))];
-    const script = [
-      // Bare, not quoted: the bundle builds these two by plain concatenation, and only
-      // SET_PRINT_FILAMENT_CONFIG goes through the quoting map.
-      plainLine(PRINT_TASK.EXTRUDER_MAP,
-                { CONFIG_EXTRUDER: filamentIndex, MAP_EXTRUDER: Number(toolhead) || 0 }),
-      plainLine(PRINT_TASK.USED_EXTRUDERS, { EXTRUDERS: heads.join(',') }),
-    ].join('\n');
-    bridge.request(CMD.SEND_GCODES, { script })
-          .catch((e) => console.warn('[preprint] update mapping:', e.message));
-    render();
+  chooseDevice(id) {
+    const d = model.devices.find(
+      (x) => String(x.dev_id || x.sn || x.ip || x.dev_name) === String(id));
+    if (d) { model.device = d; render(); }
   },
-
-  setPreference: (key, value) => {
-    prefs[key] = value;
-    const pref = PRINT_PREFERENCES.find((p) => p.key === key);
-    const script = pref ? prefsLine({ [pref.arg]: value }) : '';
-    if (script) {
-      bridge.request(CMD.SEND_GCODES, { script })
-            .catch((e) => console.warn('[preprint] update preference:', e.message));
-    }
-    render();
+  addDevice() {
+    printerCmds.addDevice(bridge).catch((e) => say(`add device: ${e.message}`, 'err'));
   },
 
   /**
-   * Send. Mirrors the real close protocol: report the outcome, record the
-   * result, then close - three separate commands, in that order.
+   * Assign a file filament to a toolhead.
+   *
+   * Held through `pending` until `print_task_config.extruder_map_table` reports it: the
+   * machine echoes about a second later, and writing the click into the object that
+   * mirrors the machine is how the next push puts the old value back. That bug has been
+   * found three times on the Device page; this is the fourth control and it gets the
+   * mechanism for free.
    */
-  send: async () => {
-    const btn = ui.$('#send');
-    btn.disabled = true;
-    setStatus('uploading…');
+  assign(fil, toolhead) {
+    model.assignment[fil.key] = toolhead;
+    // `track` records the request and wires the command's own outcome into it, so a
+    // refusal stops the hold immediately rather than waiting out the timeout.
+    pending.track(`map:${fil.key}`, toolhead, filamentCmds.writeAssignment(bridge, {
+      fileIndex: fil.index,
+      toolhead,
+      allToolheads: model.filaments.map((f) => model.assignment[f.key]),
+    })).catch((e) => say(`could not set the mapping: ${e.message}`, 'err'));
+  },
+
+  prefValue: (key) => !!model.prefs[key],
+  togglePreference(key, value) {
+    model.prefs[key] = value;
+    pending.track(`pref:${key}`, value, prefCmds.writePreference(bridge, key, value))
+      .catch((e) => say(`could not set ${key}: ${e.message}`, 'err'));
+  },
+
+  /**
+   * The help control on Extrusion Flow Calibration opens a DIALOG, not a tooltip -
+   * `A.rB(...)` with a title, a paragraph and an Ok. The sheet is the shared one the
+   * Device page uses; `cancel: false` because offering both Cancel and Ok for one
+   * dismissal is a choice that is not one.
+   */
+  explain({ title, body }) {
+    openDialog({
+      title,
+      build: (root) => root.appendChild(el('p', null, body)),
+      confirmLabel: 'Ok',
+      cancel: false,
+      onConfirm: () => true,
+    });
+  },
+
+  async refresh(panelId) {
+    if (panelId !== 'filament') return;
     try {
-      await bridge.request(CMD.GET_PRINT_ZIP, {});
-      for (let p = 0; p <= 100; p += 10) {
-        uploadPct = p;
-        ui.renderSend(uploadPct, false, 'Sending…');
-        await new Promise((r) => setTimeout(r, 60));
-      }
-      if (WITH_PRINT_SETUP) await bridge.request(CMD.START_LOCAL_PRINT, {});
-      await bridge.request(CMD.FINISH_PREPRINT, { status: 'success' });
-      await bridge.request(CMD.SET_FILAMENT_MAPPING_COMPLETE,
-                           { status: MAPPING_STATUS.SUCCESS });
-      await bridge.request(CMD.FINISH_FILAMENT_MAPPING, {});
-      setStatus('sent', 'ok');
-      ui.renderSend(100, false, 'Sent');
-    } catch (e) {
-      setStatus(`send failed: ${e.message}`, 'err');
-      await bridge.request(CMD.FINISH_PREPRINT, { status: 'failed' }).catch(() => {});
-      ui.renderSend(uploadPct, true, 'Send');
-    }
+      const m = await filamentCmds.refreshMapping(
+        bridge, (model.file && model.file.filename) || '');
+      if (m) { model.mapping = m; recomputeFile(); render(); }
+    } catch (e) { say(`refresh: ${e.message}`, 'err'); }
   },
 };
 
-/* ---- render -------------------------------------------------------- */
+/* ---- status line ------------------------------------------------------ */
+function say(message, kind = '') {
+  const n = $('#status');
+  n.hidden = !message;
+  text(n, message || '');
+  data(n, 'kind', kind || null);
+}
 
+/* ---- derive ----------------------------------------------------------- */
+function recomputeFile() {
+  model.filaments = fileFilaments(model.mapping);
+  const fresh = initialAssignment(model.mapping, model.filaments);
+  // Keep anything the operator has already chosen; only fill in what is new.
+  model.filaments.forEach((f) => {
+    if (model.assignment[f.key] == null) model.assignment[f.key] = fresh[f.key];
+  });
+}
+
+function recomputeMachine() {
+  model.toolheads = machineToolheads(state);
+  model.nozzleMismatch = WITH_PRINT_SETUP && nozzleMismatch(
+    model.filaments.map((f) => f.nozzle),
+    model.toolheads.map((h) => h.nozzleDiameter));
+
+  /*
+   * `resolve(key, mirror)` is the tick: hand it what the machine reports and it returns
+   * what to show. It confirms a value the machine has caught up with, keeps holding one
+   * still in flight, and gives up on one the machine never echoed - which is the case
+   * that matters, because an instant `ok` and a silently ignored setpoint look the same.
+   */
+  const tc = state.objects['print_task_config'] || {};
+  PRINT_PREFERENCES.forEach(({ key }) => {
+    model.prefs[key] = !!pending.resolve(`pref:${key}`, !!tc[key]).value;
+  });
+
+  // `extruder_map_table` is a flat array of THIRTY-TWO - one entry per possible tool,
+  // not one per slot. Measured on 811002511261022618B3.
+  const table = Array.isArray(tc.extruder_map_table) ? tc.extruder_map_table : null;
+  model.filaments.forEach((f) => {
+    const mirror = table && table[f.index] != null
+      ? Number(table[f.index])
+      : model.assignment[f.key];
+    model.assignment[f.key] = pending.resolve(`map:${f.key}`, mirror).value;
+  });
+}
+
+/* ---- render ----------------------------------------------------------- */
 let raf = 0;
 function render() {
   if (raf) return;
   raf = requestAnimationFrame(() => {
     raf = 0;
-    const tc = Object.assign({}, state.taskConfig(), prefs);
-
-    ui.renderModel(ui.$('#model'), file);
-    ui.renderPrinter(ui.$('#printer'), device, legal, handlers);
-
-    // path=5 (upload only) drops filament mapping and print preferences
-    // entirely - that is the whole difference between the two routes.
-    const filCard = ui.$('#filament');
-    const prefCard = ui.$('#preferences');
-    filCard.hidden = !WITH_PRINT_SETUP;
-    prefCard.hidden = !WITH_PRINT_SETUP;
-    if (WITH_PRINT_SETUP) {
-      ui.renderFilament(filCard, mapping, tc, handlers);
-      ui.renderPreferences(prefCard, tc, handlers);
-    }
-
-    // Send needs a printer, and a legal preset match when one was checked.
-    const ready = !!device && (!legal || legal.legal !== false);
-    ui.renderSend(uploadPct, ready, 'Send');
+    recomputeMachine();
+    mounted.forEach(({ panel, root }) => panel.update(root, model, ctx));
+    renderSendBar();
   });
 }
 
+function renderSendBar() {
+  const btn = $('#send');
+  const s = model.send;
+  data(btn, 'state', s.state);
+  $('#bar-fill').style.width = `${Math.round(s.progress * 100)}%`;
+  text($('#pct'), percent0(s.progress));
+
+  const busy = BUSY.has(s.state);
+  // `A.Jb.aEL()` shows a spinner in place of the label whenever the state is in flight.
+  data(btn, 'busy', busy ? '1' : null);
+  text(btn, busy ? '' : (s.state === SEND_STATE.DONE ? 'Sent'
+                       : ROUTE === 'upload' ? 'Send' : 'Send'));
+  btn.disabled = busy || s.state === SEND_STATE.DONE || !model.device;
+}
+
+/* ---- boot ------------------------------------------------------------- */
+async function boot() {
+  trace = makeTrace($('#trace'));
+
+  let mock = null;
+  if (WANT_MOCK || !Sswcp.hasHost()) {
+    mock = installMock({
+      log: trace,
+      onDialogClose: (ok) => say(ok ? 'dialog closed: success' : 'dialog closed: canceled',
+                                 ok ? 'ok' : 'warn'),
+    });
+    say('simulated host (no Orca)', 'mock');
+  }
+  bridge = new Sswcp({ log: trace });
+
+  ctx.dialog = () => document.body;
+  mounted = buildShell($('#body'), ROUTE, ctx);
+  data(document.body, 'route', ROUTE);
+
+  const job = await readJob(bridge, { log: (what, e) => trace('warn', { what, e }) });
+  Object.assign(model, {
+    file: job.file, mapping: job.mapping, legal: job.legal, errors: job.errors,
+    devices: job.devices,
+  });
+  // sw_GetConnectedMachine returns a device only when one is connected; the saved list
+  // is what the picker offers when none is.
+  model.device = job.device && Object.keys(job.device).length ? job.device
+               : (job.devices || []).find((d) => d.connected) || null;
+  recomputeFile();
+
+  try {
+    await subscribeState(bridge, state, { log: (w, e) => trace('warn', { w, e }) });
+  } catch (e) {
+    say(`no machine state: ${e.message}`, 'warn');
+  }
+  // On the repaint is not good enough for anything whose consequence is elsewhere, but
+  // this one only repaints - see device_page/js/core/orcasync.js for the other case.
+  state.onChange(render);
+
+  if (job.errors.length) say(job.errors[0], 'warn');
+  render();
+
+  mountBuildBadge($('#build-badge'), 'Print processing', bridge)
+    .then((info) => { window.__preprint.build = info; })
+    .catch(() => {});
+
+  window.__preprint.mock = mock;
+  window.__preprint.ready = true;
+}
+
+/* ---- the send --------------------------------------------------------- */
+async function doSend() {
+  closePicker();
+  say('');
+  const ok = await runSend({
+    bridge,
+    device: model.device,
+    withPrintSetup: WITH_PRINT_SETUP,
+    onState: (s, detail) => {
+      model.send.state = s;
+      model.send.detail = detail || '';
+      if (s === SEND_STATE.FAILED) say(detail || 'send failed', 'err');
+      render();
+    },
+    onProgress: (f) => { model.send.progress = f; render(); },
+  });
+  if (ok) say('sent', 'ok');
+}
+
 window.addEventListener('DOMContentLoaded', () => {
-  ui.$('#send').onclick = () => handlers.send();
+  $('#send').onclick = () => doSend();
   boot().catch((e) => {
     console.error(e);
-    setStatus(`startup failed: ${e.message}`, 'err');
+    say(`startup failed: ${e.message}`, 'err');
   });
 });
 
+/** Handed to --drive scripts. The model is live, not a copy. */
 window.__preprint = {
-  get state() { return state; }, get bridge() { return bridge; },
-  get mapping() { return mapping; }, get device() { return device; },
-  mode: MODE, handlers, mock: null,
+  route: ROUTE,
+  get state() { return state; },
+  get bridge() { return bridge; },
+  get model() { return model; },
+  get pending() { return pending; },
+  ctx, render, mock: null, ready: false,
+  /** Cancelling takes the close protocol's other outcome. */
+  cancel: () => closeDialog(bridge, MAPPING_STATUS.CANCELED),
 };

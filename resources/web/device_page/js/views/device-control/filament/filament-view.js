@@ -48,7 +48,8 @@ import { ACE_MODES, ACE_MODE_LABELS, DRY_TEMPS, DRY_HOURS, DRY_LIMITS,
          aceSourceOptions, aceModeChange, acePendingMode }
   from '../../../../../shared/js/multiACE.js';
 import { keyedList, rebuildOn } from '../../../../../shared/js/render.js';
-import { openDialog, closeDialog, openMenu } from '../../../core/overlay.js';
+import { openMenu } from '../../../core/overlay.js';
+import { openDialog, closeDialog } from '../../../../../shared/js/dialog.js';
 
 /** The toolhead artwork, at half. 64x140 becomes 32x70, which is what fits twice over. */
 const HEAD_SCALE = 0.5;

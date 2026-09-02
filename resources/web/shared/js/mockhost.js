@@ -30,9 +30,13 @@ const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8B
  * @param {Function} opts.log       trace sink (kind, packet)
  * @param {object}  opts.handlers   extra commands: cmd -> (params, ctx) => data
  * @param {object}  opts.printer    override the simulated printer
+ * @param {Function} opts.onDialogClose  called by sw_FinishFilamentMapping with the
+ *                                    recorded outcome. There is no modal here to end,
+ *                                    so this is how a surface learns it was closed.
  * @returns {{printer, stop}|null}  null if a real host is already present
  */
-export function installMockHost({ log = () => {}, handlers = {}, printer: given = null } = {}) {
+export function installMockHost({ log = () => {}, handlers = {}, printer: given = null,
+                                  onDialogClose = null } = {}) {
   if (window.wx && window.wx.__isMock !== true && typeof window.wx.postMessage === 'function') {
     return null;   // a real host is present; never shadow it
   }
@@ -482,6 +486,127 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
         case 'sw_FileLog': case 'sw_Log': case 'sw_UploadEvent': case 'sw_SetLogLevel':
           return ok({});
 
+        /* ---- Orca's side of the print-processing popup ---------------------
+         *
+         * These are answered by ORCA, not by the printer, so none of them is in
+         * PRINTER_BACKED and none comes back inside a JSON-RPC envelope. They live here
+         * rather than in the popup's own mock because the U1 they talk about is the one
+         * simulated above: the machine half of every reply below is read off `printer`,
+         * so the dialog cannot be shown a machine the rest of the simulation disagrees
+         * with. See `printer.job`.
+         */
+        case 'sw_GetActiveFile': {
+          const j = printer.job;
+          if (!j.filepath || !j.filename) return fail('mock: no active file');
+          if (params.is_zip) {
+            return ok({ file_name: j.filename.replace(/\.gcode$/, '.zip'),
+                        file_path: j.filepath.replace(/\.gcode$/, '.zip'),
+                        origin_size: j.sizeBytes, metadata: {} });
+          }
+          return ok({ filename: j.filename, metadata: {} });
+        }
+
+        /*
+         * The reply shape is SSWCP.cpp:3039's, verbatim: PARALLEL ARRAYS, plus the
+         * rendered plate. Not `{filaments: [...]}` - see printer.job.
+         */
+        case 'sw_GetFileFilamentMapping': {
+          const j = printer.job;
+          const argb = (hex) => {
+            const h = String(hex).replace('#', '');
+            return parseInt(h.slice(0, 6), 16);
+          };
+          return ok({
+            filename: j.filename,
+            filepath: j.filepath,
+            machine_model: j.presetModel,
+            estimated_time: j.estimatedTime,
+            filament_type: j.fileFilamentType.slice(),
+            filament_color: j.fileFilamentColor.map(argb),
+            filament_color_rgba: j.fileFilamentColor.slice(),
+            filament_color_multi: j.fileFilamentColorMulti.slice(),
+            filament_weight: j.fileFilamentWeight.slice(),
+            filament_weight_total: j.fileFilamentWeight.reduce((a, b) => a + b, 0),
+            filament_used_mm: j.fileFilamentUsedMm.slice(),
+            nozzle_diameters: j.fileNozzle.slice(),
+            nozzle_info: [...new Set(j.fileNozzle)],
+            filament_extruder_map: Object.assign({}, j.extruderMap),
+            // `thumbnails[0].url` is a data: PNG. One pixel is enough to prove the
+            // plumbing; what matters is that the popup reads it instead of a grey box.
+            thumbnails: [{ url: `data:image/png;base64,${PNG_1PX}`, width: 512, height: 512 }],
+          });
+        }
+
+        /*
+         * The right door for the file. Returns a URL on Orca's own page server, the size
+         * and a SHA-256 - NOT the zip's bytes. `sw_GetPrintZip` below is the other one,
+         * and it is implemented honestly so the cost of using it is visible.
+         */
+        case 'sw_GetFileStream': {
+          const j = printer.job;
+          const zip = j.filename.replace(/\.gcode$/, '.zip');
+          return ok({ file_name: params.is_zip ? zip : j.filename,
+                      file_url: `http://127.0.0.1:0/wcp/download/mock-${encodeURIComponent(zip)}`,
+                      origin_size: j.sizeBytes,
+                      checksum: j.checksum });
+        }
+
+        /*
+         * `m_res_data["content"] = res["zip_data"]` where zip_data is a
+         * std::vector<char>, which nlohmann serialises as one integer per byte. A 12 MB
+         * zip crosses as ~40 MB of JSON. The mock returns a token array of the right
+         * KIND rather than the right length - the point is that it is an array of
+         * numbers, not a base64 string, which is what a client guesses.
+         */
+        case 'sw_GetPrintZip': {
+          const j = printer.job;
+          return ok({ name: `${j.filename}.zip`, content: [80, 75, 3, 4, 20, 0, 0, 0] });
+        }
+
+        case 'sw_GetPrintLegal': {
+          const j = printer.job;
+          const connected = params.connected_model || '';
+          return ok({ preset_model: j.presetModel, legal: j.presetModel === connected });
+        }
+
+        /*
+         * The precondition is the handler's own (SSWCP.cpp:2595). A mock that accepted
+         * `{}` is exactly how the reconstruction came to send `{}` and never find out.
+         */
+        case 'sw_StartLocalPrint': {
+          if (params.type == null || params.path == null) {
+            return fail('param [type] or [path] required!');
+          }
+          printer.job.startedWith = { type: params.type, path: params.path };
+          return ok({ task_id: 'mock-task-1' });
+        }
+        case 'sw_StartCloudPrint':
+          printer.job.startedWith = Object.assign({ cloud: true }, params);
+          return ok({ task_id: 'mock-task-1' });
+
+        /*
+         * The close protocol, in the host's own three parts. Recording the outcome and
+         * ending the dialog are SEPARATE commands, and only the second closes anything -
+         * SafeEndModal exists because the page, the window manager and OnClose can all
+         * race to end the same dialog. See 03-print-processing/02-lifecycle.md
+         */
+        case 'sw_FinishPreprint':
+          printer.job.preprintStatus = params.status || null;
+          return ok({});
+        case 'sw_SetFilamentMappingComplete': {
+          const st = params.status;
+          if (st !== 'success' && st !== 'canceled') {
+            // Orca raises a native "setting failed" dialog and does NOT record anything.
+            return fail(`mock: setting failed (status ${JSON.stringify(st)})`);
+          }
+          printer.job.mappingOutcome = st;
+          return ok({});
+        }
+        case 'sw_FinishFilamentMapping':
+          printer.job.closed = true;
+          if (onDialogClose) onDialogClose(printer.job.mappingOutcome === 'success');
+          return ok({});
+
         default:
           return fail(`mock: unhandled command ${cmd}`);
       }
@@ -715,6 +840,47 @@ export function makePrinter() {
     filamentVendor: ['Snapmaker', 'Snapmaker', 'Snapmaker', 'Generic'],
     filamentType: ['PLA', 'PLA', 'PETG', 'ABS'],
     filamentColorRgba: ['E03131FF', '1971C2FF', '2F9E44FF', 'F08C00FF'],
+
+    /*
+     * ---- the JOB: what Orca is about to send -------------------------------
+     *
+     * The print dialog's whole purpose is to match the FILE's filaments against the
+     * MACHINE's, so those two lists must not be invented separately. They are not: the
+     * machine's are `filamentType` / `filamentColorRgba` / `toolheads[].nozzle_diameter`
+     * above, and the file's default to the same values here - so the default job is
+     * satisfiable, and a check that wants a mismatch has to CREATE one by moving one of
+     * them. That is the difference between a match test and a self-fulfilling one.
+     *
+     * The previous mock for this surface invented `{filaments: [{type, color, used_g}]}`,
+     * a shape `sw_GetFileFilamentMapping` has never returned. It agreed with the client
+     * that was written from the same head, so the popup drew four rows in the simulator
+     * and none in Orca. The arrays below are the handler's own - SSWCP.cpp:3039.
+     */
+    job: {
+      filepath: '/tmp/SnapmakerOrca/plate_1.gcode',
+      filename: 'benchy_4colour.gcode',
+      // sw_GetPrintLegal compares this against the CONNECTED machine's model_name.
+      presetModel: 'Snapmaker U1',
+      estimatedTime: 4412,
+      // one entry per FILE filament; the defaults mirror the four heads
+      fileFilamentType: ['PLA', 'PLA', 'PETG', 'ABS'],
+      fileFilamentColor: ['#E03131', '#1971C2', '#2F9E44', '#F08C00'],
+      // Read but never drawn by the shipped popup: a gradient or segmented spool.
+      // `null` for a plain one; `{mode, colors}` otherwise, mode 0 bands / 1 gradient.
+      fileFilamentColorMulti: [null, null, null, null],
+      fileFilamentWeight: [12.4, 9.1, 6.7, 3.2],
+      fileFilamentUsedMm: [4123, 3027, 2229, 1064],
+      // what the FILE was sliced for, per filament - checked against the head's own
+      fileNozzle: ['0.4', '0.4', '0.4', '0.4'],
+      // Orca's own filament -> extruder map, from AppConfig. The popup starts here.
+      extruderMap: { 0: '0', 1: '1', 2: '2', 3: '3' },
+      sizeBytes: 12684221,
+      checksum: 'kBqDdG0mZ0nH0mockCHECKSUMbase64PADDINGxxxxxxx=',
+      /** Set by the close protocol so a check can read what the page reported. */
+      preprintStatus: null, mappingOutcome: null, closed: false,
+      /** What sw_StartLocalPrint was actually given. */
+      startedWith: null,
+    },
     /*
      * The three job toggles, mutable because SET_PRINT_PREFERENCES writes them. Keyed by
      * the field name the machine REPORTS them under; the macro's own argument for the
