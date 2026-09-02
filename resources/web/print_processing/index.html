@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Snapmaker U1 — Print processing</title>
+<link rel="stylesheet" href="../shared/css/base.css">
+<link rel="stylesheet" href="css/preprint.css">
+</head>
+<body class="dlg">
+
+<!--
+  The print-processing popup, rebuilt.
+
+  Orca opens this modal at ?path=4 (upload and print) or ?path=5 (upload only) and gives
+  it 714 x 750 DIP. The route decides one thing: whether the print half - Edit Filament,
+  Print Preferences and the nozzle banner - is drawn at all.
+
+    ?mode=print   the ?path=4 route     (default)
+    ?mode=upload  the ?path=5 route
+    ?mock=1       force the simulator; with no window.wx it simulates anyway
+
+  Section order and every measurement come from the shipped bundle, recovered widget by
+  widget - see docs/u1-webui/03-print-processing/original-dialog-mockup.html, which is
+  this page's specification and is held to those numbers by check_mockup.py.
+-->
+
+<div id="body" class="dlg-body"></div>
+
+<div class="dlg-foot">
+  <div class="bar">
+    <div class="bar-track"><div id="bar-fill" class="bar-fill"></div></div>
+  </div>
+  <span id="pct" class="pct">0%</span>
+  <button id="send" class="send" type="button">Send</button>
+</div>
+
+<div id="status" class="status" hidden></div>
+
+<details class="trace-wrap">
+  <summary>WCP trace</summary>
+  <div id="trace" data-paused="0"></div>
+</details>
+
+<div id="build-badge"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,252 @@
+/*
+ * mockup.css - what the three print-dialog mockups share.
+ *
+ * Layered on ../../shared/css/base.css, so the tokens are the reconstruction's own.
+ * Everything here is either the dialog frame (714 x 750, which is what
+ * WebPreprintDialog actually opens) or a primitive more than one option draws.
+ */
+
+/* ---- the dialog itself ------------------------------------------------ */
+
+/* `hidden` is a UA rule, and any author `display:` beats it. Option B's match grid is
+   `display: grid`, so `#match.hidden = true` left the two lane headings on an
+   upload-only dialog with nothing under them. Author-level, so it wins. */
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+body.mock-dialog {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;               /* the dialog does not scroll; its body does */
+  background: var(--panel);
+}
+
+.dlg-title {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.dlg-title .sub { font-weight: 400; color: var(--muted); font-size: 12px; }
+.dlg-title .spacer { flex: 1; }
+
+.dlg-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 14px; }
+
+.dlg-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+/* ---- send bar --------------------------------------------------------- */
+.bar { flex: 1; min-width: 0; }
+.bar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width .18s linear;
+}
+/* One line, always: a blocking reason can be a whole sentence, and letting it wrap
+   moved the Send button down by a line the moment something went wrong. The full text
+   is on the element's title, and the check that raised it says it in full anyway. */
+.bar-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.bar-label > :first-child { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.bar-label b { font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+button.primary {
+  flex: none;
+  min-width: 130px;
+  padding: 9px 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-in);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.primary:disabled { background: var(--panel-2); color: var(--muted); cursor: not-allowed; }
+button.ghost {
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink-2);
+  font: inherit;
+  cursor: pointer;
+}
+button.ghost:hover { border-color: var(--accent); color: var(--ink); }
+
+/* ---- cards ------------------------------------------------------------ */
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  margin-bottom: 10px;
+}
+.card > h2 {
+  margin: 0;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card > h2 .spacer { flex: 1; }
+.card-body { padding: 11px 12px; }
+
+/* ---- filament swatch -------------------------------------------------- */
+.sw {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, .22);
+  box-shadow: inset 0 -5px 8px rgba(0, 0, 0, .16);
+}
+.sw.lg { width: 30px; height: 30px; border-radius: 7px; }
+.sw.sm { width: 15px; height: 15px; border-radius: 4px; }
+/* An empty slot is a checkerboard, the same absence the Device page draws. */
+.sw.empty {
+  background:
+    repeating-conic-gradient(var(--line) 0 25%, transparent 0 50%) 0 0 / 10px 10px,
+    var(--panel-2);
+  box-shadow: none;
+}
+
+/* ---- verdicts --------------------------------------------------------- */
+.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.ok   { background: var(--ok); }
+.dot.warn { background: var(--warn); }
+.dot.bad  { background: var(--err); }
+
+.note { font-size: 12px; line-height: 1.45; }
+.note.ok   { color: var(--ok); }
+.note.warn { color: var(--warn); }
+.note.bad  { color: var(--err); }
+.muted { color: var(--muted); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.pill.warn { border-color: var(--warn); color: var(--warn); }
+.pill.bad  { border-color: var(--err);  color: var(--err); }
+.pill.ok   { border-color: var(--ok);   color: var(--ok); }
+
+/* ---- toggles ---------------------------------------------------------- */
+.pref {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  cursor: pointer;
+}
+.pref + .pref { border-top: 1px solid var(--line); }
+.pref .pref-text { flex: 1; min-width: 0; }
+.pref .pref-label { font-size: 13px; color: var(--ink); }
+.pref .pref-hint  { font-size: 11px; color: var(--muted); }
+.switch {
+  flex: none;
+  width: 34px;
+  height: 19px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  position: relative;
+  transition: background .14s, border-color .14s;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform .14s, background .14s;
+}
+.pref input { position: absolute; opacity: 0; pointer-events: none; }
+.pref input:checked + .switch { background: var(--accent); border-color: var(--accent); }
+.pref input:checked + .switch::after { transform: translateX(15px); background: var(--accent-in); }
+.pref input:focus-visible + .switch { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- thumbnail -------------------------------------------------------- */
+.thumb {
+  flex: none;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  object-fit: cover;
+  display: block;
+}
+
+/* ---- select ----------------------------------------------------------- */
+select.head-pick {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  max-width: 100%;
+}
+select.head-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---- the mockup's own marker ------------------------------------------ */
+ /* Top-right, in the title bar's band: at the bottom it sat over the Send button in
+    all three options, and a marker that hides the control being judged is worse than
+    no marker. */
+.mock-tag {
+  position: fixed;
+  right: 10px;
+  top: 8px;
+  z-index: 50;
+  padding: 3px 9px;
+  border: 1px dashed var(--accent);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .04em;
+  pointer-events: none;
+}

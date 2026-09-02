@@ -1,0 +1,85 @@
+{
+ "dispatcher_symbol": "bFQ",
+ "enum_type": "AppModule (minified A.qH)",
+ "fallback": {
+  "module_const": "B.up",
+  "enum_index": 1,
+  "module_name": "home"
+ },
+ "entries": [
+  {
+   "url_path_param": null,
+   "url_alias": null,
+   "module_const": "B.asT",
+   "enum_index": 0,
+   "module_name": "unknown",
+   "index_matches_url": null,
+   "opened_by": []
+  },
+  {
+   "url_path_param": "1",
+   "url_alias": "home",
+   "module_const": "B.up",
+   "enum_index": 1,
+   "module_name": "home",
+   "index_matches_url": true,
+   "opened_by": [
+    "src/slic3r/GUI/WebViewDialog.cpp"
+   ]
+  },
+  {
+   "url_path_param": "2",
+   "url_alias": "deviceControl",
+   "module_const": "B.Me",
+   "enum_index": 2,
+   "module_name": "deviceControl",
+   "index_matches_url": true,
+   "opened_by": []
+  },
+  {
+   "url_path_param": "3",
+   "url_alias": "deviceControlOld",
+   "module_const": "B.asU",
+   "enum_index": 3,
+   "module_name": "deviceControlOld",
+   "index_matches_url": true,
+   "opened_by": []
+  },
+  {
+   "url_path_param": "4",
+   "url_alias": "preUploadAndPrint",
+   "module_const": "B.asW",
+   "enum_index": 5,
+   "module_name": "preUploadAndPrint",
+   "index_matches_url": false,
+   "opened_by": []
+  },
+  {
+   "url_path_param": "5",
+   "url_alias": "preUpload",
+   "module_const": "B.asV",
+   "enum_index": 4,
+   "module_name": "preUpload",
+   "index_matches_url": false,
+   "opened_by": []
+  },
+  {
+   "url_path_param": "6",
+   "url_alias": "testPrintUploadTask",
+   "module_const": "B.asX",
+   "enum_index": 6,
+   "module_name": "testPrintUploadTask",
+   "index_matches_url": true,
+   "opened_by": []
+  },
+  {
+   "url_path_param": "7",
+   "url_alias": "testDownloadFile",
+   "module_const": "B.asY",
+   "enum_index": 7,
+   "module_name": "testDownloadFile",
+   "index_matches_url": true,
+   "opened_by": []
+  }
+ ]
+}

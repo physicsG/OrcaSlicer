@@ -187,6 +187,17 @@ public:
     void update_dynamic_filament_list();
 
     void update_nozzle_settings(bool switch_machine = false);
+    void sync_printer_info();
+    // Second half of one press: write the ACE mode and wiring just read into the printer preset,
+    // then offer the filament sync. Split out because the nozzle half may have to open a picker
+    // first, and both of its paths end here.
+    void finish_printer_sync();
+    // The assign popover behind a head box's ACE row: which unit feeds this toolhead.
+    void show_ace_assign_popup(size_t head_idx, wxWindow* anchor);
+    // Mark the filaments the machine has loaded. A diff, like the corner ticks - not a record
+    // that a sync once ran.
+    void refresh_filament_sync_marks();
+    void refresh_plate_card();
 
     ObjectList*             obj_list();
     ObjectSettings*         obj_settings();

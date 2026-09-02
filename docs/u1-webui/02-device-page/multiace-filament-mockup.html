@@ -1,0 +1,790 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Four Toolheads, Four ACEs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/*
+ * Sibling of camera-layout-ace-mockup.html: same token set, same card/note/table
+ * vocabulary, same radio-and-sibling variant switcher, same "keep the rejected
+ * alternates" rule. No :has(). No JavaScript at all - every drawing is static markup,
+ * so a viewer that strips script still shows the whole document.
+ *
+ * TWO PALETTES, ON PURPOSE, and this is the one thing to understand before editing.
+ *
+ *   The DOCUMENT follows the reader's theme, like its sibling.
+ *   The DRAWINGS do not. They are locked to the values at the top of
+ *   resources/web/device_page/css/device.css, which says of itself: "this surface is
+ *   a fixed light design, not a theme-following one". Those values were measured off
+ *   the shipped Flutter page - #F5F6FA ground, #E8E8E8 header, #333 ink, #E6E6E6
+ *   outline, #0C63E2 accent, 8px radius, an 830px column - and a mockup that re-tinted
+ *   them would be specifying a panel nobody is going to build.
+ *
+ * Everything the drawings are made of already exists on that page:
+ *
+ *   the toolhead    icons/extruderBackground.svg, 64x140, inlined below as #u1head.
+ *                   The 36px colour disc at (15,29) and the 58x19 #6E6E6E name pill
+ *                   at (3,71) are .slot's, at .slot's offsets.
+ *   the ACE bay     the SAME disc and the SAME pill, without the extruder body. A bay
+ *                   and a head are the same object at two ends of one tube, so they
+ *                   are drawn as the same object.
+ *   empty          .slot's 8px checkerboard, which is how the shipped page says
+ *                   "no filament" and is not a colour this file gets to choose.
+ *   a pill          .pref-pill: 24px tall, --pill ground, 12px, 4px radius.
+ *   a header        .panel-head: 40px, #E8E8E8, title at x=28, tabs meeting the body.
+ */
+:root{
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --bg:#f4f6f8; --panel:#fff; --panel-2:#eef2f6;
+  --ink:#16202b; --ink-2:#47566a; --muted:#7c8b9d;
+  --line:#d8e0e8; --line-soft:#e7edf2;
+  --accent:#0C63E2; --accent-soft:#e7f0fd;
+  --ok:#1f7a4d; --warn:#9a5b12; --bad:#a92a1d;
+  --doc-bg:#eceff2;
+  --shadow:0 1px 2px rgba(16,24,32,.06),0 14px 34px -22px rgba(16,24,32,.45);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1319; --panel:#161d26; --panel-2:#1d2732;
+    --ink:#e6ecf3; --ink-2:#b3c0cf; --muted:#7f8d9d;
+    --line:#26313d; --line-soft:#202932;
+    --accent:#5B9CF8; --accent-soft:#152539;
+    --ok:#4cc38a; --warn:#d79a4f; --bad:#e8705f;
+    --doc-bg:#0a0e12;
+    --shadow:0 1px 0 rgba(255,255,255,.03),0 14px 34px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1319; --panel:#161d26; --panel-2:#1d2732;
+  --ink:#e6ecf3; --ink-2:#b3c0cf; --muted:#7f8d9d;
+  --line:#26313d; --line-soft:#202932;
+  --accent:#5B9CF8; --accent-soft:#152539;
+  --ok:#4cc38a; --warn:#d79a4f; --bad:#e8705f;
+  --doc-bg:#0a0e12;
+  --shadow:0 1px 0 rgba(255,255,255,.03),0 14px 34px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--doc-bg);color:var(--ink);font-family:var(--sans);
+     line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:44px 24px 110px}
+h1{font-size:30px;margin:0 0 8px;letter-spacing:-.02em;text-wrap:balance;font-weight:600}
+.sub{color:var(--muted);margin:0 0 8px;font-size:14.5px;max-width:74ch}
+.stamp{font-family:var(--mono);font-size:12px;color:var(--muted);margin:0 0 34px}
+.stamp b{color:var(--ok);font-weight:500}
+h2{font-size:20px;margin:56px 0 6px;letter-spacing:-.01em;font-weight:600;text-wrap:balance}
+h2 .n{color:var(--muted);font-family:var(--mono);font-size:13px;margin-right:10px;font-weight:400}
+h3{font-size:15px;margin:30px 0 6px;font-weight:600}
+.lede{color:var(--ink-2);font-size:14.5px;margin:0 0 16px;max-width:76ch}
+p{max-width:78ch}
+code,kbd{font-family:var(--mono);font-size:.88em;background:var(--panel-2);padding:1.5px 5px;
+     border-radius:4px;color:var(--ink)}
+a{color:var(--accent)}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:10px}
+th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.scroll{overflow-x:auto}
+.note{border-left:3px solid var(--accent);padding:3px 0 3px 15px;margin:16px 0;
+      color:var(--ink-2);font-size:13.5px;max-width:76ch}
+.note.warn{border-left-color:var(--warn)}
+.note.bad{border-left-color:var(--bad)}
+.note.ok{border-left-color:var(--ok)}
+.note b{color:var(--ink)}
+.chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;
+      padding:2px 7px;border-radius:5px;background:var(--panel-2);color:var(--ink-2);
+      white-space:nowrap;font-weight:500}
+.chip.yes{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+.chip.no{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.chip.maybe{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+
+/* ---- variant switcher: radios + sibling combinator, no script ---- */
+.vradio{position:absolute;opacity:0;pointer-events:none}
+.picker{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.picker label{display:block;cursor:pointer;border:1px solid var(--line);border-radius:9px;
+  padding:9px 13px;background:var(--panel);min-width:146px;flex:1 1 146px;max-width:260px}
+.picker label:hover{border-color:var(--accent)}
+.picker .k{font-family:var(--mono);font-size:11px;color:var(--muted);display:block}
+.picker .t{font-size:13.5px;font-weight:600;display:block;margin-top:1px}
+.picker .d{font-size:12px;color:var(--muted);display:block;margin-top:2px;line-height:1.4}
+.vradio:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
+.stage{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:20px;
+       margin:16px 0;overflow-x:auto}
+.caption{font-size:12.5px;color:var(--muted);margin:14px 2px 0;font-family:var(--mono);
+       max-width:none;line-height:1.7}
+.caption b{color:var(--ink-2);font-weight:500}
+.hidesvg{position:absolute;width:0;height:0;overflow:hidden}
+
+/* =====================================================================
+   THE PANEL - device.css's own values, verbatim, and not themed.
+   ===================================================================== */
+.u1{
+  --page:#F5F6FA; --panel:#FFFFFF; --panel-head:#E8E8E8; --tab-active:#FFFFFF;
+  --pill:#F5F6FA; --accent:#0C63E2; --accent-soft:rgba(12,99,226,.10);
+  --ink:#333333; --ink-nav:#242424; --ink-dim:#666666;
+  --line:#E6E6E6; --line-face:#EDEFF2; --line-soft:#F0F0F0;
+  --ok:#1F7A4D; --warn:#9A5B12; --err:#E03131;
+  --radius:8px; --head-h:40px;
+  /* the tube between a bay and a head. #C9C9C9 is extruderBackground's own body
+     gradient stop, so a grey wire is the same grey as the machine it is drawn on. */
+  --wire:#C9C9C9;
+  width:830px;margin:0 auto;color:var(--ink);
+  font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  border-radius:var(--radius);box-shadow:var(--shadow);
+}
+.u1 *{box-sizing:border-box}
+.u1 .panel-head{height:var(--head-h);background:var(--panel-head);
+  border-radius:var(--radius) var(--radius) 0 0;display:flex;align-items:center;
+  padding:0 15px 0 28px;gap:0}
+.u1 .panel-title{font-size:14px;color:var(--ink)}
+.u1 .panel-head .spacer{flex:1}
+.u1 .panel-head .gap-36{width:36px;flex:0 0 36px}
+.u1 .panel-head .sep{color:var(--ink-dim);font-size:14px;margin:0 13px 0 14px}
+/* .pref-pill, verbatim: 24px, --pill ground, 4px radius, 12px type, a chevron.
+   The ACE mode lives here because shell.js already has a `pill` header kind and
+   because a machine-state control must not look like the `tabs` kind, which
+   switches views. Clicking it opens the three modes as a menu. */
+.u1 .prefpill{height:24px;display:inline-flex;align-items:center;gap:4px;padding:0 7px;
+  background:var(--pill);border:0;border-radius:4px;color:var(--ink);font:12px/1 inherit;
+  cursor:pointer;white-space:nowrap}
+.u1 .prefpill:hover{color:var(--accent)}
+.u1 .prefpill .chev{font-size:9px;opacity:.6}
+.u1 .tab{align-self:flex-end;height:36px;min-width:52px;display:grid;place-items:center;
+  border:0;border-radius:6px 6px 0 0;background:none;cursor:pointer;padding:0 14px;
+  font:inherit;font-size:13px;color:var(--ink)}
+.u1 .tab.is-active{background:var(--tab-active)}
+.u1 .tab.wide{min-width:56px;height:40px}
+.u1 .icon-only{border:0;background:none;cursor:pointer;width:20px;height:20px;padding:0;
+  display:grid;place-items:center;color:var(--ink-dim)}
+.u1 .panel-body{background:var(--panel);border-radius:0 0 var(--radius) var(--radius);
+  overflow:hidden}
+.u1 .fbody{padding:16px 20px 18px}
+.u1 .status{font-size:13px;color:var(--ink-dim);margin-left:auto}
+
+/* a .pref-pill, used for humidity and temperature the way the shipped page uses it
+   for Print Preferences: 24px, --pill ground, 4px radius, 12px type. */
+.u1 .pill{height:24px;display:inline-flex;align-items:center;gap:5px;padding:0 8px;
+  background:var(--pill);border:0;border-radius:4px;color:var(--ink);
+  font:12px/1 inherit;white-space:nowrap}
+.u1 .pill.warnp{background:#FDF1E3;color:var(--warn)}
+.u1 .pill svg{display:block;flex:0 0 auto}
+.u1 .btn{height:28px;border-radius:6px;border:1px solid var(--line);background:var(--panel);
+  font:inherit;font-size:12.5px;color:var(--ink);padding:0 12px;cursor:pointer;
+  white-space:nowrap}
+.u1 .btn:hover{border-color:var(--accent);color:var(--accent)}
+.u1 .btn[disabled]{opacity:.4;cursor:not-allowed}
+.u1 .btn.stop{border-color:var(--warn);color:#fff;background:var(--warn)}
+.u1 .seclbl{font-size:11px;color:var(--ink-dim);margin:0 0 8px;font-weight:400}
+
+
+/* =====================================================================
+   THE TOOLHEAD - .slot, unchanged: 64x140 of the bundle's own artwork,
+   a 36px disc at (15,29), a 58x19 name pill at (3,71), a pencil at 100.
+   ===================================================================== */
+.u1 .slot{position:relative;width:64px;height:140px;flex:0 0 auto;border:0;padding:0;
+  background:none;cursor:pointer}
+.u1 .slot>svg.art{position:absolute;inset:0;width:64px;height:140px;display:block}
+.u1 .disc{position:absolute;left:15px;top:29px;width:36px;height:36px;border-radius:50%;
+  display:grid;place-items:center;font-size:14px;color:#333;
+  background-image:linear-gradient(45deg,#C4C4C4 25%,transparent 25%,transparent 75%,#C4C4C4 75%),
+    linear-gradient(45deg,#C4C4C4 25%,transparent 25%,transparent 75%,#C4C4C4 75%);
+  background-size:8px 8px;background-position:0 0,4px 4px;background-color:#E4E4E4}
+.u1 .disc[data-loaded="1"]{background-image:none}
+.u1 .namepill{position:absolute;left:3px;top:71px;width:58px;height:19px;border-radius:10px;
+  background:#6E6E6E;color:#fff;font-size:11px;line-height:19px;text-align:center;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.u1 .pencil{position:absolute;left:50%;top:100px;transform:translateX(-50%);width:20px;
+  height:20px;opacity:.8;border-bottom:1px solid #9B9B9B;padding-bottom:2px;color:#333}
+.u1 .slot:hover .pencil{opacity:1}
+/* a head fed by an ACE right now: the same green the page uses for "ok", as a ring on
+   the disc rather than a new colour anywhere */
+.u1 .slot.fed .disc{box-shadow:0 0 0 2px var(--ok),0 0 0 4px var(--panel)}
+.u1 .hsub{text-align:center;font-size:11px;color:var(--ink-dim);line-height:1.3;
+  margin-top:1px;
+  font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+.u1 .hsub.fed{color:var(--ok)}
+
+/* =====================================================================
+   THE ACE BAY - the same disc and the same pill, without the extruder.
+   A bay and a head are two ends of one tube, so they are one drawing.
+   ===================================================================== */
+.u1 .bay{position:relative;width:64px;flex:0 0 64px;height:61px;cursor:pointer;
+  border:0;background:none;padding:0}
+.u1 .bay .disc{left:14px;top:0;width:36px;height:36px}
+.u1 .bay .namepill{left:3px;top:42px}
+.u1 .bay.fed .disc{box-shadow:0 0 0 2px var(--ok),0 0 0 4px var(--panel)}
+/* Bambu's A1 / B4 address, adopted whole: two characters that a wire, a head card and
+   a tooltip can all say. A..D is the unit, 1..4 the bay. */
+.u1 .bay .disc{font-size:11px;font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+.u1 .bays{display:flex;gap:var(--bgap,14px);justify-content:center;align-items:flex-start}
+
+/* =====================================================================
+   THE UNIT BOX - a plain white card with the page's own 1px outline.
+   ===================================================================== */
+.u1 .unit{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);
+  padding:11px 14px 13px}
+.u1 .unit+.unit{margin-top:10px}
+.u1 .unit.idle{opacity:.55}
+.u1 .uhead{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.u1 .uhead .nm{font-size:13px;color:var(--ink)}
+.u1 .uhead .md{font-size:11px;color:var(--ink-dim);display:block;
+  font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+.u1 .uhead .spacer{flex:1}
+/* one line instead of a box: the rule that makes four units fit in 572px */
+.u1 .urow{display:flex;align-items:center;gap:10px;border:1px solid var(--line);
+  border-radius:var(--radius);background:var(--panel);padding:7px 12px;cursor:pointer}
+.u1 .unit+.urow,.u1 .urow+.urow,.u1 .urow+.unit{margin-top:8px}
+.u1 .urow:hover{border-color:var(--accent)}
+.u1 .urow .spacer{flex:1}
+.u1 .urow .nm{font-size:12.5px}
+.u1 .urow .feeds{font-size:11px;color:var(--ok);
+  font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+.u1 .urow .caret{color:#9AA3AF;font-size:12px}
+.u1 .swatches{display:inline-flex;gap:4px}
+.u1 .swatches i{width:12px;height:20px;border-radius:3px;display:block}
+.u1 .swatches i.empty{background-image:linear-gradient(45deg,#C4C4C4 25%,transparent 25%,
+  transparent 75%,#C4C4C4 75%),linear-gradient(45deg,#C4C4C4 25%,transparent 25%,
+  transparent 75%,#C4C4C4 75%);background-size:6px 6px;background-position:0 0,3px 3px;
+  background-color:#E4E4E4}
+
+/* ---- the source switch: Bambu's tab pair, with multiACE's third answer ---- */
+.u1 .srcsw{display:inline-flex;gap:3px;padding:3px;background:var(--pill);border-radius:6px}
+.u1 .srcsw button{width:30px;height:26px;border:1px solid transparent;border-radius:4px;
+  background:transparent;display:grid;place-items:center;cursor:pointer;padding:0;
+  color:var(--ink-dim)}
+.u1 .srcsw button:hover{background:var(--panel)}
+.u1 .srcsw button.on{background:var(--panel);border-color:var(--accent);color:var(--accent)}
+.u1 .srcsw.off{opacity:.4}
+.u1 .srcsw.off button{cursor:not-allowed}
+
+/* ---- the wire layer. One SVG per drawing, coordinates hand-computed against that
+   drawing's fixed geometry. Grey = wired, nothing loaded through it. The filament's
+   own colour = this is where what is in that head came from. ---- */
+.u1 .wlane{position:relative;height:var(--wh,34px)}
+.u1 .wlane>svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;
+  pointer-events:none}
+</style>
+<style>
+/* =====================================================================
+   PER-DESIGN GEOMETRY
+   The panel body is 830 - 2 border - 40 padding = 788px of content in every
+   one of them. Every number below is derived from that and from the two
+   fixed sizes the shipped page hands over: a toolhead is 64x140 and a bay
+   is 64 wide. Where a design has to shrink one of those to fit, it says so
+   in its own rule rather than in prose.
+   ===================================================================== */
+
+/* ---- F0: today. Four slots, the measured pitch, nothing else. ---- */
+.f0 .headrow{display:flex;align-items:flex-start;justify-content:center;
+  gap:clamp(24px,8%,110px);min-height:200px;padding-top:20px}
+
+/* ---- F1: four lanes. A lane flexes to its source - 1 for a feeder, 4 for an
+   ACE - which is the only way one row can hold both a single spool and four bays.
+   The defect it exposes is measured, not asserted: see .srcsw's width. ---- */
+.f1 .lanes{display:flex;gap:10px;align-items:stretch}
+.f1 .lane{border:1px solid var(--line);border-radius:var(--radius);padding:8px 6px 10px;
+  display:flex;flex-direction:column;align-items:center;gap:7px;min-width:0}
+.f1 .lane.feed{flex:1 1 0}
+.f1 .lane.ace{flex:4 1 0;background:var(--pill)}
+.f1 .lane .lname{font-size:11.5px;color:var(--ink-dim);
+  font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+/* No scaling, no min-width override: the lane is left to find its own size, and what
+   it finds is the source switch's min-content. That is the finding - see the caption. */
+.f1 .lane .bays{--bgap:10px}
+
+/* ---- F2: two by two. Bambu's two-group frame, wrapped. Each group is 388px,
+   which is almost exactly the width Bambu draws one AMS group at - so the bays
+   are right and the HEIGHT is what fails. ---- */
+.f2 .groups{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.f2 .grp{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px 12px}
+.f2 .grp.viaace{border-color:var(--accent)}
+.f2 .ghead{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.f2 .ghead .spacer{flex:1}
+.f2 .ghead .gname{font-size:12.5px}
+.f2 .grp .bays{--bgap:34px}
+.f2 .onehead{display:flex;justify-content:center}
+/* a unit that already appears in another group is REFERENCED, not drawn twice */
+.f2 .ref{display:flex;align-items:center;gap:9px;background:var(--pill);border-radius:6px;
+  padding:8px 10px;font-size:11.5px;color:var(--ink-dim)}
+
+/* ---- F3: heads over units. The shape the earlier study chose, redrawn in the
+   shipped artwork - which is what exposes the objection to it. ---- */
+.f3 .headrow{display:flex}
+.f3 .hcell{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px}
+
+/* ---- F4: the bus. Sources above, one routing bus, the four heads below it,
+   fed through the inlet the artwork already draws at its top edge. ---- */
+.f4 .headrow{display:flex}
+.f4 .hcell{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px}
+.f4 .hcell .srcsw{margin-top:4px}
+
+/* ---- F5: the spine. Heads down the left of a vertical trunk, sources to the
+   right of it. Four 140px toolheads stacked is 560px before anything else, so
+   this one has to give the artwork up - drawn here at the size it would survive at. ---- */
+.f5 .spine{display:flex;gap:0}
+.f5 .hcol{width:206px;flex:0 0 206px;display:flex;flex-direction:column;gap:8px}
+.f5 .hmini{display:flex;align-items:center;gap:9px;border:1px solid var(--line);
+  border-radius:var(--radius);padding:6px 8px;height:56px}
+.f5 .hmini .disc{position:static;width:30px;height:30px;flex:0 0 30px}
+.f5 .hmini .txt{min-width:0;flex:1}
+.f5 .hmini .t1{font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.f5 .hmini .t2{font-size:10.5px;color:var(--ink-dim);
+  font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+.f5 .trunk{width:46px;flex:0 0 46px;position:relative}
+.f5 .trunk>svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.f5 .ucol{flex:1;min-width:0}
+.f5 .ucol .bays{--bgap:10px}
+
+/* ---- F6: the ledger. No diagram at all: four head rows, then a source rack.
+   The connection is written rather than drawn, which is the whole trade. ---- */
+.f6 .lrow{display:flex;align-items:center;gap:12px;padding:8px 4px;
+  border-bottom:1px solid var(--line-soft)}
+.f6 .lrow:last-of-type{border-bottom:0}
+.f6 .lrow .disc{position:static;width:30px;height:30px;flex:0 0 30px}
+.f6 .lrow .who{width:88px;flex:0 0 88px;font-size:12.5px}
+.f6 .lrow .what{flex:1;min-width:0;font-size:12.5px}
+.f6 .lrow .what small{display:block;color:var(--ink-dim);font-size:11px}
+.f6 .lrow .from{width:150px;flex:0 0 150px;font-size:11.5px;color:var(--ink-dim);
+  font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+.f6 .lrow .from.fed{color:var(--ok)}
+.f6 .lrow .acts{display:flex;gap:6px}
+
+/* ---- the six versions are one radio group ---- */
+.v-f0,.v-f1,.v-f2,.v-f3,.v-f4,.v-f5,.v-f6{display:none}
+#f0:checked~.stage .v-f0,#f1:checked~.stage .v-f1,#f2:checked~.stage .v-f2,
+#f3:checked~.stage .v-f3,#f4:checked~.stage .v-f4,#f5:checked~.stage .v-f5,
+#f6:checked~.stage .v-f6{display:block}
+#f0:checked~.picker [for=f0],#f1:checked~.picker [for=f1],#f2:checked~.picker [for=f2],
+#f3:checked~.picker [for=f3],#f4:checked~.picker [for=f4],#f5:checked~.picker [for=f5],
+#f6:checked~.picker [for=f6]
+  {border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+/* ---- and the unit counts are another ---- */
+.v-n0,.v-n1,.v-n2,.v-n4,.v-ndry{display:none}
+#n0:checked~.stage .v-n0,#n1:checked~.stage .v-n1,#n2:checked~.stage .v-n2,
+#n4:checked~.stage .v-n4,#ndry:checked~.stage .v-ndry{display:block}
+#n0:checked~.picker [for=n0],#n1:checked~.picker [for=n1],#n2:checked~.picker [for=n2],
+#n4:checked~.picker [for=n4],#ndry:checked~.picker [for=ndry]
+  {border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+
+/* the height budget, drawn as a rule beside a design */
+.budget{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11.5px;
+  color:var(--muted);margin:10px auto 0;width:830px;max-width:100%}
+.budget .bar{flex:1;height:8px;border-radius:4px;background:var(--panel-2);position:relative;
+  overflow:hidden}
+.budget .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--ok);display:block}
+.budget .bar i.over{background:var(--bad)}
+</style>
+
+<svg class="hidesvg" aria-hidden="true"><defs>
+<!-- resources/web/device_page/icons/extruderBackground.svg, inlined verbatim so this
+     file is self-contained. The two stubs at x=26 and x=38 running from y=15 up to
+     y=0 are the filament INLET, and they are the reason every design below puts the
+     ACE above the toolhead rather than beneath it. The nozzle is the triangle at
+     y=133..138 and it points down. -->
+<symbol id="u1head" viewBox="0 0 64 140">
+  <path d="M32.4111 138.487C32.2283 138.804 31.7717 138.804 31.5889 138.487L28.7744 133.612C28.5916 133.296 28.8199 132.9 29.1855 132.9L34.8145 132.9C35.1801 132.9 35.4084 133.296 35.2256 133.612L32.4111 138.487Z" fill="#9B9B9B" stroke="#818181" stroke-width="0.8"/>
+  <path d="M26.625 119.4H37.375C38.6038 119.4 39.5996 120.396 39.5996 121.625V131.375C39.5996 132.604 38.6038 133.6 37.375 133.6H26.625C25.3962 133.6 24.4004 132.604 24.4004 131.375V121.625C24.4004 120.396 25.3962 119.4 26.625 119.4Z" fill="#C0C0C0" stroke="#818181" stroke-width="0.8"/>
+  <rect x="26" width="12" height="15" fill="url(#u1g0)"/>
+  <path d="M43.375 20.5996L20.625 20.5996C19.3962 20.5996 18.4004 19.6038 18.4004 18.375L18.4004 17.625C18.4004 16.3962 19.3962 15.4004 20.625 15.4004L43.375 15.4004C44.6038 15.4004 45.5996 16.3962 45.5996 17.625L45.5996 18.375C45.5996 19.6038 44.6038 20.5996 43.375 20.5996Z" fill="#989898" stroke="#818181" stroke-width="0.8"/>
+  <path d="M14 17.4004H50C57.5111 17.4004 63.5996 23.4889 63.5996 31V119.25C63.5996 123.862 59.8616 127.6 55.25 127.6H8.75C4.13842 127.6 0.400392 123.862 0.400391 119.25V31C0.400391 23.4889 6.48893 17.4004 14 17.4004Z" fill="url(#u1g1)" stroke="#818181" stroke-width="0.8"/>
+  <path d="M26 15V0" stroke="url(#u1g2)" stroke-width="0.8"/>
+  <path d="M38 15V0" stroke="url(#u1g2)" stroke-width="0.8"/>
+</symbol>
+<linearGradient id="u1g0" x1="29.79" y1="52.94" x2="29.79" y2="0" gradientUnits="userSpaceOnUse">
+  <stop stop-color="#989898"/><stop offset="1" stop-color="#989898" stop-opacity="0"/></linearGradient>
+<linearGradient id="u1g1" x1="32" y1="59.39" x2="32" y2="164.71" gradientUnits="userSpaceOnUse">
+  <stop stop-color="#D9D9D9"/><stop offset="1" stop-color="#C9C9C9"/></linearGradient>
+<linearGradient id="u1g2" x1="24.5" y1="12.35" x2="24.5" y2="0" gradientUnits="userSpaceOnUse">
+  <stop stop-color="#818181"/><stop offset="1" stop-color="#818181" stop-opacity="0"/></linearGradient>
+
+<!-- the three sources, in the page's own 1.6px stroke language -->
+<symbol id="ic-feeder" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5.3"/><circle cx="8.5" cy="8.5" r="1.7"/><path d="M13.8 8.5h3.4a2 2 0 0 1 2 2v4.3"/></g><path d="M17.6 19.4l1.6 2.2 1.6-2.2z" fill="currentColor"/></symbol>
+<symbol id="ic-ace" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="18" height="13" rx="2"/><rect x="5.8" y="9" width="2.4" height="7" rx="1.2"/><rect x="9.13" y="9" width="2.4" height="7" rx="1.2"/><rect x="12.46" y="9" width="2.4" height="7" rx="1.2"/><rect x="15.79" y="9" width="2.4" height="7" rx="1.2"/></g></symbol>
+<symbol id="ic-manual" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6v8.2"/><path d="M7.6 11.4h8.8l-2.9 6.2h-3z"/><path d="M10.5 21.4h3"/></g></symbol>
+<symbol id="ic-drop" viewBox="0 0 16 16"><path d="M8 1.6 4.5 6.4a4.2 4.2 0 1 0 7 0z" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M5.2 9.4a2.9 2.9 0 0 0 5.6 0z" fill="currentColor" opacity=".55"/></symbol>
+<symbol id="ic-dry" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><circle cx="8" cy="8" r="2.9"/><path d="M8 1.4v1.6M8 13v1.6M1.4 8h1.6M13 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1"/></g></symbol>
+<symbol id="ic-pencil" viewBox="0 0 20 20"><g fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M13.4 3.6l3 3L7.6 15.4l-3.9.9.9-3.9z"/></g></symbol>
+<!-- the ACE cabinet badge from 16-ace-visuals.md, 44x26, filled with the unit's own bays -->
+<symbol id="ace-chassis" viewBox="0 0 44 26"><rect x="2" y="1" width="40" height="20" rx="3" fill="#C9C9C9"/><rect x="0" y="20" width="44" height="5" rx="1.5" fill="#A8AEB5"/></symbol>
+</defs></svg>
+
+<div class="wrap">
+
+<h1>Four toolheads, four ACEs</h1>
+<p class="sub">Seven ways to draw the Filament panel once more than one ACE unit can feed
+a toolhead in place of its stock feeder &mdash; six new ones and the row that ships today,
+kept as the baseline. Bambu Studio's AMS display is the reference for the shape; the
+Snapmaker Device page supplies every part it is drawn out of.</p>
+<p class="stamp">Panel width <b>830</b> (<code>--col-w</code>) &middot; toolhead
+<b>64&times;140</b> (<code>extruderBackground.svg</code>) &middot; live payload from
+<b>811002511261022618B3</b>, 2026&#8209;08&#8209;25 &middot; seven shapes, five states, one recommended</p>
+
+<div class="scroll"><table>
+<tr><th>decision</th><th>taken</th><th>why, in one line</th></tr>
+<tr><td>Shape</td><td><b>F4 &middot; the bus</b></td>
+    <td>Sources above, one routing bus, the four heads in one row beneath it</td></tr>
+<tr><td>Orientation</td><td><b>ACE above the head</b></td>
+    <td>The shipped artwork's inlet is its top edge and its nozzle points down</td></tr>
+<tr><td>Head row</td><td><b>one row of four</b></td>
+    <td>A toolhead is 140&nbsp;px tall; a second row of them costs the whole budget</td></tr>
+<tr><td>A bay</td><td><b>the same disc and pill as a head</b></td>
+    <td>A bay and a head are two ends of one tube, so they are one drawing</td></tr>
+<tr><td>Bay address</td><td><b>A1&hellip;D4</b></td>
+    <td>Bambu's, adopted whole: two characters a wire, a card and a tooltip can share</td></tr>
+<tr><td>Scaling</td><td><b>one unit open, the rest one line</b></td>
+    <td>Four open unit boxes is 556&nbsp;px against a ~190&nbsp;px allowance</td></tr>
+</table></div>
+
+<h2><span class="n">01</span>Two fixed sizes decide most of this</h2>
+<p class="lede">The panel does not get to choose how wide it is or how big a toolhead is.
+Both numbers already exist, both were measured rather than picked, and between them they
+rule out three of the six shapes before any of them is judged on how it reads.</p>
+
+<div class="scroll"><table>
+<tr><th>fixed</th><th>value</th><th>set by</th><th>consequence</th></tr>
+<tr><td>Panel width</td><td class="num">830</td>
+    <td><code>--col-w</code> in <code>device.css</code>; the side column is
+        <code>flex: 0 0 var(--col-w)</code></td>
+    <td>788&nbsp;px of body content, at every window size at or above 1600</td></tr>
+<tr><td>Panel height</td><td class="num">~572</td>
+    <td>What the side column has left after Control's cluster</td>
+    <td>A body that overflows is <b>clipped in silence</b> &mdash; <code>.panel-body</code>
+        is <code>overflow: hidden</code></td></tr>
+<tr><td>A toolhead</td><td class="num">64&times;140</td>
+    <td><code>icons/extruderBackground.svg</code>, drawn by <code>.slot</code></td>
+    <td>Four of them in a row is 140&nbsp;px. Four in a column is 560</td></tr>
+<tr><td>A bay</td><td class="num">64&times;61</td>
+    <td>The same 36&nbsp;px disc at (15,29) and 58&times;19 name pill at (3,71),
+        without the extruder body</td>
+    <td>Four bays plus gaps is ~300&nbsp;px, so two units fit across and three do not</td></tr>
+</table></div>
+
+<div class="note"><b>The artwork says which way up the picture goes.</b> Two stubs run
+from <code>y=15</code> to <code>y=0</code> at <code>x=26</code> and <code>x=38</code> &mdash;
+that is where filament enters &mdash; and the nozzle is a triangle at
+<code>y=133..138</code> pointing down. So a diagram that puts the ACE <i>below</i> the
+toolheads draws filament climbing into a nozzle. Bambu's own display puts the cabinet
+above and the nozzle at the bottom for the same reason. This is the one thing the earlier
+study's <b>P1</b> got backwards, and it was invisible until the real artwork was used
+instead of a placeholder rectangle.</div>
+
+<div class="note ok"><b>A bay is drawn as a head.</b> The shipped page already has one
+way to say "some filament, this colour, called this": a 36&nbsp;px disc that falls back to
+an 8&nbsp;px checkerboard when empty, over a 58&times;19 <code>#6E6E6E</code> pill holding
+the material name. An ACE bay is the same statement about the same substance, so it is the
+same drawing minus the extruder body &mdash; not Orca's <code>AMSLib</code> tube, which is
+the standard for the <i>C++</i> surfaces in
+<a href="../../ace-mmu/16-ace-visuals.md">16&#8209;ace&#8209;visuals.md</a> and would be a
+fifth language on a page that already has one.</div>
+
+<h2><span class="n">02</span>What the machine actually reports</h2>
+<p class="lede">Every drawing below is filled from one payload, read off the printer on
+2026&#8209;08&#8209;25. Where a second or fourth unit appears it is labelled as invented,
+because only one exists.</p>
+
+<div class="scroll"><table>
+<tr><th>field</th><th>value</th><th>what the panel does with it</th></tr>
+<tr><td><code>mode</code></td><td class="num">head</td>
+    <td>The per-head source switch is live. In <code>normal</code> and <code>multi</code>
+        it is disabled <b>with the reason showing</b>, never hidden</td></tr>
+<tr><td><code>device_count</code></td><td class="num">1</td><td>One unit box</td></tr>
+<tr><td><code>head_feeder</code></td><td class="num">{0,1,2 true, 3 false}</td>
+    <td>Toolheads 1&ndash;3 on their stock feeders</td></tr>
+<tr><td><code>head_ace</code></td><td class="num">{0:0, 1:1, 2:2, 3:0}</td>
+    <td><b>Not the answer to "what feeds this head".</b> Heads 2 and 3 name ACE&nbsp;2 and
+        ACE&nbsp;3, which do not exist. Resolve <code>head_manual</code> first, then
+        <code>head_feeder</code>, and <code>head_ace</code> only for the remainder</td></tr>
+<tr><td><code>head_source[3]</code></td>
+    <td class="num">{ace_index:0, slot:2, PETG, Generic, 632C2C}</td>
+    <td>Toolhead&nbsp;4 is loaded from <b>A3</b>. This is what makes one wire coloured</td></tr>
+<tr><td><code>gate_status</code></td><td class="num">[1,1,1,1]</td>
+    <td>All four bays occupied</td></tr>
+<tr><td>slot identity</td><td class="num">absent</td>
+    <td>Every raw slot reads <code>{material:"", brand:"", rfid:0}</code>. A bay that is
+        occupied but unidentified is drawn as <b>occupied but unidentified</b></td></tr>
+<tr><td><code>humidity</code> / <code>temp</code></td><td class="num">38&nbsp;% / 31&nbsp;&deg;C</td>
+    <td>One <code>.pref-pill</code>, not three chips</td></tr>
+<tr><td><code>spool_binding</code></td><td class="num">{}</td>
+    <td>Nothing is bound, so <b>no bay has a level</b>. The disc is a colour, not a gauge
+        &mdash; which is also why this panel does not borrow <code>AMSLib</code>'s
+        fill-from-the-bottom tube</td></tr>
+</table></div>
+
+<h3>The three sources, and the macro behind each</h3>
+<div class="scroll"><table>
+<tr><th>source</th><th>what it means</th><th>what the switch sends</th><th>read back from</th></tr>
+<tr><td><b>Feeder</b></td><td>The head's own stock side feeder. The ACE never touches it</td>
+    <td class="num">ACE_SET_HEAD_FEEDER HEAD=n ENABLE=1</td><td class="num">head_feeder[n]</td></tr>
+<tr><td><b>ACE</b></td><td>Wired to exactly one unit, and can load only that unit's bays</td>
+    <td class="num">ACE_SET_HEAD_FEEDER HEAD=n ENABLE=0<br>ACE_SET_HEAD_ACE HEAD=n ACE=a</td>
+    <td class="num">head_ace[n], with head_feeder false</td></tr>
+<tr><td><b>Manual</b></td><td>Hand-fed / TPU bypass. No ACE feed, retract, assist or RFID</td>
+    <td class="num">ACE_SET_HEAD_MANUAL HEAD=n ENABLE=1</td><td class="num">head_manual[n]</td></tr>
+</table></div>
+
+<div class="note warn"><b>One unit may feed several heads.</b>
+<code>ACE_SET_HEAD_ACE</code> binds a head to one ACE and says nothing about the reverse,
+so ticking ACE&nbsp;1 on a second head is legal. That single fact is what separates the
+six designs below into two families: the ones that draw a unit <b>once</b>, and the ones
+that draw it <b>once per head it feeds</b>. With one unit and four heads &mdash; the
+cheapest ACE setup anyone will own &mdash; the second family draws the same cabinet four
+times, with four humidity readings that all have to agree.</div>
+
+
+
+
+<h2><span class="n">03</span>Seven shapes, drawn at the machine's own state</h2>
+<p class="lede">One ACE&nbsp;2&nbsp;Pro in head mode feeding Toolhead&nbsp;4 from bay A3,
+three heads on their stock feeders, Toolhead&nbsp;3 empty. Every version is 830&nbsp;px
+wide and built from the same five parts, so what differs between them is shape and
+nothing else. <b>At one unit they all work.</b> Section 04 is where the choice is made.</p>
+
+<input class="vradio" type="radio" name="fsel" id="f4" checked>
+<input class="vradio" type="radio" name="fsel" id="f0">
+<input class="vradio" type="radio" name="fsel" id="f1">
+<input class="vradio" type="radio" name="fsel" id="f2">
+<input class="vradio" type="radio" name="fsel" id="f3">
+<input class="vradio" type="radio" name="fsel" id="f5">
+<input class="vradio" type="radio" name="fsel" id="f6">
+<div class="picker">
+<label for="f0"><span class="k">F0</span><span class="t">Today</span><span class="d">Four slots, no ACE anywhere</span></label>
+<label for="f1"><span class="k">F1</span><span class="t">Four lanes</span><span class="d">Bambu&#39;s group once per toolhead, lanes flexing to their source</span></label>
+<label for="f2"><span class="k">F2</span><span class="t">Two by two</span><span class="d">Bambu&#39;s two-group frame, wrapped</span></label>
+<label for="f3"><span class="k">F3</span><span class="t">Heads over units</span><span class="d">The earlier study&#39;s P1, in the real artwork</span></label>
+<label for="f4"><span class="k">F4</span><span class="t">The bus &#10003;</span><span class="d">Sources above, merge bar, four heads below</span></label>
+<label for="f5"><span class="k">F5</span><span class="t">The spine</span><span class="d">Heads on a vertical trunk, sources beside it</span></label>
+<label for="f6"><span class="k">F6</span><span class="t">The ledger</span><span class="d">No diagram: rows, and a source rack</span></label>
+</div>
+<div class="stage">
+<div class="v-f0"><div class="u1 f0"><div class="panel-head"><span class="panel-title">Filament</span><span class="gap-36"></span><button class="tab wide is-active" type="button" title="Refresh">&#8635;</button><span class="sep">|</span><button class="prefpill" type="button" title="Head mode only wires a head to a unit - SET_ACE_MODE MODE=normal|multi|head">ACE mode &middot; <b style="font-weight:600">Head</b><span class="chev">&#9662;</span></button><span class="spacer"></span><span class="status"></span><span class="gap-36"></span><button class="icon-only" type="button" title="More">&#8943;</button><span style="width:10px"></span><button class="icon-only" type="button" title="About filament sources">?</button></div><div class="panel-body"><div class="fbody"><p class="seclbl">One slot per toolhead. Type and colour come from <code>print_task_config</code>; nothing on the panel knows an ACE exists.</p><div class="headrow"><div class="hcell"><button class="slot" type="button" title="Toolhead 1" aria-label="Toolhead 1"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#f44336;color:#fff">1</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub"></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 2" aria-label="Toolhead 2"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#ffffdc;color:#333">2</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub"></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 3" aria-label="Toolhead 3"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc">3</span><span class="namepill">/</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub"></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 4" aria-label="Toolhead 4"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">4</span><span class="namepill">PETG</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub"></div></div></div></div></div></div><div class="budget"><span>body</span><span class="bar"><i style="width:60%"></i></span><span>272 / 456 &middot; 184 spare</span></div><p class="caption"><b>What ships today.</b> Four slots, the measured 174&nbsp;px pitch, and nothing on the panel that knows an ACE exists. Every version below is this row plus something above or below it &mdash; which is why the row itself is never the thing being argued about.</p></div>
+<div class="v-f1"><div class="u1 f1"><div class="panel-head"><span class="panel-title">Filament</span><span class="gap-36"></span><button class="tab wide is-active" type="button" title="Refresh">&#8635;</button><span class="sep">|</span><button class="prefpill" type="button" title="Head mode only wires a head to a unit - SET_ACE_MODE MODE=normal|multi|head">ACE mode &middot; <b style="font-weight:600">Head</b><span class="chev">&#9662;</span></button><span class="spacer"></span><span class="status">1 ACE unit</span><span class="gap-36"></span><button class="icon-only" type="button" title="More">&#8943;</button><span style="width:10px"></span><button class="icon-only" type="button" title="About filament sources">?</button></div><div class="panel-body"><div class="fbody"><div class="lanes"><div class="lane feed"><div class="lname">Toolhead 1</div><div class="srcsw" role="group" aria-label="Source for Toolhead 1"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div><div class="bays"><button class="bay" type="button" title="Ext: PLA" aria-label="Ext: PLA"><span class="disc" data-loaded="1" style="background:#f44336;color:#fff">Ext</span><span class="namepill">PLA</span></button></div><div class="wlane" style="--wh:22px"><svg viewBox="0 0 64 22" preserveAspectRatio="none" aria-hidden="true"><path d="M32 0 V22" stroke="#f44336" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="hcell"><button class="slot" type="button" title="Toolhead 1" aria-label="Toolhead 1"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#f44336;color:#fff">1</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">Jayo</div></div></div><div class="lane feed"><div class="lname">Toolhead 2</div><div class="srcsw" role="group" aria-label="Source for Toolhead 2"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div><div class="bays"><button class="bay" type="button" title="Ext: PLA" aria-label="Ext: PLA"><span class="disc" data-loaded="1" style="background:#ffffdc;color:#333">Ext</span><span class="namepill">PLA</span></button></div><div class="wlane" style="--wh:22px"><svg viewBox="0 0 64 22" preserveAspectRatio="none" aria-hidden="true"><path d="M32 0 V22" stroke="#ffffdc" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="hcell"><button class="slot" type="button" title="Toolhead 2" aria-label="Toolhead 2"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#ffffdc;color:#333">2</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">Forshape</div></div></div><div class="lane feed"><div class="lname">Toolhead 3</div><div class="srcsw" role="group" aria-label="Source for Toolhead 3"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div><div class="bays"><button class="bay" type="button" title="Ext: empty" aria-label="Ext: empty"><span class="disc">Ext</span><span class="namepill">/</span></button></div><div class="wlane" style="--wh:22px"><svg viewBox="0 0 64 22" preserveAspectRatio="none" aria-hidden="true"><path d="M32 0 V22" stroke="var(--wire)" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="hcell"><button class="slot" type="button" title="Toolhead 3" aria-label="Toolhead 3"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc">3</span><span class="namepill">/</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">empty</div></div></div><div class="lane ace"><div class="lname">Toolhead 4 &middot; ACE A</div><div class="srcsw" role="group" aria-label="Source for Toolhead 4"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div><div style="display:flex;gap:6px;align-items:center"><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>38&nbsp;%</span><span class="pill ">31&nbsp;&deg;C</span><button class="btn" type="button">Dry</button></div><div class="bays"><button class="bay" type="button" title="A1: PETG" aria-label="A1: PETG"><span class="disc" data-loaded="1" style="background:#83AFFF;color:#333">A1</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A2: PETG" aria-label="A2: PETG"><span class="disc" data-loaded="1" style="background:#8FA7C8;color:#333">A2</span><span class="namepill">PETG</span></button><button class="bay fed" type="button" title="A3: PETG" aria-label="A3: PETG"><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">A3</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A4: PETG" aria-label="A4: PETG"><span class="disc" data-loaded="1" style="background:#C47053;color:#fff">A4</span><span class="namepill">PETG</span></button></div><div class="wlane" style="--wh:22px"><svg viewBox="0 0 64 22" preserveAspectRatio="none" aria-hidden="true"><path d="M32 0 V22" stroke="#632C2C" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="hcell"><button class="slot fed" type="button" title="Toolhead 4" aria-label="Toolhead 4"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">4</span><span class="namepill">PETG</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">A3</div></div></div></div></div></div></div><div class="budget"><span>body</span><span class="bar"><i style="width:88%"></i></span><span>403 / 456 &middot; 53 spare</span></div><p class="caption">Bambu&#39;s group, once per toolhead, with the lane flexing to its source: <b>1</b> for a stock feeder and <b>4</b> for an ACE. It reads beautifully at this state &mdash; and it has two faults, both visible above. The source switch is <b>102&nbsp;px</b> wide and a feeder lane is <b>92&nbsp;px</b> inside, so it is drawn at 88&nbsp;% to fit. And the moment a second head is wired to ACE&nbsp;A, the same cabinet is drawn twice, with two humidity readings that have to agree.</p></div>
+<div class="v-f2"><div class="u1 f2"><div class="panel-head"><span class="panel-title">Filament</span><span class="gap-36"></span><button class="tab wide is-active" type="button" title="Refresh">&#8635;</button><span class="sep">|</span><button class="prefpill" type="button" title="Head mode only wires a head to a unit - SET_ACE_MODE MODE=normal|multi|head">ACE mode &middot; <b style="font-weight:600">Head</b><span class="chev">&#9662;</span></button><span class="spacer"></span><span class="status">1 ACE unit, drawn twice</span><span class="gap-36"></span><button class="icon-only" type="button" title="More">&#8943;</button><span style="width:10px"></span><button class="icon-only" type="button" title="About filament sources">?</button></div><div class="panel-body"><div class="fbody"><div class="groups"><div class="grp"><div class="ghead"><span class="gname">Toolhead 1</span><span class="spacer"></span><div class="srcsw" role="group" aria-label="Source for Toolhead 1"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="bays"><button class="bay" type="button" title="Ext: PLA" aria-label="Ext: PLA"><span class="disc" data-loaded="1" style="background:#f44336;color:#fff">Ext</span><span class="namepill">PLA</span></button></div><div class="wlane" style="--wh:22px"><svg viewBox="0 0 64 22" preserveAspectRatio="none" aria-hidden="true"><path d="M32 0 V22" stroke="#f44336" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="onehead"><div class="hcell"><button class="slot" type="button" title="Toolhead 1" aria-label="Toolhead 1"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#f44336;color:#fff">1</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">Jayo</div></div></div></div><div class="grp"><div class="ghead"><span class="gname">Toolhead 2</span><span class="spacer"></span><div class="srcsw" role="group" aria-label="Source for Toolhead 2"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="bays"><button class="bay" type="button" title="Ext: PLA" aria-label="Ext: PLA"><span class="disc" data-loaded="1" style="background:#ffffdc;color:#333">Ext</span><span class="namepill">PLA</span></button></div><div class="wlane" style="--wh:22px"><svg viewBox="0 0 64 22" preserveAspectRatio="none" aria-hidden="true"><path d="M32 0 V22" stroke="#ffffdc" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="onehead"><div class="hcell"><button class="slot" type="button" title="Toolhead 2" aria-label="Toolhead 2"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#ffffdc;color:#333">2</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">Forshape</div></div></div></div><div class="grp viaace"><div class="ghead"><span class="gname">Toolhead 3</span><span class="spacer"></span><div class="srcsw" role="group" aria-label="Source for Toolhead 3"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="ref"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632C2C"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/></svg><span>ACE&nbsp;A &mdash; already drawn at Toolhead&nbsp;4.<br>Loaded from <b>A1</b>. Open that group to change its bays.</span></div><div class="wlane" style="--wh:22px"><svg viewBox="0 0 64 22" preserveAspectRatio="none" aria-hidden="true"><path d="M32 0 V22" stroke="#83AFFF" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="onehead"><div class="hcell"><button class="slot fed" type="button" title="Toolhead 3" aria-label="Toolhead 3"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#83AFFF;color:#333">3</span><span class="namepill">PETG</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">A1</div></div></div></div><div class="grp viaace"><div class="ghead"><span class="gname">Toolhead 4</span><span class="spacer"></span><div class="srcsw" role="group" aria-label="Source for Toolhead 4"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div style="display:flex;gap:6px;align-items:center;justify-content:center;margin-bottom:8px"><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>38&nbsp;%</span><span class="pill ">31&nbsp;&deg;C</span><button class="btn" type="button">Dry</button></div><div class="bays"><button class="bay" type="button" title="A1: PETG" aria-label="A1: PETG"><span class="disc" data-loaded="1" style="background:#83AFFF;color:#333">A1</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A2: PETG" aria-label="A2: PETG"><span class="disc" data-loaded="1" style="background:#8FA7C8;color:#333">A2</span><span class="namepill">PETG</span></button><button class="bay fed" type="button" title="A3: PETG" aria-label="A3: PETG"><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">A3</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A4: PETG" aria-label="A4: PETG"><span class="disc" data-loaded="1" style="background:#C47053;color:#fff">A4</span><span class="namepill">PETG</span></button></div><div class="wlane" style="--wh:22px"><svg viewBox="0 0 64 22" preserveAspectRatio="none" aria-hidden="true"><path d="M32 0 V22" stroke="#632C2C" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="onehead"><div class="hcell"><button class="slot fed" type="button" title="Toolhead 4" aria-label="Toolhead 4"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">4</span><span class="namepill">PETG</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">A3</div></div></div></div></div></div></div></div><div class="budget"><span>body</span><span class="bar"><i class="over" style="width:100%"></i></span><span>686 / 456 &middot; 230 over</span></div><p class="caption">Bambu&#39;s two-group frame taken literally and wrapped 2&times;2. Each group is <b>388&nbsp;px</b>, which is almost exactly the width Bambu draws one AMS group at, so the bays are right. <b>The height is what fails.</b> Two rows of a 140&nbsp;px toolhead plus its group is over 700&nbsp;px against a panel that has about 456 to give. The bottom-left group also shows the only honest answer to sharing in this family: draw the unit once and <b>reference</b> it everywhere else &mdash; which is an admission that the layout cannot say the thing it is for. <b>This verdict was later narrowed:</b> it holds for <i>this arrangement</i> and not for the idea. See <a href="multiace-f2-iterations.html">multiace-f2-iterations.html</a>, where three rearrangements of the same subpanel fit with 29&ndash;39&nbsp;px to spare and none of them folds at four units.</p></div>
+<div class="v-f3"><div class="u1 f3"><div class="panel-head"><span class="panel-title">Filament</span><span class="gap-36"></span><button class="tab wide is-active" type="button" title="Refresh">&#8635;</button><span class="sep">|</span><button class="prefpill" type="button" title="Head mode only wires a head to a unit - SET_ACE_MODE MODE=normal|multi|head">ACE mode &middot; <b style="font-weight:600">Head</b><span class="chev">&#9662;</span></button><span class="spacer"></span><span class="status">1 ACE unit</span><span class="gap-36"></span><button class="icon-only" type="button" title="More">&#8943;</button><span style="width:10px"></span><button class="icon-only" type="button" title="About filament sources">?</button></div><div class="panel-body"><div class="fbody"><div class="headrow"><div class="hcell"><button class="slot" type="button" title="Toolhead 1" aria-label="Toolhead 1"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#f44336;color:#fff">1</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw" role="group" aria-label="Source for Toolhead 1"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 2" aria-label="Toolhead 2"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#ffffdc;color:#333">2</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw" role="group" aria-label="Source for Toolhead 2"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 3" aria-label="Toolhead 3"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc">3</span><span class="namepill">/</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw" role="group" aria-label="Source for Toolhead 3"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot fed" type="button" title="Toolhead 4" aria-label="Toolhead 4"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">4</span><span class="namepill">PETG</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">A3</div><div class="srcsw" role="group" aria-label="Source for Toolhead 4"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div></div><div class="wlane" style="--wh:36px"><svg viewBox="0 0 790 36" aria-hidden="true"><path d="M691.25 0 C691.25 16 434 16 434 36" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><circle cx="434" cy="36" r="3" fill="#632C2C"/><circle cx="691.25" cy="0" r="3" fill="#632C2C"/></svg></div><div class="unit"><div class="uhead"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632C2C"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/></svg><span><span class="nm">ACE A</span><span class="md">ACE 2 Pro &middot; ready</span></span><span class="spacer"></span><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>38&nbsp;%</span><span class="pill ">31&nbsp;&deg;C</span><button class="btn" type="button">Dry</button></div><div class="bays"><button class="bay" type="button" title="A1: PETG" aria-label="A1: PETG"><span class="disc" data-loaded="1" style="background:#83AFFF;color:#333">A1</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A2: PETG" aria-label="A2: PETG"><span class="disc" data-loaded="1" style="background:#8FA7C8;color:#333">A2</span><span class="namepill">PETG</span></button><button class="bay fed" type="button" title="A3: PETG" aria-label="A3: PETG"><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">A3</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A4: PETG" aria-label="A4: PETG"><span class="disc" data-loaded="1" style="background:#C47053;color:#fff">A4</span><span class="namepill">PETG</span></button></div></div></div></div></div><div class="budget"><span>body</span><span class="bar"><i style="width:86%"></i></span><span>391 / 456 &middot; 65 spare</span></div><p class="caption">The shape the earlier study chose (its <b>P1</b>), redrawn in the shipped artwork &mdash; which is what exposes the objection. The wire leaves bay <b>A3</b> and climbs into Toolhead&nbsp;4 from below, entering at the nozzle. <code>extruderBackground.svg</code> draws its inlet as two stubs at the <i>top</i> edge and its nozzle pointing <i>down</i>; the picture and the machine disagree. Everything else about it is sound, and F4 is this drawing turned over.</p></div>
+<div class="v-f4"><div class="u1 f4"><div class="panel-head"><span class="panel-title">Filament</span><span class="gap-36"></span><button class="tab wide is-active" type="button" title="Refresh">&#8635;</button><span class="sep">|</span><button class="prefpill" type="button" title="Head mode only wires a head to a unit - SET_ACE_MODE MODE=normal|multi|head">ACE mode &middot; <b style="font-weight:600">Head</b><span class="chev">&#9662;</span></button><span class="spacer"></span><span class="status">1 ACE unit</span><span class="gap-36"></span><button class="icon-only" type="button" title="More">&#8943;</button><span style="width:10px"></span><button class="icon-only" type="button" title="About filament sources">?</button></div><div class="panel-body"><div class="fbody"><div class="unit"><div class="uhead"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632C2C"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/></svg><span><span class="nm">ACE A</span><span class="md">ACE 2 Pro &middot; ready</span></span><span class="spacer"></span><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>38&nbsp;%</span><span class="pill ">31&nbsp;&deg;C</span><button class="btn" type="button">Dry</button></div><div class="bays"><button class="bay" type="button" title="A1: PETG" aria-label="A1: PETG"><span class="disc" data-loaded="1" style="background:#83AFFF;color:#333">A1</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A2: PETG" aria-label="A2: PETG"><span class="disc" data-loaded="1" style="background:#8FA7C8;color:#333">A2</span><span class="namepill">PETG</span></button><button class="bay fed" type="button" title="A3: PETG" aria-label="A3: PETG"><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">A3</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A4: PETG" aria-label="A4: PETG"><span class="disc" data-loaded="1" style="background:#C47053;color:#fff">A4</span><span class="namepill">PETG</span></button></div></div><div class="wlane" style="--wh:36px"><svg viewBox="0 0 790 36" aria-hidden="true"><path d="M278 14 H512" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><rect x="384.0" y="10.5" width="22" height="7" rx="3.5" fill="#C9C9C9"/><path d="M278 0 V14" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M356 0 V14" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M512 0 V14" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M434 0 V14" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M434 14 H395.0" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M395.0 14 C395.0 30 691.25 16 691.25 36" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><circle cx="691.25" cy="36" r="3" fill="#632C2C"/></svg></div><div class="headrow"><div class="hcell"><button class="slot" type="button" title="Toolhead 1" aria-label="Toolhead 1"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#f44336;color:#fff">1</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw" role="group" aria-label="Source for Toolhead 1"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 2" aria-label="Toolhead 2"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#ffffdc;color:#333">2</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw" role="group" aria-label="Source for Toolhead 2"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 3" aria-label="Toolhead 3"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc">3</span><span class="namepill">/</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw" role="group" aria-label="Source for Toolhead 3"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot fed" type="button" title="Toolhead 4" aria-label="Toolhead 4"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">4</span><span class="namepill">PETG</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">A3</div><div class="srcsw" role="group" aria-label="Source for Toolhead 4"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div></div></div></div></div><div class="budget"><span>body</span><span class="bar"><i style="width:87%"></i></span><span>395 / 456 &middot; 61 spare</span></div><p class="caption"><b>The recommendation.</b> Sources above, Bambu&#39;s own merge bar under the bays with its grey nub, and the four toolheads in one row beneath &mdash; each wire landing on the inlet the artwork already draws. Three bays drop to the bar in grey because they are available; <b>A3</b> is drawn in its own colour because that is where the PETG in Toolhead&nbsp;4 came from. A head on a stock feeder has no wire at all, which is true: its spool is at the head and the ACE never touches it.</p></div>
+<div class="v-f5"><div class="u1 f5"><div class="panel-head"><span class="panel-title">Filament</span><span class="gap-36"></span><button class="tab wide is-active" type="button" title="Refresh">&#8635;</button><span class="sep">|</span><button class="prefpill" type="button" title="Head mode only wires a head to a unit - SET_ACE_MODE MODE=normal|multi|head">ACE mode &middot; <b style="font-weight:600">Head</b><span class="chev">&#9662;</span></button><span class="spacer"></span><span class="status">1 ACE unit &middot; no toolhead artwork</span><span class="gap-36"></span><button class="icon-only" type="button" title="More">&#8943;</button><span style="width:10px"></span><button class="icon-only" type="button" title="About filament sources">?</button></div><div class="panel-body"><div class="fbody"><div class="spine"><div class="hcol"><div class="hmini"><span class="disc" data-loaded="1" style="background:#f44336;color:#fff">1</span><span class="txt"><span class="t1">Toolhead 1 &middot; PLA</span><span class="t2" style="">feeder</span></span><div class="srcsw" role="group" aria-label="Source for Toolhead 1"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hmini"><span class="disc" data-loaded="1" style="background:#ffffdc;color:#333">2</span><span class="txt"><span class="t1">Toolhead 2 &middot; PLA</span><span class="t2" style="">feeder</span></span><div class="srcsw" role="group" aria-label="Source for Toolhead 2"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hmini"><span class="disc">3</span><span class="txt"><span class="t1">Toolhead 3 &middot; &mdash;</span><span class="t2" style="">feeder</span></span><div class="srcsw" role="group" aria-label="Source for Toolhead 3"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hmini"><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">4</span><span class="txt"><span class="t1">Toolhead 4 &middot; PETG</span><span class="t2" style="color:var(--ok)">A3</span></span><div class="srcsw" role="group" aria-label="Source for Toolhead 4"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div></div><div class="trunk"><svg viewBox="0 0 46 248" preserveAspectRatio="none" aria-hidden="true"><path d="M23 28 V220" stroke="var(--wire)" stroke-width="2" fill="none"/><circle cx="23" cy="28" r="3" fill="#C9C9C9"/><circle cx="23" cy="92" r="3" fill="#C9C9C9"/><circle cx="23" cy="156" r="3" fill="#C9C9C9"/><circle cx="23" cy="220" r="3" fill="#C9C9C9"/><path d="M0 220 H23" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M23 220 C34 220 34 62 46 62" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><circle cx="23" cy="220" r="3.5" fill="#632C2C"/></svg></div><div class="ucol"><div class="unit"><div class="uhead"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632C2C"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/></svg><span><span class="nm">ACE A</span><span class="md">ACE 2 Pro &middot; ready</span></span><span class="spacer"></span><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>38&nbsp;%</span><span class="pill ">31&nbsp;&deg;C</span><button class="btn" type="button">Dry</button></div><div class="bays"><button class="bay" type="button" title="A1: PETG" aria-label="A1: PETG"><span class="disc" data-loaded="1" style="background:#83AFFF;color:#333">A1</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A2: PETG" aria-label="A2: PETG"><span class="disc" data-loaded="1" style="background:#8FA7C8;color:#333">A2</span><span class="namepill">PETG</span></button><button class="bay fed" type="button" title="A3: PETG" aria-label="A3: PETG"><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">A3</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A4: PETG" aria-label="A4: PETG"><span class="disc" data-loaded="1" style="background:#C47053;color:#fff">A4</span><span class="namepill">PETG</span></button></div></div></div></div></div></div></div><div class="budget"><span>body</span><span class="bar"><i style="width:62%"></i></span><span>282 / 456 &middot; 174 spare</span></div><p class="caption">Heads down a vertical trunk, sources beside it. It scales without bound &mdash; a fifth unit is another box in the right-hand column &mdash; and no wire ever crosses another. <b>It costs the toolhead.</b> Four 140&nbsp;px extruders stacked is 560&nbsp;px before anything else, so the artwork is gone and a head is a 30&nbsp;px disc in a row. That is a different page&#39;s design language, adopted to solve a layout problem.</p></div>
+<div class="v-f6"><div class="u1 f6"><div class="panel-head"><span class="panel-title">Filament</span><span class="gap-36"></span><button class="tab wide is-active" type="button" title="Refresh">&#8635;</button><span class="sep">|</span><button class="prefpill" type="button" title="Head mode only wires a head to a unit - SET_ACE_MODE MODE=normal|multi|head">ACE mode &middot; <b style="font-weight:600">Head</b><span class="chev">&#9662;</span></button><span class="spacer"></span><span class="status">1 ACE unit</span><span class="gap-36"></span><button class="icon-only" type="button" title="More">&#8943;</button><span style="width:10px"></span><button class="icon-only" type="button" title="About filament sources">?</button></div><div class="panel-body"><div class="fbody"><div><div class="lrow"><span class="disc" data-loaded="1" style="background:#f44336;color:#fff">1</span><span class="who">Toolhead 1</span><span class="what">PLA<small>Jayo</small></span><span class="from">&#8592; feeder</span><span class="acts"><button class="btn" type="button">Unload</button></span></div><div class="lrow"><span class="disc" data-loaded="1" style="background:#ffffdc;color:#333">2</span><span class="who">Toolhead 2</span><span class="what">PLA<small>Forshape</small></span><span class="from">&#8592; feeder</span><span class="acts"><button class="btn" type="button">Unload</button></span></div><div class="lrow"><span class="disc">3</span><span class="who">Toolhead 3</span><span class="what">&mdash;<small>nothing detected</small></span><span class="from">&#8592; feeder</span><span class="acts"><button class="btn" type="button">Load</button></span></div><div class="lrow"><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">4</span><span class="who">Toolhead 4</span><span class="what">PETG<small>Generic</small></span><span class="from fed">&#8592; A3</span><span class="acts"><button class="btn" type="button">Swap</button><button class="btn" type="button">Unload</button></span></div></div><p class="seclbl" style="margin-top:14px">Sources</p><div class="urow" role="button" tabindex="0"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632C2C"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/></svg><span class="nm">ACE A</span><span class="pill">ACE 2 Pro</span><span class="swatches"><i style="background:#83AFFF"></i><i style="background:#8FA7C8"></i><i style="background:#632C2C"></i><i style="background:#C47053"></i></span><span class="spacer"></span><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>38&nbsp;%</span><span class="pill ">31&nbsp;&deg;C</span><span class="feeds">feeds T4</span><span class="caret">&#9662;</span></div></div></div></div><div class="budget"><span>body</span><span class="bar"><i style="width:68%"></i></span><span>312 / 456 &middot; 144 spare</span></div><p class="caption">No diagram at all: four toolhead rows, then the units as a rack beneath. It is the smallest, it scales to eight units, every control is reachable, and it survives the narrow single-column layout below 1600&nbsp;px where none of the others do. The trade is the whole point of the panel: <b>the connection is written rather than drawn</b>. Worth keeping as the narrow-window form of F4, not as its replacement.</p></div>
+</div>
+
+<h2><span class="n">04</span>Where the choice is actually made</h2>
+<p class="lede">At one unit every shape works. What separates them is 456&nbsp;px &mdash;
+the <b>measured</b> height of <code>.filament-body</code> at 1920&times;1080, taken off
+the running page with <code>run_webkit.py&nbsp;--size&nbsp;1920x1080</code>, not estimated.
+A body past that is <b>clipped in silence</b>, because <code>.panel-body</code> is
+<code>overflow: hidden</code>.</p>
+
+<div class="scroll"><table>
+<tr><th>part</th><th>height</th><th>where the budget goes</th></tr>
+<tr><td>The four toolheads, one row</td><td class="num">195</td>
+    <td>140 of artwork, then the source switch and the bay it is loaded from</td></tr>
+<tr><td>One open unit box</td><td class="num">130</td>
+    <td>A header of 26, four 61&nbsp;px bays, 24 of padding</td></tr>
+<tr><td>One collapsed unit row</td><td class="num">42</td>
+    <td>Badge, name, four swatches, humidity, which heads it feeds</td></tr>
+<tr><td>The bus</td><td class="num">36</td>
+    <td>Bambu&#39;s merge bar and the legs off it</td></tr>
+<tr><td>Body padding</td><td class="num">34</td><td>16 top, 18 bottom</td></tr>
+<tr><td><b>Available</b></td><td class="num"><b>456</b></td>
+    <td>Measured, at 1920&times;1080. A taller window gives more &mdash; Filament is the
+        <code>grows</code> panel in its column</td></tr>
+</table></div>
+
+<div class="scroll"><table>
+<tr><th>version</th><th>body</th><th>fits 456</th><th>a shared unit</th>
+    <th>the 140&nbsp;px toolhead</th><th>four units</th><th>verdict</th></tr>
+<tr><td><b>F0</b> today</td><td class="num">272</td><td><span class="chip yes">yes</span></td>
+    <td>&mdash;</td><td>kept</td><td>&mdash;</td><td>Says nothing about an ACE</td></tr>
+<tr><td><b>F1</b> four lanes</td><td class="num">403</td><td><span class="chip yes">yes</span></td>
+    <td><span class="chip no">drawn once per head</span></td><td>kept</td>
+    <td><span class="chip no">bays fall to 38&nbsp;px</span></td>
+    <td><b>Rejected.</b> Duplication, and a 102&nbsp;px switch in a 92&nbsp;px lane</td></tr>
+<tr><td><b>F2</b> two by two</td><td class="num">686</td>
+    <td><span class="chip no">230 over</span></td>
+    <td><span class="chip maybe">referenced</span></td><td>kept, twice per column</td>
+    <td><span class="chip no">no</span></td>
+    <td><b>Rejected on height.</b> Two rows of toolhead is the whole budget</td></tr>
+<tr><td><b>F3</b> heads over units</td><td class="num">391</td><td><span class="chip yes">yes</span></td>
+    <td><span class="chip yes">once</span></td><td>kept</td>
+    <td><span class="chip no">no</span></td>
+    <td><b>Rejected.</b> Filament climbs into the nozzle</td></tr>
+<tr><td><b>F4</b> the bus</td><td class="num">395</td><td><span class="chip yes">61 spare</span></td>
+    <td><span class="chip yes">once</span></td><td>kept</td>
+    <td><span class="chip maybe">folds to F6</span></td>
+    <td><b>Chosen</b></td></tr>
+<tr><td><b>F5</b> the spine</td><td class="num">282</td><td><span class="chip yes">yes</span></td>
+    <td><span class="chip yes">once</span></td>
+    <td><span class="chip no">given up</span></td><td><span class="chip yes">yes</span></td>
+    <td><b>Rejected.</b> Solves a layout problem by leaving the design language</td></tr>
+<tr><td><b>F6</b> the ledger</td><td class="num">312</td><td><span class="chip yes">yes</span></td>
+    <td><span class="chip yes">once</span></td>
+    <td><span class="chip no">a 30&nbsp;px disc</span></td><td><span class="chip yes">yes</span></td>
+    <td><b>Kept</b> as F4&#39;s dense form, not as a rival</td></tr>
+</table></div>
+
+<div class="note ok"><b>F4 and F6 are one design at two densities.</b> That is the
+finding, and it is what stops the panel having to choose between drawing the routing and
+surviving four units. One or two units get the diagram; three or more get the rack, with
+any single unit expandable back into the picture. The rule is the same one the camera
+already follows &mdash; one thing in focus, the rest summarised &mdash; and the same one
+Storage followed when it became a destination of its own.</div>
+
+<h3>F4 at every unit count</h3>
+<p class="lede">Same design, five machine states. Four of them change only how many units
+there are and which is open; the fifth is the dryer running, which changes what the
+controls will accept.</p>
+
+<input class="vradio" type="radio" name="nsel" id="n1" checked>
+<input class="vradio" type="radio" name="nsel" id="n0">
+<input class="vradio" type="radio" name="nsel" id="n2">
+<input class="vradio" type="radio" name="nsel" id="n4">
+<input class="vradio" type="radio" name="nsel" id="ndry">
+<div class="picker">
+<label for="n1"><span class="k">N1</span><span class="t">One unit</span><span class="d">What the printer reports today</span></label>
+<label for="n0"><span class="k">N0</span><span class="t">No ACE</span><span class="d">The degradation path, and the ship-first state</span></label>
+<label for="n2"><span class="k">N2</span><span class="t">Two units, one shared</span><span class="d">A unit feeding two heads, and a collapsed one</span></label>
+<label for="n4"><span class="k">N4</span><span class="t">Four units</span><span class="d">16 bays. The diagram folds to the rack</span></label>
+<label for="ndry"><span class="k">ND</span><span class="t">Drying</span><span class="d">A countdown while it runs</span></label>
+</div><div class="stage">
+<div class="v-n1"><div class="u1 f4"><div class="panel-head"><span class="panel-title">Filament</span><span class="gap-36"></span><button class="tab wide is-active" type="button" title="Refresh">&#8635;</button><span class="sep">|</span><button class="prefpill" type="button" title="Head mode only wires a head to a unit - SET_ACE_MODE MODE=normal|multi|head">ACE mode &middot; <b style="font-weight:600">Head</b><span class="chev">&#9662;</span></button><span class="spacer"></span><span class="status">1 ACE unit</span><span class="gap-36"></span><button class="icon-only" type="button" title="More">&#8943;</button><span style="width:10px"></span><button class="icon-only" type="button" title="About filament sources">?</button></div><div class="panel-body"><div class="fbody"><div class="unit"><div class="uhead"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632C2C"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/></svg><span><span class="nm">ACE A</span><span class="md">ACE 2 Pro &middot; ready</span></span><span class="spacer"></span><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>38&nbsp;%</span><span class="pill ">31&nbsp;&deg;C</span><button class="btn" type="button">Dry</button></div><div class="bays"><button class="bay" type="button" title="A1: PETG" aria-label="A1: PETG"><span class="disc" data-loaded="1" style="background:#83AFFF;color:#333">A1</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A2: PETG" aria-label="A2: PETG"><span class="disc" data-loaded="1" style="background:#8FA7C8;color:#333">A2</span><span class="namepill">PETG</span></button><button class="bay fed" type="button" title="A3: PETG" aria-label="A3: PETG"><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">A3</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A4: PETG" aria-label="A4: PETG"><span class="disc" data-loaded="1" style="background:#C47053;color:#fff">A4</span><span class="namepill">PETG</span></button></div></div><div class="wlane" style="--wh:36px"><svg viewBox="0 0 790 36" aria-hidden="true"><path d="M278 14 H512" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><rect x="384.0" y="10.5" width="22" height="7" rx="3.5" fill="#C9C9C9"/><path d="M278 0 V14" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M356 0 V14" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M512 0 V14" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M434 0 V14" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M434 14 H395.0" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M395.0 14 C395.0 30 691.25 16 691.25 36" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><circle cx="691.25" cy="36" r="3" fill="#632C2C"/></svg></div><div class="headrow"><div class="hcell"><button class="slot" type="button" title="Toolhead 1" aria-label="Toolhead 1"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#f44336;color:#fff">1</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw" role="group" aria-label="Source for Toolhead 1"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 2" aria-label="Toolhead 2"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#ffffdc;color:#333">2</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw" role="group" aria-label="Source for Toolhead 2"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 3" aria-label="Toolhead 3"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc">3</span><span class="namepill">/</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw" role="group" aria-label="Source for Toolhead 3"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot fed" type="button" title="Toolhead 4" aria-label="Toolhead 4"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">4</span><span class="namepill">PETG</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">A3</div><div class="srcsw" role="group" aria-label="Source for Toolhead 4"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div></div></div></div></div><div class="budget"><span>body</span><span class="bar"><i style="width:87%"></i></span><span>395 / 456 &middot; 61 spare</span></div><p class="caption"><b>One unit &mdash; what the machine reports.</b> 395&nbsp;px of the 456 the panel has. Three bays drop to Bambu&#39;s merge bar in grey because they are available; A3 is in its own colour because that is what is in Toolhead&nbsp;4. Toolheads 1&ndash;3 have no wire, which is true &mdash; their spools are at the head and the ACE never touches them.</p></div>
+<div class="v-n0"><div class="u1 f4"><div class="panel-head"><span class="panel-title">Filament</span><span class="gap-36"></span><button class="tab wide is-active" type="button" title="Refresh">&#8635;</button><span class="sep">|</span><button class="prefpill" type="button" title="Head mode only wires a head to a unit - SET_ACE_MODE MODE=normal|multi|head">ACE mode &middot; <b style="font-weight:600">Head</b><span class="chev">&#9662;</span></button><span class="spacer"></span><span class="status">No ACE unit</span><span class="gap-36"></span><button class="icon-only" type="button" title="More">&#8943;</button><span style="width:10px"></span><button class="icon-only" type="button" title="About filament sources">?</button></div><div class="panel-body"><div class="fbody"><div class="headrow"><div class="hcell"><button class="slot" type="button" title="Toolhead 1" aria-label="Toolhead 1"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#f44336;color:#fff">1</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw off" role="group" aria-label="Source for Toolhead 1"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true" title="Head mode only - the machine is not in head mode" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false" title="Head mode only - the machine is not in head mode" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false" title="Head mode only - the machine is not in head mode" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 2" aria-label="Toolhead 2"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#ffffdc;color:#333">2</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw off" role="group" aria-label="Source for Toolhead 2"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true" title="Head mode only - the machine is not in head mode" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false" title="Head mode only - the machine is not in head mode" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false" title="Head mode only - the machine is not in head mode" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 3" aria-label="Toolhead 3"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc">3</span><span class="namepill">/</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw off" role="group" aria-label="Source for Toolhead 3"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true" title="Head mode only - the machine is not in head mode" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false" title="Head mode only - the machine is not in head mode" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false" title="Head mode only - the machine is not in head mode" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 4" aria-label="Toolhead 4"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">4</span><span class="namepill">PETG</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw off" role="group" aria-label="Source for Toolhead 4"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true" title="Head mode only - the machine is not in head mode" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false" title="Head mode only - the machine is not in head mode" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false" title="Head mode only - the machine is not in head mode" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div></div></div></div></div><div class="budget"><span>body</span><span class="bar"><i style="width:50%"></i></span><span>229 / 456 &middot; 227 spare</span></div><p class="caption"><b>No ACE.</b> The unit zone and the bus are absent entirely, so the panel is today&#39;s row plus a source switch per head &mdash; and the switch is drawn <b>disabled with its reason</b> rather than hidden, because a control that vanishes teaches nobody why. This is also the degradation path: if the ACE object stops answering, the panel loses the diagram and keeps the toolheads.</p></div>
+<div class="v-n2"><div class="u1 f4"><div class="panel-head"><span class="panel-title">Filament</span><span class="gap-36"></span><button class="tab wide is-active" type="button" title="Refresh">&#8635;</button><span class="sep">|</span><button class="prefpill" type="button" title="Head mode only wires a head to a unit - SET_ACE_MODE MODE=normal|multi|head">ACE mode &middot; <b style="font-weight:600">Head</b><span class="chev">&#9662;</span></button><span class="spacer"></span><span class="status">2 ACE units</span><span class="gap-36"></span><button class="icon-only" type="button" title="More">&#8943;</button><span style="width:10px"></span><button class="icon-only" type="button" title="About filament sources">?</button></div><div class="panel-body"><div class="fbody"><div class="urow" role="button" tabindex="0"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#1f8a4c"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#f0f0f0"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#F5F6FA"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#2b2b2b"/></svg><span class="nm">ACE B</span><span class="pill">ACE Pro</span><span class="swatches"><i style="background:#1f8a4c"></i><i style="background:#f0f0f0"></i><i class="empty"></i><i style="background:#2b2b2b"></i></span><span class="spacer"></span><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>52&nbsp;%</span><span class="pill ">29&nbsp;&deg;C</span><span class="feeds">feeds T3</span><span class="caret">&#9662;</span></div><div class="unit"><div class="uhead"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632C2C"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/></svg><span><span class="nm">ACE A</span><span class="md">ACE 2 Pro &middot; feeds T1, T4</span></span><span class="spacer"></span><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>38&nbsp;%</span><span class="pill ">31&nbsp;&deg;C</span><button class="btn" type="button">Dry</button></div><div class="bays"><button class="bay" type="button" title="A1: PETG" aria-label="A1: PETG"><span class="disc" data-loaded="1" style="background:#83AFFF;color:#333">A1</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A2: PETG" aria-label="A2: PETG"><span class="disc" data-loaded="1" style="background:#8FA7C8;color:#333">A2</span><span class="namepill">PETG</span></button><button class="bay fed" type="button" title="A3: PETG" aria-label="A3: PETG"><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">A3</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A4: PETG" aria-label="A4: PETG"><span class="disc" data-loaded="1" style="background:#C47053;color:#fff">A4</span><span class="namepill">PETG</span></button></div></div><div class="wlane" style="--wh:36px"><svg viewBox="0 0 790 36" aria-hidden="true"><path d="M278 14 H512" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><rect x="384.0" y="10.5" width="22" height="7" rx="3.5" fill="#C9C9C9"/><path d="M356 0 V14" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M512 0 V14" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M278 0 V14" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M434 0 V14" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M434 14 H395.0" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M395.0 14 C395.0 30 98.75 16 98.75 36" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><circle cx="98.75" cy="36" r="3" fill="var(--wire)"/><path d="M395.0 14 C395.0 30 691.25 16 691.25 36" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><circle cx="691.25" cy="36" r="3" fill="#632C2C"/></svg></div><div class="headrow"><div class="hcell"><button class="slot" type="button" title="Toolhead 1" aria-label="Toolhead 1"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc">1</span><span class="namepill">/</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">ACE A &middot; empty</div><div class="srcsw" role="group" aria-label="Source for Toolhead 1"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 2" aria-label="Toolhead 2"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#3b3b3b;color:#fff">2</span><span class="namepill">TPU</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">hand-fed</div><div class="srcsw" role="group" aria-label="Source for Toolhead 2"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual on" aria-label="Hand-fed / TPU bypass" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot fed" type="button" title="Toolhead 3" aria-label="Toolhead 3"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#f0f0f0;color:#333">3</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">B2</div><div class="srcsw" role="group" aria-label="Source for Toolhead 3"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot fed" type="button" title="Toolhead 4" aria-label="Toolhead 4"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">4</span><span class="namepill">PETG</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">A3</div><div class="srcsw" role="group" aria-label="Source for Toolhead 4"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div></div></div></div></div><div class="budget"><span>body</span><span class="bar"><i style="width:98%"></i></span><span>445 / 456 &middot; 11 spare</span></div><p class="caption"><b>Two units, and one of them shared.</b> ACE&nbsp;A is wired to Toolhead&nbsp;1 <i>and</i> Toolhead&nbsp;4; only Toolhead&nbsp;4 has filament in it, so only that leg is coloured and the other is grey &mdash; wiring with nothing through it. Toolhead&nbsp;2 is on the hand-fed bypass and has no wire at all. <b>ACE&nbsp;B is collapsed to one line and therefore draws no wire</b>; Toolhead&nbsp;3 still says <code>B2</code>, so nothing is lost but the picture.</p></div>
+<div class="v-n4"><div class="u1 f4"><div class="panel-head"><span class="panel-title">Filament</span><span class="gap-36"></span><button class="tab wide is-active" type="button" title="Refresh">&#8635;</button><span class="sep">|</span><button class="prefpill" type="button" title="Head mode only wires a head to a unit - SET_ACE_MODE MODE=normal|multi|head">ACE mode &middot; <b style="font-weight:600">Head</b><span class="chev">&#9662;</span></button><span class="spacer"></span><span class="status">4 ACE units &middot; 16 bays</span><span class="gap-36"></span><button class="icon-only" type="button" title="More">&#8943;</button><span style="width:10px"></span><button class="icon-only" type="button" title="About filament sources">?</button></div><div class="panel-body"><div class="fbody"><div class="urow" role="button" tabindex="0"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632C2C"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/></svg><span class="nm">ACE A</span><span class="pill">ACE 2 Pro</span><span class="swatches"><i style="background:#83AFFF"></i><i style="background:#8FA7C8"></i><i style="background:#632C2C"></i><i style="background:#C47053"></i></span><span class="spacer"></span><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>38&nbsp;%</span><span class="pill ">31&nbsp;&deg;C</span><span class="feeds">feeds T1</span><span class="caret">&#9662;</span></div><div class="urow" role="button" tabindex="0"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#1f8a4c"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#f0f0f0"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#F5F6FA"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#2b2b2b"/></svg><span class="nm">ACE B</span><span class="pill">ACE Pro</span><span class="swatches"><i style="background:#1f8a4c"></i><i style="background:#f0f0f0"></i><i class="empty"></i><i style="background:#2b2b2b"></i></span><span class="spacer"></span><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>52&nbsp;%</span><span class="pill ">29&nbsp;&deg;C</span><span class="feeds">feeds T2</span><span class="caret">&#9662;</span></div><div class="urow" role="button" tabindex="0"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#e8b12a"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#7a4fd0"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#d6d6d6"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#F5F6FA"/></svg><span class="nm">ACE C</span><span class="pill">ACE 2 Pro</span><span class="swatches"><i style="background:#e8b12a"></i><i style="background:#7a4fd0"></i><i style="background:#d6d6d6"></i><i class="empty"></i></span><span class="spacer"></span><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>44&nbsp;%</span><span class="pill ">30&nbsp;&deg;C</span><span class="feeds">feeds T3</span><span class="caret">&#9662;</span></div><div class="urow" role="button" tabindex="0"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#0f6fd1"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#c9c9c9"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#F5F6FA"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#F5F6FA"/></svg><span class="nm">ACE D</span><span class="pill">ACE 2 Pro</span><span class="swatches"><i style="background:#0f6fd1"></i><i style="background:#c9c9c9"></i><i class="empty"></i><i class="empty"></i></span><span class="spacer"></span><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>61&nbsp;%</span><span class="pill ">28&nbsp;&deg;C</span><span class="feeds">feeds T4</span><span class="caret">&#9662;</span></div><div class="headrow" style="margin-top:14px"><div class="hcell"><button class="slot fed" type="button" title="Toolhead 1" aria-label="Toolhead 1"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">1</span><span class="namepill">PETG</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">A3</div><div class="srcsw" role="group" aria-label="Source for Toolhead 1"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot fed" type="button" title="Toolhead 2" aria-label="Toolhead 2"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#1f8a4c;color:#fff">2</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">B1</div><div class="srcsw" role="group" aria-label="Source for Toolhead 2"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot fed" type="button" title="Toolhead 3" aria-label="Toolhead 3"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#7a4fd0;color:#fff">3</span><span class="namepill">PETG</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">C2</div><div class="srcsw" role="group" aria-label="Source for Toolhead 3"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot fed" type="button" title="Toolhead 4" aria-label="Toolhead 4"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#0f6fd1;color:#fff">4</span><span class="namepill">ABS</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">D1</div><div class="srcsw" role="group" aria-label="Source for Toolhead 4"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div></div></div></div></div><div class="budget"><span>body</span><span class="bar"><i style="width:95%"></i></span><span>435 / 456 &middot; 21 spare</span></div><p class="caption"><b>Four units, and the diagram does not fit.</b> A unit box measures 130&nbsp;px, so four of them plus their margins is 550 &mdash; and with the bus (36) and the toolheads (195) the body would be <b>815</b> against 456. So the panel folds to the rack, which is F6, kept for exactly this. Every unit is one line of 42&nbsp;px, every toolhead names its bay, and opening a unit swaps its line back for the box. Same move Storage already made: a component that outgrows its panel gets promoted rather than crushed.</p></div>
+<div class="v-ndry"><div class="u1 f4"><div class="panel-head"><span class="panel-title">Filament</span><span class="gap-36"></span><button class="tab wide is-active" type="button" title="Refresh">&#8635;</button><span class="sep">|</span><button class="prefpill" type="button" title="Head mode only wires a head to a unit - SET_ACE_MODE MODE=normal|multi|head">ACE mode &middot; <b style="font-weight:600">Head</b><span class="chev">&#9662;</span></button><span class="spacer"></span><span class="status">drying</span><span class="gap-36"></span><button class="icon-only" type="button" title="More">&#8943;</button><span style="width:10px"></span><button class="icon-only" type="button" title="About filament sources">?</button></div><div class="panel-body"><div class="fbody"><div class="unit"><div class="uhead"><svg width="44" height="26" viewBox="0 0 44 26" aria-hidden="true" class="acebadge"><use href="#ace-chassis"/><rect x="6" y="4" width="5" height="14" rx="2.5" fill="#83AFFF"/><rect x="15" y="4" width="5" height="14" rx="2.5" fill="#8FA7C8"/><rect x="24" y="4" width="5" height="14" rx="2.5" fill="#632C2C"/><rect x="33" y="4" width="5" height="14" rx="2.5" fill="#C47053"/></svg><span><span class="nm">ACE A</span><span class="md">ACE 2 Pro &middot; drying</span></span><span class="spacer"></span><span class="pill warnp"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-dry"/></svg>55&nbsp;&deg;C &middot; 2 h 41 m left</span><span class="pill "><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-drop"/></svg>31&nbsp;%</span><span class="pill ">54&nbsp;&deg;C</span><button class="btn stop" type="button">Stop</button></div><div class="bays"><button class="bay" type="button" title="A1: PETG" aria-label="A1: PETG"><span class="disc" data-loaded="1" style="background:#83AFFF;color:#333">A1</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A2: PETG" aria-label="A2: PETG"><span class="disc" data-loaded="1" style="background:#8FA7C8;color:#333">A2</span><span class="namepill">PETG</span></button><button class="bay fed" type="button" title="A3: PETG" aria-label="A3: PETG"><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">A3</span><span class="namepill">PETG</span></button><button class="bay" type="button" title="A4: PETG" aria-label="A4: PETG"><span class="disc" data-loaded="1" style="background:#C47053;color:#fff">A4</span><span class="namepill">PETG</span></button></div></div><div class="wlane" style="--wh:36px"><svg viewBox="0 0 790 36" aria-hidden="true"><path d="M278 14 H512" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><rect x="384.0" y="10.5" width="22" height="7" rx="3.5" fill="#C9C9C9"/><path d="M278 0 V14" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M356 0 V14" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M512 0 V14" stroke="var(--wire)" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M434 0 V14" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M434 14 H395.0" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M395.0 14 C395.0 30 691.25 16 691.25 36" stroke="#632C2C" stroke-width="2.5" fill="none" stroke-linecap="round"/><circle cx="691.25" cy="36" r="3" fill="#632C2C"/></svg></div><div class="headrow"><div class="hcell"><button class="slot" type="button" title="Toolhead 1" aria-label="Toolhead 1"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#f44336;color:#fff">1</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw off" role="group" aria-label="Source for Toolhead 1"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true" title="ACE A is drying" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false" title="ACE A is drying" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false" title="ACE A is drying" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 2" aria-label="Toolhead 2"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#ffffdc;color:#333">2</span><span class="namepill">PLA</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw off" role="group" aria-label="Source for Toolhead 2"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true" title="ACE A is drying" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false" title="ACE A is drying" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false" title="ACE A is drying" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot" type="button" title="Toolhead 3" aria-label="Toolhead 3"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc">3</span><span class="namepill">/</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub">feeder</div><div class="srcsw off" role="group" aria-label="Source for Toolhead 3"><button type="button" class="feeder on" aria-label="Stock side feeder" aria-pressed="true" title="ACE A is drying" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace" aria-label="Fed by an ACE unit" aria-pressed="false" title="ACE A is drying" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false" title="ACE A is drying" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div><div class="hcell"><button class="slot fed" type="button" title="Toolhead 4" aria-label="Toolhead 4"><svg class="art" viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg><span class="disc" data-loaded="1" style="background:#632C2C;color:#fff">4</span><span class="namepill">PETG</span><svg class="pencil" viewBox="0 0 20 20" aria-hidden="true"><use href="#ic-pencil"/></svg></button><div class="hsub fed">A3</div><div class="srcsw off" role="group" aria-label="Source for Toolhead 4"><button type="button" class="feeder" aria-label="Stock side feeder" aria-pressed="false" title="ACE A is drying" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-feeder"/></svg></button><button type="button" class="ace on" aria-label="Fed by an ACE unit" aria-pressed="true" title="ACE A is drying" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-ace"/></svg></button><button type="button" class="manual" aria-label="Hand-fed / TPU bypass" aria-pressed="false" title="ACE A is drying" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-manual"/></svg></button></div></div></div></div></div></div><div class="budget"><span>body</span><span class="bar"><i style="width:87%"></i></span><span>395 / 456 &middot; 61 spare</span></div><p class="caption"><b>The dryer running.</b> <code>dryer_status</code> carries target, duration and remaining, so the pill counts down; humidity is falling and the 54&nbsp;&deg;C is the dryer&#39;s, not the room&#39;s. The source switches are shown inert here <b>with the reason on them</b> &mdash; the same rule the ACE-mode row follows, and for the same reason. The routing is untouched: what is in Toolhead&nbsp;4 is still what is in Toolhead&nbsp;4.</p></div>
+</div>
+<h2><span class="n">05</span>Every control, and where F4 puts it</h2>
+<p class="lede">Read out of <code>printer.gcode.help</code> on the machine. Each of these
+is a plain G-code macro with documented arguments, and the page already owns
+<code>sw_SendGCodes</code> &mdash; so what used to be listed as the blocker is not one.</p>
+
+<div class="scroll"><table>
+<tr><th>control</th><th>where it lives in F4</th><th>what it sends</th></tr>
+<tr><td>Source: feeder / ACE / manual</td><td>The switch under each toolhead</td>
+    <td class="num">ACE_SET_HEAD_FEEDER &middot; ACE_SET_HEAD_ACE &middot; ACE_SET_HEAD_MANUAL</td></tr>
+<tr><td>ACE mode</td><td>The header pill &mdash; <code>pill</code>, the existing header kind</td>
+    <td class="num">SET_ACE_MODE MODE=normal|multi|head [HEAD=n]</td></tr>
+<tr><td>Load a head</td><td>The toolhead's own sheet, opened by clicking it</td>
+    <td class="num">ACE_LOAD_HEAD HEAD=0 [ACE=0] [SLOT=0]</td></tr>
+<tr><td>Unload a head</td><td>The same sheet</td>
+    <td class="num">ACE_UNLOAD_HEAD HEAD=0 [RETRACT_LENGTH=] [KEEP_HEAT=]</td></tr>
+<tr><td>Swap a head to another bay</td><td>The same sheet, and each bay's sheet</td>
+    <td class="num">ACE_SWAP_HEAD HEAD=0 ACE=1 [SLOT=0]</td></tr>
+<tr><td>Dry, with temperature and duration</td><td>The unit's <b>Dry</b> button</td>
+    <td class="num">ACE_DRY ACE=0 [TEMP=] [DURATION=] &middot; ACED__DRY_STOP</td></tr>
+<tr><td>Dry automatically above a humidity</td><td>The same sheet</td>
+    <td class="num">ACE_SET_AUTO_DRY</td></tr>
+<tr><td>Switch the active unit</td><td>A collapsed unit's row, when there are two</td>
+    <td class="num">ACE_SWITCH TARGET=0 [AUTOLOAD=1]</td></tr>
+<tr><td>Unload everything</td><td rowspan="5">The header's overflow. Six of these are set
+    once; on the face of the panel they would bury the four things that change daily</td>
+    <td class="num">ACE_UNLOAD_ALL_HEADS &middot; ACE_UNLOAD_ALL_CANCEL</td></tr>
+<tr><td>Flush length for the next swap</td><td class="num">ACE_SET_PURGE LENGTH=&lt;mm&gt; | RESET=1</td></tr>
+<tr><td>Confirm before load / unload</td><td class="num">ACE_SET_CONFIRM_COMMANDS ENABLE=0|1</td></tr>
+<tr><td>Spoolman URL and auto-sync</td><td class="num">ACE_SET_SPOOLMAN URL= AUTO=0|1</td></tr>
+<tr><td>Clear the head&rarr;bay bookkeeping</td><td class="num">ACE_CLEAR_HEADS [HEAD=0]</td></tr>
+<tr><td>Name the filament in an <i>unloaded</i> bay</td>
+    <td>The bay's own sheet &mdash; <span class="chip maybe">tier 2</span></td>
+    <td>No macro. multiACE's own override store, behind CORS</td></tr>
+<tr><td>Bowden calibration</td><td><span class="chip no">not in v1</span></td>
+    <td class="num">ACE_CALIBRATION_START / _FEED / _MARK / _RETURN &hellip;</td></tr>
+<tr><td>Background swap while printing</td><td><span class="chip no">not in v1</span></td>
+    <td class="num">ACE_BG_SWAP &middot; ACE_BG_UNLOAD &middot; ACE_BG_MOVE</td></tr>
+</table></div>
+
+<div class="note bad"><b>Leave the experimental macros out, and say so.</b> Everything
+marked <code>[EXPERIMENTAL]</code> in the macro help carries preconditions in its own
+help text &mdash; <i>requires head mode, 1:1 wiring, an OPEN dock below the head (purges
+~60&nbsp;mm!)</i>. A panel that offers them without enforcing those is a panel that purges
+filament onto a bed. They belong in <code>check_coverage.py</code>'s
+<code>EXCLUDED</code> list with that reason attached, which is how this page keeps
+"not built" visible instead of silent.</div>
+
+<div class="note warn"><b>Every one of these is slow, and an instant <code>ok</code> is
+indistinguishable from success.</b> <code>ACE_BG_UNLOAD</code>'s own help says
+~3&nbsp;min. So the rules the page already has apply without amendment: never await the
+request, confirm against machine state (<code>swap_in_progress</code>,
+<code>last_swap_result</code>, <code>head_source</code>,
+<code>dryer_status.status</code>), and drive it through
+<a href="../../../resources/web/shared/js/pending.js"><code>shared/pending.js</code></a>.
+<code>ace.event_seq</code> and <code>ace.swap_phase</code> look purpose-built for exactly
+this and neither has been watched through a swap yet.</div>
+
+<h2><span class="n">06</span>What can be built now, and what cannot</h2>
+<p class="lede">Two ways into the ACE, and they do not carry the same data. The first is
+free; the second needs a small piece of C++ that does not exist yet.</p>
+
+<div class="scroll"><table>
+<tr><th></th><th><code>ace</code>, a Klipper object over the page's own MQTT session</th>
+    <th><code>/multiace/api/state</code>, the FastAPI service</th></tr>
+<tr><td>Reachable from the page</td>
+    <td><span class="chip yes">yes</span> <code>sw_GetMachineState {objects:{ace:null}}</code>
+        &mdash; 277&nbsp;ms, measured through <code>run_webkit.py --real</code>. No new
+        bridge command</td>
+    <td><span class="chip no">no</span> nginx :80 sends no CORS header;
+        <code>fetch</code> fails <code>Load failed</code></td></tr>
+<tr><td>Topology, unit health, occupancy</td><td><span class="chip yes">all of it</span></td>
+    <td>same</td></tr>
+<tr><td>Identity of what is <i>loaded</i></td>
+    <td><span class="chip yes">yes</span> <code>head_source[n]</code></td><td>same</td></tr>
+<tr><td>Identity of what is in an <i>unloaded</i> bay</td>
+    <td><span class="chip no">absent</span> every raw slot reads
+        <code>{material:"", brand:"", rfid:0}</code></td>
+    <td><span class="chip yes">present</span> from multiACE's override store</td></tr>
+</table></div>
+
+<div class="note"><b>The panel is drawn for the first tier and degrades honestly into it.</b>
+An occupied bay whose filament is not named is drawn as <b>occupied and not named</b>
+&mdash; the disc keeps its checkerboard-free grey and the name pill reads <code>/</code>
+&mdash; rather than blank, which would be a lie in the other direction. Tier&nbsp;2 is one
+<code>sw_</code> command that proxies <code>/multiace/api/state</code> past CORS, and it
+changes nothing about the layout: it fills in pills that already exist.</div>
+
+<h2><span class="n">07</span>Build order, and how to check any of it</h2>
+<p class="lede">Each step is useful on its own and none of them needs the one after it.</p>
+
+<div class="scroll"><table>
+<tr><th>#</th><th>step</th><th>needs</th></tr>
+<tr><td>1</td><td><b>The head row grows a source switch</b>, reading
+    <code>head_manual</code> &rarr; <code>head_feeder</code> &rarr; <code>head_ace</code>
+    <i>in that order</i>, and the ACE-mode pill in the header. No unit box, no wires. This
+    is state <b>N0</b>, and it is worth shipping alone: it is the whole of the panel's
+    behaviour with no ACE attached</td><td>&mdash;</td></tr>
+<tr><td>2</td><td><b>The unit box</b> &mdash; badge, humidity and temperature pill, four
+    bays drawn as heads. Read from <code>sw_GetMachineState {objects:{ace:null}}</code>.
+    State <b>N1</b> without its wires</td><td>1</td></tr>
+<tr><td>3</td><td><b>The bus</b> &mdash; Bambu's merge bar, the grey stubs, the coloured
+    leg from <code>head_source</code>. This is the part that has to be checked
+    geometrically rather than by eye</td><td>2</td></tr>
+<tr><td>4</td><td><b>The collapsed row and the rack</b> &mdash; two units, then the fold
+    to F6 at three. States <b>N2</b> and <b>N4</b></td><td>2</td></tr>
+<tr><td>5</td><td><b>The sheets</b> &mdash; load, unload, swap, dry, and the header
+    overflow's settings list</td><td>2</td></tr>
+<tr><td>6</td><td><b>Tier 2</b> &mdash; an <code>sw_</code> proxy for
+    <code>/multiace/api/state</code>, so an unloaded bay can be named</td><td>2</td></tr>
+</table></div>
+
+<h3>How the drawings above were checked</h3>
+<p class="lede"><code>--shots</code> writes blank PNGs under WSL &mdash; EGL finds no
+driver &mdash; so a screenshot proves nothing here. Every claim this document makes about
+a size or a position was asked of the running document instead.</p>
+
+<pre style="background:var(--panel);border:1px solid var(--line);border-radius:8px;
+padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.7"># the drawings: 830px wide, every body against the 456 it is allowed, both themes
+python3 docs/u1-webui/tools/check_mockup.py docs/u1-webui/02-device-page/multiace-filament-mockup.html
+
+# where 456 came from - the real panel, in Orca's own engine, at the window that matters
+python3 resources/web/shared/tests/run_webkit.py --size 1920x1080
+
+# and the page itself, once any of this is built
+python3 resources/web/shared/tests/run_webkit.py --size 1920x1080 --drive resources/web/shared/tests/drive/dom.js
+python3 resources/web/shared/tests/run_webkit.py --real --device-ip 192.0.2.1</pre>
+
+<div class="note ok"><b>The wires are checked by arithmetic, not by looking.</b> Each
+coloured path is asked for its endpoints with <code>getPointAtLength</code> and
+<code>getScreenCTM</code>, and those are compared against the centre of the bay it claims
+to leave and the toolhead it claims to enter. When this was first drawn the coordinates
+were 2&nbsp;px out, because the panel body is 790&nbsp;px of content and not the 788 the
+arithmetic assumed &mdash; the card has no border. Nothing on screen would have shown
+that, and the check does.</div>
+
+</div>

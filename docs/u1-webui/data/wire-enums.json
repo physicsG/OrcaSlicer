@@ -1,0 +1,108 @@
+{
+ "AppEnvironment": {
+  "by_ordinal": {
+   "0": "dev",
+   "1": "staging",
+   "2": "pre",
+   "3": "prod"
+  },
+  "default": null,
+  "getter_symbol": "ga0",
+  "identified": true,
+  "values": [
+   "dev",
+   "staging",
+   "pre",
+   "prod"
+  ]
+ },
+ "AppLocale": {
+  "by_ordinal": {
+   "0": "en",
+   "1": "zh"
+  },
+  "default": null,
+  "getter_symbol": "ga0",
+  "identified": true,
+  "values": [
+   "en",
+   "zh"
+  ]
+ },
+ "HttpMethod": {
+  "by_ordinal": {
+   "0": "GET",
+   "1": "POST",
+   "2": "PUT",
+   "3": "DOWNLOAD",
+   "4": "DELETE"
+  },
+  "default": "GET",
+  "getter_symbol": "ga0",
+  "identified": true,
+  "values": [
+   "GET",
+   "POST",
+   "PUT",
+   "DOWNLOAD",
+   "DELETE"
+  ]
+ },
+ "PrintState": {
+  "by_ordinal": {
+   "0": "unknown",
+   "1": "ready",
+   "2": "standby",
+   "3": "printing",
+   "4": "paused",
+   "5": "cancelled",
+   "6": "error",
+   "7": "complete"
+  },
+  "default": "unknown",
+  "getter_symbol": "ga0",
+  "identified": true,
+  "values": [
+   "unknown",
+   "ready",
+   "standby",
+   "printing",
+   "paused",
+   "cancelled",
+   "error",
+   "complete"
+  ]
+ },
+ "Region": {
+  "by_ordinal": {
+   "0": "CN",
+   "1": "US"
+  },
+  "default": null,
+  "getter_symbol": "ga0",
+  "identified": true,
+  "values": [
+   "CN",
+   "US"
+  ]
+ },
+ "unnamed_4": {
+  "by_ordinal": {
+   "0": "\\u6210\\u529f",
+   "1": "\\u8bf7\\u6c42\\u51fa\\u9519",
+   "2": "\\u4e0b\\u8f7d\\u4e2d",
+   "3": "\\u5fd9\\u788c",
+   "4": "\\u672a\\u77e5"
+  },
+  "default": null,
+  "getter_symbol": "gb6C",
+  "identified": false,
+  "values": [
+   "\\u6210\\u529f",
+   "\\u8bf7\\u6c42\\u51fa\\u9519",
+   "\\u4e0b\\u8f7d\\u4e2d",
+   "\\u5fd9\\u788c",
+   "\\u672a\\u77e5"
+  ]
+ }
+}

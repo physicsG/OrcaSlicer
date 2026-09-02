@@ -1658,7 +1658,18 @@ void SSWCP_Instance::update_filament_info(const json& objects, bool send_message
             }
             if (need_load_preset) {
                 tmp_filaments = filaments;
-                wxGetApp().load_current_presets();
+                // DEFERRED, and it matters. This runs on the stack of a
+                // wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED handler - a page asked for it -
+                // and load_current_presets() is not a small thing: update_pages(),
+                // force_print_bed_update(), load_current_preset() on every tab and
+                // rebuild_page_tree() on the model tabs. Destroying and rebuilding
+                // widgets while GTK is still dispatching the webview's message is how a
+                // sidebar refresh turns into a crash on the next tab switch.
+                //
+                // The containers above are already updated, so nothing waits on this but
+                // the redraw. Every other GUI action in this file goes through CallAfter
+                // for the same reason.
+                wxGetApp().CallAfter([]() { wxGetApp().load_current_presets(); });
             }
 
             if (send_message) {
@@ -2121,6 +2132,8 @@ void SSWCP_MachineOption_Instance::process()
         sw_UploadAsyncTimelapseInstance();
     } else if (m_cmd == "sw_DeleteCameraTimelapse") {
         sw_DeleteCameraTimelapse();
+    } else if (m_cmd == "sw_GetPrintHistory") {
+        sw_GetPrintHistory();
     } else if (m_cmd == "sw_GetCameraTimelapseInstance") {
         sw_GetCameraTimelapseInstance();
     } else if (m_cmd == "sw_ServerClientManagerSetUserinfo") {
@@ -3757,6 +3770,28 @@ void SSWCP_MachineOption_Instance::sw_GetCameraTimelapseInstance()
 
         auto weak_self = std::weak_ptr<SSWCP_Instance>(shared_from_this());
         host->async_get_timelapse_instance(m_param_data, [weak_self](const json& response) {
+            auto self = weak_self.lock();
+            if (self) {
+                SSWCP_Instance::on_mqtt_msg_arrived(self, response);
+            }
+        });
+    }
+}
+// Completed jobs, from Moonraker's own history store. Params are passed through
+// verbatim: {limit, start, since, before, order} are what server.history.list takes.
+void SSWCP_MachineOption_Instance::sw_GetPrintHistory()
+{
+    {
+        std::shared_ptr<PrintHost> host = nullptr;
+        wxGetApp().get_connect_host(host);
+
+        if (!host) {
+            handle_general_fail(-1, "Connection lost!");
+            return;
+        }
+
+        auto weak_self = std::weak_ptr<SSWCP_Instance>(shared_from_this());
+        host->async_get_print_history(m_param_data, [weak_self](const json& response) {
             auto self = weak_self.lock();
             if (self) {
                 SSWCP_Instance::on_mqtt_msg_arrived(self, response);
@@ -5756,10 +5791,39 @@ void SSWCP_UserLogin_Instance::sw_SubUserUpdatePrivacy()
     wxGetApp().m_user_update_privacy_subscribers[m_webview] = weak_ptr;
 }
 
+// A subscription that answers nothing only ever reports CHANGES, and the change a page
+// most needs to hear about happened before it existed: the account is restored from
+// app_config in init_app_config(), and the notify() that goes with it reaches no
+// subscribers. post_init() re-announces, but that runs when the frame is built - several
+// seconds before a 5 MB Flutter bundle has parsed and subscribed. The page then sits on
+// its default, which is signed out, over a live session that is right there in the
+// config.
+//
+// So the subscription replies with the state as it stands. `notify()` builds the same
+// payload for a change, and a page cannot tell - nor should it care - whether what it
+// received was the current value or a new one.
 void SSWCP_UserLogin_Instance::sw_SubscribeUserLoginState()
 {
     std::weak_ptr<SSWCP_Instance> weak_ptr = shared_from_this();
     wxGetApp().m_user_login_subscribers[m_webview]  = weak_ptr;
+
+    auto* info = wxGetApp().sm_get_userinfo();
+    if (!info)
+        return;
+
+    json data;
+    if (info->is_user_login()) {
+        data["status"]   = "online";
+        data["nickname"] = info->get_user_name();
+        data["icon"]     = info->get_user_icon_url();
+        data["token"]    = info->get_user_token();
+        data["userid"]   = info->get_user_id();
+        data["account"]  = info->get_user_account();
+    } else {
+        data["status"] = "offline";
+    }
+    m_res_data = data;
+    send_to_js();
 }
 
 // SSWCP_MachineManage_Instance
@@ -6931,14 +6995,12 @@ void SSWCP_MqttAgent_Instance::sw_mqtt_set_engine()
                                     wxGetApp().mainframe->update_slice_print_status(MainFrame::eEventPlateUpdate);
 
                                     if (!wxGetApp().mainframe->m_printer_view->isSnapmakerPage()) {
-                                        wxString url      = wxString::FromUTF8(LOCALHOST_URL + std::to_string(wxGetApp().get_page_http_port()) +
-                                                                               "/web/flutter_web/index.html?path=2");
+                                        wxString url      = wxGetApp().get_u1_surface_url(GUI_App::U1Surface::DeviceTab);
                                         auto     real_url = wxGetApp().get_international_url(url);
                                         wxGetApp().mainframe->load_printer_url(real_url); 
                                     } else {
                                         if (reload_device_view) {
-                                            wxString url      = wxString::FromUTF8(LOCALHOST_URL + std::to_string(wxGetApp().get_page_http_port()) +
-                                                                                   "/web/flutter_web/index.html?path=2");
+                                            wxString url      = wxGetApp().get_u1_surface_url(GUI_App::U1Surface::DeviceTab);
                                             auto     real_url = wxGetApp().get_international_url(url);
 
                                             wxGetApp().mainframe->load_printer_url(real_url);
@@ -7164,6 +7226,7 @@ std::unordered_set<std::string> SSWCP::m_machine_option_cmd_list = {
     "sw_UploadAsyncTimelapseInstance",
     "sw_DeleteCameraTimelapse",
     "sw_GetCameraTimelapseInstance",
+    "sw_GetPrintHistory",
     "sw_ServerClientManagerSetUserinfo",
     "sw_DefectDetactionConfig",
     "sw_PrinterDefectDetection",
@@ -7228,7 +7291,25 @@ std::shared_ptr<SSWCP_Instance> SSWCP::create_sswcp_instance(std::string cmd, co
 }
 
 // Handle incoming web messages
+// Anything a PAGE can send arrives here, and everything below parses JSON and indexes
+// into it. Nothing above catches: this is called straight out of a
+// wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED handler, so an unexpected shape - a missing key,
+// a string where a number was expected, an array shorter than the loop reading it - left
+// a nlohmann exception to unwind through wxWidgets and terminate the app. The same shape
+// of bug that made an unreachable printer abort Orca at launch, and the same fix: report
+// it and carry on. A malformed command is the page's problem to see in the log, not the
+// application's to die of.
 void SSWCP::handle_web_message(std::string message, wxWebView* webview) {
+    try {
+        handle_web_message_impl(message, webview);
+    } catch (const std::exception& e) {
+        BOOST_LOG_TRIVIAL(error) << "[WCP] handle_web_message threw: " << e.what();
+    } catch (...) {
+        BOOST_LOG_TRIVIAL(error) << "[WCP] handle_web_message threw an unknown exception";
+    }
+}
+
+void SSWCP::handle_web_message_impl(std::string message, wxWebView* webview) {
     {
 
         if (!webview) {

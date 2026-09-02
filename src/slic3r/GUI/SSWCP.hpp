@@ -436,6 +436,7 @@ private:
     void sw_UploadAsyncTimelapseInstance();
     void sw_DeleteCameraTimelapse();
     void sw_GetCameraTimelapseInstance();
+    void sw_GetPrintHistory();
 
     void sw_DefectDetactionConfig();    
     void sw_PrinterDefectDetection();
@@ -625,8 +626,14 @@ class SSWCP
 {
 public:
     // Handle incoming web messages
+    // Catches everything the parsing below can throw. A page that sends a malformed
+    // command must not be able to terminate the app - see the definition.
     static void handle_web_message(std::string message, wxWebView* webview);
 
+private:
+    static void handle_web_message_impl(std::string message, wxWebView* webview);
+
+public:
     // Handle incoming web messages for Flutter debug (no webview required)
     static void handle_webmsg_for_debug(std::string message);
 

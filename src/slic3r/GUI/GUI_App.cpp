@@ -9,6 +9,7 @@
 #include "format.hpp"
 #include "common_func/common_func.hpp"
 #include "Downloader.hpp"
+#include "SMAccountPersist.hpp"
 
 #include "slic3r/GUI/WebUrlDialog.hpp"
 #include "slic3r/GUI/WebPresetDialog.hpp"
@@ -1002,6 +1003,11 @@ void GUI_App::post_init()
 
     m_open_method = "double_click";
     bool switch_to_3d = false;
+
+    // The account was restored in init_app_config(), before the webview existed - so the notify()
+    // that went with it reached no subscribers. Say it again now the page is listening, or it
+    // keeps offering Login/Register over a live session.
+    sm_announce_login();
 
     if (!this->init_params->input_files.empty()) {
 
@@ -2234,6 +2240,12 @@ void GUI_App::init_app_config()
         }
         // Save orig_version here, so its empty if no app_config existed before this run.
         m_last_config_version = app_config->orig_version();//parse_semver_from_ini(app_config->config_path());
+
+        // Restore the saved Snapmaker account here rather than in post_init(): the webview asks
+        // for the login state once, early, and post_init() runs after that. Restoring later left
+        // the account live in C++ while the home page still offered Login/Register - seen on a
+        // real restore, and the placement PR #715 arrived at independently.
+        sm_restore_login();
     }
     else {
 #ifdef _WIN32
@@ -3912,7 +3924,7 @@ void GUI_App::recreate_GUI(const wxString &msg_name)
 
     if (!preset_bundle->is_bbl_vendor()) {
         if (is_snapmaker_u1) {
-            wxString url      = wxString::FromUTF8(LOCALHOST_URL + std::to_string(get_page_http_port()) + "/web/flutter_web/index.html?path=2");
+            wxString url      = get_u1_surface_url(U1Surface::DeviceTab);
             auto     real_url = wxGetApp().get_international_url(url);
             mainframe->load_printer_url(real_url);
         } else {
@@ -4299,6 +4311,9 @@ void GUI_App::sm_request_user_logout()
     } catch (std::exception&) {
         ;
     }
+    // Forget the persisted session, after the revoke above has used the token.
+    m_login_userinfo.clear();
+    sm_persist_login();
 }
 
 //BBS
@@ -4353,6 +4368,56 @@ wxString GUI_App::get_international_url(const wxString& origin_url) {
                wxString::FromUTF8("&dark_mode=" + dark_mode);
     }
 
+}
+
+// ---- Snapmaker U1 embedded web surfaces ------------------------------------
+//
+// One place decides which page each surface loads. See docs/u1-webui/.
+//
+// The **Device tab is the reconstruction, always**: it is the only Device page
+// now, and nothing loads `flutter_web?path=2` any more. What that page owed Orca
+// - the machine's filament inventory, which the sidebar's filament combos are
+// built from - it now pays itself; see device_page/js/core/orcasync.js.
+//
+// The print-processing popup still has two implementations, and
+// "u1_reconstructed_ui" still chooses between them. The bundle also stays for the
+// Home tab (?path=0), the preset dialog (?path=3) and the Add-Device dialog, none
+// of which was reconstructed.
+wxString GUI_App::get_u1_surface_url(U1Surface surface) const
+{
+    const std::string port = std::to_string(get_page_http_port());
+    const bool reconstructed = app_config->get_bool("u1_reconstructed_ui");
+
+    std::string path;
+    switch (surface) {
+    case U1Surface::DeviceTab:
+        path = "/web/device_page/index.html";
+        break;
+    case U1Surface::PrintAndUpload:
+        path = reconstructed ? "/web/print_processing/index.html?mode=print"
+                             : "/web/flutter_web/index.html?path=4";
+        break;
+    case U1Surface::UploadOnly:
+        path = reconstructed ? "/web/print_processing/index.html?mode=upload"
+                             : "/web/flutter_web/index.html?path=5";
+        break;
+    }
+    return wxString::FromUTF8(LOCALHOST_URL + port + path);
+}
+
+bool GUI_App::is_u1_device_tab_url(const wxString& url)
+{
+    // One Device page, one URL. `flutter_web?path=2` is deliberately NOT accepted:
+    // the tab never loads it, and treating it as the Device tab would register a
+    // second page for the state pushes that only one document can own.
+    return url.find("device_page/index.html") != wxString::npos;
+}
+
+bool GUI_App::is_u1_surface_url(const wxString& url)
+{
+    return url.find("flutter_web") != wxString::npos
+        || url.find("device_page/index.html") != wxString::npos
+        || url.find("print_processing/index.html") != wxString::npos;
 }
 
 bool GUI_App::is_user_login()

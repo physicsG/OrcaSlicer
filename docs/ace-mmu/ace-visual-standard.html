@@ -1,0 +1,1337 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The ACE visual standard</title>
+<style>
+  :root{
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --page:#e6e7e9; --panel:#ffffff; --hbar:#eef0f1; --line:#e4e6e8; --line-soft:#eef0f1; --inset:#f4f5f6;
+    --text:#2f3336; --dim:#7d868d; --faint:#a7aeb4;
+    --teal:#14b8a6; --teal-ink:#fff; --teal-soft:rgba(20,184,166,.12);
+    --blue:#4a90d9; --warn:#e2953a; --warn-soft:rgba(226,149,58,.14);
+    --bad:#d0574e; --bad-soft:rgba(208,87,78,.13);
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 26px -18px rgba(16,24,32,.4);
+
+    /* Orca's own AMS constants — AMSItem.hpp lines 17-27. These are the standard. */
+    --ams-brand:#009688;      /* AMS_CONTROL_BRAND_COLOUR      */
+    --ams-block-bk:#eeeeee;   /* AMS_CONTROL_DEF_BLOCK_BK_COLOUR — the band  */
+    --ams-lib-bk:#f8f8f8;     /* AMS_CONTROL_DEF_LIB_BK_COLOUR  — the ground */
+    --ams-disable:#cecece;    /* AMS_CONTROL_DISABLE_COLOUR     */
+    --ams-disable-tx:#909090; /* AMS_CONTROL_DISABLE_TEXT_COLOUR*/
+    --ams-gray500:#acacac; --ams-gray700:#6b6b6b; --ams-gray800:#323a3d;
+    --ams-rule:#c2c2c2;       /* the divider in AMSHumidity     */
+    --ams-ink:#000000;
+    --ams-stroke:rgba(0,0,0,.55);
+    /* the badge: hood, base and an empty bay */
+    --ace-hood:#e8e8e8; --ace-base:#cfcfcf; --ace-bay:#ffffff; --ace-line:#6b6b6b;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --page:#0f1215; --panel:#181c20; --hbar:#1f242a; --line:#272d33; --line-soft:#20262b; --inset:#1e242a;
+      --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d;
+      --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+      --blue:#5aa0e6; --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+      --bad:#e0736a; --bad-soft:rgba(224,115,106,.16);
+      --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+      /* StateColor::darkModeColorFor equivalents */
+      --ams-brand:#00b09e; --ams-block-bk:#2c3237; --ams-lib-bk:#23282c;
+      --ams-disable:#4a5157; --ams-disable-tx:#7d868d;
+      --ams-gray500:#8b9299; --ams-gray700:#aab2b8; --ams-gray800:#d4dade;
+      --ams-rule:#454c52; --ams-ink:#e6eaed; --ams-stroke:rgba(255,255,255,.5);
+      --ace-hood:#3d444a; --ace-base:#2f353a; --ace-bay:#59616a; --ace-line:#aab2b8;
+    }
+  }
+  :root[data-theme="dark"]{
+    --page:#0f1215; --panel:#181c20; --hbar:#1f242a; --line:#272d33; --line-soft:#20262b; --inset:#1e242a;
+    --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d;
+    --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+    --blue:#5aa0e6; --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+    --bad:#e0736a; --bad-soft:rgba(224,115,106,.16);
+    --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+    --ams-brand:#00b09e; --ams-block-bk:#2c3237; --ams-lib-bk:#23282c;
+    --ams-disable:#4a5157; --ams-disable-tx:#7d868d;
+    --ams-gray500:#8b9299; --ams-gray700:#aab2b8; --ams-gray800:#d4dade;
+    --ams-rule:#454c52; --ams-ink:#e6eaed; --ams-stroke:rgba(255,255,255,.5);
+      --ace-hood:#3d444a; --ace-base:#2f353a; --ace-bay:#59616a; --ace-line:#aab2b8;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{font-family:var(--font-sans);color:var(--text);background:var(--page);font-size:14px;line-height:1.45;
+       -webkit-font-smoothing:antialiased;padding:30px 14px 70px;}
+  code{font-family:var(--font-mono);font-size:12px;background:var(--panel);border:1px solid var(--line);
+       border-radius:4px;padding:1px 5px;}
+  .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+
+  .col{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:34px;}
+  .lede h1{margin:0 0 6px;font-size:23px;font-weight:700;letter-spacing:-.015em;text-wrap:balance;}
+  .lede p{margin:0;color:var(--dim);font-size:13.5px;max-width:68ch;}
+  .lede p + p{margin-top:9px;}
+  .lede b{color:var(--text);font-weight:600;}
+  .eyebrow{display:flex;align-items:baseline;gap:10px;font-size:10.5px;font-weight:800;letter-spacing:.11em;
+           text-transform:uppercase;color:var(--dim);margin-bottom:12px;}
+  .eyebrow .k{color:var(--teal);}
+  section{display:block;}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;
+        box-shadow:var(--shadow);}
+  .card h3{margin:0 0 4px;font-size:14.5px;font-weight:700;}
+  .card .sub{margin:0 0 14px;font-size:12.5px;color:var(--dim);max-width:66ch;}
+  .card .sub b{color:var(--text);font-weight:600;}
+
+  /* ---------- the deck ---------- */
+  .deck{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 15px;
+        display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow);}
+  .deck .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .deck .lbl{flex:0 0 auto;width:96px;font-size:10.5px;font-weight:800;letter-spacing:.09em;
+             text-transform:uppercase;color:var(--dim);}
+  .seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:7px;overflow:hidden;
+       background:var(--inset);}
+  .seg button{appearance:none;border:0;background:transparent;color:var(--dim);font:inherit;font-size:12px;
+              padding:5px 11px;cursor:pointer;border-right:1px solid var(--line);white-space:nowrap;}
+  .seg button:last-child{border-right:0;}
+  .seg button:hover{color:var(--text);}
+  .seg button[aria-pressed="true"]{background:var(--teal);color:var(--teal-ink);font-weight:600;}
+  .seg button:focus-visible{outline:2px solid var(--blue);outline-offset:-2px;}
+
+  /* ======================================================================
+     THE STANDARD. Every number below is from src/slic3r/GUI/Widgets/AMSItem.hpp.
+     ====================================================================== */
+
+  /* --- the badge: the small four-spool glyph. 36x22, drawn not photographed. --- */
+  .badge{display:block;flex:0 0 auto;}
+  .badgebtn{appearance:none;border:0;background:transparent;padding:2px;border-radius:4px;cursor:pointer;
+            line-height:0;}
+  .badgebtn:hover{background:var(--inset);}
+  .badgebtn:focus-visible{outline:2px solid var(--blue);outline-offset:1px;}
+  .glyph{display:block;flex:0 0 auto;color:var(--ace-line);}
+
+  .opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:14px;}
+  .opt{border:1px solid var(--line);border-radius:9px;padding:12px 12px 11px;background:var(--panel);
+       display:flex;flex-direction:column;gap:9px;cursor:pointer;text-align:left;font:inherit;}
+  .opt:hover{border-color:var(--ams-brand);}
+  .opt[aria-pressed="true"]{border-color:var(--ams-brand);
+                            box-shadow:inset 0 0 0 1px var(--ams-brand);}
+  .opt .nm{font-size:12px;font-weight:700;color:var(--text);}
+  .opt .big{display:flex;justify-content:center;align-items:center;height:56px;
+            background:var(--inset);border-radius:6px;}
+  .opt .why{font-size:11px;color:var(--dim);line-height:1.4;}
+  /* the badge at true size, in the row it actually lives in */
+  .ctx{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:6px;
+       padding:5px 8px;background:var(--panel);}
+  .ctx .k{font-size:12px;color:var(--text);width:34px;flex:0 0 auto;}
+  .ctx .pen{font-size:11px;color:var(--dim);}
+  .tabctx{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:6px;
+          background:#3c4348;color:#e8ecef;font-size:12px;}
+
+  /* --- the atom: one slot. AMS_ITEM_CUBE_SIZE 14x14, radius 2 --- */
+  .cube{width:14px;height:14px;border-radius:2px;flex:0 0 auto;position:relative;display:block;}
+  .cube.empty{background:transparent;box-shadow:inset 0 0 0 1px var(--ams-ink);}
+  .cube.empty::after{content:"";position:absolute;inset:1px;
+    background:linear-gradient(to bottom left, transparent calc(50% - .5px), var(--ams-ink) calc(50% - .5px),
+               var(--ams-ink) calc(50% + .5px), transparent calc(50% + .5px));}
+  .cube.inferred{box-shadow:0 0 0 1px var(--panel), 0 0 0 2px var(--ams-gray500);}
+  .cube.inferred::after{content:"";position:absolute;inset:-2px;border-radius:3px;
+                        border:1px dashed var(--ams-gray500);}
+  .cube.active{box-shadow:0 0 0 1px var(--ams-lib-bk), 0 0 0 3px var(--ams-brand);}
+  .cube.off{background:var(--ams-disable)!important;box-shadow:none;}
+  .cube.off::after{display:none;}
+
+  /* --- the strip: AMSPreview. AMS_ITEM_SIZE 82x27, padding 7, radius 3 --- */
+  .strip{display:inline-flex;align-items:center;gap:5px;height:27px;padding:0 7px;border-radius:3px;
+         background:var(--ams-lib-bk);flex:0 0 auto;}
+  .strip.sel{box-shadow:inset 0 0 0 2px var(--ams-brand);}
+  .strip.off{background:var(--ams-lib-bk);}
+
+  /* --- the moisture pill: AMSHumidity. 93x26 with %, 60x26 without. radius = h/2 --- */
+  .pill{display:inline-flex;align-items:center;height:26px;padding:0 8px;gap:4px;border-radius:13px;
+        background:var(--ams-block-bk);color:var(--ams-ink);font-size:12px;flex:0 0 auto;
+        font-variant-numeric:tabular-nums;}
+  .pill .drop{width:16px;height:16px;flex:0 0 auto;}
+  .pill .pc{font-size:14px;line-height:1;}
+  .pill .sign{font-size:12px;line-height:1;opacity:.8;}
+  .pill .rule{width:1px;height:20px;background:var(--ams-rule);margin:0 5px;flex:0 0 auto;}
+  .pill .sun{width:16px;height:16px;flex:0 0 auto;}
+  .pill .tmp{font-size:12px;line-height:1;}
+  .pill.off{background:var(--ams-block-bk);color:var(--ams-disable-tx);}
+
+  /* --- the box: band + ground. Two greys, two jobs. --- */
+  .unit{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel);
+        display:inline-block;min-width:264px;}
+  .unit .band{display:flex;align-items:center;gap:8px;padding:6px 9px;background:var(--ams-block-bk);
+              border-bottom:1px solid var(--line);}
+  .unit .band .no{width:20px;height:20px;border-radius:6px;background:var(--ams-brand);color:#fff;
+                  display:grid;place-items:center;font-size:11px;font-weight:800;flex:0 0 auto;}
+  .unit .band .nm{font-size:12.5px;font-weight:700;color:var(--ams-gray800);white-space:nowrap;}
+  .unit .band .to{font-size:11.5px;color:var(--ams-gray700);white-space:nowrap;}
+  .unit .band .rt{margin-left:auto;display:flex;align-items:center;gap:6px;}
+  .unit .ground{background:var(--ams-lib-bk);padding:11px 12px;display:flex;gap:10px;justify-content:center;}
+  .unit.off{opacity:1;}
+  .unit.off .band .no{background:var(--ams-disable);}
+  .unit.off .band .nm,.unit.off .band .to{color:var(--ams-disable-tx);}
+
+  /* --- the spool object: AMSLib. AMS_CAN_LIB_SIZE 58x80.
+         A colour column filled from the bottom, standing in a grey well. --- */
+  .lib{width:58px;height:80px;flex:0 0 auto;position:relative;border-radius:6px;}
+  .lib .tube{position:absolute;inset:4px;border-radius:5px;background:var(--ams-block-bk);overflow:hidden;}
+  .lib .fill{position:absolute;left:0;right:0;bottom:0;border-radius:4px;}
+  .lib .fill.hatch{background-image:repeating-linear-gradient(135deg,
+      rgba(255,255,255,.42) 0 5px, transparent 5px 10px);}
+  .lib .lab{position:absolute;left:2px;right:2px;bottom:6px;text-align:center;font-size:10px;
+            line-height:1.2;color:var(--ams-gray700);}
+  .lib .lab .g{display:block;font-size:9.5px;opacity:.9;font-variant-numeric:tabular-nums;}
+  .lib .lab.on{color:#fff;}
+  .lib .lab.dk{color:#1c2024;}
+  .lib .sn{position:absolute;top:6px;left:0;right:0;text-align:center;font-size:8.5px;font-weight:800;
+           letter-spacing:.06em;color:var(--ams-gray500);}
+  .lib .sn.on{color:rgba(255,255,255,.88);}
+  .lib .sn.dk{color:rgba(0,0,0,.55);}
+  .lib.sel{box-shadow:inset 0 0 0 2px var(--selc,var(--ams-brand));}
+  .lib.off .tube{background:var(--ams-block-bk);}
+  .lib.off .fill{background:var(--ams-disable)!important;}
+
+  /* the light grey box the four spools stand in */
+  .spoolbox{background:var(--ams-lib-bk);padding:11px 12px;display:flex;gap:10px;justify-content:center;}
+
+  /* ---------- sheet furniture ---------- */
+  .rack{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start;}
+  .spec{display:flex;flex-direction:column;gap:7px;align-items:flex-start;}
+  .spec .cap{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);}
+  .spec .dim{font-size:10.5px;color:var(--dim);font-family:var(--font-mono);}
+  .swatchrow{display:flex;gap:18px;flex-wrap:wrap;}
+  .stage{background:var(--inset);border:1px solid var(--line-soft);border-radius:8px;padding:16px 18px;
+         display:flex;gap:22px;flex-wrap:wrap;align-items:center;}
+
+  table.tp{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.tp th{text-align:left;font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+              color:var(--dim);padding:0 10px 7px 0;border-bottom:1px solid var(--line);}
+  table.tp td{padding:8px 10px 8px 0;border-bottom:1px solid var(--line-soft);color:var(--dim);vertical-align:top;}
+  table.tp tr:last-child td{border-bottom:0;}
+  table.tp td b{color:var(--text);font-weight:600;}
+  .scroll{overflow-x:auto;}
+  .note{margin:12px 0 0;font-size:12.5px;color:var(--dim);}
+  .note b{color:var(--text);font-weight:600;}
+  .flag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+        color:var(--warn);background:var(--warn-soft);border-radius:4px;padding:1px 6px;vertical-align:2px;}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+
+/* ================= the Device page's own objects ==========================
+   Everything below is device.css's geometry, copied value for value, because the
+   Device page draws these and this sheet is meant to be where they come from. A
+   number here that disagrees with `resources/web/device_page/css/device.css` is a
+   bug in one of the two. */
+.dp { --disc:36px; --pillw:58px; --pillh:19px; --bay-gap:6px;
+      /* the seam runs through the MIDDLE of the roll: 5 px of padding + half a disc */
+      --seam: calc(5px + var(--disc) / 2); }
+.dp-top { width: fit-content; padding: 5px 16px; border-radius: 9px; }
+.dp-cab  { background: linear-gradient(180deg,#EEEEEE 0 var(--seam),#CECECE var(--seam) 100%); }
+.dp-feed { background: linear-gradient(180deg,#FFFFFF 0 var(--seam),#1F1F1F var(--seam) 100%);
+           box-shadow: inset 0 0 0 1px #D9DDE3; }
+.dp-bays { display: flex; gap: 10px; align-items: flex-start; }
+.dp-bay  { width: calc(var(--pillw) + 4px); flex: 0 0 calc(var(--pillw) + 4px); }
+.dp-disc {
+  display: grid; place-items: center; margin: 0 auto;
+  width: var(--disc); height: var(--disc); border-radius: 50%;
+  font: 500 12px/1 ui-monospace, monospace; color: #333;
+  box-shadow: 0 0 0 3px #FFFFFF;
+}
+.dp-chip {
+  display: block; margin: var(--bay-gap) auto 0;
+  width: var(--pillw); height: var(--pillh); line-height: var(--pillh);
+  border-radius: calc(var(--pillh) / 2);
+  background: #6E6E6E; color: #fff;
+  font-size: 12.5px; text-align: center;
+}
+/* The head: the shipped artwork at a stated scale, and one marker centred on its BODY -
+   extruderBackground.svg draws that body y=17.4..127.6 of its 64x140, so (32, 72.5). */
+.dp-head { position: relative; --s: 1; width: calc(64px * var(--s)); height: calc(140px * var(--s)); }
+.dp-head svg { display: block; width: 100%; height: 100%; }
+.dp-sensor {
+  position: absolute; box-sizing: content-box;
+  left: calc(32px * var(--s) - 7.5px); top: calc(72.5px * var(--s) - 7.5px);
+  width: 11px; height: 11px; border-radius: 50%; border: 2px solid #fff;
+  background: #2e9e5b;
+}
+/* Caps line up, drawings sit on one baseline. `align-items: flex-end` did the second
+   and broke the first: four specs of four different heights staggered their captions. */
+.dp-row { display: flex; align-items: flex-start; gap: 26px; flex-wrap: wrap; }
+.dp-stage { display: flex; align-items: flex-end; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<!-- resources/web/device_page/icons/extruderBackground.svg, inlined verbatim so this
+     sheet is self-contained. The two stubs at x=26 and x=38 running y=15 up to y=0 are
+     the filament INLET, which is why every ACE on this page sits above the toolhead. -->
+<symbol id="u1head" viewBox="0 0 64 140">
+<path d="M32.4111 138.487C32.2283 138.804 31.7717 138.804 31.5889 138.487L28.7744 133.612C28.5916 133.296 28.8199 132.9 29.1855 132.9L34.8145 132.9C35.1801 132.9 35.4084 133.296 35.2256 133.612L32.4111 138.487Z" fill="#9B9B9B" stroke="#818181" stroke-width="0.8"/>
+<path d="M26.625 119.4H37.375C38.6038 119.4 39.5996 120.396 39.5996 121.625V131.375C39.5996 132.604 38.6038 133.6 37.375 133.6H26.625C25.3962 133.6 24.4004 132.604 24.4004 131.375V121.625C24.4004 120.396 25.3962 119.4 26.625 119.4Z" fill="#C0C0C0" stroke="#818181" stroke-width="0.8"/>
+<rect x="26" width="12" height="15" fill="url(#paint0_linear_7091_9280)"/>
+<path d="M43.375 20.5996L20.625 20.5996C19.3962 20.5996 18.4004 19.6038 18.4004 18.375L18.4004 17.625C18.4004 16.3962 19.3962 15.4004 20.625 15.4004L43.375 15.4004C44.6038 15.4004 45.5996 16.3962 45.5996 17.625L45.5996 18.375C45.5996 19.6038 44.6038 20.5996 43.375 20.5996Z" fill="#989898" stroke="#818181" stroke-width="0.8"/>
+<path d="M14 17.4004H50C57.5111 17.4004 63.5996 23.4889 63.5996 31V119.25C63.5996 123.862 59.8616 127.6 55.25 127.6H8.75C4.13842 127.6 0.400392 123.862 0.400391 119.25V31C0.400391 23.4889 6.48893 17.4004 14 17.4004Z" fill="url(#paint1_linear_7091_9280)" stroke="#818181" stroke-width="0.8"/>
+<path d="M26 15V0" stroke="url(#paint2_linear_7091_9280)" stroke-width="0.8"/>
+<path d="M38 15V0" stroke="url(#paint3_linear_7091_9280)" stroke-width="0.8"/>
+<defs>
+<linearGradient id="paint0_linear_7091_9280" x1="29.7895" y1="52.9412" x2="29.7895" y2="1.21831e-07" gradientUnits="userSpaceOnUse">
+<stop stop-color="#989898"/>
+<stop offset="1" stop-color="#989898" stop-opacity="0"/>
+</linearGradient>
+<linearGradient id="paint1_linear_7091_9280" x1="32" y1="59.3898" x2="32" y2="164.709" gradientUnits="userSpaceOnUse">
+<stop stop-color="#D9D9D9"/>
+<stop offset="1" stop-color="#C9C9C9"/>
+</linearGradient>
+<linearGradient id="paint2_linear_7091_9280" x1="24.5" y1="12.3529" x2="24.5" y2="0" gradientUnits="userSpaceOnUse">
+<stop stop-color="#818181"/>
+<stop offset="1" stop-color="#818181" stop-opacity="0"/>
+</linearGradient>
+<linearGradient id="paint3_linear_7091_9280" x1="36.5" y1="12.3529" x2="36.5" y2="0" gradientUnits="userSpaceOnUse">
+<stop stop-color="#818181"/>
+<stop offset="1" stop-color="#818181" stop-opacity="0"/>
+</linearGradient>
+</defs>
+</symbol>
+</defs></svg>
+
+<div class="col">
+
+  <header class="lede">
+    <h1>The ACE visual standard</h1>
+    <p>An ACE is drawn four different ways today. The device page gives it <b>60&nbsp;px circular
+      spools</b>; the assignment dialog gives it <b>96&nbsp;px cards in a teal-banded box</b>; the new
+      printer panel gives it <b>7&times;15&nbsp;px bars in a rounded strip</b>; and the filament-mapping
+      popup &mdash; which reads the ACE through <code>amsList</code> &mdash; already gives it
+      <b>Orca's real AMS widgets</b>. Four languages for one object.</p>
+    <p>That last one is the way out. The ACE is projected onto <code>Ams</code>/<code>AmsTray</code>
+      already, so <b>the AMS widgets are the standard</b> &mdash; the geometry below is lifted from
+      <code>src/slic3r/GUI/Widgets/AMSItem.hpp</code> rather than invented, which is what stops it
+      drifting again. Everything is drawn here at <b>true size</b>: 1&nbsp;px = 1&nbsp;DIP.</p>
+    <p>Four states are the ACE's own and have no AMS equivalent &mdash; an <b>inferred</b> spool
+      identity, a <b>configured but absent</b> unit, the <b>toolhead a unit feeds</b>, and a
+      <b>temperature</b> reading. Each is marked <span class="flag">ACE</span> where it appears.</p>
+  </header>
+
+  <div class="deck">
+    <div class="row">
+      <span class="lbl">Badge</span>
+      <span class="seg" id="segBadge">
+        <button data-v="a">A &middot; Cabinet</button>
+        <button data-v="b">B &middot; Outlined</button>
+        <button data-v="c">C &middot; Tray</button>
+        <button data-v="d">D &middot; Bays</button>
+        <button data-v="e">E &middot; Spool faces</button>
+        <button data-v="f">F &middot; Cabinet, flush</button>
+        <button data-v="g">G &middot; Spools over</button>
+      </span>
+    </div>
+    <div class="row">
+      <span class="lbl">Outline</span>
+      <span class="seg" id="segLine">
+        <button data-v="o1">O1 &middot; Outlined bays</button>
+        <button data-v="o2">O2 &middot; Solid bays</button>
+        <button data-v="o3">O3 &middot; Bay ticks</button>
+        <button data-v="o4">O4 &middot; Cabinet only</button>
+        <button data-v="o5">O5 &middot; Flush, solid bays</button>
+      </span>
+    </div>
+    <div class="row">
+      <span class="lbl">Square</span>
+      <span class="seg" id="segSq">
+        <button data-v="s1">S1 &middot; Letterboxed</button>
+        <button data-v="s2">S2 &middot; Reproportioned</button>
+        <button data-v="s3">S3 &middot; Framed</button>
+        <button data-v="s4">S4 &middot; Front face</button>
+      </span>
+    </div>
+    <div class="row">
+      <span class="lbl">Slot 3</span>
+      <span class="seg" id="segState">
+        <button data-v="solid">Loaded</button>
+        <button data-v="dual">Two colours</button>
+        <button data-v="grad">Gradient</button>
+        <button data-v="empty">Empty</button>
+        <button data-v="inferred">Inferred</button>
+      </span>
+    </div>
+    <div class="row">
+      <span class="lbl">Unit</span>
+      <span class="seg" id="segUnit">
+        <button data-v="ok">Connected</button>
+        <button data-v="drying">Drying</button>
+        <button data-v="absent">Not connected</button>
+      </span>
+    </div>
+    <div class="row">
+      <span class="lbl">Remaining</span>
+      <span class="seg" id="segRem">
+        <button data-v="spoolman">From Spoolman</button>
+        <button data-v="part">Part-used</button>
+        <button data-v="unknown">Unmeasured</button>
+      </span>
+    </div>
+    <div class="row">
+      <span class="lbl">Moisture</span>
+      <span class="seg" id="segHum">
+        <button data-v="raw">Percent (39%)</button>
+        <button data-v="bucket">Level only</button>
+        <button data-v="temp">Percent + temp</button>
+        <button data-v="none">Unknown</button>
+      </span>
+    </div>
+  </div>
+
+  <!-- ================= 1. the badge ================= -->
+  <section>
+    <div class="eyebrow"><span class="k">1</span><span>The badge &mdash; four spools in a box</span></div>
+    <div class="card">
+      <h3>Five ways to draw it &mdash; all 44&times;26</h3>
+      <p class="sub">The icon Bambu puts beside <b>AMS</b> in a nozzle box is <b>not
+        <code>AMSPreview</code></b> &mdash; not a row of cubes but a little cabinet seen head-on, and
+        Orca ships no equivalent (<code>ams_icon.svg</code> is a 155&times;128 illustration). So here are
+        seven candidates, from the faithful copy to the ones that lean on what this fork already draws.
+        <b>Pick one and the whole page follows.</b></p>
+      <div class="opts" id="badgeOpts"></div>
+      <p class="note" style="margin-top:14px"><b>Each is drawn to the same 44&times;26 box and the same
+        four bays</b>, so they are interchangeable in code &mdash; one function, one argument. Pick with
+        the <b>Badge</b> row in the deck and the rest of this page follows, including the states below.
+        Every one is shown twice: enlarged, and at true size in the row it actually lives in.</p>
+      <p class="note"><b>A</b> is the faithful distillation of Bambu's icon &mdash; hood, bays, base
+        drawn over them. <b>B</b> keeps that silhouette but draws the chassis in line rather than fill,
+        so the colours carry and the grey mass goes away. <b>C</b> drops the chassis entirely and stands
+        the bays on <code>AMSPreview</code>'s own ground, which is the least new invention of the five.
+        <b>D</b> is the ACE's front face: four bays cut into one body. <b>E</b> uses spool ends, which is
+        what the U1&nbsp;+&nbsp;multiACE page already draws &mdash; picking it would make that page the
+        standard rather than the exception. <b>F</b> is <b>A with parallel sides</b>: one rounded
+        rectangle split by a colour stop rather than a narrower hood over a wider base. That is the
+        silhouette the Device page&#39;s <i>cabinet</i> actually has (section&nbsp;4), so a badge meant
+        to be its portrait arguably should not narrow its top &mdash; which is the whole of the case
+        for it, and the whole of the case against is that A is Bambu&#39;s own proportion.
+        <b>G</b> finishes that thought: the spools are drawn <b>last</b> rather than under the
+        lower half, so none is cropped, and the margin round them is <b>one number on all four
+        sides</b> &mdash; 4&nbsp;px, which is the gap&#39;s own number and the proportion A
+        states. The badge is still 44&times;26 and its body still 24 tall, so that margin comes
+        out of the spools: they grow from <b>5&times;13 to 6&times;16</b> and the drawing gets
+        its air back at the edges instead of at the corners.</p>
+      <div class="stage" id="badgeStates" style="margin-top:14px"></div>
+      <p class="note" style="margin-top:16px"><b>The outlined twin &mdash; the same cabinet, in line.</b>
+        Where the badge says <em>what is in it</em>, the outline says <em>what it is</em>: it names an
+        ACE in a popover row, a settings label, a menu. So it is not a separate drawing &mdash; it is
+        <b>A's own silhouette</b>, one stepped path with the hood's shoulders on top and the base
+        stepping out at the bottom. Five ways to treat the bays inside it &mdash; and the last is
+        not that silhouette at all: <b>O5</b> wears <b>G</b>&#39;s, because if the badge stops
+        stepping then its outlined twin has to stop too, or the pair say two different things
+        about one object:</p>
+      <div class="opts" id="lineOpts"></div>
+      <p class="note" style="margin-top:16px"><b>And a square twin, for icon slots.</b> The cabinet is
+        44&times;26 &mdash; it cannot go where the app wants a square: a tab, a menu row, a
+        <code>ScalableButton</code>. Squaring it is a real trade, because the ACE's four bays sit in a
+        <em>row</em>, and a row is wide. Four ways to spend the square, each shown at 48, at 24 and 16
+        true size, and in the tab it would most likely appear in:</p>
+      <div class="opts" id="sqOpts"></div>
+      <p class="note" style="margin-top:14px"><b>The trade, plainly.</b> <b>S1</b> changes nothing and
+        pays for it in size &mdash; at 16&nbsp;px the bays are under a pixel. <b>S2</b> fills the square
+        but the bays thin out. <b>S3</b> adds an outline that competes with the cabinet's own.
+        <b>S4</b> is the most legible small, at the cost of the hood-and-base step.</p>
+
+      <div class="qbox" style="margin-top:16px;border-color:var(--teal-soft)">
+        <h4 style="color:var(--teal)">Settled &mdash; three forms, one rule</h4>
+        <p style="margin:0 0 10px;font-size:13px;color:var(--dim)">The picks turned out to share a rule,
+          which is a better outcome than three unrelated shapes:
+          <b>outlined chassis, solid bays</b>, at one stroke weight.</p>
+        <div class="stage" id="settled" style="gap:26px"></div>
+        <p class="note" style="margin-top:12px"><b>What the square costs, stated.</b> <b>S4</b> drops the
+          hood and the base step, so the square is <em>not</em> the same silhouette as the wide glyph
+          &mdash; the family is carried by the bay treatment and the stroke, not by the outline. That is
+          a deliberate trade: the two live in different places (a tab or menu icon versus a popover row
+          or label) and the square has a third of the width to say the same thing in. If they ever end
+          up side by side and the mismatch shows, <b>S1</b> is the fallback, because it is literally the
+          wide drawing scaled down.</p>
+        <p class="note"><b>Three definitions, not eight.</b> The alternates stay on this page as the
+          record of what was weighed; the code ships
+          <code>ace_badge()</code>, <code>ace_glyph()</code> and <code>ace_glyph_square()</code>
+          and nothing else.</p>
+      </div>
+      <p class="note" style="margin-top:14px"><b>There is no single-bay variant.</b> Bambu needs one
+        because an AMS Lite holds one spool; <b>every ACE unit has exactly four slots</b> &mdash;
+        <code>/api/state</code> returns <code>"slots": [/* exactly 4 */]</code> and
+        <code>SLOT_COUNT = 4</code> is a constant, not a configuration. A one-bay glyph would depict a
+        machine that does not exist, so the family has four bays or none (<b>O4</b>), and nothing
+        between.</p>
+    </div>
+  </section>
+
+  <!-- ================= 2. moisture ================= -->
+  <section>
+    <div class="eyebrow"><span class="k">2</span><span>Moisture and temperature</span></div>
+    <div class="card">
+      <h3>The pill &mdash; 93&times;26 with a percentage, 60&times;26 without</h3>
+      <p class="sub"><code>AMSHumidity</code>, unchanged: a <b>pill</b> (radius = half the height) on
+        <code>AMS_CONTROL_DEF_BLOCK_BK_COLOUR</code>, the <code>hum_level1..5</code> droplet at 16&nbsp;px,
+        then a 1&nbsp;px <code>#C2C2C2</code> divider and the dryer glyph when the unit can dry.
+        <b>All of it already exists</b> &mdash; icons, sizes, sentinel values.</p>
+      <div class="stage" id="pills"></div>
+      <p class="note"><b>The ACE reports a raw percentage</b> where the AMS often reports only a 1&ndash;5
+        bucket, and <code>AMSinfo</code> already handles exactly that split: <code>humidity_raw = -1</code>
+        selects the numbered droplet, anything else selects the plain droplet plus the number. Your unit
+        reports <code>humidity: 39</code>, so it takes the second form. Bucket it as
+        1&nbsp;=&nbsp;&le;20, 2&nbsp;=&nbsp;&le;35, 3&nbsp;=&nbsp;&le;50, 4&nbsp;=&nbsp;&le;65,
+        5&nbsp;=&nbsp;&gt;65 to pick the glyph.</p>
+      <p class="note"><b>Temperature</b> <span class="flag">ACE</span> is the one addition. The AMS carries
+        <code>current_temperature</code> in its info struct but never draws it in this widget; the ACE
+        reports <code>temp</code> per unit and it matters while drying. It goes in the same pill behind a
+        second divider, so there is still one chip to look at rather than three. When the unit reports no
+        temperature the segment is absent, not zeroed.</p>
+      <p class="note"><b>Drying</b> swaps the sun (<code>ams_drying</code>) for the animated glyph
+        (<code>ams_is_drying</code>) exactly as <code>support_drying()</code> does, and the remaining time
+        belongs in the tooltip, not the pill &mdash; the pill is a glance, not a readout.</p>
+    </div>
+  </section>
+
+  <!-- ================= 3. the box ================= -->
+  <section>
+    <div class="eyebrow"><span class="k">3</span><span>The box the spools sit in</span></div>
+    <div class="card">
+      <h3>Four spool objects in a light grey box</h3>
+      <p class="sub">This is the AMS shape: a <b>light grey box</b> with four <b>colour columns</b>
+        standing in it. The column is <code>AMSLib</code> &mdash; 58&times;80
+        (<code>AMS_CAN_LIB_SIZE</code>), a well inset by 4, and the filament colour drawn
+        <b>from the bottom up</b> to how much is left. Not a swatch on a card: a level in a tube, so a
+        row of them reads as an inventory at a glance.</p>
+      <p class="sub">Three greys, all from the AMS palette, each doing one job: <code>#EEEEEE</code> is
+        the <b>band</b> and also the <b>empty tube</b>, <code>#F8F8F8</code> is the <b>box</b> the tubes
+        stand in. Selection is 2&nbsp;px in <b>the filament's own colour</b>, which is
+        <code>AMSLib</code>'s rule rather than the brand teal &mdash; hover is the teal.</p>
+      <div class="stage" style="flex-direction:column;align-items:flex-start;gap:22px">
+        <div class="spec">
+          <span class="cap">A &middot; Strip &mdash; 82&times;27</span>
+          <div id="stripDemo"></div>
+          <span class="dim">AMSPreview · inline: a head box, a mapping row, a list item</span>
+        </div>
+        <div class="spec">
+          <span class="cap">B &middot; Unit box &mdash; band + ground</span>
+          <div id="unitDemo"></div>
+          <span class="dim">the ACE as an object: identity, the head it feeds, moisture, four slots</span>
+        </div>
+        <div class="spec">
+          <span class="cap">C &middot; Spool objects &mdash; 58&times;80 each</span>
+          <div id="libDemo"></div>
+          <span class="dim">AMS_CAN_LIB_SIZE · the column is how much is left</span>
+        </div>
+        <div class="spec">
+          <span class="cap">D &middot; The cabinet &mdash; 310&times;71 &middot; <b>what is
+            used today</b></span>
+          <div id="dpCabinet"></div>
+          <span class="dim">#EEEEEE over #CECECE &middot; seam through the roll at
+            5+18 &middot; 16 px of shoulder either side, and it does not resize</span>
+        </div>
+        <div class="spec">
+          <span class="cap">D&prime; &middot; The stock feeder &mdash; the same drawing,
+            94&times;71</span>
+          <div id="dpFeeder"></div>
+          <span class="dim">#FFFFFF over #1F1F1F &middot; the Automatic Filament Feeder
+            Module is a different device and one glance should say so</span>
+        </div>
+        <div class="spec">
+          <span class="cap">Their badges &mdash; 44&times;26 and 17&times;17</span>
+          <div class="dp-row" id="dpBadges"></div>
+          <span class="dim">the ACE badge is wide because a cabinet is; the feeder&#39;s is
+            square, because a wide badge for it only ever read as a squashed ACE</span>
+        </div>
+        <div class="spec">
+          <span class="cap">The toolhead &mdash; 64&times;140, and at half</span>
+          <div class="dp-row" id="dpHead"></div>
+          <span class="dim">extruderBackground.svg &middot; the marker is centred on the
+            artwork&#39;s BODY at (32, 72.5), not on its box</span>
+        </div>
+      </div>
+      <p class="note"><b>D is the third box, and it is the one in use.</b> A and B are the
+        AMS language at two scales; <b>D is what the Device page&#39;s Filament panel draws
+        today</b>, with <code>device.css</code>&#39;s own numbers, and the badge in section 1
+        is its portrait &mdash; which is the whole reason <b>G</b> exists, since the cabinet
+        has parallel sides and uncropped spools and a badge of it should have both too.
+        Change a number here and <code>resources/web/device_page/css/device.css</code> has to
+        move with it, or <code>check_mockup.py</code> says so.</p>
+      <p class="note"><b>And when Spoolman is bound, the bay can say how much is
+        left.</b> The cabinet draws a flat colour today for the reason below &mdash; an ACE
+        slot has no <code>material_remain</code>, so a disc is a colour and not a gauge.
+        That holds only while nothing is bound. With <code>spool_mode: "spoolman"</code> and
+        <code>spool_binding</code> mapping the slot to a Spoolman id there <i>is</i> a
+        weight, and then the rule the AMS column already follows applies to the disc: the
+        filament colour <b>from the bottom up</b> to how much is left. One drawing with two
+        states, not two drawings &mdash; switch it with the <b>Remaining</b> row in the deck
+        and watch D change with C. <b>Unmeasured is hatched rather than empty</b>, because
+        <i>unmeasured</i> and <i>used up</i> are different things and a bar at zero says the
+        second one. The <b>badge</b> does not follow: at 6&times;16 a level is not readable,
+        and colour and emptiness are all it claims to carry.</p>
+      <p class="note"><b>A bay is <code>.slot</code>&#39;s own, and that is what fixes the
+        width.</b> A 36&nbsp;px disc over a 58&times;19 name pill, 6&nbsp;px apart, in a
+        62&nbsp;px column with 10&nbsp;px gaps &mdash; four of those plus 16&nbsp;px of
+        shoulder either side is <b>310&nbsp;px, at every panel width there is</b>. The column
+        is <code>flex: 0 0</code> on purpose: shrinking it would be a second set of
+        proportions for the same object, which is the thing this sheet exists to prevent.
+        What that costs is measured in
+        <a href="../u1-webui/02-device-page/multiace-actions.html">the actions study</a>
+        &mdash; the card needs a 330&nbsp;px cell, and below a 655&nbsp;px panel a bay is
+        cut.</p>
+      <p class="note"><b>The seam is disc-relative, not a percentage.</b>
+        <code>5px + var(--disc)/2</code> puts the hard colour stop through the middle of
+        every roll, so half of each is in each half of the box &mdash; and widening the gap
+        under a roll moves the chip without moving the seam. Splitting the bay across the two
+        halves is what made <code>.slot</code>&#39;s own 36/58/19 affordable: with both in
+        the upper half the box was 71&nbsp;px tall and a bay had to shrink to 26/52.</p>
+      <p class="note"><b>The feeder is the cabinet&#39;s drawing, not a drawing of its
+        own</b> &mdash; same padding, same radius, same seam rule, one bay instead of four. A
+        frame may change horizontal padding and nothing else, or a feeder&#39;s spool stops
+        sitting at an ACE bay&#39;s exact height. Its badge follows the same idea: the frame
+        at badge size, white over black on a rounded square.</p>
+      <p class="note"><b>The band carries identity, the ground carries contents.</b> Left to right the band
+        is: unit number in a brand-coloured square, the model name the printer gives it
+        (<code>protocol: "v2"</code> &rarr; <b>ACE 2 Pro</b>, <code>"v1"</code> &rarr; <b>ACE Pro</b>), the
+        toolhead it feeds <span class="flag">ACE</span>, and the moisture pill hard right &mdash; which is
+        where Bambu puts it on the AMS.</p>
+      <p class="note"><b>Where the level comes from &mdash; and the one thing to settle.</b> The AMS has
+        <code>material_remain</code> 0&ndash;100 and draws it directly. <b>An ACE slot has no such
+        field</b>: <code>/api/state</code>'s <code>slots[]</code> carries material, brand, colour and
+        source, and nothing about quantity. But your printer runs <code>spool_mode: "spoolman"</code>,
+        and <code>spool_binding</code> maps slots to Spoolman ids &mdash;
+        <code>{"0_0":"15", "0_1":"10", "0_3":"16"}</code> &mdash; each carrying a real
+        <code>weight_g</code>: <b>500&nbsp;g</b>, <b>998&nbsp;g</b> and <b>843&nbsp;g</b>. So three of
+        your four slots can drive the column honestly; <b>S3 is not bound</b>, which is why it is drawn
+        full but hatched and labelled <i>amount unknown</i> rather than pretending to be full.</p>
+      <p class="note">What is <em>not</em> available is a percentage: Spoolman knows the initial weight,
+        this payload does not, so a column scaled to 1&nbsp;kg would call an 843&nbsp;g spool 84% when it
+        may be a full 850&nbsp;g one. <b>Show the grams, and treat the column as a gauge rather than a
+        measurement</b> &mdash; or fetch <code>remaining_weight</code> from Spoolman directly and scale
+        it properly, which is its own small piece of work.
+        <code>AceSlot</code> parses none of this today <span class="flag">ACE</span>, so wiring the
+        binding through is the prerequisite for the column meaning anything.</p>
+      <p class="note"><b>A unit that is configured but not answering</b> <span class="flag">ACE</span> has no
+        AMS equivalent: an AMS is only reported when present, whereas an ACE lives in the preset and the
+        printer may be off, on cloud, or short of a unit. It takes
+        <code>AMS_CONTROL_DISABLE_COLOUR</code> through the same <code>Enable(false)</code> path the AMS
+        widgets already have &mdash; grey cubes, grey badge, grey text &mdash; so it is legibly <em>there
+        but unreadable</em>, rather than absent or, worse, empty.</p>
+    </div>
+  </section>
+
+  <!-- ================= 4. constants ================= -->
+  <section>
+    <div class="eyebrow"><span class="k">4</span><span>The numbers, and where they come from</span></div>
+    <div class="card">
+      <h3>One source, two implementations</h3>
+      <p class="sub">The ACE is drawn in native wx (the sidebar, the mapping popup) <b>and</b> in webviews
+        (the assignment dialog, the U1&nbsp;+&nbsp;multiACE page). So the standard is one spec with two
+        implementations, and the numbers are pinned to the existing macros so the two cannot drift.</p>
+      <div class="scroll">
+        <table class="tp">
+          <thead><tr><th>Thing</th><th>wx macro</th><th>Value</th><th>CSS token</th></tr></thead>
+          <tbody>
+            <tr><td><b>ACE badge</b></td><td class="mono">— (new)</td><td class="mono">44×26 fill</td><td class="mono">ace_badge()</td></tr>
+            <tr><td><b>ACE glyph</b></td><td class="mono">— (new)</td><td class="mono">44×26 line, stroke 1.6</td><td class="mono">ace_glyph()</td></tr>
+            <tr><td><b>ACE glyph, square</b></td><td class="mono">— (new)</td><td class="mono">24×24 line, stroke 1.6</td><td class="mono">ace_glyph_square()</td></tr>
+            <tr><td><b>Slot cube</b></td><td class="mono">AMS_ITEM_CUBE_SIZE</td><td class="mono">14×14, r2</td><td>internal to <code>AMSPreview</code> — never drawn alone</td></tr>
+            <tr><td><b>Strip</b></td><td class="mono">AMS_ITEM_SIZE</td><td class="mono">82×27, r3, pad 7, gap 5</td><td class="mono">.strip</td></tr>
+            <tr><td><b>Strip + moisture</b></td><td class="mono">AMS_ITEM_HUMIDITY_SIZE</td><td class="mono">120×27</td><td class="mono">.strip + .pill</td></tr>
+            <tr><td><b>Slot card</b></td><td class="mono">AMS_CAN_LIB_SIZE</td><td class="mono">58×80</td><td class="mono">.lib</td></tr>
+            <tr><td><b>Moisture pill</b></td><td class="mono">AMS_HUMIDITY_SIZE</td><td class="mono">93×26, r13</td><td class="mono">.pill</td></tr>
+            <tr><td><b>&hellip; level only</b></td><td class="mono">AMS_HUMIDITY_NO_PERCENT_SIZE</td><td class="mono">60×26</td><td class="mono">.pill.short</td></tr>
+            <tr><td><b>Band ground</b></td><td class="mono">AMS_CONTROL_DEF_BLOCK_BK_COLOUR</td><td class="mono">#EEEEEE</td><td class="mono">--ams-block-bk</td></tr>
+            <tr><td><b>Spool ground</b></td><td class="mono">AMS_CONTROL_DEF_LIB_BK_COLOUR</td><td class="mono">#F8F8F8</td><td class="mono">--ams-lib-bk</td></tr>
+            <tr><td><b>Selection</b></td><td class="mono">AMS_CONTROL_BRAND_COLOUR</td><td class="mono">#009688, 2px</td><td class="mono">--ams-brand</td></tr>
+            <tr><td><b>Unreadable</b></td><td class="mono">AMS_CONTROL_DISABLE_COLOUR</td><td class="mono">#CECECE</td><td class="mono">--ams-disable</td></tr>
+            <tr><td><b>Pill divider</b></td><td class="mono">— (literal in AMSHumidity)</td><td class="mono">#C2C2C2, 20px</td><td class="mono">--ams-rule</td></tr>
+            <tr><td><b>Droplets</b></td><td class="mono">hum_level1..5_{light,dark}</td><td class="mono">16px SVG</td><td>same files</td></tr>
+            <tr><td><b>Dryer</b></td><td class="mono">ams_drying / ams_is_drying</td><td class="mono">16px SVG</td><td>same files</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note"><b>One arithmetic snag to settle in code:</b> padding&nbsp;7 plus four 14&nbsp;px cubes
+        plus three 5&nbsp;px gaps is 85, not the 82 the constant states. The AMS gets away with it because
+        callers size the preview themselves. For the ACE, fix it once &mdash; gap&nbsp;4 lands exactly on
+        82 &mdash; rather than letting each surface pick.</p>
+    </div>
+  </section>
+
+  <!-- ================= 5. adoption ================= -->
+  <section>
+    <div class="eyebrow"><span class="k">5</span><span>What changes where</span></div>
+    <div class="card">
+      <h3>Every surface that draws an ACE</h3>
+      <div class="scroll">
+        <table class="tp">
+          <thead><tr><th>Surface</th><th>Draws now</th><th>Becomes</th></tr></thead>
+          <tbody>
+            <tr><td><b>Filament mapping popup</b><br><span class="mono">AmsMappingPopup.cpp</span></td>
+                <td>Orca's AMS widgets, via the <code>amsList</code> projection</td>
+                <td><b>Nothing.</b> It is already the standard &mdash; this is the reference.</td></tr>
+            <tr><td><b>Printer panel</b><br><span class="mono">Plater.cpp sidebar</span></td>
+                <td>7×15 px bars in an ad-hoc rounded strip</td>
+                <td><b>A &mdash; Strip (82×27)</b>, four 14 px cubes. Same width as the AMS row it mirrors.</td></tr>
+            <tr><td><b>U1 + multiACE page</b><br><span class="mono">resources/web/multiace</span></td>
+                <td>60 px circular spools with a hub; 36 px circular swatches</td>
+                <td><b>B &mdash; Unit box</b> with <b>C &mdash; slot cards</b>. The circles are the biggest
+                    departure and the one worth losing: nothing else in Orca draws filament round.</td></tr>
+            <tr><td><b>Assignment dialog</b><br><span class="mono">resources/web/aceplan</span></td>
+                <td>96 px <code>.pos</code> cards in a teal-banded <code>.acebox</code></td>
+                <td><b>B + C</b>, keeping the drag targets. Closest already; mostly re-tokening.</td></tr>
+            <tr><td><b>Device / AMS tab</b><br><span class="mono">AMSControl, AmsItem</span></td>
+                <td>Orca's AMS widgets, fed by the projection</td>
+                <td><b>Nothing</b>, beyond naming the unit <i>ACE 2 Pro</i> rather than <i>AMS</i>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note"><b>Order I would take it:</b> the strip ships with the printer panel, since that PR
+        is drawing one anyway and it is the cheapest place to prove the tokens. The unit box and slot cards
+        then land as one restyle PR across the two web pages, which is where the four languages actually
+        collapse into one. The two native surfaces need no work at all &mdash; which is the argument for
+        this standard rather than a new one.</p>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var S = { state:"solid", unit:"ok", hum:"raw", rem:"spoolman", badge:"g", line:"o5", sq:"s4" };
+
+  // Slot 3 is the one the deck drives; the rest are your printer's real spools,
+  // read from 192.168.2.242 (four Kingroon/Generic PETG).
+  var SLOTS = [
+    {c:"#83AFFF", mat:"PETG", n:"Kingroon", lab:"Silver", g:500, sid:15},
+    {c:"#8FA7C8", mat:"PETG", n:"Kingroon", lab:"Gray",   g:998, sid:10},
+    {c:"#632C2C", mat:"PETG", n:"Generic",  lab:"",       g:null, sid:null},  // not bound to Spoolman
+    {c:"#C47053", mat:"PETG", n:"Kingroon", lab:"Orange", g:843, sid:16}
+  ];
+  var PART = [62, 31, null, 88];   // a part-used set, to show the column doing its job
+
+  // Level for the column, 0..100, or -1 when nothing measures this slot.
+  function levelFor(i){
+    if (S.rem === "unknown" || SLOTS[i].sid === null) return -1;
+    if (S.rem === "part") return PART[i] === null ? -1 : PART[i];
+    return Math.min(100, Math.round(SLOTS[i].g / 10));   // grams against a 1 kg nominal
+  }
+  function gramsFor(i){
+    if (SLOTS[i].sid === null || S.rem === "unknown") return null;
+    if (S.rem === "part") return PART[i] === null ? null : Math.round(SLOTS[i].g * PART[i] / 100);
+    return SLOTS[i].g;
+  }
+
+
+  /* ---------------- the badge: 36x22, three shapes ---------------- */
+  var BAYX = [6, 15, 24, 33];          // x of each bay; padding 4 == gap 4
+  function bayFill(cols, i, off){
+    if (off) return "var(--ams-disable)";
+    return cols[i] === null ? "var(--ace-bay,#ffffff)" : cols[i];
+  }
+  function svgOpen(z){
+    return '<svg class="badge" width="' + (44*z) + '" height="' + (26*z) +
+           '" viewBox="0 0 44 26" aria-hidden="true">';
+  }
+
+  // A · Cabinet — hood, bays, base drawn over them. The Bambu distillation.
+  function badgeA(cols, z, off, parts){
+    parts = parts || {hood:1, bays:1, base:1};
+    var o = [svgOpen(z)];
+    if (parts.hood) o.push('<path d="M2 9a7 7 0 0 1 7-7h26a7 7 0 0 1 7 7v17H2Z" fill="' +
+      (off ? "var(--ams-block-bk)" : "var(--ace-hood,#e8e8e8)") + '"/>');
+    if (parts.bays) for (var i = 0; i < 4; i++)
+      o.push('<rect x="' + BAYX[i] + '" y="4.5" width="5" height="14" rx="2.5" fill="' +
+             bayFill(cols, i, off) + '"/>');
+    if (parts.base) o.push('<rect x="0" y="16" width="44" height="10" rx="1.5" fill="' +
+      (off ? "var(--ams-disable)" : "var(--ace-base,#cfcfcf)") + '"/>');
+    return o.join("") + '</svg>';
+  }
+
+  // B · Outlined — same silhouette, chassis in line so the colours carry.
+  function badgeB(cols, z, off){
+    var ink = off ? "var(--ams-disable)" : "var(--ace-line,#6b6b6b)";
+    var o = [svgOpen(z)];
+    o.push('<path d="M2.9 10.5a6.6 6.6 0 0 1 6.6-6.6h25a6.6 6.6 0 0 1 6.6 6.6v13.6H2.9Z" ' +
+           'fill="none" stroke="' + ink + '" stroke-width="1.6" stroke-linejoin="round"/>');
+    for (var i = 0; i < 4; i++)
+      o.push('<rect x="' + (BAYX[i] + 0.4) + '" y="6.4" width="4.2" height="11" rx="2.1" fill="' +
+             bayFill(cols, i, off) + '"/>');
+    o.push('<path d="M2.9 17.6H41.1" stroke="' + ink + '" stroke-width="1.6"/>');
+    return o.join("") + '</svg>';
+  }
+
+  // C · Tray — no chassis; bays stand on AMSPreview's own ground.
+  function badgeC(cols, z, off){
+    var o = [svgOpen(z)];
+    o.push('<rect x="0" y="1" width="44" height="24" rx="3" fill="var(--ams-lib-bk)"/>');
+    for (var i = 0; i < 4; i++)
+      o.push('<rect x="' + BAYX[i] + '" y="5" width="5" height="16" rx="2.5" fill="' +
+             bayFill(cols, i, off) + '"/>');
+    return o.join("") + '</svg>';
+  }
+
+  // D · Bays — the ACE's front face: four bays cut into one body.
+  function badgeD(cols, z, off){
+    var o = [svgOpen(z)];
+    o.push('<rect x="0" y="1" width="44" height="24" rx="4" fill="' +
+           (off ? "var(--ams-block-bk)" : "var(--ace-base,#cfcfcf)") + '"/>');
+    for (var i = 0; i < 4; i++)
+      o.push('<rect x="' + (3 + i * 9.75) + '" y="4" width="8.25" height="18" rx="2" fill="' +
+             bayFill(cols, i, off) + '"/>');
+    return o.join("") + '</svg>';
+  }
+
+  // E · Spool faces — spool ends, the language the U1 + multiACE page already speaks.
+  function badgeE(cols, z, off){
+    var o = [svgOpen(z)];
+    o.push('<rect x="0" y="1" width="44" height="24" rx="4" fill="var(--ams-lib-bk)"/>');
+    for (var i = 0; i < 4; i++) {
+      var cx = 8.5 + i * 9;
+      o.push('<circle cx="' + cx + '" cy="13" r="4.4" fill="' + bayFill(cols, i, off) + '"/>');
+      o.push('<circle cx="' + cx + '" cy="13" r="1.5" fill="var(--ams-lib-bk)"/>');
+    }
+    return o.join("") + '</svg>';
+  }
+
+  // F · Cabinet, flush — A with its two halves the SAME width.
+  //
+  // A's hood is inset 2 either side and its base runs the full 44, which is what makes
+  // it read as furniture at 44x26. The Device page's own cabinet does not do that: it is
+  // ONE rounded rectangle with a hard colour stop through it (`.ace-cab-top`, radius 9,
+  // #EEEEEE over #CECECE), so its sides are parallel. A badge that is a picture of the
+  // thing in the card should have the card's silhouette, which is this one.
+  function badgeF(cols, z, off){
+    var hood = off ? "var(--ams-block-bk)" : "var(--ace-hood,#e8e8e8)";
+    var base = off ? "var(--ams-disable)"  : "var(--ace-base,#cfcfcf)";
+    var o = [svgOpen(z)];
+    o.push('<rect x="0" y="2" width="44" height="24" rx="5" fill="' + hood + '"/>');
+    for (var i = 0; i < 4; i++)
+      o.push('<rect x="' + BAYX[i] + '" y="5.5" width="5" height="13" rx="2.5" fill="' +
+             bayFill(cols, i, off) + '"/>');
+    // the lower half, rounded at the bottom only - the colour stop, not a second box
+    o.push('<path d="M0 16 h44 v5 a5 5 0 0 1 -5 5 h-34 a5 5 0 0 1 -5 -5 Z" fill="' +
+           base + '"/>');
+    return o.join("") + '</svg>';
+  }
+
+  // G · Cabinet, spools over — F with the bays drawn LAST and one margin all round.
+  //
+  // Three changes from F, and they are one idea. F keeps A's habit of drawing the base
+  // OVER the bays, which crops their lower 2.5 px; here the bays go on top, so a spool is
+  // a whole spool. That leaves the margins visibly unequal — 6 px at the sides against
+  // 3.5 top — so they are made ONE number, and the standard already has that number:
+  // padding 4 == gap 4, Bambu's own proportion, which A states and F quietly broke by
+  // widening the body without moving the bays.
+  //
+  // The badge stays 44x26 and the body stays 24 tall, so the margin comes out of the
+  // spools: they grow from 5x13 to 6x16 and the drawing gets its air back at the edges
+  // instead. Positions are integers on purpose — x 4/14/24/34, pitch 10.
+  var GBAY = { x:[4, 14, 24, 34], y:6, w:6, h:16, rx:3 };
+  function badgeG(cols, z, off){
+    var hood = off ? "var(--ams-block-bk)" : "var(--ace-hood,#e8e8e8)";
+    var base = off ? "var(--ams-disable)"  : "var(--ace-base,#cfcfcf)";
+    var o = [svgOpen(z)];
+    o.push('<rect x="0" y="2" width="44" height="24" rx="5" fill="' + hood + '"/>');
+    o.push('<path d="M0 16 h44 v5 a5 5 0 0 1 -5 5 h-34 a5 5 0 0 1 -5 -5 Z" fill="' +
+           base + '"/>');
+    // last, so the colour is not cropped by the lower half
+    for (var i = 0; i < 4; i++)
+      o.push('<rect x="' + GBAY.x[i] + '" y="' + GBAY.y + '" width="' + GBAY.w +
+             '" height="' + GBAY.h + '" rx="' + GBAY.rx + '" fill="' +
+             bayFill(cols, i, off) + '"/>');
+    return o.join("") + '</svg>';
+  }
+
+  var BADGES = { a:badgeA, b:badgeB, c:badgeC, d:badgeD, e:badgeE, f:badgeF, g:badgeG };
+  var BADGE_META = {
+    a:["Cabinet", "Bambu's icon, distilled: hood, bays, base drawn over them. The "
+       + "starting point, and what G is a correction of."],
+    b:["Outlined", "Same shape in line. Colours carry; nothing competes with them."],
+    c:["Tray", "No chassis at all — AMSPreview's ground with capsules. Least invented."],
+    d:["Bays", "The ACE seen head-on: four bays in one body. Boldest colour."],
+    e:["Spool faces", "Spool ends, as the U1 + multiACE page already draws them."],
+    f:["Cabinet, flush", "A with PARALLEL sides \u2014 one rounded rectangle split by a "
+       + "colour stop, which is the silhouette the Device page's own cabinet has."],
+    g:["Cabinet, spools over", "CHOSEN. F with the spools drawn LAST, so none is cropped, and one "
+       + "margin all round: 4 px, the gap's own number. The spools take the width back "
+       + "\u2014 6\u00d716 rather than 5\u00d713."]
+  };
+  function badgeSVG(cols, z, parts, off){
+    if (S.badge === "a") return badgeA(cols, z, off, parts);
+    return BADGES[S.badge](cols, z, off);
+  }
+
+  // The outlined twin — the SAME cabinet as A, drawn in line. One stepped silhouette:
+  // hood shoulders on top, base stepping out at the bottom, exactly as A reads when filled.
+  var CAB = "M1 17H4V9a6 6 0 0 1 6-6h24a6 6 0 0 1 6 6v8h3v8H1Z";
+  function glyphSVG(variant, z){
+    z = z || 1;
+    variant = variant || S.line;
+    var o = ['<svg class="glyph" width="' + (44*z) + '" height="' + (26*z) +
+             '" viewBox="0 0 44 26" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+             'stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">'];
+    if (variant === "o5") return glyphFlushSVG(z);
+    o.push('<path d="' + CAB + '"/>');
+    if (variant === "o1")
+      for (var i = 0; i < 4; i++)
+        o.push('<rect x="' + (BAYX[i] - 0.2) + '" y="6.2" width="5.4" height="10.8" rx="2.7" ' +
+               'stroke-width="1.3"/>');
+    else if (variant === "o2")
+      for (var j = 0; j < 4; j++)
+        o.push('<rect x="' + BAYX[j] + '" y="6.4" width="5" height="10.6" rx="2.5" ' +
+               'fill="currentColor" stroke="none"/>');
+    else if (variant === "o3")
+      for (var k = 0; k < 4; k++)
+        o.push('<path d="M' + (BAYX[k] + 2.5) + ' 7.6V15.6" stroke-width="3"/>');
+    // "o4" draws the cabinet alone — no bays.
+    return o.join("") + '</svg>';
+  }
+  /* O5 — G's outline. The four above all wear CAB, which is A's stepped silhouette; if
+     the badge stops stepping then its outlined twin has to stop too, or the pair say two
+     different things about one object. Same body as G, inset by half a stroke so the 1.6
+     does not clip the viewBox, and G's own bays filled. */
+  function glyphFlushSVG(z){
+    z = z || 1;
+    var o = ['<svg class="glyph" width="' + (44*z) + '" height="' + (26*z) +
+             '" viewBox="0 0 44 26" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+             'stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">'];
+    o.push('<rect x="0.8" y="2.8" width="42.4" height="22.4" rx="4.6"/>');
+    for (var i = 0; i < 4; i++)
+      o.push('<rect x="' + GBAY.x[i] + '" y="' + GBAY.y + '" width="' + GBAY.w +
+             '" height="' + GBAY.h + '" rx="' + GBAY.rx +
+             '" fill="currentColor" stroke="none"/>');
+    return o.join("") + '</svg>';
+  }
+  var LINE_META = {
+    o1:["Outlined bays", "Every part in line. Lightest, but 5 px bays outlined at 1.3 get thin."],
+    o2:["Solid bays",    "Chassis in line, bays filled. Closest to Bambu's own popup rows, "
+        + "and the treatment O5 carries onto G's outline."],
+    o3:["Bay ticks",     "Bays as four strokes. Simplest to draw, reads at any size."],
+    o4:["Cabinet only",  "No bays — for when the glyph means \u201Can ACE\u201D, not a particular one."],
+    o5:["Flush, solid bays", "CHOSEN. O2's treatment on G's outline: no step, one margin all "
+        + "round. The twin of G, for when the badge stops stepping."]
+  };
+
+  /* ---- the square twin: for icon slots (a tab, a menu row, a toolbar button),
+         where the 44x26 cabinet cannot go. 24x24, stroke reads ~1.6 at true size. ---- */
+  function sqOpen(px){
+    return '<svg class="glyph" width="' + px + '" height="' + px +
+           '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+           'stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">';
+  }
+  // S1 — the wide cabinet, scaled down and letterboxed. Same drawing, no new proportions.
+  function sq1(px){
+    var k = 0.5, dy = (24 - 26*k) / 2;
+    var o = [sqOpen(px)];
+    o.push('<g transform="translate(-1,' + dy.toFixed(2) + ') scale(' + k + ')" stroke-width="' +
+           (1.6/k).toFixed(2) + '">');
+    o.push('<path d="' + CAB + '"/>');
+    for (var i = 0; i < 4; i++)
+      o.push('<rect x="' + BAYX[i] + '" y="6.4" width="5" height="10.6" rx="2.5" ' +
+             'fill="currentColor" stroke="none"/>');
+    return o.join("") + '</g></svg>';
+  }
+  // S2 — reproportioned to fill the square: taller hood, base still stepping out.
+  function sq2(px){
+    var o = [sqOpen(px)];
+    o.push('<path d="M1.6 16.4H4V7.4A4.4 4.4 0 0 1 8.4 3h7.2A4.4 4.4 0 0 1 20 7.4v9h2.4V22H1.6Z"/>');
+    for (var i = 0; i < 4; i++)
+      o.push('<rect x="' + (5.6 + i*3.5) + '" y="6.6" width="2.4" height="9.8" rx="1.2" ' +
+             'fill="currentColor" stroke="none"/>');
+    return o.join("") + '</svg>';
+  }
+  // S3 — the wide cabinet inside a rounded square, so the squareness is deliberate.
+  function sq3(px){
+    var k = 0.42, dy = (24 - 26*k) / 2;
+    var o = [sqOpen(px)];
+    o.push('<rect x="1.2" y="1.2" width="21.6" height="21.6" rx="5"/>');
+    o.push('<g transform="translate(2.8,' + dy.toFixed(2) + ') scale(' + k + ')" stroke-width="' +
+           (1.5/k).toFixed(2) + '">');
+    o.push('<path d="' + CAB + '"/>');
+    for (var i = 0; i < 4; i++)
+      o.push('<rect x="' + BAYX[i] + '" y="6.4" width="5" height="10.6" rx="2.5" ' +
+             'fill="currentColor" stroke="none"/>');
+    return o.join("") + '</g></svg>';
+  }
+  // S4 — the front face alone: one body, four bays, no hood or base step.
+  function sq4(px){
+    var o = [sqOpen(px)];
+    o.push('<rect x="1.8" y="4.4" width="20.4" height="15.2" rx="3.2"/>');
+    for (var i = 0; i < 4; i++)
+      o.push('<rect x="' + (4.2 + i*4.2) + '" y="7.4" width="3.2" height="9.2" rx="1.6" ' +
+             'fill="currentColor" stroke="none"/>');
+    return o.join("") + '</svg>';
+  }
+  var SQ = { s1:sq1, s2:sq2, s3:sq3, s4:sq4 };
+  var SQ_META = {
+    s1:["Letterboxed", "The 44\u00d726 cabinet scaled into the square. Nothing redrawn \u2014 but it sits small, with air above and below."],
+    s2:["Reproportioned", "Taller hood, narrower bays, base still stepping out. Fills the square; the bays get thin."],
+    s3:["Framed", "Cabinet inside a rounded square, so the squareness is deliberate rather than padding."],
+    s4:["Front face", "CHOSEN. Body and four bays, no hood. Reads best at 16 px."]
+  };
+  function sqOptsHTML(){
+    return ["s1","s2","s3","s4"].map(function(k){
+      var m = SQ_META[k], fn = SQ[k];
+      return '<button class="opt" data-sq="' + k + '" aria-pressed="' + (S.sq === k) + '">' +
+             '<span class="nm">' + k.toUpperCase() + ' &middot; ' + m[0] + '</span>' +
+             '<span class="big">' + fn(48) + '</span>' +
+             '<span class="ctx" style="gap:10px"><span style="line-height:0">' + fn(24) + '</span>' +
+             '<span style="line-height:0">' + fn(16) + '</span>' +
+             '<span style="font-size:11px;color:var(--dim)">24 / 16</span></span>' +
+             '<span class="tabctx"><span style="line-height:0">' + fn(20) + '</span>' +
+             '<span>U1 + multiACE</span></span>' +
+             '<span class="why">' + m[1] + '</span></button>';
+    }).join("");
+  }
+
+  function badgeCols(){
+    if (S.unit === "absent") return [null, null, null, null];
+    return SLOTS.map(function(sl, i){
+      var st = (i === 2) ? S.state : "solid";
+      if (st === "empty") return null;
+      if (st === "dual")  return "#e8443a";
+      if (st === "grad")  return "#f2b705";
+      return sl.c;
+    });
+  }
+
+  function badgeOptsHTML(){
+    var c = badgeCols();
+    return ["a","b","c","d","e","f","g"].map(function(k){
+      var meta = BADGE_META[k], fn = BADGES[k];
+      return '<button class="opt" data-badge="' + k + '" aria-pressed="' + (S.badge === k) + '">' +
+             '<span class="nm">' + k.toUpperCase() + ' &middot; ' + meta[0] + '</span>' +
+             '<span class="big">' + fn(c, 2, S.unit === "absent") + '</span>' +
+             '<span class="ctx"><span class="k">ACE</span><span class="pen">&#9998;</span>' +
+             fn(c, 1, S.unit === "absent") + '</span>' +
+             '<span class="why">' + meta[1] + '</span></button>';
+    }).join("");
+  }
+
+  function lineOptsHTML(){
+    return ["o1","o2","o3","o4","o5"].map(function(k){
+      var m = LINE_META[k];
+      return '<button class="opt" data-line="' + k + '" aria-pressed="' + (S.line === k) + '">' +
+             '<span class="nm">' + k.toUpperCase() + ' &middot; ' + m[0] + '</span>' +
+             '<span class="big">' + glyphSVG(k, 2) + '</span>' +
+             '<span class="ctx"><span class="k" style="width:auto">ACE 1</span>' +
+             glyphSVG(k, 1) + '</span>' +
+             '<span class="why">' + m[1] + '</span></button>';
+    }).join("");
+  }
+
+  function badgeAnatomyHTML(){
+    var c = badgeCols(), Z = 4;
+    var steps = [
+      ["1 · hood",        {hood:1, bays:0, base:0}],
+      ["2 · four bays",   {hood:1, bays:1, base:0}],
+      ["3 · base over",   {hood:1, bays:1, base:1}]
+    ];
+    var out = steps.map(function(st){
+      return '<div class="spec"><span class="cap">' + st[0] + '</span>' +
+             badgeSVG(c, Z, st[1]) + '<span class="dim">&nbsp;</span></div>';
+    });
+    out.push('<div class="spec"><span class="cap">true size</span>' +
+             '<span style="display:flex;align-items:center;height:' + (26*Z) + 'px">' +
+             badgeSVG(c, 1, null) + '</span><span class="dim">44×26</span></div>');
+    return out.join("");
+  }
+
+  function badgeStatesHTML(){
+    var full = SLOTS.map(function(s){ return s.c; });
+    var rows = [
+      ["Loaded",        badgeSVG(full, 2)],
+      ["One bay empty", badgeSVG([full[0], full[1], null, full[3]], 2)],
+      ["All empty",     badgeSVG([null,null,null,null], 2)],
+      ["Not connected", badgeSVG(full, 2, null, true)],
+      ["ACE 2 Pro",     glyphSVG(null, 2)]
+    ];
+    return rows.map(function(r){
+      return '<div class="spec"><span class="cap">' + r[0] + '</span>' + r[1] +
+             '<span class="dim">' + (r[0].indexOf("Pro") >= 0
+                                     ? "44×26 line" : "44×26 fill") + '</span></div>';
+    }).join("");
+  }
+
+  function cubeHTML(i, extraCls){
+    var s = SLOTS[i], cls = "cube " + (extraCls || ""), style = "", inner = "";
+    var st = (i === 2) ? S.state : "solid";
+    if (S.unit === "absent") return '<span class="cube off"></span>';
+
+    if (st === "empty")    return '<span class="' + cls + ' empty"></span>';
+    if (st === "dual")     style = "background:linear-gradient(to right,#e8443a 0 50%,#2e7bd6 50% 100%)";
+    else if (st === "grad")style = "background:linear-gradient(to right,#e8443a,#f2b705)";
+    else                   style = "background:" + s.c;
+    if (st === "inferred") cls += " inferred";
+    return '<span class="' + cls + '" style="' + style + '">' + inner + '</span>';
+  }
+
+  // hum_level1..5 stand-in: a droplet whose fill tracks the level.
+  function droplet(level){
+    var fill = ["#8fb6d8","#6ea3d0","#4a90d9","#e2953a","#d0574e"][level - 1];
+    return '<svg class="drop" viewBox="0 0 16 16" aria-hidden="true">' +
+      '<path d="M8 1.6C8 1.6 3.4 7 3.4 10a4.6 4.6 0 0 0 9.2 0C12.6 7 8 1.6 8 1.6Z" ' +
+      'fill="' + fill + '" opacity=".9"/></svg>';
+  }
+  function sun(drying){
+    if (drying) return '<svg class="sun" viewBox="0 0 16 16" aria-hidden="true">' +
+      '<circle cx="8" cy="8" r="3.4" fill="#e2953a"/>' +
+      '<path d="M8 .8v2M8 13.2v2M.8 8h2M13.2 8h2M2.9 2.9l1.4 1.4M11.7 11.7l1.4 1.4M13.1 2.9l-1.4 1.4M4.3 11.7l-1.4 1.4" ' +
+      'stroke="#e2953a" stroke-width="1.3" stroke-linecap="round"/></svg>';
+    return '<svg class="sun" viewBox="0 0 16 16" aria-hidden="true">' +
+      '<circle cx="8" cy="8" r="3.4" fill="none" stroke="var(--ams-gray500)" stroke-width="1.3"/>' +
+      '<path d="M8 .8v2M8 13.2v2M.8 8h2M13.2 8h2M2.9 2.9l1.4 1.4M11.7 11.7l1.4 1.4M13.1 2.9l-1.4 1.4M4.3 11.7l-1.4 1.4" ' +
+      'stroke="var(--ams-gray500)" stroke-width="1.3" stroke-linecap="round"/></svg>';
+  }
+  function bucket(pc){ return pc <= 20 ? 1 : pc <= 35 ? 2 : pc <= 50 ? 3 : pc <= 65 ? 4 : 5; }
+
+  function pillHTML(){
+    if (S.hum === "none") return "";
+    var off = (S.unit === "absent") ? " off" : "";
+    var drying = (S.unit === "drying");
+    var o = '<span class="pill' + off + '">';
+    if (S.hum === "bucket") {
+      o += droplet(bucket(39));
+    } else {
+      o += droplet(bucket(39)) + '<span class="pc">39</span><span class="sign">%</span>';
+      if (S.hum === "temp")
+        o += '<span class="rule"></span><span class="tmp">28&deg;C</span>';
+    }
+    o += '<span class="rule"></span>' + sun(drying);
+    o += '</span>';
+    return o;
+  }
+
+  function stripHTML(sel){
+    var o = '<span class="strip' + (sel ? " sel" : "") + '">';
+    for (var i = 0; i < 4; i++) o += cubeHTML(i, i === 0 && sel ? "active" : "");
+    return o + '</span>';
+  }
+
+  function unitHTML(){
+    var absent = (S.unit === "absent");
+    var o = '<div class="unit' + (absent ? " off" : "") + '">';
+    o += '<div class="band"><span class="no">1</span><span class="nm">ACE 2 Pro</span>' +
+         '<span class="to">&rarr; Toolhead 4</span><span class="rt">' +
+         (absent ? '<span class="pill off">not connected</span>' : pillHTML()) +
+         '</span></div>';
+    o += '<div class="ground">';
+    for (var i = 0; i < 4; i++) o += libHTML(i, i === 0);
+    o += '</div></div>';
+    return o;
+  }
+
+  // AMSLib chooses its badge/ink by the filament's luminance; same rule here.
+  function lum(hex){
+    var c = hex.replace("#",""), r = parseInt(c.substr(0,2),16)/255,
+        g = parseInt(c.substr(2,2),16)/255, b = parseInt(c.substr(4,2),16)/255;
+    return 0.299*r + 0.587*g + 0.114*b;
+  }
+
+  function libHTML(i, sel){
+    var sl = SLOTS[i];
+    var st = (i === 2) ? S.state : "solid";
+    var absent = (S.unit === "absent"), empty = (st === "empty");
+    var lvl = levelFor(i), g = gramsFor(i);
+
+    var fill = "background:" + sl.c;
+    if (st === "dual")      fill = "background:linear-gradient(to right,#e8443a 0 50%,#2e7bd6 50% 100%)";
+    else if (st === "grad") fill = "background:linear-gradient(to right,#e8443a,#f2b705)";
+
+    var h = empty ? 0 : (lvl < 0 ? 100 : lvl);
+    var hatch = (!empty && lvl < 0) ? " hatch" : "";
+    var dash  = (st === "inferred" && !absent) ? "border:1px dashed var(--ams-gray500);" : "";
+
+    // The label sits on the colour once the column is tall enough to be behind it;
+    // its ink then follows the filament's luminance, as AMSLib's badge does.
+    var onFill = h >= 34 && !absent;
+    var light  = onFill && lum(sl.c) < 0.6;      // dark filament -> light ink
+    var inkCls = !onFill ? "" : (light ? " on" : " dk");
+    var lab = absent ? "&mdash;"
+            : empty  ? "empty"
+            : sl.mat + (st === "inferred" ? "?" : "") +
+              '<span class="g">' + (g === null ? "&mdash;" : g + " g") + "</span>";
+
+    return '<div class="lib' + (absent ? " off" : "") + (sel && !absent ? " sel" : "") + '"' +
+           (sel && !absent ? ' style="--selc:' + sl.c + '"' : "") + '>' +
+           '<div class="tube" style="' + dash + '">' +
+           (h > 0 ? '<div class="' + ("fill" + hatch) + '" style="' + fill + ';height:' + h + '%"></div>' : "") +
+           '</div>' +
+           '<span class="sn' + (h > 78 ? (light ? " on" : " dk") : "") + '">S' + (i + 1) + '</span>' +
+           '<span class="lab' + inkCls + '">' + lab + '</span>' +
+           '</div>';
+  }
+
+  function pillsHTML(){
+    var saveH = S.hum, saveU = S.unit, out = [];
+    [["Percent","raw","ok"],["Level only","bucket","ok"],["Percent + temp","temp","ok"],
+     ["Drying","raw","drying"],["Unreadable","raw","absent"]].forEach(function(r){
+      S.hum = r[1]; S.unit = r[2];
+      var flag = (r[0] === "Percent + temp") ? ' <span class="flag">ACE</span>' : "";
+      out.push('<div class="spec"><span class="cap">' + r[0] + flag + '</span>' +
+               (r[2] === "absent" ? '<span class="pill off">' + droplet(2) + '<span class="pc" style="opacity:.6">--</span></span>'
+                                  : pillHTML()) +
+               '<span class="dim">' + (r[1] === "bucket" ? "60×26" : "93×26") + '</span></div>');
+    });
+    S.hum = saveH; S.unit = saveU;
+    return out.join("");
+  }
+
+
+  /* ---- what the Device page draws -------------------------------------------------
+   * The cabinet, the feeder and the toolhead, at the size the Filament panel draws them.
+   * Built from the same SLOTS the rest of this sheet uses, so a colour changed above
+   * changes here too - these are the same four spools, drawn the other way.
+   */
+  /* A bay that knows how much is left, and one that does not.
+   *
+   * The cabinet draws a flat colour today, and the reason is in section 3: an ACE slot has
+   * no `material_remain`, so a disc is a colour rather than a gauge. That is only true
+   * while nothing is bound. With `spool_mode: "spoolman"` and `spool_binding` mapping the
+   * slot to a Spoolman id there IS a weight, and then the same rule the AMS column follows
+   * applies here: the filament colour drawn FROM THE BOTTOM UP to how much is left.
+   *
+   * So it is one drawing with two states rather than two drawings. Unmeasured is hatched,
+   * not empty - `unmeasured` and `used up` are different things and a bar at zero says the
+   * second one. Switch it with the `Remaining` row in the deck.
+   */
+  function dpFillFor(i, colour){
+    var lvl = levelFor(i);
+    if (lvl < 0) {
+      // no binding, no weight: hatched over the colour, which says "some, unmeasured"
+      return "repeating-linear-gradient(135deg," + colour + " 0 5px,"
+           + "rgba(255,255,255,.45) 5px 9px)";
+    }
+    return "linear-gradient(to top," + colour + " 0 " + lvl + "%,"
+         + "#E4E4E4 " + lvl + "% 100%)";
+  }
+  function dpBayHTML(i, addr){
+    var sl = (i == null) ? null : SLOTS[i];
+    // The sheet's own convention: slot 3 is the one the deck varies.
+    var st = (i === 2) ? S.state : "solid";
+    var absent = (S.unit === "absent"), empty = (st === "empty");
+    var fill = (absent || empty) ? "#E4E4E4" : sl.c;
+    if (st === "dual")      fill = "linear-gradient(to right,#e8443a 0 50%,#2e7bd6 50% 100%)";
+    else if (st === "grad") fill = "linear-gradient(to right,#e8443a,#f2b705)";
+    var ink = (!absent && !empty && lum(sl.c) < 0.6) ? "#fff" : "#333";
+    // A level only where there is one to draw: a plain colour when the deck says the ACE
+    // is on its own, a column when Spoolman has bound the slot.
+    if (!absent && !empty && st === "solid" && S.rem !== "none") fill = dpFillFor(i, sl.c);
+    var g = (absent || empty) ? null : gramsFor(i);
+    return '<div class="dp-bay" title="' + (g === null ? "no weight bound"
+              : g + " g \u00b7 Spoolman") + '">' +
+      '<span class="dp-disc" style="background:' + fill + ';color:' + ink + '">' +
+      (addr || "") + '</span>' +
+      '<span class="dp-chip">' + (absent ? "&mdash;" : empty ? "/" : sl.mat) + '</span>' +
+      '</div>';
+  }
+  function dpCabinetHTML(){
+    var bays = "";
+    for (var i = 0; i < 4; i++) bays += dpBayHTML(i, "A" + (i + 1));
+    return '<div class="dp"><div class="dp-top dp-cab"><div class="dp-bays">' +
+           bays + '</div></div></div>';
+  }
+  function dpFeederHTML(){
+    // one bay, and no address on it: a feeder has no A1..A4 to name.
+    return '<div class="dp"><div class="dp-top dp-feed"><div class="dp-bays">' +
+           dpBayHTML(0, "") + '</div></div></div>';
+  }
+  /* The feeder's badge: the frame at badge size, square. 24x24 drawn at 17, exactly as
+     the panel's moduleBadge() builds it - white body, black lower half, 1px #D9DDE3. */
+  function feederBadgeSVG(px){
+    return '<svg width="' + px + '" height="' + px + '" viewBox="0 0 24 24" aria-hidden="true">' +
+      '<rect x="1" y="1" width="22" height="22" rx="5" fill="#FFFFFF"/>' +
+      '<path d="M1 13 h22 v5 a5 5 0 0 1 -5 5 h-12 a5 5 0 0 1 -5 -5 Z" fill="#1F1F1F"/>' +
+      '<rect x="1" y="1" width="22" height="22" rx="5" fill="none" stroke="#D9DDE3" stroke-width="1"/>' +
+      '</svg>';
+  }
+  function dpBadgesHTML(){
+    var c = badgeCols();
+    var cell = function(cap, art, dim){
+      return '<div class="spec"><span class="cap">' + cap + '</span>' + art +
+             '<span class="dim">' + dim + '</span></div>';
+    };
+    // One baseline for all four, so true size and x3 can be compared rather than hunted.
+    var box = function(h, art){
+      return '<span class="dp-stage" style="height:' + h + 'px">' + art + '</span>';
+    };
+    return cell("ACE, true size", box(78, badgeSVG(c, 1, null)), "44&times;26")
+         + cell("ACE, &times;3", box(78, badgeSVG(c, 3, null)), "the same drawing")
+         + cell("Feeder, true size", box(78, feederBadgeSVG(17)), "17&times;17")
+         + cell("Feeder, &times;3", box(78, feederBadgeSVG(51)), "24&times;24 nominal");
+  }
+  function dpHeadHTML(){
+    var one = function(scale, cap, dim){
+      return '<div class="spec"><span class="cap">' + cap + '</span>' +
+        '<span class="dp-stage" style="height:140px">' +
+        '<div class="dp-head" style="--s:' + scale + '">' +
+        '<svg viewBox="0 0 64 140" aria-hidden="true"><use href="#u1head"/></svg>' +
+        '<span class="dp-sensor"></span></div></span>' +
+        '<span class="dim">' + dim + '</span></div>';
+    };
+    return one(1, "Normal", "64&times;140") + one(0.5, "Half", "32&times;70 &middot; what the card draws");
+  }
+
+  function render(){
+    document.getElementById("badgeOpts").innerHTML = badgeOptsHTML();
+    document.getElementById("lineOpts").innerHTML  = lineOptsHTML();
+    document.getElementById("sqOpts").innerHTML    = sqOptsHTML();
+    document.getElementById("settled").innerHTML =
+      '<div class="spec"><span class="cap">G &middot; badge</span>' + badgeG(badgeCols(), 1, false) +
+      '<span class="dim">44×26 fill · a head box</span></div>' +
+      '<div class="spec"><span class="cap">O5 &middot; outline</span>' + glyphSVG("o5", 1) +
+      '<span class="dim">44×26 line · a row, a label</span></div>' +
+      '<div class="spec"><span class="cap">S4 &middot; square</span>' +
+      '<span style="display:flex;align-items:center;gap:10px">' + sq4(24) + sq4(16) + '</span>' +
+      '<span class="dim">24 / 16 line · a tab, a menu</span></div>';
+    document.getElementById("badgeStates").innerHTML  = badgeStatesHTML();
+    document.getElementById("pills").innerHTML     = pillsHTML();
+    document.getElementById("stripDemo").innerHTML =
+      stripHTML(false) + ' <span style="display:inline-block;width:14px"></span> ' +
+      stripHTML(true)  + ' <span style="display:inline-block;width:14px"></span> ' + pillHTML();
+    document.getElementById("unitDemo").innerHTML  = unitHTML();
+    var libs = '<div class="spoolbox" style="border-radius:8px">';
+    for (var i = 0; i < 4; i++) libs += libHTML(i, i === 0);
+    document.getElementById("libDemo").innerHTML = libs + '</div>';
+    document.getElementById("dpCabinet").innerHTML = dpCabinetHTML();
+    document.getElementById("dpFeeder").innerHTML  = dpFeederHTML();
+    document.getElementById("dpBadges").innerHTML  = dpBadgesHTML();
+    document.getElementById("dpHead").innerHTML    = dpHeadHTML();
+  }
+
+  function wire(id, key){
+    var box = document.getElementById(id);
+    box.addEventListener("click", function(e){
+      var b = e.target.closest("button");
+      if (!b) return;
+      S[key] = b.dataset.v; mark(box, key); render();
+    });
+    mark(box, key);
+  }
+  function mark(box, key){
+    Array.prototype.forEach.call(box.querySelectorAll("button"), function(b){
+      b.setAttribute("aria-pressed", String(b.dataset.v === S[key]));
+    });
+  }
+
+  document.getElementById("badgeOpts").addEventListener("click", function(e){
+    var b = e.target.closest("[data-badge]");
+    if (!b) return;
+    S.badge = b.dataset.badge;
+    mark(document.getElementById("segBadge"), "badge");
+    render();
+  });
+  document.getElementById("lineOpts").addEventListener("click", function(e){
+    var b = e.target.closest("[data-line]");
+    if (!b) return;
+    S.line = b.dataset.line;
+    mark(document.getElementById("segLine"), "line");
+    render();
+  });
+  document.getElementById("sqOpts").addEventListener("click", function(e){
+    var b = e.target.closest("[data-sq]");
+    if (!b) return;
+    S.sq = b.dataset.sq;
+    mark(document.getElementById("segSq"), "sq");
+    render();
+  });
+  wire("segBadge","badge"); wire("segLine","line"); wire("segSq","sq");
+  wire("segState","state"); wire("segUnit","unit"); wire("segHum","hum"); wire("segRem","rem");
+  render();
+})();
+</script>

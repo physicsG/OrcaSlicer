@@ -44,7 +44,10 @@ public:
     void setMixedFilamentInfos(const std::vector<MixedFilamentPreviewInfo>& infos);
     bool shouldDeleteMixedFilaments() const;
 
-    void setOverwriteMode();
+    // `whole_machine` is for the case where the plate is empty: the project then takes every
+    // filament the machine reports rather than the count it happened to have. With objects on the
+    // plate it must stay false - they reference filaments by index.
+    void setOverwriteMode(bool whole_machine = false);
 
     bool Layout() override;
 
@@ -102,6 +105,7 @@ private:
     std::vector<unsigned int> m_filamentIdRemap;
     std::vector<MixedFilamentPreviewInfo> m_mixedFilamentInfos;
     bool m_bMappingMode        = true;
+    bool m_bOverwriteWholeMachine = false;
     bool m_hasMixedFilaments   = false;
     bool m_shouldDeleteMixedFilaments = false;
 };

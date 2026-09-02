@@ -542,6 +542,28 @@ private:
     bool            is_user_login();
 
     wxString get_international_url(const wxString& origin_url);
+
+    // ---- Snapmaker U1 embedded web surfaces --------------------------------
+    //
+    // The Device tab and the print-processing popup are pages served from the
+    // loopback HTTP server, documented in docs/u1-webui.
+    //
+    // The Device tab is always resources/web/device_page. The popup still has
+    // two implementations - resources/web/print_processing and the shipped
+    // Flutter bundle - and "u1_reconstructed_ui" chooses. Both decisions live in
+    // ONE place, get_u1_surface_url(); build the URLs through it rather than by
+    // hand, and test them with the helpers below.
+    enum class U1Surface {
+        DeviceTab,        // Orca's Device tab
+        PrintAndUpload,   // the popup, uploading and then printing
+        UploadOnly,       // the popup, uploading without printing
+    };
+    wxString get_u1_surface_url(U1Surface surface) const;
+
+    // True for a URL that shows the Device tab, under either implementation.
+    static bool is_u1_device_tab_url(const wxString& url);
+    // True for any of the U1 embedded surfaces, under either implementation.
+    static bool is_u1_surface_url(const wxString& url);
     wxString flutter_web_base_url(const wxString& path);
     wxString build_flutter_web_url(const wxString& path);
 

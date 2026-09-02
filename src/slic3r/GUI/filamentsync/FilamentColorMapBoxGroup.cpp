@@ -25,9 +25,6 @@ constexpr int g_containerBorderW   = 1;  // border width
 constexpr int g_labelGap           = 20; // gap between labels and cards
 constexpr int g_cardGap            = 20; // gap between cards (Figma: gap-[20px])
 
-// Label vertical positioning: align with card top-bar text (y=7)
-constexpr int g_labelDesignTopMargin = 6;  // align "Source Filament" with top bar text
-constexpr int g_labelVerticalGap     = 24; // gap between "Source Filament" and "Printer Filament"
 
 // ============================================================
 // Colours
@@ -61,10 +58,9 @@ namespace GUI
 
 int FilamentColorMapBoxGroup::GetGridCols()
 {
-    const wxString lang = wxGetApp().app_config->get_language_code();
-    if (lang.StartsWith("zh") || lang.StartsWith("ja") || lang.StartsWith("ko"))
-        return 5;
-    return 4;
+    // 6 columns wide: with the left label column gone the dialog width fits 6 cards,
+    // so the conceivable maximum of 16 spools (4 ACE units x 4 slots) lands in 3 rows.
+    return 6;
 }
 
 FilamentColorMapBoxGroup::FilamentColorMapBoxGroup(wxWindow* parent,
@@ -79,42 +75,20 @@ FilamentColorMapBoxGroup::FilamentColorMapBoxGroup(wxWindow* parent,
     SetBackgroundColour(g_containerBg);
     Bind(wxEVT_PAINT, &FilamentColorMapBoxGroup::onPaint, this);
 
-    // ---- Outer horizontal sizer (after padding) ----
-    auto* rowSizer = new wxBoxSizer(wxHORIZONTAL);
+    // ---- Caption ----
+    // Replaces the old left "Source Filament" / "Printer Filament" label column, which only lined
+    // up with the first card row and read as broken once the cards wrapped to a second row (more
+    // than four filaments - which a U1 reaches as soon as the ACE is in the list). A single caption
+    // above the grid scales to any number of filaments; each card already shows the project
+    // filament on top and the mapped printer filament below.
+    m_pCaption = new Label(
+        this, _L("Map each project filament (top) to a printer filament (below)"));
+    m_pCaption->SetFont(Label::Body_12);
+    m_pCaption->SetForegroundColour(g_labelTextColor);
+    m_pCaption->SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
+    m_pCaption->SetBackgroundColour(g_containerBg);
 
-    // ---- Left label column ----
-    auto* labelSizer = new wxBoxSizer(wxVERTICAL);
-
-    m_pLabelDesign = new Label(this, _L("Source Filament"));
-    m_pLabelDesign->SetFont(Label::Body_14);
-    m_pLabelDesign->SetForegroundColour(g_labelTextColor);
-    m_pLabelDesign->SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
-    m_pLabelDesign->SetBackgroundColour(g_containerBg);
-    labelSizer->AddSpacer(FromDIP(g_labelDesignTopMargin));
-    labelSizer->Add(m_pLabelDesign, 0, wxEXPAND);
-    labelSizer->AddSpacer(FromDIP(g_labelVerticalGap));
-
-    m_pLabelMachine = new Label(this, _L("Printer Filament"));
-    m_pLabelMachine->SetFont(Label::Body_14);
-    m_pLabelMachine->SetForegroundColour(g_labelTextColor);
-    m_pLabelMachine->SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
-    m_pLabelMachine->SetBackgroundColour(g_containerBg);
-    labelSizer->Add(m_pLabelMachine, 0, wxEXPAND);
-
-    // Constrain both labels to the same width so the label column has a
-    // predictable size regardless of which translation ends up longer.
-    {
-        int w1 = m_pLabelDesign->GetTextExtent(m_pLabelDesign->GetLabel()).GetWidth();
-        int w2 = m_pLabelMachine->GetTextExtent(m_pLabelMachine->GetLabel()).GetWidth();
-        int maxW = std::max(w1, w2);
-        m_pLabelDesign->SetMinSize(wxSize(maxW, -1));
-        m_pLabelMachine->SetMinSize(wxSize(maxW, -1));
-    }
-    labelSizer->AddStretchSpacer(1);
-
-    rowSizer->Add(labelSizer, 0, wxEXPAND | wxRIGHT, FromDIP(g_labelGap));
-
-    // ---- Right card grid — 5 columns, auto rows ----
+    // ---- Card grid - N columns, auto rows ----
     auto* cardGridSizer = new wxFlexGridSizer(0, GetGridCols(), FromDIP(g_cardGap), FromDIP(g_cardGap));
 
     int boxIndex = 0;
@@ -131,11 +105,12 @@ FilamentColorMapBoxGroup::FilamentColorMapBoxGroup(wxWindow* parent,
         ++boxIndex;
     }
 
-    rowSizer->Add(cardGridSizer, 0, wxALIGN_TOP);
-
-    // ---- Padding around the row ----
+    // ---- Caption above the grid, padded ----
     auto* outerSizer = new wxBoxSizer(wxVERTICAL);
-    outerSizer->Add(rowSizer, 1, wxEXPAND | wxALL, FromDIP(g_containerPadding));
+    outerSizer->Add(m_pCaption, 0, wxLEFT | wxTOP | wxRIGHT, FromDIP(g_containerPadding));
+    outerSizer->AddSpacer(FromDIP(g_labelGap));
+    outerSizer->Add(cardGridSizer, 0,
+                    wxLEFT | wxRIGHT | wxBOTTOM | wxALIGN_TOP, FromDIP(g_containerPadding));
     SetSizer(outerSizer);
     Layout();
 }
@@ -255,7 +230,10 @@ int FilamentColorMapBoxGroup::getHeightForRowCount(int rows) const
     int vGap  = FromDIP(g_cardGap);
     int gridH = rows * cardH + std::max(0, rows - 1) * vGap;
     int pad   = FromDIP(g_containerPadding);
-    return gridH + 2 * pad;
+    // Account for the caption above the grid (and the gap below it), or the container is sized
+    // too short and clips the last card row.
+    int header = m_pCaption ? m_pCaption->GetBestSize().y + FromDIP(g_labelGap) : 0;
+    return header + gridH + 2 * pad;
 }
 
 void FilamentColorMapBoxGroup::bindMappingChangedCallback(std::function<void()> cb)

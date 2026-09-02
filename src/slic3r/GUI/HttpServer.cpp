@@ -102,16 +102,41 @@ void session::stop()
     socket.close(ignored_ec);
 }
 
+/*
+ * One header line, read on '\n' and not on '\r'.
+ *
+ * This used to read until '\r' and then consume the '\n' with a second getline. That
+ * desynchronises by one byte whenever a read stops with a '\r' as the last byte in the
+ * buffer: the '\n' is not there yet, the second getline consumes nothing, and every line
+ * after it arrives with a leading '\n'. `line.length() == 0` - which is how the end of
+ * the headers is recognised - then never matches, so the session waits for a delimiter
+ * that will never come and the request is never answered.
+ *
+ * asio reads in 512-byte chunks, so the boundary is real rather than theoretical: of the
+ * 515 places a 516-byte WebKit request can be split, exactly two hang the server, and one
+ * of them is byte 513. Loading the reconstructed Device page - ~48 ES modules over ~6
+ * pooled connections - hit it about once per load, which left the page with its shell
+ * drawn, `.content` empty, `readyState` stuck at "interactive", and nothing in any log.
+ *
+ * '\n' is the line terminator that cannot be orphaned: a split between the CR and the LF
+ * now leaves the CR at the end of the line, where it is stripped.
+ */
+static inline void strip_cr(std::string& line)
+{
+    if (!line.empty() && line.back() == '\r')
+        line.pop_back();
+}
+
 void session::read_first_line()
 {
     auto self(shared_from_this());
 
-    async_read_until(socket, buff, '\r', [this, self](const boost::beast::error_code& e, std::size_t s) {
+    async_read_until(socket, buff, '\n', [this, self](const boost::beast::error_code& e, std::size_t s) {
         if (!e) {
-            std::string  line, ignore;
+            std::string  line;
             std::istream stream{&buff};
-            std::getline(stream, line, '\r');
-            std::getline(stream, ignore, '\n');
+            std::getline(stream, line, '\n');
+            strip_cr(line);
             headers.on_read_request_line(line);
             read_next_line();
         } else if (e != boost::asio::error::operation_aborted) {
@@ -141,6 +166,9 @@ void session::read_next_line()
         ssOut << "Access-Control-Allow-Origin: *\r\n";                            // 允许所有源
         ssOut << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";          // 允许的方法
         ssOut << "Access-Control-Allow-Headers: Content-Type, Authorization\r\n"; // 允许的请求头
+        // This server answers one request per connection and closes the socket in the
+        // write handler below, so it has to SAY so - see ResponseFile::write_response.
+        ssOut << "Connection: close\r\n";
         ssOut << "Content-Length: 0\r\n";                                         // 无响应体
         ssOut << "\r\n";                                                          // 头和主体之间的空行（必须）
 
@@ -152,14 +180,16 @@ void session::read_next_line()
         return; // 提前返回，避免后续逻辑
     }
 
-    async_read_until(socket, buff, '\r', [this, self](const boost::beast::error_code& e, std::size_t s) {
+    async_read_until(socket, buff, '\n', [this, self](const boost::beast::error_code& e, std::size_t s) {
         if (!e) {
-            std::string  line, ignore;
+            std::string  line;
             std::istream stream{&buff};
-            std::getline(stream, line, '\r');
-            std::getline(stream, ignore, '\n');
+            std::getline(stream, line, '\n');
+            strip_cr(line);
             headers.on_read_header(line);
 
+            // The empty line is the end of the headers, and it is only ever empty when
+            // the CR/LF pair is consumed as one - see read_first_line().
             if (line.length() == 0) {
                 if (headers.content_length() == 0) {
                     std::cout << "Request received: " << headers.method << " " << headers.get_url();
@@ -802,6 +832,7 @@ void HttpServer::ResponseRedirect::write_response(std::stringstream& ssOut)
     size_t            content_length = sHTML.size(); // 字节长度（与字符数相同，因无多字节字符）
 
     ssOut << "HTTP/1.1 302 Found\r\n";
+    ssOut << "Connection: close\r\n";   // one request per connection - see ResponseFile
     ssOut << "Location: " << location_str << "\r\n";
     ssOut << "Content-Type: text/html\r\n";
     ssOut << "Content-Length: " << content_length << "\r\n"; // 正确计算长度
@@ -816,6 +847,7 @@ void HttpServer::ResponseNotFound::write_response(std::stringstream& ssOut)
     size_t            content_length = sHTML.size(); // 字节长度
 
     ssOut << "HTTP/1.1 404 Not Found\r\n";
+    ssOut << "Connection: close\r\n";   // one request per connection - see ResponseFile
     ssOut << "Content-Type: text/html\r\n";
     ssOut << "Content-Length: " << content_length << "\r\n"; // 正确计算长度
     ssOut << "Access-Control-Allow-Origin: *\r\n";           // CORS头
@@ -876,6 +908,22 @@ void HttpServer::ResponseFile::write_response(std::stringstream& ssOut)
 
     // 构造响应头（严格使用\r\n，头结束后空行）
     ssOut << "HTTP/1.1 200 OK\r\n";
+    /*
+     * One request per connection, and the response has to say so.
+     *
+     * session::read_next_line() writes this and then calls server.stop(self), which
+     * shuts the socket down - but HTTP/1.1 is persistent BY DEFAULT, so a reply with no
+     * `Connection` header tells the client the socket may be reused. WebKit believes it,
+     * keeps the socket in its pool, and sends a later request into a socket this server
+     * has already closed. That request is never answered and never retried.
+     *
+     * It cost a blank Device page: the reconstruction loads ~48 ES modules, WebKit
+     * fetches them over ~6 pooled connections, and one module request per page load was
+     * lost this way - `readyState` stuck at "interactive", `.content` empty, no console
+     * error, nothing in any log. The Flutter bundle survives it because it is one big
+     * script rather than a module graph, so a lost request is a lost image at worst.
+     */
+    ssOut << "Connection: close\r\n";
     ssOut << "Content-Type: " << content_type << "\r\n";
     ssOut << "Content-Length: " << content_length << "\r\n"; // 必须与实际内容长度一致
     ssOut << "Access-Control-Allow-Origin: *\r\n";           // CORS头

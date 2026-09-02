@@ -1,0 +1,127 @@
+/* Option B - the match sheet. */
+
+.dlg-body { display: flex; flex-direction: column; gap: 10px; }
+
+/* the plate and its numbers, compressed to one strip */
+.strip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.strip .thumb { width: 52px; height: 52px; }
+.strip .name { font-size: 13px; font-weight: 600; color: var(--ink); }
+.strip .nums { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.strip .grow { flex: 1; min-width: 0; }
+.legal { margin: 0; }
+
+/* the two lanes, and the wires between them */
+.match {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 54px 1fr;
+  gap: 0;
+  position: relative;
+}
+/* The wires SVG is absolutely positioned, so it occupies no track - which left the
+   right-hand lane to fall into the 54px gutter. Both lanes name their column. */
+.match .col { min-width: 0; display: flex; flex-direction: column; }
+.match .col:first-of-type { grid-column: 1; }
+.match .col:last-of-type  { grid-column: 3; }
+.match h3 {
+  margin: 0 0 7px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.match .col:last-child h3 { text-align: right; }
+.lane { display: flex; flex-direction: column; gap: 7px; }
+
+.wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.wires path { fill: none; stroke-width: 2.5; stroke-linecap: round; opacity: .75; }
+.wires path.bad  { stroke-dasharray: 4 4; }
+.wires path.dim  { opacity: .18; }
+.wires path.live { opacity: 1; stroke-width: 3.5; }
+
+/* a file filament */
+.frow, .hrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  width: 100%;
+}
+.frow:hover, .hrow:hover { border-color: var(--accent); }
+.frow.sel, .hrow.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(15, 110, 123, .18); }
+.frow .t, .hrow .t { flex: 1; min-width: 0; }
+.frow .lbl, .hrow .lbl {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.frow .sub, .hrow .sub { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hrow { flex-direction: row-reverse; text-align: right; }
+.hrow .num {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 17px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.hrow.taken .num { background: var(--accent); border-color: var(--accent); color: var(--accent-in); }
+.hrow.bad  { border-color: var(--err); }
+.hrow.bad .sub  { color: var(--err); }
+.hrow.warn { border-color: var(--warn); }
+.hrow.warn .sub { color: var(--warn); }
+.hrow.bad .num  { background: var(--err);  border-color: var(--err);  color: #fff; }
+.hrow.warn .num { background: var(--warn); border-color: var(--warn); color: #fff; }
+
+.hint { margin: 0; font-size: 11.5px; color: var(--muted); min-height: 1.4em; }
+.hint.bad { color: var(--err); }
+.hint.warn { color: var(--warn); }
+
+/* the three preferences, as one compact row of chips */
+.foot-prefs { flex: none; display: flex; flex-direction: column; gap: 1px; }
+.foot-prefs .chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.foot-prefs .chip input { position: absolute; opacity: 0; pointer-events: none; }
+.foot-prefs .chip .box {
+  width: 12px; height: 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--panel);
+}
+.foot-prefs .chip input:checked + .box {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--panel);
+}
+.foot-prefs .chip input:checked ~ span { color: var(--ink-2); }

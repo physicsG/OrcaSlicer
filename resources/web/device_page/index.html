@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snapmaker U1 — Device</title>
+<link rel="stylesheet" href="../shared/css/base.css">
+<link rel="stylesheet" href="css/device.css">
+</head>
+<body>
+
+<!--
+  The shell, and only the shell. Everything inside .content and the rail's nav is built
+  from js/registry.js - which is where to look for what this page is made of. Each panel
+  lives in js/views/<destination>/<panel>/, all three of its files together.
+-->
+<div class="app">
+
+  <aside class="rail">
+    <button class="device-select" id="device-select">
+      <span class="dev-icon">S</span>
+      <span class="dev-name" id="dev-name">Unconnected</span>
+      <span class="dev-state" id="dev-state" data-state="none"></span>
+      <img class="chev" src="icons/keyboardArrowDropDown.svg" alt="">
+    </button>
+    <nav></nav>
+  </aside>
+
+  <main class="content"></main>
+
+</div>
+
+<div id="build-badge"></div>
+
+<!--
+  Talks to Orca through window.wx.postMessage, exactly like the shipped Flutter
+  bundle. With no host present it loads a simulated U1 instead, so it can be
+  exercised standalone. Force the simulator with ?mock=1
+-->
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

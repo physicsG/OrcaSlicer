@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Device page — self test</title>
+<style>
+ body{background:#14161a;color:#e7eaf0;font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:20px}
+ h1{font-size:18px} h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#98a1b0;margin:18px 0 6px}
+ .t{padding:3px 0;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+ .pass::before{content:"PASS  ";color:#8ce99a} .fail::before{content:"FAIL  ";color:#ff9b9b}
+ .fail{color:#ff9b9b} .detail{color:#98a1b0;padding-left:50px;white-space:pre-wrap}
+ #sum{margin-top:18px;padding:10px 14px;border-radius:8px;border:1px solid #2c313a;display:inline-block}
+ .ok{background:rgba(47,158,68,.15);border-color:#2f9e44}
+ .bad{background:rgba(224,49,49,.15);border-color:#e03131}
+</style>
+</head>
+<body>
+<h1>Snapmaker U1 Device page — self test</h1>
+<p style="color:#98a1b0">Exercises the real modules against the simulated printer: envelope
+shape, subscription ack-then-push, partial-state merging, control round-trips, error decoding.</p>
+<div id="out"></div>
+<div id="sum"></div>
+
+<script type="module">
+import { CMD, SUBSCRIBE_OBJECTS, TOOLHEADS, LIMITS, NAMED, decodeErrorCode } from '../js/protocol.js';
+import { Sswcp } from '../js/sswcp.js';
+import { MachineState, unwrapStatus } from '../js/state.js';
+import { installMock } from '../../device_page/js/core/mock.js';
+
+const out = document.getElementById('out');
+let pass = 0, fail = 0;
+
+function section(t){ const h=document.createElement('h2'); h.textContent=t; out.append(h); }
+function check(name, cond, detail){
+  const d=document.createElement('div');
+  d.className='t '+(cond?'pass':'fail'); d.textContent=name; out.append(d);
+  if(!cond && detail){ const e=document.createElement('div'); e.className='detail'; e.textContent=detail; out.append(e); }
+  cond ? pass++ : fail++;
+}
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+(async function run(){
+  // ---------------------------------------------------------------
+  section('envelope');
+  const sent = [];
+  const mock = installMock({ log:(dir,pkt)=>{ if(dir==='mock-rx') sent.push(pkt); } });
+  check('mock host installed', !!mock && window.wx.__isMock === true);
+
+  const bridge = new Sswcp();
+  const dev = await bridge.request(CMD.GET_CONNECTED_MACHINE);
+  const first = sent[0];
+  check('request has header.seqid', typeof first?.header?.seqid === 'string', JSON.stringify(first?.header));
+  check('payload carries cmd/params/event_id/metadata',
+        first && 'cmd' in first.payload && 'params' in first.payload &&
+        'event_id' in first.payload && 'metadata' in first.payload,
+        JSON.stringify(first?.payload));
+  check('one-shot request has null event_id', first?.payload?.event_id === null);
+  check('response resolves with payload.data', dev && dev.sn === 'U1MOCK0000000001', JSON.stringify(dev));
+
+  // ---------------------------------------------------------------
+  section('state model');
+  check('24 objects subscribed', Object.keys(SUBSCRIBE_OBJECTS).length === 24,
+        String(Object.keys(SUBSCRIBE_OBJECTS).length));
+  check('four toolheads, first named "extruder"',
+        TOOLHEADS.length === 4 && TOOLHEADS[0] === 'extruder');
+  check('extruder filter has 8 fields', SUBSCRIBE_OBJECTS.extruder.length === 8);
+
+  const st = new MachineState();
+  const snap = await bridge.request(CMD.GET_MACHINE_STATE, { objects: SUBSCRIBE_OBJECTS });
+  check('snapshot unwraps to an object map', !!unwrapStatus(snap));
+  st.applyPayload(snap);
+  check('bed parsed', st.bed().target === 60, JSON.stringify(st.bed()));
+  check('four toolheads present', st.toolheads().filter(t=>t.present).length === 4);
+  check('job filename parsed', st.job().filename.endsWith('.gcode'), st.job().filename);
+
+  // partial merge must not drop untouched fields
+  const before = st.get('heater_bed');
+  st.apply({ heater_bed: { temperature: 42.0 } });
+  const after = st.get('heater_bed');
+  check('partial push merges (target survives)',
+        after.temperature === 42.0 && after.target === before.target,
+        JSON.stringify(after));
+
+  // ---------------------------------------------------------------
+  section('subscription');
+  let pushes = 0;
+  const sub = await bridge.subscribe(CMD.SUBSCRIBE_MACHINE_STATE, {}, (data)=>{
+    pushes++; st.applyPayload(data);
+  });
+  check('subscribe returns an eventId', typeof sub.eventId === 'string', sub.eventId);
+  check('subscribe acked', sub.ack && sub.ack.subscribed === true, JSON.stringify(sub.ack));
+  await sleep(2400);
+  check('pushes arriving', pushes >= 2, `received ${pushes}`);
+
+  const d0 = st.job().printDuration;
+  await sleep(1200);
+  check('state advances between pushes', st.job().printDuration > d0,
+        `${d0} -> ${st.job().printDuration}`);
+
+  // ---------------------------------------------------------------
+  section('control round-trips');
+  await bridge.request(CMD.CONTROL_BED_TEMP, { temp: 75 });
+  await sleep(1200);
+  check('bed target followed the command', st.bed().target === 75, String(st.bed().target));
+
+  await bridge.request(CMD.CONTROL_EXTRUDER_TEMP, { temp: 245, index: 2, map: 2 });
+  await sleep(1200);
+  check('toolhead 3 target set (index is 0-based)',
+        st.toolheads()[2].target === 245, String(st.toolheads()[2].target));
+
+  await bridge.request(CMD.CONTROL_PRINT_SPEED, { percentage: 120 });
+  await sleep(1200);
+  check('speed factor followed', st.speed().factorPct === 120, String(st.speed().factorPct));
+
+  await bridge.request(CMD.CONTROL_LED, { name: NAMED.cavityLed, white: 0 });
+  await sleep(1200);
+  check('led off', st.led().on === false, JSON.stringify(st.led()));
+
+  await bridge.request(CMD.CONTROL_MAIN_FAN, { speed: 60 });
+  await sleep(1200);
+  check('main fan followed (0..1 on the wire, % in the UI)',
+        st.fans().main === 60, String(st.fans().main));
+
+  await bridge.request(CMD.PRINT_PAUSE);
+  await sleep(1200);
+  check('pause reflected in print_stats.state', st.job().state === 'paused', st.job().state);
+  await bridge.request(CMD.PRINT_RESUME);
+  await sleep(1200);
+  check('resume reflected', st.job().state === 'printing', st.job().state);
+
+  // ---------------------------------------------------------------
+  section('errors');
+  const e = decodeErrorCode('0002052300020000');
+  check('error decodes to toolhead subsystem', e && e.subsystem === '0523', JSON.stringify(e));
+  check('unit index -> Toolhead 3', e && e.toolhead === 3, String(e && e.toolhead));
+  check('bad code rejected', decodeErrorCode('nope') === null);
+
+  section('failure handling');
+  let threw = null;
+  try { await bridge.request('sw_DefinitelyNotACommand'); } catch (err) { threw = err; }
+  check('unknown command rejects with SswcpError',
+        threw && threw.name === 'SswcpError' && threw.code === -1, String(threw));
+
+  // ---------------------------------------------------------------
+  mock.stop();
+  const sum = document.getElementById('sum');
+  sum.textContent = `${pass}/${pass+fail} checks passed`;
+  sum.className = fail ? 'bad' : 'ok';
+})();
+</script>
+</body>
+</html>

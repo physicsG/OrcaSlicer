@@ -1,0 +1,885 @@
+{
+ "sw_AddDevice": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_BedMesh_AbortProbeMesh": {
+  "forwarded": true,
+  "handler": "async_bedmesh_abort_probe_mesh",
+  "method": "printer.bed_mesh.abort_probe_mesh",
+  "params": []
+ },
+ "sw_CameraStartMonitor": {
+  "forwarded": false,
+  "handler": "async_camera_start",
+  "method": "camera.start_monitor",
+  "params": [
+   "domain",
+   "expect_pw",
+   "interval"
+  ]
+ },
+ "sw_CameraStopMonitor": {
+  "forwarded": false,
+  "handler": "async_canmera_stop",
+  "method": "camera.stop_monitor",
+  "params": [
+   "domain"
+  ]
+ },
+ "sw_CancelDownload": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_CancelPullCloudFile": {
+  "forwarded": true,
+  "handler": "async_cancel_pull_cloud_file",
+  "method": "server.files.cancel_pull",
+  "params": []
+ },
+ "sw_Connect": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_ConnectOtherMachine": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_ControlBedTemp": {
+  "forwarded": false,
+  "handler": "async_control_bed_temp",
+  "method": "printer.control.bed_temp",
+  "params": [
+   "temp"
+  ]
+ },
+ "sw_ControlExtruderTemp": {
+  "forwarded": false,
+  "handler": "async_control_extruder_temp",
+  "method": "printer.control.extruder_temp",
+  "params": [
+   "index",
+   "map",
+   "temp"
+  ]
+ },
+ "sw_ControlGenericFan": {
+  "forwarded": false,
+  "handler": "async_control_generic_fan",
+  "method": "printer.control.generic_fan",
+  "params": [
+   "name",
+   "speed"
+  ]
+ },
+ "sw_ControlLed": {
+  "forwarded": false,
+  "handler": "async_control_led",
+  "method": "printer.control.led",
+  "params": [
+   "name",
+   "white"
+  ]
+ },
+ "sw_ControlMainFan": {
+  "forwarded": false,
+  "handler": "async_control_main_fan",
+  "method": "printer.control.main_fan",
+  "params": [
+   "speed"
+  ]
+ },
+ "sw_ControlPrintSpeed": {
+  "forwarded": false,
+  "handler": "async_control_print_speed",
+  "method": "printer.control.print_speed",
+  "params": [
+   "percentage"
+  ]
+ },
+ "sw_ControlPurifier": {
+  "forwarded": true,
+  "handler": "async_controlPurifier",
+  "method": "printer.control.purifier",
+  "params": []
+ },
+ "sw_DefectDetactionConfig": {
+  "forwarded": true,
+  "handler": "async_defect_detaction_config",
+  "method": "printer.defect_detection.config",
+  "params": []
+ },
+ "sw_DeleteCameraTimelapse": {
+  "forwarded": true,
+  "handler": "async_delete_camera_timelapse",
+  "method": "camera.delete_timelapse_instance",
+  "params": []
+ },
+ "sw_DeleteDevices": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_DeleteMachineFile": {
+  "forwarded": false,
+  "handler": "async_delete_machine_file",
+  "method": "server.files.delete_file",
+  "params": [
+   "path"
+  ]
+ },
+ "sw_DeleteRecentFiles": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_Disconnect": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_DownLoadFile": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_DownLoadFileAndOpen": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_DownloadMachineFile": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_Exit": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_FileGetStatus": {
+  "forwarded": true,
+  "handler": "async_server_files_get_status",
+  "method": "server.files.get_status",
+  "params": []
+ },
+ "sw_FileLog": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_FileView": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_FilesThumbnailsBase64": {
+  "forwarded": false,
+  "handler": "async_files_thumbnails_base64",
+  "method": "server.files.thumbnails_base64",
+  "params": [
+   "path"
+  ]
+ },
+ "sw_FinishFilamentMapping": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_FinishPreprint": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetActiveFile": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetCache": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetCameraTimelapseInstance": {
+  "forwarded": true,
+  "handler": "async_get_timelapse_instance",
+  "method": "camera.get_timelapse_instance",
+  "params": []
+ },
+ "sw_GetConnectedMachine": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetDeviceDataStorageSpace": {
+  "forwarded": true,
+  "handler": "async_get_userdata_space",
+  "method": "server.files.get_userdata_space",
+  "params": []
+ },
+ "sw_GetFileFilamentMapping": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetFileListPage": {
+  "forwarded": false,
+  "handler": "async_get_file_page_list",
+  "method": "server.files.list_page",
+  "params": [
+   "files_per_page",
+   "page_number",
+   "root"
+  ]
+ },
+ "sw_GetFileStream": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetFilesFromDir": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetLocalDevices": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetMachineFindSupportInfo": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetMachineObjects": {
+  "forwarded": true,
+  "handler": "async_get_machine_objects",
+  "method": "printer.objects.list",
+  "params": []
+ },
+ "sw_GetMachineState": {
+  "forwarded": false,
+  "handler": "async_get_machine_info",
+  "method": "printer.objects.query",
+  "params": [
+   "objects"
+  ]
+ },
+ "sw_GetMachineSystemInfo": {
+  "forwarded": true,
+  "handler": "async_get_system_info",
+  "method": "machine.system_info",
+  "params": []
+ },
+ "sw_GetPincode": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetPrintHistory": {
+  "forwarded": true,
+  "handler": "async_get_print_history",
+  "method": "server.history.list",
+  "params": []
+ },
+ "sw_GetPrintLegal": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetPrintZip": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetPrinterInfo": {
+  "forwarded": true,
+  "handler": "async_get_printer_info",
+  "method": "printer.info",
+  "params": []
+ },
+ "sw_GetRecentProjects": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetSoftwareInfo": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetUserLoginState": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_GetUserUpdatePrivacy": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_LaunchConsole": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_Log": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_MachineFilesGetDirectory": {
+  "forwarded": false,
+  "handler": "async_machine_files_directory",
+  "method": "server.files.get_directory",
+  "params": [
+   "extended",
+   "path"
+  ]
+ },
+ "sw_MachineFilesMetadata": {
+  "forwarded": false,
+  "handler": "async_machine_files_metadata",
+  "method": "server.files.metadata",
+  "params": [
+   "filename"
+  ]
+ },
+ "sw_MachineFilesRoots": {
+  "forwarded": true,
+  "handler": "async_machine_files_roots",
+  "method": "server.files.roots",
+  "params": []
+ },
+ "sw_MachineFilesThumbnails": {
+  "forwarded": false,
+  "handler": "async_machine_files_thumbnails",
+  "method": "server.files.thumbnails",
+  "params": [
+   "filename"
+  ]
+ },
+ "sw_MachineHeartbeat": {
+  "forwarded": true,
+  "handler": "async_machine_heartbeat",
+  "method": "machine.heartbeat",
+  "params": []
+ },
+ "sw_MachinePrintCancel": {
+  "forwarded": true,
+  "handler": "async_cancel_print_job",
+  "method": "printer.print.cancel",
+  "params": []
+ },
+ "sw_MachinePrintPause": {
+  "forwarded": true,
+  "handler": "async_pause_print_job",
+  "method": "printer.print.pause",
+  "params": []
+ },
+ "sw_MachinePrintResume": {
+  "forwarded": true,
+  "handler": "async_resume_print_job",
+  "method": "printer.print.resume",
+  "params": []
+ },
+ "sw_MachinePrintStart": {
+  "forwarded": false,
+  "handler": "async_start_print_job",
+  "method": "printer.print.start",
+  "params": [
+   "filename"
+  ]
+ },
+ "sw_NewProject": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_NotifyUploadTimelaspe": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_OpenBrowser": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_OpenNetworkDialog": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_OpenOrcaWebview": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_OpenProject": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_OpenRecentFile": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_OpenTimelapseFolder": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_PrinterDefectDetection": {
+  "forwarded": true,
+  "handler": "async_defect_detaction_config",
+  "method": "printer.defect_detection.config",
+  "params": []
+ },
+ "sw_PullCloudFile": {
+  "forwarded": true,
+  "handler": "async_pull_cloud_file",
+  "method": "server.files.pull",
+  "params": []
+ },
+ "sw_RemoveCache": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_RenameDevice": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SendGCodes": {
+  "forwarded": false,
+  "handler": "async_send_gcodes",
+  "method": "printer.gcode.script",
+  "params": [
+   "script"
+  ]
+ },
+ "sw_ServerClientManagerSetUserinfo": {
+  "forwarded": true,
+  "handler": "async_server_client_manager_set_userinfo",
+  "method": "server.client_manager.set_userinfo",
+  "params": []
+ },
+ "sw_SetCache": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SetDeviceName": {
+  "forwarded": false,
+  "handler": "async_set_device_name",
+  "method": "machine.set_device_name",
+  "params": [
+   "name"
+  ]
+ },
+ "sw_SetFilamentMappingComplete": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SetLogLevel": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SetSubscribeFilter": {
+  "forwarded": false,
+  "handler": "async_set_machine_subscribe_filter",
+  "method": "printer.objects.subscribe",
+  "params": [
+   "objects"
+  ]
+ },
+ "sw_StartCloudPrint": {
+  "forwarded": true,
+  "handler": "async_start_cloud_print",
+  "method": "server.files.start_cloud_print",
+  "params": []
+ },
+ "sw_StartLocalPrint": {
+  "forwarded": true,
+  "handler": "async_start_local_print",
+  "method": "server.files.start_local_print",
+  "params": []
+ },
+ "sw_StartMachineFind": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_StopMachineFind": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_StopMachineStateSubscription": {
+  "forwarded": false,
+  "handler": "async_unsubscribe_machine_info",
+  "method": null,
+  "params": [],
+  "why": "no JSON-RPC method found behind async_unsubscribe_machine_info"
+ },
+ "sw_SubUserUpdatePrivacy": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SubscribeCacheKey": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SubscribeDownloadState": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SubscribeLocalDevices": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SubscribeMachineState": {
+  "forwarded": false,
+  "handler": "async_subscribe_machine_info",
+  "method": null,
+  "params": [],
+  "why": "no JSON-RPC method found behind async_subscribe_machine_info"
+ },
+ "sw_SubscribePageStateChange": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SubscribeRecentFiles": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SubscribeUserLoginState": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SwitchModel": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SwitchTab": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_SystemGetDeviceInfo": {
+  "forwarded": true,
+  "handler": "async_get_device_info",
+  "method": "system.get_device_info",
+  "params": []
+ },
+ "sw_Test_connect": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_UnsubscribeAll": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_UnsubscribeCacheKeys": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_UnsubscribeDownloadState": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_UnsubscribePageStateChange": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_Unsubscribe_Filter": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_UpdateMachineFilamentInfo": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_UploadAsyncTimelapseInstance": {
+  "forwarded": true,
+  "handler": "async_upload_timelapse_instance",
+  "method": "camera.upload_async_timelapse_instance",
+  "params": []
+ },
+ "sw_UploadCameraTimelapse": {
+  "forwarded": true,
+  "handler": "async_upload_camera_timelapse",
+  "method": "camera.upload_timelapse_instance",
+  "params": []
+ },
+ "sw_UploadEvent": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_UploadFiletoMachine": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_UserLogin": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_UserLogout": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_WakeupFind": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_Webview_Unsubscribe": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_create_mqtt_client": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_exception_query": {
+  "forwarded": true,
+  "handler": "async_exception_query",
+  "method": "server.exception.query",
+  "params": []
+ },
+ "sw_mqtt_connect": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_mqtt_disconnect": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_mqtt_publish": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_mqtt_set_engine": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_mqtt_subscribe": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_mqtt_unsubscribe": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "sw_test_mqtt_moonraker": {
+  "forwarded": true,
+  "handler": "async_get_printer_info",
+  "method": "printer.info",
+  "params": []
+ },
+ "test": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ },
+ "test_async": {
+  "forwarded": false,
+  "handler": null,
+  "method": null,
+  "params": [],
+  "why": "the handler makes no async_ call - answered inside Orca"
+ }
+}

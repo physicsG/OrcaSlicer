@@ -1,0 +1,421 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>U1 build plates in the UI</title>
+<style>
+  :root{
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --page:#e6e7e9; --panel:#fff; --line:#e4e6e8; --line-soft:#eef0f1; --inset:#f4f5f6;
+    --text:#2f3336; --dim:#7d868d; --faint:#a7aeb4;
+    --teal:#14b8a6; --teal-ink:#fff; --teal-soft:rgba(20,184,166,.12);
+    --blue:#4a90d9; --warn:#e2953a; --warn-soft:rgba(226,149,58,.14);
+    --bad:#d0574e; --bad-soft:rgba(208,87,78,.13);
+    --ok:#2e9e5b; --ok-soft:rgba(46,158,91,.13);
+    --shadow:0 1px 2px rgba(16,24,32,.05), 0 10px 26px -18px rgba(16,24,32,.4);
+    --sb-panel:#fff; --sb-title:#f1f1f1; --sb-line:#e3e5e6; --sb-field-line:#dcdfe1;
+    --sb-text:#26292c; --sb-dim:#7a8288; --sb-inset:#f6f7f8;
+  }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+    --page:#0f1215; --panel:#181c20; --line:#272d33; --line-soft:#20262b; --inset:#1e242a;
+    --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d;
+    --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+    --blue:#5aa0e6; --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+    --bad:#e0736a; --bad-soft:rgba(224,115,106,.16); --ok:#4cb87a; --ok-soft:rgba(76,184,122,.16);
+    --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+    --sb-panel:#23282c; --sb-title:#2d3338; --sb-line:#383f45; --sb-field-line:#3d454b;
+    --sb-text:#e6eaed; --sb-dim:#98a1a8; --sb-inset:#1f2428;
+  }}
+  :root[data-theme="dark"]{
+    --page:#0f1215; --panel:#181c20; --line:#272d33; --line-soft:#20262b; --inset:#1e242a;
+    --text:#e8ecef; --dim:#98a2aa; --faint:#6a757d;
+    --teal:#17b890; --teal-ink:#04211a; --teal-soft:rgba(23,184,144,.16);
+    --blue:#5aa0e6; --warn:#e6a23c; --warn-soft:rgba(230,162,60,.16);
+    --bad:#e0736a; --bad-soft:rgba(224,115,106,.16); --ok:#4cb87a; --ok-soft:rgba(76,184,122,.16);
+    --shadow:0 1px 0 rgba(255,255,255,.03), 0 12px 30px -16px rgba(0,0,0,.7);
+    --sb-panel:#23282c; --sb-title:#2d3338; --sb-line:#383f45; --sb-field-line:#3d454b;
+    --sb-text:#e6eaed; --sb-dim:#98a1a8; --sb-inset:#1f2428;
+  }
+  *{box-sizing:border-box;} html,body{margin:0;}
+  body{font-family:var(--font-sans);color:var(--text);background:var(--page);font-size:14px;
+       line-height:1.45;-webkit-font-smoothing:antialiased;padding:30px 14px 70px;}
+  code{font-family:var(--font-mono);font-size:12px;background:var(--panel);border:1px solid var(--line);
+       border-radius:4px;padding:1px 5px;}
+  .col{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:32px;}
+  .lede h1{margin:0 0 6px;font-size:23px;font-weight:700;letter-spacing:-.015em;text-wrap:balance;}
+  .lede p{margin:0;color:var(--dim);font-size:13.5px;max-width:70ch;} .lede p+p{margin-top:9px;}
+  .lede b{color:var(--text);font-weight:600;}
+  .eyebrow{display:flex;align-items:baseline;gap:10px;font-size:10.5px;font-weight:800;letter-spacing:.11em;
+           text-transform:uppercase;color:var(--dim);margin-bottom:12px;}
+  .eyebrow .k{color:var(--teal);}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;
+        box-shadow:var(--shadow);}
+  .card h3{margin:0 0 4px;font-size:14.5px;font-weight:700;}
+  .card .sub{margin:0 0 14px;font-size:12.5px;color:var(--dim);max-width:70ch;}
+  .card .sub b{color:var(--text);font-weight:600;}
+  .note{margin:12px 0 0;font-size:12.5px;color:var(--dim);line-height:1.5;} .note b{color:var(--text);font-weight:600;}
+
+  .chip{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+        border-radius:4px;padding:2px 7px;}
+  .chip.ok{color:var(--ok);background:var(--ok-soft);}
+  .chip.no{color:var(--bad);background:var(--bad-soft);}
+  .chip.warn{color:var(--warn);background:var(--warn-soft);}
+
+  .rack{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start;}
+  .spec{display:flex;flex-direction:column;align-items:center;gap:6px;}
+  .cap{font-size:10.5px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase;}
+  .pn{font-size:11.5px;color:var(--dim);text-align:center;}
+
+  /* a plate thumbnail: the product photo, sampled at its centre so we get surface, not silhouette */
+  .plw{display:inline-grid;place-items:center;flex:0 0 auto;line-height:0;}
+  .plw svg{display:block;}
+  .pl{border-radius:5px;border:1px solid rgba(120,130,138,.35);background-repeat:no-repeat;
+      background-position:center;flex:0 0 auto;}
+  .pl.lg{border-radius:8px;}
+  .pl.miss{background:repeating-linear-gradient(45deg,var(--inset),var(--inset) 5px,transparent 5px,transparent 10px);
+           display:grid;place-items:center;color:var(--faint);font-size:9px;text-align:center;line-height:1.1;}
+  /* whole-plate view, for the record */
+  /* Source shots are third-party and deliberately not in git; with
+     ui-snapshots-inspiration/ present they load, without it this caption shows. */
+  .pw{border-radius:6px;border:1px solid var(--line);background-color:var(--inset);
+      background-repeat:no-repeat;background-position:center;background-size:contain;
+      position:relative;display:grid;place-items:center;text-align:center;padding:10px;
+      font-size:10px;line-height:1.45;color:var(--faint);}
+
+  .sb{width:462px;max-width:100%;background:var(--sb-panel);border:1px solid var(--line);border-radius:8px;
+      overflow:hidden;color:var(--sb-text);font-size:13px;box-shadow:var(--shadow);}
+  .sb .tbar{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--sb-title);
+            border-bottom:1px solid var(--sb-line);}
+  .sb .body{padding:10px;}
+  .cards{display:flex;gap:7px;align-items:stretch;}
+  .pcard{position:relative;border:1px solid var(--sb-field-line);border-radius:8px;background:var(--sb-panel);
+         display:flex;flex-direction:column;overflow:hidden;}
+  .pcard.printer{flex:1 1 auto;min-width:0;}
+  .pcard.plate{flex:0 0 92px;cursor:pointer;}
+  .pcard.plate:hover{border-color:var(--teal);}
+  .pcard.sync{flex:0 0 96px;align-items:center;justify-content:center;gap:6px;padding:10px 6px;background:var(--sb-inset);}
+  .pcard .top{flex:1;display:grid;place-items:center;padding:9px 8px 5px;min-height:56px;}
+  .pcard .foot{display:flex;align-items:center;gap:5px;padding:5px 8px 7px;font-size:12px;min-width:0;}
+  .pcard .foot .v{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pcard .info{position:absolute;top:4px;right:5px;font-size:11px;color:var(--sb-dim);}
+  .thumb{width:44px;height:40px;border-radius:5px;background:linear-gradient(160deg,#5c646b,#23282c);
+         display:grid;place-items:center;color:#c9d1d7;font-size:8.5px;font-weight:700;}
+  .ic{color:var(--sb-dim);font-size:11px;}
+  /* the picker the card opens */
+  .picker{border:1px solid var(--sb-field-line);border-radius:8px;background:var(--sb-panel);padding:8px;
+          display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px;}
+  .pick{display:flex;flex-direction:column;align-items:center;gap:5px;padding:6px 3px;border-radius:6px;
+        border:1px solid transparent;cursor:pointer;}
+  .pick:hover{border-color:var(--sb-field-line);}
+  .pick[aria-pressed="true"]{border-color:var(--teal);box-shadow:inset 0 0 0 1px var(--teal);}
+  .pick .lb{font-size:9.5px;color:var(--sb-dim);text-align:center;line-height:1.15;}
+
+  table.tp{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.tp th{text-align:left;font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+              color:var(--dim);padding:0 10px 7px 0;border-bottom:1px solid var(--line);}
+  table.tp td{padding:9px 10px 9px 0;border-bottom:1px solid var(--line-soft);color:var(--dim);vertical-align:middle;}
+  table.tp tr:last-child td{border-bottom:0;} table.tp td b{color:var(--text);font-weight:600;}
+  .scroll{overflow-x:auto;}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--inset);}
+  .seg button{appearance:none;border:0;background:transparent;color:var(--dim);font:inherit;font-size:12px;
+              padding:5px 11px;cursor:pointer;border-right:1px solid var(--line);}
+  .seg button:last-child{border-right:0;}
+  .seg button[aria-pressed="true"]{background:var(--teal);color:var(--teal-ink);font-weight:600;}
+  .opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));gap:13px;margin-top:12px;}
+  .opt{border:1px solid var(--line);border-radius:9px;padding:12px;background:var(--panel);
+       display:flex;flex-direction:column;gap:9px;cursor:pointer;text-align:left;font:inherit;}
+  .opt:hover{border-color:var(--teal);}
+  .opt[aria-pressed="true"]{border-color:var(--teal);box-shadow:inset 0 0 0 1px var(--teal);}
+  .opt .nm{font-size:12.5px;font-weight:700;color:var(--text);}
+  .opt .why{font-size:11px;color:var(--dim);line-height:1.45;}
+  .opt .shots{display:flex;align-items:flex-end;gap:12px;justify-content:center;
+              background:var(--inset);border-radius:6px;padding:9px 6px;}
+  a{color:var(--blue);}
+</style>
+
+<div class="col">
+  <header class="lede">
+    <h1>U1 build plates in the UI</h1>
+    <p>Snapmaker sells <b>three</b> plates for the U1 — Textured PEI, Smooth PEI and Graphic
+      Effect — and both the EU and US stores list exactly those, one variant each. Their product
+      photography is below, sampled at the plate's centre so what you see is the <em>surface</em>
+      rather than the silhouette.</p>
+    <p><b>And a fourth, from elsewhere.</b> <b>Cool Steel Plate</b> is in the U1's default list but
+      Snapmaker does not sell it separately, so there was no photo for it. BIQU's
+      <a href="https://eu.biqu.equipment/products/biqu-cryogrip-pro-buildplate-double-sided-7-layer-composite-with-high-magnetic-spring-steel-low-energy-printing-for-snapmaker-u1">CryoGrip
+      Pro for the Snapmaker U1</a> fills that slot: a double-sided 7-layer composite in two
+      finishes — <b>Frostbite</b> (coarse) and <b>Glacier</b> (fine) — and, for Glacier, five
+      colours. Same U1 mount, so the measured silhouette carries over unchanged.</p>
+    <p><b>Scope: these three, plus Cool Steel.</b> The app can offer more — turning on
+      <code>support_multi_bed_types</code> swaps the U1's list for a longer one that includes Cool
+      Plate, Engineering Plate and the rest of the Bambu-lineage set. Those are
+      <b>deliberately out of scope here</b>; §3 records what they are and what they would need, so
+      the decision is on paper rather than rediscovered later.</p>
+  </header>
+
+  <section>
+    <div class="eyebrow"><span class="k">1</span><span>Three photographed, one drawn</span></div>
+    <div class="card">
+      <h3>Photographed, cropped to surface</h3>
+      <p class="sub">The first three sample the middle of Snapmaker's own flat product shot; Cool
+        Steel is drawn, because Snapmaker does not sell one. Worth noting because I had guessed
+        wrong before looking: <b>Smooth PEI is matte black</b>, not amber — only Textured PEI
+        is the bronze people picture when they hear "PEI".</p>
+      <div class="rack" id="three"></div>
+      <div class="rack" style="margin-top:20px" id="whole"></div>
+      <p class="note" style="margin-top:16px"><b>The shape is measured, not traced.</b> My first
+        attempt was drawn by eye and was wrong in every dimension &mdash; deep crenellations where
+        the plate has small nicks. So the product PNG was decoded to raw pixels and the top and
+        bottom edges sampled per column. The plate is <b>391&times;413</b> (aspect 0.947); the three
+        top notches sit at <b>x&nbsp;26 / 50 / 74</b>, each about <b>6 wide and 2.9 deep</b>; the
+        bottom has a <b>tongue from x&nbsp;23 to 77.5</b> protruding <b>2.9</b> below the sides;
+        corners are radius <b>~2</b>. All as percentages of the plate's own box.</p>
+      <p class="note"><b>How literal to draw it was a real choice.</b> A notch 2.9% deep on a
+        40&nbsp;px-tall thumbnail is <b>just over one pixel</b> &mdash; drawn truthfully, the plate
+        is a rounded square with three nicks nobody will see. Exaggerating is a normal icon
+        convention but it is a decision, so it was made deliberately: <b>Emphasised</b>, the
+        measured notches roughly doubled. The alternates stay as the record of what was weighed.</p>
+      <div class="opts" id="shapeOpts"></div>
+      <p class="note"><b>Only Snapmaker's own plates are photographed.</b> The first three are
+        first-party products for their bed types, so a photo is simply what the plate looks like.
+        <b>Cool Steel is drawn instead</b> &mdash; Snapmaker does not sell it separately, and the
+        nearest real product is a third party's (BIQU's CryoGrip Pro, which does fit the U1). Using
+        that art would brand a <em>bed type</em> with a vendor the app never otherwise mentions, and
+        a user selecting <i>Cool Steel Plate</i> may own any plate or none. So it is a generic cool
+        plate: a cool blue with a soft sheen, no maker's marks, no invented texture pretending to be
+        a particular surface. <b>The same rule applies to the advanced-mode plates</b> if they are
+        ever added.</p>
+      <p class="note"><b>Shape as well as surface.</b> A square crop showed the material but could
+        have been any plate on any printer. These are clipped to the U1 plate's <b>own outline</b>
+        &mdash; three shallow notches along the top and a wide tongue along the bottom &mdash; so
+        the three plates share a shape that says they belong to the same machine, which is most of
+        what a thumbnail can usefully carry.</p>
+      <p class="note"><b>Aspect is preserved, not stretched.</b> The plate is square, the card slot
+        is 44&times;40, so the drawing letterboxes rather than squashing &mdash; the notches stay the
+        shape they are on the real plate. The texture underneath is still sampled from the middle of
+        the photo, so no background or perspective creeps in at the edges.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="k">2</span><span>In the panel</span></div>
+    <div class="card">
+      <h3>The plate card, and the picker behind it</h3>
+      <p class="sub">The card is 92&nbsp;px — the width Bambu uses — so the label clips to
+        <i>Textur…</i> and the picture carries the identification. Click a plate below to change
+        the card.</p>
+      <div id="ctx"></div>
+      <p class="note"><b>This is why the card can be narrow.</b> With a picture, a clipped label is
+        a caption; without one it is just clipped text, which is why the row stays full-width until
+        the art exists.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="k">3</span><span>Noted, not now — the advanced-mode plates</span></div>
+    <div class="card">
+      <h3>What else the enum can offer, and why it waits</h3>
+      <p class="sub"><code>PrintConfig.cpp</code> holds <b>three</b> bed-type lists, not one: the
+        generic Bambu set of six, the U1's own set (<code>// U1 only 4</code>), and a seven-entry
+        set used when <code>support_multi_bed_types</code> is on (<code>// U1 use 7 …</code>).
+        Only the first three rows below are plates Snapmaker sells for the U1 — the rest appear
+        only in that advanced mode, and are <b>left alone for now</b>.</p>
+      <div class="scroll">
+        <table class="tp">
+          <thead><tr><th>Enum</th><th>Name on the U1</th><th>Name generically</th><th>Thumb</th><th>Status</th></tr></thead>
+          <tbody id="allrows"></tbody>
+        </table>
+      </div>
+      <p class="note"><b>The trap to remember when they are picked up.</b> The same
+        <code>BedType</code> value is named differently depending on the printer:
+        <code>btPEI</code> is <i>Smooth High Temp Plate</i> generically but <i>Smooth PEI Plate</i>
+        on the U1, and <code>btSuperTack</code> is <i>Cool Plate (SuperTack)</i> generically but
+        <i>Cool Steel Plate</i> on the U1. So a thumbnail must key off the <b>enum value</b>, never
+        the label — otherwise the U1 shows a Bambu plate under a Snapmaker name, or nothing at all.</p>
+      <p class="note"><b>Cool Steel is the awkward one</b> and worth flagging now: it sits in the
+        U1's <em>default</em> list of four, yet Snapmaker does not sell it separately — it ships
+        with the printer, so there is no product page to photograph from. If the U1's default set
+        should be complete, that is the one plate you would have to shoot yourself.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="k">4</span><span>Before any of this ships</span></div>
+    <div class="card">
+      <p class="note" style="margin-top:0"><b>These images are Snapmaker's.</b> They are used here
+        as a design reference, the same way <code>ui-snapshots-inspiration/</code> holds Bambu's
+        screenshots. Shipping them inside an <b>AGPL-3.0</b> repository is a different question and
+        the answer is probably no without permission — so the options that actually ship are: ask
+        Snapmaker, photograph the plates yourself, or draw them.
+        <span class="chip warn">decide before PR</span></p>
+      <p class="note"><b>And a format note.</b> Two of the three sources are <code>.webp</code>,
+        which Orca's icon path cannot read — <code>BitmapCache.cpp</code> goes through nanosvg for
+        SVG and wxWidgets handlers for raster. Whatever is chosen ships as <b>PNG</b> at 1×/2×, or
+        as SVG if drawn.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var IMG = { textured: "../../ui-snapshots-inspiration/Snapmaker_U1_plates/textured_0.webp",
+              smooth:   "../../ui-snapshots-inspiration/Snapmaker_U1_plates/smooth_0.webp",
+              graphic:  "../../ui-snapshots-inspiration/Snapmaker_U1_plates/graphic_0.png" };
+
+  // Each product shot frames the whole plate; ~240% zoom lands inside the surface.
+  var PLATES = [
+    { key:"pei",   img:"textured", zoom:185, u1:"Textured PEI Plate", gen:"Textured PEI Plate",      en:"btPTE" },
+    { key:"pte",   img:"smooth",   zoom:190, u1:"Smooth PEI Plate",   gen:"Smooth High Temp Plate",  en:"btPEI" },
+    { key:"gesp",  img:"graphic",  zoom:195, u1:"Graphic Effect Plate", gen:"Graphic Effect Plate",  en:"btGESP" },
+    { key:"stack", drawn:true, u1:"Cool Steel Plate",  gen:"Cool Plate (SuperTack)", en:"btSuperTack" },
+    { key:"pc",    img:null,       u1:"—",            gen:"Smooth Cool Plate",      en:"btPC" },
+    { key:"ep",    img:null,       u1:"—",            gen:"Engineering Plate",      en:"btEP" },
+    { key:"pct",   img:null,       u1:"—",            gen:"Textured Cool Plate",    en:"btPCT" }
+  ];
+  var sel = 0;
+
+  // The U1 plate's outline, MEASURED from the product shot rather than traced by eye:
+  // graphic_0.png decoded to raw pixels, thresholded against the background, and the top
+  // and bottom edge profiles sampled per column. Results, as % of the plate's own box:
+  //   aspect 391x413 = 0.947 (slightly taller than wide)
+  //   three top notches centred at x = 26 / 50 / 74, each ~6 wide and 2.9 DEEP
+  //   a bottom tongue from x 23 to 77.5, protruding 2.9 below the side edges
+  //   corner radius ~2
+  var ASPECT = 105.6;                       // height when width is 100
+  function platePath(nd, nw, td, r){
+    // nd notch depth, nw notch half-width, td tongue depth, r corner radius
+    var H = ASPECT, sideY = H - td, p = [];
+    p.push("M" + r + " 0");
+    [26, 50, 74].forEach(function(cx){
+      p.push("H" + (cx - nw) + " L" + cx + " " + nd.toFixed(2) + " L" + (cx + nw) + " 0");
+    });
+    p.push("H" + (100 - r));
+    p.push("A" + r + " " + r + " 0 0 1 100 " + r);
+    p.push("V" + (sideY - r).toFixed(2));
+    p.push("A" + r + " " + r + " 0 0 1 " + (100 - r) + " " + sideY.toFixed(2));
+    p.push("H79.5 L77 " + H.toFixed(2) + " H23 L20.5 " + sideY.toFixed(2));
+    p.push("H" + r);
+    p.push("A" + r + " " + r + " 0 0 1 0 " + (sideY - r).toFixed(2));
+    p.push("V" + r);
+    p.push("A" + r + " " + r + " 0 0 1 " + r + " 0 Z");
+    return p.join(" ");
+  }
+  // As measured, and deliberately exaggerated so the shape survives 44 px.
+  var SHAPES = {
+    measured: ["As measured",  platePath(3.06, 3,   3.06, 2),
+               "The outline exactly as the photo gives it. Truthful, and at 44 px the notches are just over one pixel — the shape says almost nothing and the texture does all the work."],
+    hinted:   ["Emphasised",   platePath(5.5,  3.8, 4.2,  2),
+               "CHOSEN. Notches roughly doubled — enough to register as a notched plate at a glance without reading as a different object."],
+    icon:     ["Exaggerated",  platePath(8.5,  4.5, 5.5,  2.5),
+               "Pushed until the silhouette survives at icon size. A normal convention for small icons — the plate is recognisable, but no longer to scale."],
+    plain:    ["Plain",        platePath(0,    0,   0,    3),
+               "No notches at all: a rounded rectangle. Nothing is overstated, and the texture alone identifies the plate. Least distinctive, most honest about what 44 px can hold."]
+  };
+  var shape = "hinted";
+
+  // Anything Snapmaker does not sell for the U1 is drawn generically rather than
+  // photographed, so the app never brands a bed type with a vendor it does not mention.
+  // Paths and gradients only, so nanosvg can render it.
+  function coolFill(id){
+    return '<defs><linearGradient id="' + id + '" x1="0.1" y1="0" x2="0.7" y2="1">' +
+           '<stop offset="0" stop-color="#d6e8f4"/><stop offset="0.55" stop-color="#b3cfe2"/>' +
+           '<stop offset="1" stop-color="#93b3c9"/></linearGradient></defs>' +
+           '<rect x="-10" y="-10" width="130" height="130" fill="url(#' + id + ')"/>' +
+           '<path d="M-10 78 L120 22 L120 40 L-10 96 Z" fill="#ffffff" opacity="0.22"/>' +
+           '<path d="M-10 24 L120 -26 L120 -14 L-10 36 Z" fill="#ffffff" opacity="0.13"/>';
+  }
+  var uid = 0;
+
+  function thumb(p, w, h, cls){
+    if (p.drawn) {
+      var gid = "cool" + (++uid);
+      return '<span class="plw ' + (cls||"") + '" style="width:' + w + 'px;height:' + h + 'px">' +
+        '<svg viewBox="0 0 100 ' + ASPECT + '" width="' + w + '" height="' + h + '" preserveAspectRatio="xMidYMid meet">' +
+        '<clipPath id="c' + gid + '"><path d="' + SHAPES[shape][1] + '"/></clipPath>' +
+        '<g clip-path="url(#c' + gid + ')">' + coolFill(gid) + '</g>' +
+        '<path d="' + SHAPES[shape][1] + '" fill="none" stroke="rgba(0,0,0,.32)" stroke-width="1.1"/>' +
+        '</svg></span>';
+    }
+    if (!p.img)
+      return '<span class="pl miss ' + (cls||"") + '" style="width:' + w + 'px;height:' + h + 'px">no<br>art</span>';
+    var id = "clip" + (++uid), d = SHAPES[shape][1];
+    var z = p.zoom / 100;
+    var iw = 100 * z, ih = ASPECT * z, ix = (100 - iw) / 2, iy = (ASPECT - ih) / 2;
+    return '<span class="plw ' + (cls||"") + '" style="width:' + w + 'px;height:' + h + 'px">' +
+      '<svg viewBox="0 0 100 ' + ASPECT + '" width="' + w + '" height="' + h + '" preserveAspectRatio="xMidYMid meet">' +
+      '<defs><clipPath id="' + id + '"><path d="' + d + '"/></clipPath></defs>' +
+      '<image href="' + IMG[p.img] + '" x="' + ix.toFixed(1) + '" y="' + iy.toFixed(1) +
+      '" width="' + iw.toFixed(1) + '" height="' + ih.toFixed(1) +
+      '" preserveAspectRatio="xMidYMid slice" clip-path="url(#' + id + ')"/>' +
+      '<path d="' + d + '" fill="none" stroke="rgba(0,0,0,.32)" stroke-width="1.1"/>' +
+      '</svg></span>';
+  }
+
+  function whole(p, w, h){
+    return '<span class="pw" style="width:' + w + 'px;height:' + h + 'px;' +
+           'background-image:url(' + IMG[p.img] + ')">ui-snapshots-inspiration/<br>(not in git)</span>';
+  }
+
+  function render(){
+    document.getElementById("three").innerHTML = PLATES.slice(0,4).map(function(p){
+      return '<div class="spec"><span class="cap">' + p.u1 + '</span>' +
+             thumb(p, 132, 120, "lg") +
+             '<span style="display:flex;gap:10px;align-items:center">' + thumb(p, 44, 40) +
+             '<span class="pn">44×40</span></span></div>';
+    }).join("");
+
+    document.getElementById("whole").innerHTML =
+      '<div class="spec" style="align-items:flex-start"><span class="cap">the source shots</span>' +
+      '<span style="display:flex;gap:12px">' +
+      PLATES.slice(0,3).map(function(p){ return whole(p, 120, 96); }).join("") + '</span></div>';
+
+    var p = PLATES[sel];
+    document.getElementById("ctx").innerHTML =
+      '<div class="sb"><div class="tbar"><span class="ic">&#9636;</span><span>Printer</span></div>' +
+      '<div class="body"><div class="cards">' +
+      '<div class="pcard printer"><div class="top"><span class="thumb">U1</span></div>' +
+      '<div class="foot"><span class="ic">&#9662;</span><span class="v">Snapmaker U1 (0.4 nozzle) - multiACE</span></div></div>' +
+      '<div class="pcard plate"><span class="info">&#9432;</span><div class="top">' + thumb(p, 44, 40) + '</div>' +
+      '<div class="foot"><span class="ic">&#9662;</span><span class="v">' + p.u1 + '</span></div></div>' +
+      '<div class="pcard sync"><span style="font-size:19px;color:var(--sb-dim)">&#8635;</span>' +
+      '<span style="font-size:12px">Sync info</span></div></div>' +
+      '<div class="picker">' + PLATES.slice(0,4).map(function(q, i){
+        return '<div class="pick" data-i="' + i + '" aria-pressed="' + (i === sel) + '">' +
+               thumb(q, 40, 36) + '<span class="lb">' + q.u1 + '</span></div>';
+      }).join("") + '</div></div></div>';
+
+    Array.prototype.forEach.call(document.querySelectorAll("#segFinish button"), function(b){
+      b.setAttribute("aria-pressed", String(b.dataset.f === coolFinish));
+    });
+    document.getElementById("shapeOpts").innerHTML = Object.keys(SHAPES).map(function(k){
+      var m = SHAPES[k], keep = shape;
+      shape = k;
+      var big = thumb(PLATES[2], 86, 91), small = thumb(PLATES[2], 44, 40);
+      shape = keep;
+      return '<button class="opt" data-shape="' + k + '" aria-pressed="' + (shape === k) + '">' +
+             '<span class="nm">' + m[0] + '</span>' +
+             '<span class="shots">' + big + small + '</span>' +
+             '<span class="why">' + m[2] + '</span></button>';
+    }).join("");
+    document.getElementById("allrows").innerHTML = PLATES.map(function(q){
+      var has = !!q.img;
+      var st = (q.key === "stack") ? '<span class="chip warn">third-party art</span>'
+             : has ? '<span class="chip ok">in scope</span>'
+                   : '<span class="chip no">advanced mode — later</span>';
+      return '<tr><td class="mono"><b>' + q.en + '</b></td><td><b>' + q.u1 + '</b></td>' +
+             '<td>' + q.gen + '</td><td>' + thumb(q, 40, 36) + '</td><td>' + st + '</td></tr>';
+    }).join("");
+  }
+
+  document.addEventListener("click", function(e){
+    var fin = e.target.closest("[data-f]");
+    if (fin) { coolFinish = fin.dataset.f; render(); return; }
+    var sh = e.target.closest("[data-shape]");
+    if (sh) { shape = sh.dataset.shape; render(); return; }
+    var t = e.target.closest("[data-i]");
+    if (!t) return;
+    sel = +t.dataset.i; render();
+  });
+  render();
+})();
+</script>
