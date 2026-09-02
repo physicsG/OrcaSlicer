@@ -58,24 +58,45 @@ Asked before anything was sent, which is the order that matters.
 | idle machine | `ok` in **109 ms** |
 | running print | `print_stats` goes `printing` → `cancelled` in **~10 s** |
 
-**But the request times out first.** On a running print `sw_MachinePrintCancel` did not
-answer inside the client's 15 s window:
+On the running print the request itself **timed out at the client's 15 s** while the
+machine stopped. The first reading of that was *"this firmware does not answer a cancel"*
+— one data point and a guess, and wrong.
 
-```
--> sw_MachinePrintCancel
-   FAILED sw_MachinePrintCancel timed out after 15000ms
-print_stats:  0ms "printing"   10000ms "cancelled"
-```
+### Klipper runs G-code sequentially, and the cancel queues behind it
 
-The machine stopped. The *reply* never came. **A control that reports the outcome from
-the reply would tell the operator the cancel failed while the print was stopping** — and
-this is `CMD.PRINT_CANCEL`, the same command the Device page's task panel sends, so the
-finding is not confined to this surface.
+The better explanation, and it is testable without printing anything. `G4` is a dwell: it
+blocks the queue for a known time and moves nothing, heats nothing, extrudes nothing.
 
-The fix is the one this project already has for exactly this shape: confirm against
-`print_stats`, not against the ack — `shared/js/pending.js`, whose whole reason for
-existing is that an instant `ok` and a silently-ignored command look identical. **Not yet
-applied**; it touches the Device page's task panel and is a decision of its own.
+| queue | `sw_MachinePrintCancel` round trip |
+|---|---|
+| empty | **197 ms** |
+| behind `G4 P3000` | **3323 ms** |
+| behind `G4 P6000` | **6213 ms** |
+
+The round trip is **the queue plus about a quarter of a second**, every time. So the
+cancel on that print was never lost: it was queued behind the homing move a starting job
+makes, and the client gave up while the firmware was still working through it.
+
+`drive/cancel-latency-real.js` is the measurement, and it moves nothing.
+
+### The consequence: two clocks, not one
+
+`u1_bridge.py` learned this once already — its `RPC_TIMEOUT` is 80 s, set after a 31 s
+toolchange came back as *"the printer refused the command"*. The page's own client was
+still at 15 s for everything, which is the same lesson one layer up, unlearned.
+
+`shared/js/sswcp.js` now waits on two clocks, split by `PRINTER_BACKED` — the set that
+already classifies which replies come back through the printer's envelope:
+
+| | |
+|---|---|
+| Orca answers it | 15 s. It comes back in milliseconds or not at all. |
+| the printer answers it | 80 s, matching the bridge. It comes back when the queue drains. |
+
+**Confirming against `print_stats` rather than against the ack is still the right
+belt-and-braces** — `shared/js/pending.js` exists for exactly that shape — but it is no
+longer the only thing standing between an operator and a cancel that reports failure
+while it works.
 
 ## What the machine was holding
 
@@ -141,6 +162,9 @@ curl -X DELETE "http://<ip>:7125/server/files/gcodes/<plate>.gcode"
 
 ## Still not proven
 
+- **A cancel measured against a real homing move.** The queue explanation is measured with
+  `G4`; that a starting print's homing is what filled the queue is inference from the
+  timing, not a separate observation.
 - **A print left to run.** Everything here is cancelled within seconds; no plate has been
   taken to completion, so nothing downstream of the first layer has been seen.
 - **The cloud path.** `sw_StartCloudPrint`, `server.files.pull` and the S3 upload are

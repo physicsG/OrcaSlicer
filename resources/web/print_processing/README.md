@@ -218,11 +218,10 @@ procedure is the `u1-hardware-test` skill.
 
 ## Honest limits
 
-- **A cancel that works still reports failure.** `sw_MachinePrintCancel` does not answer
-  inside the client's 15 s on a running print, though the machine stops in ~10. Anything
-  reading the outcome off the reply gets it wrong — and that is `CMD.PRINT_CANCEL`, the
-  Device page's command too. The fix is `shared/js/pending.js`, which exists for this
-  exact shape; not applied yet, because it touches the task panel.
+- **Confirming a machine command against its ack is still wrong**, even though the
+  timeout that made it visible is fixed. `shared/js/pending.js` exists for that shape and
+  the print dialog uses it for the mapping and the preferences; the Device page's task
+  panel still reads a cancel's outcome off the reply.
 - **No plate has been left to run.** Everything is cancelled within seconds, so nothing
   past the first moments of a job has been observed.
 - **The cloud path is untouched** — `sw_StartCloudPrint`, `server.files.pull` and the S3

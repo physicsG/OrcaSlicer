@@ -30,6 +30,7 @@ nobody runs.
 | `print-dialog-real.js` | The same dialog against `u1_bridge.py` with a **real sliced plate** (`--gcode`) and no printer (`--device-ip 192.0.2.1`). The filament list, the weights and the thumbnail all come out of the file Orca's own slicer wrote, so this is the Orca half on real data rather than a fixture. **Read-only on purpose**: the send path ends in `sw_StartLocalPrint`. 15 checks. |
 | `print-dialog-machine.js` | The dialog against a **connected U1**, and the first thing here to see one. Prints `print_task_config` and the extruder objects raw — this surface had never seen either from hardware — then checks the refusal rule against whatever the machine actually holds, recomputed from the raw objects so a bug in the page cannot make it agree with itself. **Read-only**: it opens the picker and never picks. |
 | `print-cancel-real.js` | Whether `sw_MachinePrintCancel` reaches this firmware, asked **before** anything is sent to it. Refuses outright if a print is in progress. Proves the route and the round trip; it cannot prove a running print stops, and says so. |
+| `cancel-latency-real.js` | Why a machine command answered slowly. Blocks Klipper's queue with `G4` — a dwell, so **nothing moves** — and times a cancel behind it. Measured `dwell + ~250 ms` every time, which is what turned "this firmware does not answer a cancel" into "the client's clock was too short". Run it before concluding a command was ignored. |
 
 ```bash
 R=resources/web/shared/tests

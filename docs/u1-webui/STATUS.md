@@ -1217,9 +1217,12 @@ Then, in rough order of value:
    [03-print-processing/05-hardware-e2e.md](03-print-processing/05-hardware-e2e.md) and
    the procedure is the `u1-hardware-test` skill.
 
-   What remains: **a cancel that works still reports failure** - the request times out at
-   15 s while the machine stops in ~10 - and that is `CMD.PRINT_CANCEL`, the Device page's
-   command too. No plate has been left to run, and the cloud path is untouched.
+   A cancel that worked reported failure, and the reason turned out to be the client's
+   own clock: Klipper runs G-code sequentially, so a command queues behind whatever is in
+   flight - measured at **dwell + ~250 ms** with `G4` blocking the queue. `sswcp.js` now
+   waits 80 s for a `PRINTER_BACKED` command and 15 s for one Orca answers, which is the
+   split `u1_bridge.py` already made. No plate has been left to run, and the cloud path is
+   untouched.
 
 6. **`sw_DeleteMachineFile` is implemented in Orca and unreferenced here.** Storage
    deliberately has no delete for print files — Delete sat a few pixels from a one-click
