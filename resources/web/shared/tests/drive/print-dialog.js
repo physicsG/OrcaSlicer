@@ -32,8 +32,19 @@
         + `toolheads ${pp.model.toolheads.length}`);
     say('');
 
-    /* ---- the sections, in the bundle's order ---- */
+    /* ---- the sections, in the bundle's order ----
+       ?path=5 drops the print half entirely, which is the whole difference between the
+       two routes. Run this script against both URLs; it checks whichever it is on. */
     const ids = qq('#body .card, #body .bare').map((n) => n.id).join(',');
+    if (pp.route === 'upload') {
+      check('upload-only keeps two sections', ids, 'panel-model-info,panel-printer');
+      check('and no filament cards', qq('.fil-card').length, 0);
+      check('and no preferences', qq('.pref').length, 0);
+      check('and no nozzle banner', qq('.nozzle-warn').length, 0);
+      check('Send is still offered', q('.send').disabled, false);
+      window.__report = L.join('\n');
+      return;
+    }
     check('five sections, in A.bi3 order', ids,
           'panel-model-info,panel-printer,panel-filament,panel-preferences,panel-nozzle');
 

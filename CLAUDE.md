@@ -250,29 +250,48 @@ else**. Full rationale: [docs/u1-webui/02-device-page/09-restructure.md](docs/u1
 
 ### The print-processing popup (`resources/web/print_processing/`)
 
-The other embedded surface, and the one being worked on now. **It is not shippable and
-the reason is not polish.** It reads `mapping.filaments[i]` — a shape
-`sw_GetFileFilamentMapping` has never returned; the reply is **parallel arrays**
-(`filament_type[]`, `filament_color_rgba[]`, `filament_weight[]`, `nozzle_diameters[]`,
-`filament_extruder_map`, and `thumbnails[]`, **the rendered plate**, which the popup draws
-as a grey box). Only its own mock returns `filaments[]`, so it renders four rows against
-the simulator and none against Orca — the failure this file already warns about, arrived
-at by writing the mock from the same head as the client instead of from the handler. The
-send would fail too: `sw_StartLocalPrint` refuses `{}` and wants `{ type, path }`. And the
-file is fetched with `sw_GetPrintZip`, which serialises a `std::vector<char>` — a 12 MB
-zip crosses as ~40 MB of JSON integers, where **`sw_GetFileStream` returns a URL, a size
-and a SHA-256** and the upload is the page's own multipart POST to `/server/files/upload`,
-so **the progress bar can be a byte count** instead of the `setTimeout` it is. All of it,
-with the C++ line numbers, is
-[docs/u1-webui/03-print-processing/04-requirements.md](docs/u1-webui/03-print-processing/04-requirements.md).
+The other embedded surface, **rebuilt from the shipped one** rather than from a design.
+The widget tree is all in `main.dart.js` and the constants resolve, so
+[the specification](docs/u1-webui/03-print-processing/original-dialog-mockup.html) is
+measurement: `B.ch = EdgeInsets.all(12)`, `B.m4 = BoxConstraints(120,180,0,inf)`, the
+80 x 100 filament card, the three dropdowns' item heights and offsets. `check_mockup.py`
+holds the mockup to those numbers and `drive/print-dialog.js` holds the page to the same
+ones after a real layout.
 
-**The shape is an open decision, and three are built** —
-[`print_processing/mockups/`](resources/web/print_processing/mockups/): *faithful* (the
-shipped four cards, corrected), *match sheet* (the mapping is the page, both sides drawn),
-*preflight* (checks that resolve themselves). All three run the same fixture and the same
-corrected send at the true 714 × 750, with `?scenario=` and `?mode=` switchable. Pick one
-before restructuring; the restructure then lifts the Device page's `registry.js`, panel
-folders and `pending`/`render` across, which is what would prove they generalise.
+**Three things the shipped dialog does that no screenshot showed**, because both captures
+were taken with the filament section empty: Edit Filament is a **Wrap of 80 x 100 cards**,
+not rows; there is a **fifth section**, a nozzle-mismatch banner (`A.R5`); and **a
+toolhead whose type or nozzle does not match is passed `enabled: false` and cannot be
+picked at all** - half opacity, a warning icon and one of two tooltips. That last one is
+behaviour, and the drive script checks it by clicking a refused item and asserting
+nothing moved.
+
+**The two sources are never derived from each other.** The FILE's filaments come from
+`sw_GetFileFilamentMapping` - **parallel arrays**, and the plate thumbnail - and the
+MACHINE's from `print_task_config` plus each extruder's `nozzle_diameter`. The bundle
+names `sw_GetMachineFilamentMapping` for the machine side and Orca does not implement it.
+A file filament's nozzle is the one **inferred** thing here: `nozzle_diameters` is
+per-extruder and `filament_type` per-filament, and a real plate reports seven of one and
+four of the other.
+
+**One mock for both surfaces**, in `shared/js/mockhost.js`: the U1 *and* Orca's half of
+this dialog, with the file's filaments and the machine's on one `printer` object. A
+surface-local mock that invented both lists could never report a mismatch - it would be
+testing its own fixture. It also enforces the host's preconditions, so
+`sw_StartLocalPrint` refuses `{}` there exactly as the C++ does.
+
+**Testing it against a real U1** needs a real plate, because outside Orca there is none:
+
+```bash
+R=resources/web/shared/tests
+python3 $R/run_webkit.py --real --size 714x750 --watch \
+    --gcode ~/models/plate_1.gcode --page web/print_processing/index.html
+```
+
+`u1_bridge.py` parses the file's own trailing metadata to answer Orca's half.
+`sw_StartLocalPrint` is refused unless `--allow-print` is passed: it starts a print, and a
+suite that can start a print is a suite that will. The whole account is
+[resources/web/print_processing/README.md](resources/web/print_processing/README.md).
 
 Iterate on it with `run_webkit.py`, which drives the real page in **WebKitGTK — the
 engine Orca's own webview uses**. It needs a display (WSLg provides one); playwright and
