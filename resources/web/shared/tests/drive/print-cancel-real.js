@@ -69,7 +69,7 @@
     let failed = null;
     const t0 = Date.now();
     try {
-      reply = await pp.bridge.request('sw_MachinePrintCancel', {});
+      reply = await pp.bridge.request(pp.CMD.PRINT_CANCEL, {});
     } catch (e) {
       failed = e.message;
     }

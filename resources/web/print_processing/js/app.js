@@ -24,7 +24,7 @@ import { Pending } from '../../shared/js/pending.js';
 import { installMock } from './core/mock.js';
 import { buildShell } from './core/shell.js';
 import { readJob, subscribeState, fileFilaments, machineToolheads,
-         nozzleMismatch, initialAssignment } from './core/session.js';
+         nozzleMismatch, initialAssignment, matchOf } from './core/session.js';
 import { runSend, close as closeDialog, SEND_STATE, BUSY } from './core/send.js';
 import { closePicker } from './widgets/picker.js';
 import { makeTrace } from '../../shared/js/trace.js';
@@ -59,6 +59,7 @@ const model = {
 };
 
 let bridge = null;
+let mockHost = null;
 let mounted = [];
 let trace = () => {};
 
@@ -243,7 +244,7 @@ async function boot() {
 
   let mock = null;
   if (WANT_MOCK || !Sswcp.hasHost()) {
-    mock = installMock({
+    mockHost = mock = installMock({
       log: trace,
       onDialogClose: (ok) => say(ok ? 'dialog closed: success' : 'dialog closed: canceled',
                                  ok ? 'ok' : 'warn'),
@@ -312,6 +313,32 @@ async function bringUpMachine() {
   render();
 }
 
+/**
+ * The simulator's stand-in for the printer's HTTP upload.
+ *
+ * It reports progress in the same shape `XMLHttpRequest.upload.onprogress` does, at a
+ * pace fast enough not to slow a suite down. It is not pretending the upload succeeded
+ * on a machine - there is no machine - it is letting the sequence around it be tested.
+ */
+async function simulatedUpload({ blob, filename, onProgress, onReply }) {
+  const total = (blob && blob.size) || 1;
+  for (let i = 1; i <= 8; i++) {
+    if (onProgress) onProgress(Math.round((total * i) / 8), total);
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  // Moonraker's own 201 shape, measured on 811002511261022618B3: `path` and `root` are
+  // separate fields and `path` carries NO root prefix. The send reads the stored path
+  // back off this rather than constructing one, so the simulator has to answer in the
+  // same shape or it stops testing that.
+  const body = JSON.stringify({
+    action: 'create_file',
+    item: { path: filename, root: 'gcodes', size: total,
+            modified: Date.now() / 1000, permissions: 'rw' },
+  });
+  if (onReply) onReply(201, body);
+  return body;
+}
+
 /* ---- the send --------------------------------------------------------- */
 async function doSend() {
   closePicker();
@@ -320,6 +347,14 @@ async function doSend() {
     bridge,
     device: model.device,
     withPrintSetup: WITH_PRINT_SETUP,
+    /*
+     * The upload is a POST to the PRINTER, so against the simulator there is nothing on
+     * the other end - the simulated U1 answers MQTT, not HTTP. `runSend` takes the
+     * upload as a seam for exactly this: the simulator supplies one that reports the
+     * same byte progress a real one would, so the whole sequence runs end to end
+     * without a machine. Against a real host this is undefined and the real POST goes.
+     */
+    upload: mockHost ? simulatedUpload : undefined,
     onState: (s, detail) => {
       model.send.state = s;
       model.send.detail = detail || '';
@@ -327,6 +362,9 @@ async function doSend() {
       render();
     },
     onProgress: (f) => { model.send.progress = f; render(); },
+    // The wire, kept where a --drive script can read it. This surface's send has never
+    // been observed against a machine, so what each step ANSWERED is the evidence.
+    onNote: (m) => { trace('send', { note: m }); said.push(`send: ${m}`); },
   });
   if (ok) say('sent', 'ok');
 }
@@ -349,6 +387,14 @@ window.__preprint = {
   ctx, render, mock: null, ready: false,
   /** What the page has reported, in order. See `say`. */
   get said() { return said; },
+  /* The rules a --drive script needs to reason about the same things the page does,
+     rather than reimplementing them and agreeing with itself by accident. */
+  session: { matchOf },
+  /* The command table, so a script names a command the way the page does. A drive
+     script that spells `sw_MachinePrintCancel` itself is one rename away from testing
+     nothing - and the cancel is the same command the Device page's task panel sends,
+     `CMD.PRINT_CANCEL`, not a second one belonging to this surface. */
+  CMD,
   /** Cancelling takes the close protocol's other outcome. */
   cancel: () => closeDialog(bridge, MAPPING_STATUS.CANCELED),
 };

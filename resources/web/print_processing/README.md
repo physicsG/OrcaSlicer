@@ -206,13 +206,29 @@ firmware in 109 ms and answers `ok` on an idle machine. That is the route, not a
 been caught by that before. **That a running print stops has not been shown** and cannot
 be without running one.
 
+**The send path ran end to end**, and settled the two things Orca's source could not say.
+The upload is a cross-origin multipart POST and answers `HTTP 201` with the item it
+created; `start_local_print` wants that reply's `item.path` **without** the root glued on
+(`gcodes/x.zip` gives `File not found`); and the firmware unpacks the archive, so the
+start reply names the inner `.gcode`. A print was started and cancelled — `print_stats`
+went `printing` → `cancelled` in about ten seconds, **while the cancel request itself
+timed out**. All of it, with the wire, is
+[05-hardware-e2e.md](../../../docs/u1-webui/03-print-processing/05-hardware-e2e.md); the
+procedure is the `u1-hardware-test` skill.
+
 ## Honest limits
 
-- **Nothing in the send path past `sw_GetFileStream` has run against a machine.** The
-  upload is a multipart POST the page makes itself and has never been made; `type` and
-  `path` for `sw_StartLocalPrint` are unverified against this firmware. The bridge gates
-  that command behind `--allow-print` for exactly this reason.
-- **A running print has never been cancelled** — see above.
+- **A cancel that works still reports failure.** `sw_MachinePrintCancel` does not answer
+  inside the client's 15 s on a running print, though the machine stops in ~10. Anything
+  reading the outcome off the reply gets it wrong — and that is `CMD.PRINT_CANCEL`, the
+  Device page's command too. The fix is `shared/js/pending.js`, which exists for this
+  exact shape; not applied yet, because it touches the task panel.
+- **No plate has been left to run.** Everything is cancelled within seconds, so nothing
+  past the first moments of a job has been observed.
+- **The cloud path is untouched** — `sw_StartCloudPrint`, `server.files.pull` and the S3
+  upload. This is the LAN route only.
+- **Whether a started job honours the mapping and the preferences** has not been checked.
+  The macros are written and acknowledged; that is not the same thing.
 - **The multi-plate Model Information layout is not built.** `A.J9` has a second
   branch for a file with `partitions`, and `sw_GetFileFilamentMapping` as Orca
   implements it has no such key — the branch is unreachable through this host. It is

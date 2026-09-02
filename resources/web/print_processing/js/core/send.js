@@ -58,7 +58,7 @@ export const BUSY = new Set([SEND_STATE.PACKAGING, SEND_STATE.UPLOADING,
  * testing its own stub. A drive script hands in an XHR whose `upload` emits what it
  * wants to see.
  */
-export function uploadToPrinter({ url, blob, filename, onProgress, xhrFactory }) {
+export function uploadToPrinter({ url, blob, filename, onProgress, xhrFactory, onReply }) {
   return new Promise((resolve, reject) => {
     const xhr = (xhrFactory || (() => new XMLHttpRequest()))();
     xhr.open('POST', url, true);
@@ -67,9 +67,15 @@ export function uploadToPrinter({ url, blob, filename, onProgress, xhrFactory })
       // have is how a bar comes to move on its own.
       if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total);
     };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300
-      ? resolve(xhr.responseText)
-      : reject(new Error(`upload failed: HTTP ${xhr.status}`)));
+    xhr.onload = () => {
+      // The host's own answer, kept rather than discarded. A 2xx is not proof the file
+      // landed: Moonraker replies about what it stored and WHERE, and the first real
+      // upload from this page produced a 2xx with no file on the printer afterwards.
+      if (onReply) onReply(xhr.status, String(xhr.responseText || '').slice(0, 400));
+      if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.responseText);
+      else reject(new Error(`upload failed: HTTP ${xhr.status} `
+                            + `${String(xhr.responseText || '').slice(0, 200)}`));
+    };
     xhr.onerror = () => reject(new Error('upload failed: network error'));
     const form = new FormData();
     form.append('file', blob, filename);
@@ -87,8 +93,8 @@ export function uploadToPrinter({ url, blob, filename, onProgress, xhrFactory })
  * itself can be driven without a printer, a host or a network.
  */
 export async function runSend(deps) {
-  const { bridge, device, onState, onProgress, fetchFn = fetch, upload = uploadToPrinter,
-          withPrintSetup = true } = deps;
+  const { bridge, device, onState, onProgress, onNote, fetchFn = fetch,
+          upload = uploadToPrinter, withPrintSetup = true } = deps;
   const set = (s, detail) => onState && onState(s, detail);
 
   try {
@@ -106,21 +112,44 @@ export async function runSend(deps) {
     set(SEND_STATE.UPLOADING);
     const host = printerHost(device);
     if (!host) throw new Error('no printer address to upload to');
-    await upload({
-      url: `${host}/server/files/upload`,
+    const uploadUrl = `${host}/server/files/upload`;
+    if (onNote) onNote(`POST ${uploadUrl} (${stream.file_name}, ${blob.size} bytes)`);
+    const uploaded = await upload({
+      url: uploadUrl,
       blob,
       filename: stream.file_name,
       onProgress: (loaded, total) => onProgress && onProgress(loaded / total, loaded, total),
+      onReply: (status, body) => onNote && onNote(`upload -> HTTP ${status} ${body}`),
     });
     onProgress && onProgress(1, stream.origin_size, stream.origin_size);
+
+    /*
+     * WHERE THE FILE WENT, according to the machine rather than according to us.
+     *
+     * Moonraker answers a 201 with the item it created, and `path` and `root` are
+     * SEPARATE fields:
+     *
+     *     {"action":"create_file","item":{"path":"plate.zip","root":"gcodes",…}}
+     *
+     * Sending `gcodes/plate.zip` - the root glued onto the front, which is the obvious
+     * guess and what this did first - got `File not found: gcodes/plate.zip` from
+     * `server.files.start_local_print` on 811002511261022618B3. The upload had worked;
+     * only the name was wrong. Reading it back off the reply beats constructing it.
+     */
+    const stored = storedPath(uploaded) || stream.file_name;
 
     if (withPrintSetup) {
       set(SEND_STATE.STARTING);
       // The two parameters the handler will not run without.
-      await bridge.request(CMD.START_LOCAL_PRINT, {
-        type: 'local',
-        path: `gcodes/${stream.file_name}`,
-      });
+      /*
+       * INFERRED, and the last unverified pair on this surface. The handler passes
+       * `m_param_data` straight through to `server.files.start_local_print`, so what
+       * this firmware wants for `type` and `path` is not in Orca's source at all.
+       */
+      const startWith = { type: 'local', path: stored };
+      if (onNote) onNote(`sw_StartLocalPrint ${JSON.stringify(startWith)}`);
+      const started = await bridge.request(CMD.START_LOCAL_PRINT, startWith);
+      if (onNote) onNote(`start -> ${JSON.stringify(started)}`);
     }
 
     await report(bridge, 'success');
@@ -150,6 +179,17 @@ async function report(bridge, status) {
 export async function close(bridge, status) {
   await bridge.request(CMD.SET_FILAMENT_MAPPING_COMPLETE, { status });
   await bridge.request(CMD.FINISH_FILAMENT_MAPPING, {});
+}
+
+/** The path Moonraker says it stored the file at. Its own words, not our arithmetic. */
+export function storedPath(responseText) {
+  try {
+    const j = JSON.parse(responseText);
+    const item = j && j.item;
+    return (item && item.path) || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 /**

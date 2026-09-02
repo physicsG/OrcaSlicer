@@ -1210,9 +1210,16 @@ Then, in rough order of value:
    from the file rather than a fixture. `sw_StartLocalPrint` is gated behind
    `--allow-print`.
 
-   What remains: **nothing past `sw_GetFileStream` has been observed with a machine
-   answering.** The upload is a multipart POST the page makes itself and has never been
-   made. One session with a U1 on the LAN settles it.
+   **It has now run end to end against 811002511261022618B3** - upload, start, print,
+   cancel - which settled the send contract Orca's source does not contain and found a
+   bug the simulator could not: an identity fallback that placed two filaments on
+   toolheads the picker itself refuses. The account is
+   [03-print-processing/05-hardware-e2e.md](03-print-processing/05-hardware-e2e.md) and
+   the procedure is the `u1-hardware-test` skill.
+
+   What remains: **a cancel that works still reports failure** - the request times out at
+   15 s while the machine stops in ~10 - and that is `CMD.PRINT_CANCEL`, the Device page's
+   command too. No plate has been left to run, and the cloud path is untouched.
 
 6. **`sw_DeleteMachineFile` is implemented in Orca and unreferenced here.** Storage
    deliberately has no delete for print files — Delete sat a few pixels from a one-click

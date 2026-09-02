@@ -20,6 +20,9 @@ import { OK_CODE } from './sswcp.js';
 
 const TICK_MS = 1000;
 
+/** An empty but structurally valid zip, so the send path has something to fetch. */
+const ZIP_STUB = 'UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==';
+
 /** A 1x1 PNG, so thumbnail plumbing can be exercised without real artwork. */
 const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
@@ -545,8 +548,18 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
         case 'sw_GetFileStream': {
           const j = printer.job;
           const zip = j.filename.replace(/\.gcode$/, '.zip');
+          /*
+           * A FETCHABLE url. It used to be `http://127.0.0.1:0/…` - port zero, which
+           * nothing serves - so `fetch` failed with "Load failed" and the send path
+           * could not be exercised in the simulator at all. That went unnoticed because
+           * no check had ever pressed Send here; the first thing to try it was a script
+           * being smoke-tested before it ran against a real machine.
+           *
+           * A `data:` URL is the honest stand-in: the page fetches it and gets a blob,
+           * which is all it does with Orca's own localhost URL.
+           */
           return ok({ file_name: params.is_zip ? zip : j.filename,
-                      file_url: `http://127.0.0.1:0/wcp/download/mock-${encodeURIComponent(zip)}`,
+                      file_url: `data:application/zip;base64,${ZIP_STUB}`,
                       origin_size: j.sizeBytes,
                       checksum: j.checksum });
         }
