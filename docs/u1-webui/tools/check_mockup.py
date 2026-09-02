@@ -2175,8 +2175,65 @@ CHECKS["original-dialog-mockup.html"] = r"""
       qq('#dlg .card > .title').map(e=>e.firstChild.textContent).join('/') : '',
       'Model Information/Select Printer');
 
+  // ---- the three dropdown menus ----
+  // DropdownButton2 geometry: MenuItemStyleData(height,padding) + DropdownStyleData
+  // (maxHeight,width,padding,decoration,elevation,offset). Every number is a constant.
+  seg('data','four'); seg('dev','one');
+
+  seg('menu','printer');
+  const pm=q('#dlg .menu.m-printer');
+  say('printer menu is 300 wide', Math.round(R(pm).width), 300);
+  say('printer items are 50 tall (B.aqV)', Math.round(R(pm.children[0]).height), 50);
+  say('printer item padding is 16 (B.c8)', getComputedStyle(pm.children[0]).paddingLeft, '16px');
+  say('the saved devices plus the synthetic add-device row', pm.children.length, 3);
+  say('the connected one carries a green check',
+      getComputedStyle(pm.querySelector('.tick')).color, 'rgb(76, 175, 80)');
+  say('add device carries no Lan Mode label',
+      pm.children[2].querySelector('.lan'), null);
+
+  seg('menu','head');
+  const hm=q('#dlg .menu.m-head');
+  say('toolhead menu is 200 wide', Math.round(R(hm).width), 200);
+  say('toolhead items are 48 tall (B.aqU)', Math.round(R(hm.children[0]).height), 48);
+  say('toolhead menu caps at 300', parseInt(getComputedStyle(hm).maxHeight,10), 300);
+  say('and is radius 8', getComputedStyle(hm).borderTopLeftRadius, '8px');
+  // offset (-50, 0) off the trigger's left edge. The trigger sits inside a flex
+  // row, so its left edge is fractional; allow the one pixel that costs.
+  say('offset is -50 from the trigger (B.asz)',
+      Math.abs((R(hm).left - R(q('#trg-head')).left) + 50) <= 1, true);
+  say('one item per toolhead', hm.children.length, 4);
+  // a head matches on type AND nozzle; head 3 is NONE, head 4 has a 0.2 nozzle
+  say('two heads are unpickable', qq('#dlg .menu.m-head .mitem[aria-disabled="true"]').length, 2);
+  say('a NONE head gets its own tooltip', hm.children[2].title, 'dialog_filament_type_none_tips');
+  say('a wrong-nozzle head gets the other', hm.children[3].title, 'dialog_filament_type_not_match_tips');
+  say('a matching head has no tooltip', hm.children[0].title, '');
+  say('the assigned head carries a check', !!hm.children[0].querySelector('.tick'), true);
+  say('every unpickable head carries a warning',
+      qq('#dlg .menu.m-head .mitem[aria-disabled="true"] .warnic').length, 2);
+
+  seg('menu','plate');
+  say('opening the plate menu switches Model Information to its partitions layout',
+      q('#seg-mi button[aria-pressed="true"]').dataset.v, 'multi');
+  const qm=q('#dlg .menu.m-plate');
+  say('plate items are 80 tall (B.aqW)', Math.round(R(qm.children[0]).height), 80);
+  say('plate item padding is LTRB(8,6,8,6) (B.rT)',
+      [getComputedStyle(qm.children[0]).paddingTop,
+       getComputedStyle(qm.children[0]).paddingLeft].join('/'), '6px/8px');
+  say('plate menu caps at 480', parseInt(getComputedStyle(qm).maxHeight,10), 480);
+  say('and rounds only its bottom corners (B.VC)',
+      [getComputedStyle(qm).borderTopLeftRadius,
+       getComputedStyle(qm).borderBottomLeftRadius].join('/'), '0px/4px');
+  say('plate menu is as wide as its button',
+      Math.round(R(qm).width), Math.round(R(q('#trg-plate')).width));
+  say('the plate button is 90 tall', Math.round(R(q('#trg-plate')).height), 90);
+  say('the selected plate carries a check', !!qm.children[0].querySelector('.tick'), true);
+  say('a plate row lists its filaments as chips',
+      qm.children[0].querySelectorAll('.chip').length, 4);
+  seg('menu','none');
+  say('closing removes every menu', qq('#dlg .menu').length, 0);
+
   // ---- as captured: no filament data ----
-  seg('route','print'); seg('data','empty');
+  seg('mi','single'); seg('route','print'); seg('data','empty');
   say('with no filament requirements the grid is empty, as both captures show',
       qq('#dlg .fcard').length, 0);
   say('but the section is still drawn', qq('#dlg .card').length, 4);
