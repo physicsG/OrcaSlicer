@@ -96,6 +96,12 @@
       check('every device row carries an address',
             metas.length > 0 && metas.every((t) => /\d+\.\d+\.\d+\.\d+/.test(t)), true);
       say(`  device rows: ${JSON.stringify(metas)}`);
+      // Ellipsised is not shown. The row is 300 wide and the address is ~24 characters;
+      // if it does not fit, the line that was added to disambiguate two rows cannot.
+      const clipped = qq('.menu-printer .dev-meta')
+        .filter((n) => n.scrollWidth > n.clientWidth + 1);
+      check('and none of them is truncated',
+            clipped.map((n) => n.textContent).join(' | '), '');
       check('the connected one carries a check', qq('.menu-printer .menu-tick').length, 1);
     }
     q('.picker').click();

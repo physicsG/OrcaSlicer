@@ -94,7 +94,10 @@ export function mount(root, ctx) {
           t.appendChild(m);
         }
         node.appendChild(t);
-        node.appendChild(el('span', 'menu-grow'));
+        // No spacer: `.dev-text` is the flexible child and pushes the tick right on its
+        // own. Keeping the old `menu-grow` beside it left TWO `flex: 1` children sharing
+        // the row, so the address was ellipsised to "Lan Mode · 19..." with half the
+        // menu standing empty next to it.
         if (d[DEVICE.CONNECTED]) node.appendChild(el('span', 'menu-tick'));
       },
     }));
