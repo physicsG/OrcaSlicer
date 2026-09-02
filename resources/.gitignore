@@ -1,0 +1,7 @@
+# Where run_webkit.py drops a packaged plate so the page can fetch it.
+#
+# `sw_GetFileStream` hands the page a URL rather than the bytes, so the zip has to be
+# reachable over HTTP - the harness copies it under the directory it is already serving,
+# which is THIS one. It first went in resources/web/, one level too deep, and the file
+# showed up untracked on the next commit.
+_bridge_files/
