@@ -186,10 +186,16 @@ function recomputeMachine() {
   // not one per slot. Measured on 811002511261022618B3.
   const table = Array.isArray(tc.extruder_map_table) ? tc.extruder_map_table : null;
   model.filaments.forEach((f) => {
-    const mirror = table && table[f.index] != null
-      ? Number(table[f.index])
-      : model.assignment[f.key];
-    model.assignment[f.key] = pending.resolve(`map:${f.key}`, mirror).value;
+    // `extruder_map_table` is the machine's own map and is always fully populated - it
+    // is 32 entries whether or not a plate is loaded - so it cannot be read as "Orca
+    // assigned this". Only a value the operator or Orca actually chose counts; the
+    // mirror is what a HELD value is confirmed against, not a source of assignments.
+    const held = pending.resolve(`map:${f.key}`,
+                                 table && table[f.index] != null
+                                   ? Number(table[f.index]) : null);
+    if (held.state === 'sent' || held.asked != null) {
+      model.assignment[f.key] = held.value;
+    }
   });
 }
 
@@ -219,7 +225,16 @@ function renderSendBar() {
                        : ROUTE === 'upload' ? 'Send' : 'Send'));
   // A device RECORD is not a printer that answered. Sending to one that never did
   // would fail at the upload, after the dialog had implied the mapping was checked.
-  btn.disabled = busy || s.state === SEND_STATE.DONE || !model.device || !model.connected;
+  /*
+   * Every filament needs a home. This is the page's own gate, not one recovered from
+   * the bundle: the picker already refuses a toolhead that cannot print a filament, so
+   * the only bad state left is one still unassigned - the `!` on the card - and sending
+   * a plate with one would leave the machine to discover it.
+   */
+  const unplaced = WITH_PRINT_SETUP
+    && model.filaments.some((f) => model.assignment[f.key] == null);
+  btn.disabled = busy || s.state === SEND_STATE.DONE || !model.device || !model.connected
+              || unplaced;
 }
 
 /* ---- boot ------------------------------------------------------------- */

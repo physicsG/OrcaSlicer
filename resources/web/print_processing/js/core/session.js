@@ -279,7 +279,17 @@ export function initialAssignment(mapping, filaments) {
   filaments.forEach((f) => {
     const v = map[f.key] != null ? map[f.key] : map[f.index];
     const n = Number(v);
-    out[f.key] = Number.isFinite(n) ? n : f.index;
+    // NOT identity. A filament Orca has no opinion about is UNASSIGNED, which the card
+    // draws as `!` in the warning colour, and which is the bundle's own answer.
+    //
+    // Falling back to `f.index` looked harmless and is not. Against the real machine on
+    // 2026-09-02 the plate wanted PLA in all four while the printer held
+    // ["PLA","PLA","NONE","PETG"], so identity put filament 3 on an empty head and
+    // filament 4 on PETG - two toolheads the picker itself REFUSES - and nothing on
+    // screen said so, because the warning mark means "nothing chosen" and something had
+    // been. An assignment the operator never made should not be one they have to notice
+    // is wrong.
+    out[f.key] = Number.isFinite(n) ? n : null;
   });
   return out;
 }

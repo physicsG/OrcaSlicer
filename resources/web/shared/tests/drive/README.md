@@ -28,6 +28,8 @@ nobody runs.
 | `print-mockups.js` | One of the three **print-dialog mockups**, in the dialog's own 714 × 750. Dumps the tree, then asserts what would be quietly wrong: the plate thumbnail visible without a click *and* decoded, a way to choose a destination per filament, Send agreeing with the scenario, and an edit reaching the model and repainting. Needs `--page`, not the Device page. It found a name column squeezed to 22 px and a lane that had fallen into the wire gutter — neither of which the screenshots showed. |
 | `print-dialog.js` | The rebuilt **print dialog** against the simulator, in the 714 × 750 the host opens. Every geometry assertion is a row of the specification mockup, checked after a real layout; then the behaviour the bundle carries - a toolhead whose type or nozzle does not match is passed `enabled: false` and **cannot be picked**, which this checks by clicking one and asserting nothing moved. 43 checks. |
 | `print-dialog-real.js` | The same dialog against `u1_bridge.py` with a **real sliced plate** (`--gcode`) and no printer (`--device-ip 192.0.2.1`). The filament list, the weights and the thumbnail all come out of the file Orca's own slicer wrote, so this is the Orca half on real data rather than a fixture. **Read-only on purpose**: the send path ends in `sw_StartLocalPrint`. 15 checks. |
+| `print-dialog-machine.js` | The dialog against a **connected U1**, and the first thing here to see one. Prints `print_task_config` and the extruder objects raw — this surface had never seen either from hardware — then checks the refusal rule against whatever the machine actually holds, recomputed from the raw objects so a bug in the page cannot make it agree with itself. **Read-only**: it opens the picker and never picks. |
+| `print-cancel-real.js` | Whether `sw_MachinePrintCancel` reaches this firmware, asked **before** anything is sent to it. Refuses outright if a print is in progress. Proves the route and the round trip; it cannot prove a running print stops, and says so. |
 
 ```bash
 R=resources/web/shared/tests
@@ -48,6 +50,12 @@ python3 $R/run_webkit.py --size 714x750 --drive $R/drive/print-dialog.js \
 python3 $R/run_webkit.py --real --device-ip 192.0.2.1 --size 714x750 \
     --gcode ~/models/plate_1.gcode --page web/print_processing/index.html \
     --drive $R/drive/print-dialog-real.js
+python3 $R/run_webkit.py --real --sn <SN> --size 714x750 --settle 25 \
+    --gcode ~/models/plate_1.gcode --page web/print_processing/index.html \
+    --drive $R/drive/print-dialog-machine.js
+python3 $R/run_webkit.py --real --sn <SN> --size 714x750 --settle 25 \
+    --gcode ~/models/plate_1.gcode --page web/print_processing/index.html \
+    --drive $R/drive/print-cancel-real.js
 python3 $R/run_webkit.py --real --device-ip 192.0.2.1 --drive $R/drive/no-printer.js
 ```
 

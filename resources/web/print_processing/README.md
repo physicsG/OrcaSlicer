@@ -174,13 +174,45 @@ Four things here are not what the previous reconstruction did, each read off the
 4. **Closing is two commands and only the second closes.**
    `sw_SetFilamentMappingComplete` records; `sw_FinishFilamentMapping` ends the modal.
 
+## What a real machine showed
+
+Driven against `811002511261022618B3` on 2026-09-02, Orca closed. It paired over
+`mqtt://…:1884`, exchanged keys, opened `mqtts://…:8883`, attached the engine, and
+`print_task_config` arrived:
+
+```
+filament_type       ["PLA","PLA","NONE","PETG"]
+filament_vendor     ["Jayo","Forshape","NONE","Kingroon"]
+filament_exist      [true,true,false,true]
+extruder .. 3       nozzle 0.4 each
+```
+
+The plate wanted PLA throughout, so the picker offered heads 1 and 2 and refused 3 and 4
+— with the two different tooltips, `_none_tips` for the empty head and `_not_match_tips`
+for the PETG one. The refusal set was recomputed from the raw objects in the drive script
+rather than read off the page, so the page could not agree with itself.
+
+**It found a bug that the simulator could not.** `initialAssignment` fell back to
+*identity* when Orca had no opinion — and this host has none, since
+`filament_extruder_map` is Orca's own config. On this machine that put filament 3 on the
+empty head and filament 4 on PETG: two toolheads **the picker itself refuses**, with
+nothing on screen saying so, because the warning mark means *"nothing chosen"* and
+something had been. Unassigned is now the default, which is the bundle's own answer, and
+Send is refused while any filament has no home.
+
+**Cancel was proven before anything was sent.** `sw_MachinePrintCancel` routes to this
+firmware in 109 ms and answers `ok` on an idle machine. That is the route, not a promise:
+`ok` is what a Klipper macro says to an argument it does not have, and this project has
+been caught by that before. **That a running print stops has not been shown** and cannot
+be without running one.
+
 ## Honest limits
 
-- **Never driven against a connected printer.** The Orca half runs on a real plate, the
-  not-connected branch is covered, and the connect path is exercised as far as
-  `sw_mqtt_connect` — against `192.0.2.1` it fails with `No route to host`, which is the
-  right answer. What has *not* been seen is the other side of that: a machine answering,
-  `print_task_config` arriving, and anything in the send path past `sw_GetFileStream`.
+- **Nothing in the send path past `sw_GetFileStream` has run against a machine.** The
+  upload is a multipart POST the page makes itself and has never been made; `type` and
+  `path` for `sw_StartLocalPrint` are unverified against this firmware. The bridge gates
+  that command behind `--allow-print` for exactly this reason.
+- **A running print has never been cancelled** — see above.
 - **The multi-plate Model Information layout is not built.** `A.J9` has a second
   branch for a file with `partitions`, and `sw_GetFileFilamentMapping` as Orca
   implements it has no such key — the branch is unreachable through this host. It is
