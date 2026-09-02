@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>multiACE print — Option G</title>
+<link rel="stylesheet" href="../../shared/css/base.css">
+<link rel="stylesheet" href="mockup.css">
+<link rel="stylesheet" href="ace-mockup.css">
+<link rel="stylesheet" href="option-g.css">
+</head>
+<body class="mock-dialog">
+
+<!--
+  OPTION G - THE GROUPING, AND A WAY BACK.
+
+  Adapted from another slicer's two-nozzle flow (ui-snapshots-inspiration/Slicing/), whose
+  four steps are: a Slicing Result panel that shows which filaments were GROUPED onto
+  which nozzle and what the grouping saved; a Regroup dialog offering Auto
+  (filament-saving | convenience) or Custom; a Send print job dialog where each filament
+  chip carries the AMS slot it comes from; and a slot picker that greys the AMS that
+  cannot feed that nozzle.
+
+  What that flow has and D, E and F do not is A SECOND DOOR. They treat the plan as fixed
+  and a mismatch as an errand: walk to the printer, move a spool. This one can also change
+  the plan - tell it where the spool actually is, or re-group around what is loaded - and
+  re-slice. On a machine where the fix is three flights of stairs away, that is often the
+  cheaper door.
+
+  It costs a re-slice, and it says so. On an ACE plate BOTH levers need one: the head a
+  filament runs on and the bay it comes from are each written into the gcode, the first as
+  `T<n>` and the second as `ACE_SWAP_HEAD SLOT=`. That is the one place this differs from
+  the flow it is adapted from, where the slot mapping is sent at print time.
+-->
+
+<div class="dlg-title">
+  <span id="title">Print Preprocessing</span>
+  <span class="sub" id="subtitle"></span>
+  <span class="spacer"></span>
+</div>
+
+<div class="dlg-body">
+  <section class="grp" id="s-model"><h3>Model Information</h3>
+    <div class="grp-body"></div></section>
+
+  <section class="grp" id="s-printer"><h3>Printer</h3><div class="grp-body"></div></section>
+
+  <section class="grp" id="s-filament">
+    <h3>Filament<span class="spacer"></span><span class="saving" id="saving"></span></h3>
+    <div class="grp-body"></div>
+  </section>
+
+  <section class="grp" id="s-prefs"><h3>Print Preferences</h3><div class="grp-body"></div></section>
+</div>
+
+<div class="dlg-foot">
+  <div class="bar">
+    <div class="bar-track"><div class="bar-fill" id="fill"></div></div>
+    <div class="bar-label"><span id="stage">Ready</span><b id="pct"></b></div>
+  </div>
+  <button class="primary" id="send">Send</button>
+</div>
+
+<script type="module" src="option-g.js"></script>
+</body>
+</html>

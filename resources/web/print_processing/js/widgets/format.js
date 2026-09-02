@@ -34,6 +34,12 @@ export function grams2(g) {
 }
 
 /** A filament card's own weight is `toStringAsFixed(0) + "g"`. No space, no decimals. */
+/** One decimal, for a purge figure - `40.4 g`. Two would imply a precision nobody has. */
+export function grams1(g) {
+  const n = Number(g);
+  return Number.isFinite(n) && n > 0 ? `${n.toFixed(1)} g` : '—';
+}
+
 export function grams0(g) {
   const n = Number(g);
   return `${Number.isFinite(n) ? n.toFixed(0) : 0}g`;

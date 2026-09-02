@@ -1,0 +1,237 @@
+/*
+ * ace-mockup.css - the machine, drawn, in a 714px dialog.
+ *
+ * Layered on mockup.css (the dialog frame) which is layered on shared/css/base.css (the
+ * tokens). Every number with a source is commented with it; the sources are the Device
+ * page's `.ace-*` rules, the Prepare tab's `SyncMarkBox`, and Bambu Studio's AMS
+ * display, which is where both of those came from.
+ *
+ * WHAT CHANGED FOR THIS SURFACE, AND WHY
+ *
+ * The Device page draws a bay at `--disc: 36px` in an 830px panel. This dialog is 714px
+ * wide with 14px of padding a side, so a full ACE cabinet at that size (310px) plus
+ * three feeder modules (94px each) is 592px plus gaps - it fits, and it is drawn at full
+ * size in option E. Options D and F use `--disc: 28px`, which is the same drawing
+ * scaled, NOT a different one: every proportion here is disc-relative, so the seam still
+ * runs through the middle of the roll and the marks still sit on its edge.
+ */
+
+/* ---- a place: a disc over a name chip --------------------------------- */
+
+.ace-box { --disc: 36px; --pillw: 58px; --pillh: 19px; --bay-gap: 6px; }
+.ace-box.is-small { --disc: 28px; --pillw: 46px; --pillh: 16px; --bay-gap: 5px; }
+
+.place {
+  position: relative;
+  width: calc(var(--pillw) + 4px);
+  flex: 0 0 calc(var(--pillw) + 4px);
+}
+
+/* The checkerboard is this page's word for EMPTY, which is why an occupied bay that
+   nobody has named must never wear it - it gets the solid neutral instead. */
+.ace-disc {
+  position: relative; z-index: 1; margin: 0 auto; display: grid; place-items: center;
+  width: var(--disc); height: var(--disc); border-radius: 50%;
+  font: 500 calc(var(--disc) * .33) / 1 var(--mono); color: #333;
+  box-shadow: 0 0 0 3px var(--panel);
+  background-image:
+    linear-gradient(45deg, #C4C4C4 25%, transparent 25%, transparent 75%, #C4C4C4 75%),
+    linear-gradient(45deg, #C4C4C4 25%, transparent 25%, transparent 75%, #C4C4C4 75%);
+  background-size: 8px 8px; background-position: 0 0, 4px 4px; background-color: #E4E4E4;
+}
+.ace-disc[data-loaded="1"] { background-image: none; }
+
+/* What the PLATE wants of this place, when it is not what is there. A ring behind the
+   disc rather than a swatch beside it: two solid blocks read as two spools, and there is
+   one place with two claims on it. */
+/* The disc carries its own 3px white halo, so a ring at disc+12 leaves 3px showing and
+   reads as a rim on the disc rather than a second mark. Measured in WebKitGTK: at
+   disc+18 there is a 3px gap AND a 3px ring, which is the smallest pair that separates. */
+.place-want {
+  position: absolute; z-index: 0; left: 50%; top: -6px;
+  transform: translateX(-50%);
+  width: calc(var(--disc) + 18px); height: calc(var(--disc) + 18px);
+  border-radius: 50%; border: 3px solid transparent;
+}
+
+.ace-chip {
+  position: relative; z-index: 1; display: block;
+  margin: var(--bay-gap) auto 0;
+  width: var(--pillw); height: var(--pillh); line-height: var(--pillh);
+  border-radius: calc(var(--pillh) / 2);
+  background: #6E6E6E; color: #fff;
+  font-size: calc(var(--pillh) * .62); text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ace-chip.is-unknown { background: #B7BDC6; }
+
+/* Two marks on one roll, two questions. The right one is whether the record may be
+   edited; the left one is whether the spool identified itself over the air. Both
+   absolute, so a spool that has a tag and one that has not occupy the same box. */
+.ace-prov, .ace-tag {
+  position: absolute; z-index: 3; pointer-events: none;
+  top: calc(var(--disc) - 11px);
+  width: 15px; height: 15px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--panel); box-shadow: 0 1px 2px rgba(16, 24, 40, .22);
+}
+.ace-prov { left: calc(50% + var(--disc) / 2 - 11px); color: #4A5563; }
+.ace-tag  { left: calc(50% - var(--disc) / 2 - 4px); color: #16A34A; }
+
+/* ---- the boxes -------------------------------------------------------- */
+
+/* The seam runs through the MIDDLE of the spool as a hard colour stop, so half of every
+   roll is in each half of the box. Disc-relative: widening the gap under the roll moves
+   the chip without moving the seam. */
+.ace-cab, .ace-feed { position: relative; --seam: calc(5px + var(--disc) / 2); }
+.ace-cab-top, .ace-feed-top {
+  position: relative; z-index: 2;
+  width: fit-content; margin: 0 auto;
+  padding: 5px 16px; border-radius: 9px;
+}
+/* Orca's own AMS neutrals: AMS_CONTROL_DEF_BLOCK_BK_COLOUR over AMS_CONTROL_DISABLE_COLOUR. */
+.ace-cab-top {
+  background: linear-gradient(180deg, #EEEEEE 0 var(--seam), #CECECE var(--seam) 100%);
+}
+/* Snapmaker's feeder module is a different device and one glance should say so. Only the
+   HORIZONTAL padding may change, or a feeder's spool stops sitting at a bay's height. */
+.ace-feed-top {
+  background: linear-gradient(180deg, #FFFFFF 0 var(--seam), #1F1F1F var(--seam) 100%);
+  box-shadow: inset 0 0 0 1px #D9DDE3;
+}
+.ace-bays { display: flex; gap: 10px; justify-content: center; align-items: flex-start; }
+/* Multi mode: one bay from each cabinet, so a row of one-bay boxes rather than one box of
+   four. The gap is wider than a bay gap because these are separate cabinets. */
+.ace-lanes { display: flex; gap: 12px; justify-content: center; align-items: flex-start; }
+.ace-box.is-small .ace-bays { gap: 7px; }
+
+/* ---- the unit's own line ---------------------------------------------- */
+
+.ace-strip {
+  display: flex; align-items: center; gap: 7px;
+  min-height: 22px; padding: 0 2px;
+  font-size: 11.5px; color: var(--muted);
+}
+.ace-strip .spacer { flex: 1; }
+.ace-badge { flex: 0 0 auto; display: block; }
+.ace-unit { color: var(--ink-2); white-space: nowrap; }
+.ace-unit b { color: var(--ink); font-weight: 600; }
+.ace-hum {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 19px; padding: 0 8px; border-radius: 10px;
+  background: var(--panel-2); color: var(--ink-2); font-size: 11px; white-space: nowrap;
+}
+.ace-sep { width: 1px; height: 10px; background: #C2C2C2; }
+
+/* ---- the tubes and the toolhead --------------------------------------- */
+
+/* The manifold sits below the box, so a bay's drop has to cross it to get there - and
+   filament inside a machine is not drawn over the machine. z-index 0 against the box's
+   2 is the whole of that rule. */
+.ace-wire {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  overflow: visible; pointer-events: none; z-index: 0;
+}
+.ace-tool { position: relative; z-index: 2; display: flex; flex-direction: column;
+            align-items: center; gap: 2px; }
+.ace-tool-label { font: 10.5px/1 var(--sans); color: var(--muted); white-space: nowrap; }
+
+/* ---- the head box: the Prepare tab's, in HTML -------------------------- */
+
+/* `SyncMarkBox` with `SetCornerRadius(8)` and a #EEEEEE border that goes #00AE42 on
+   hover. Two across, which is what `m_heads_sizer` wraps at. */
+.head-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.head-box {
+  position: relative; overflow: hidden;
+  border: 1px solid #EEEEEE; border-radius: 8px;
+  background: var(--panel); padding: 6px 8px 7px; min-width: 0;
+}
+.head-box:hover { border-color: #00AE42; }
+.head-box.is-wide { grid-column: 1 / -1; }
+.head-box > h3 {
+  margin: 0 0 3px; font: 600 12px/1.3 var(--sans); color: #4A5258;
+}
+:root:not([data-theme="light"]) .head-box > h3 { color: var(--ink-2); }
+/* The tick is the box's own claim about the machine, so it sits IN the box, at its
+   corner, and is absent rather than grey when nothing has been read. */
+.tick { position: absolute; right: 0; top: 0; z-index: 4; }
+
+/* The ACE row: a 34px key, the adjust affordance, then the value hard right - the same
+   three-part row the Prepare tab builds, so the badge lands in the same place whether
+   the words `Stock feeder` follow it or not. */
+.hrow {
+  display: flex; align-items: center; gap: 6px;
+  min-height: 22px; font-size: 11.5px; color: var(--ink-2);
+}
+.hrow .k { flex: 0 0 34px; color: var(--muted); }
+.hrow .spacer { flex: 1; }
+.hrow .v { color: var(--ink); white-space: nowrap; }
+.hrow .v.dim { color: var(--muted); }
+
+/* ---- rows ------------------------------------------------------------- */
+
+.prow {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 2px; min-width: 0;
+}
+.prow + .prow { border-top: 1px solid var(--line); }
+.prow .grow { flex: 1; min-width: 0; }
+.prow .who { font-size: 12px; color: var(--ink); white-space: nowrap;
+             overflow: hidden; text-overflow: ellipsis; }
+.prow .say { font-size: 11px; color: var(--muted); white-space: nowrap;
+             overflow: hidden; text-overflow: ellipsis; }
+
+/* Bambu's Project Filaments badge: the filament's number on its own colour. This is the
+   one identity a file filament has, and it is the same one the Prepare sidebar gives it. */
+.fnum {
+  flex: none; display: grid; place-items: center;
+  width: 22px; height: 22px; border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, .22);
+  font: 600 11px/1 var(--mono);
+}
+.fnum.sm { width: 18px; height: 18px; font-size: 10px; border-radius: 3px; }
+
+/* The bay address, as a word in a sentence rather than on a disc. */
+.addr { font: 500 11px/1 var(--mono); color: var(--ink-2);
+        background: var(--panel-2); border-radius: 4px; padding: 3px 5px; }
+
+/* ---- the cost line ----------------------------------------------------- */
+
+/* 300 swaps is not a defect and must not be drawn as one: it is what seven colours on
+   four heads costs, and the operator is entitled to it before Send rather than after. */
+.cost {
+  display: flex; align-items: baseline; gap: 5px;
+  font-size: 11.5px; color: var(--muted);
+}
+.cost b { font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* ---- the override ------------------------------------------------------ */
+
+.override {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin-top: 8px; padding: 8px 10px;
+  border: 1px solid var(--warn); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+  font-size: 11.5px; line-height: 1.45; color: var(--ink-2);
+}
+.override input { margin: 2px 0 0; flex: none; }
+.override b { color: var(--ink); font-weight: 600; }
+
+/* ---- the plate strip --------------------------------------------------- */
+
+/* Seven filaments do not fit four cards, and that is the whole problem this dialog has
+   with an ACE plate. They fit one wrapping strip at 22px each. */
+.plate-strip { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+
+/* ---- the mode, shared by every design ---------------------------------- */
+
+/* The mode decides what an address means, so every design that draws one says it. */
+.mode-row { display: flex; align-items: baseline; gap: 9px; margin-bottom: 7px; min-width: 0; }
+.mode-pill {
+  flex: none; padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel-2);
+  font: 500 11px/1.5 var(--sans); color: var(--ink-2); white-space: nowrap;
+}
+.mode-pill.dim { color: var(--muted); }
+.mode-say { font-size: 11px; color: var(--muted); min-width: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

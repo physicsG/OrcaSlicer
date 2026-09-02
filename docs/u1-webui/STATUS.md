@@ -1238,6 +1238,131 @@ Then, in rough order of value:
 because that destination has exactly one panel. If a second joins it, rename then — the
 structure is one directory per panel and the registry is the only place that names them.
 
+## The print popup and multiACE (2026-09-02)
+
+**Slicing on this branch cannot produce the plate this design is for, and that was
+checked rather than assumed.** The ACE *topology* landed with the printer panel — `ace_mode`,
+`ace_head_unit`, `ace_head_capacity` at `PrintConfig.cpp:3989` — and **no line of the
+slicing core reads any of the three**: `GCode.cpp`, `Print.cpp` and `ToolOrdering.cpp`
+contain no occurrence of `ace`, there is no `AceMmuPlan.hpp`, no
+`GCodeWriter::set_tool_remap`, and nothing emits `ACE_SWAP_HEAD`. Four filaments on four
+toolheads has worked for a while — the U1 inherits `fdm_toolchanger` with a four-entry
+`nozzle_diameter` and ships a real `change_filament_gcode` — but an ACE bay as a filament
+source does not exist here. Worse: the extruder-range check is inside `#if 0` at
+`Print.cpp:1783-1790`, so a seven-filament U1 plate **slices without complaint and emits
+`T4`–`T6`**, which no head can honour. The planner and emitter are on the unmerged
+`feat/ace-mmu-slicing`.
+
+**The design question turned out to be the opposite of the four-card one.** On an ACE
+plate the gcode's `ACE_SWAP_HEAD HEAD=n` names the physical head, so
+`SET_PRINT_EXTRUDER_MAP` must go out as the identity — remapping the tools without
+remapping the swaps prints on one head while the ACE feeds another. So the dialog loses
+its head picker entirely and gains a reconciliation: the file says which bay each filament
+comes from, the machine says what is in it, and the dialog says what to move. The verdict
+is three-valued (`agrees` / `differs` / `cannot tell`) because a bay's identity has a
+precedence, `rfid > override > derived`, and only the first two are asserted.
+
+Three designs, drawn in the language this machine already has — the Device page's
+Filament panel, the Prepare tab's Printer section, and Bambu's AMS display behind both:
+[mockups/multiace.html](../../resources/web/print_processing/mockups/multiace.html), six
+scenarios, at the 714 x 750 the host opens. The account, including the seven things that
+have to exist first, is
+[03-print-processing/06-multiace.md](03-print-processing/06-multiace.md).
+
+**A fourth design came from another slicer's two-nozzle flow**
+(`ui-snapshots-inspiration/Slicing/`), and it carries the idea the first three were
+missing. D, E and F treat the plan as fixed, so a mismatch is an errand: walk to the
+printer, move a spool. That flow's step 02 offers **Convenience Mode** — group the
+filaments around the spools that are *already* loaded — and the mismatch stops existing.
+Option G is that, with the one difference stated on screen: there the slot mapping is sent
+at print time and costs nothing, while on an ACE plate the head and the bay are both
+written into the gcode, so either change means slicing again and G's button says
+**Re-slice**. The four steps mapped onto the U1, and the three things the slicer would
+need (starting with `fmmAutoForMatch`, whose enum is already at `PrintConfig.hpp:350`
+with no config key behind it and `bbs_3mf.cpp:7712` hardcoding the other one), are
+[06-multiace.md §3a](03-print-processing/06-multiace.md).
+
+**A second ACE unit was then added as a scenario, and it found a bug all three earlier
+designs had carried through every green sweep.** D, E and F each read
+`model.ace.units[0]` for every head — and `ACE_SET_HEAD_ACE` binds a head to exactly one
+unit, so on a two-ACE machine toolhead 3's bays were judged against toolhead 4's cabinet:
+four bays that agree with themselves and are the wrong four. `reconcile()` had it too. It
+was invisible while every scenario had one unit. With two units the planner spreads seven
+filaments over ten places and the swap count falls **300 → 164**, which is the argument
+for a second unit in the first place.
+
+**The mode is drawn now, and multi with it.** `SET_ACE_MODE` is not a preference: it
+decides what a head's places *are*, so every design states it in a read-only pill in the
+Device page's own words, and the three shapes are `shapeOf()`'s — in **head** a head is
+its own feeder or wired to one unit and the badge sits **beside `Toolhead N`**; in
+**multi** bay *i* of every unit feeds head *i*, so a head has a **lane**, its box draws one
+bay from each cabinet (`laneBoxes()`, the Device page's `laneBox` lifted) and the units
+move to a **band above** the grid; in **normal** the band goes below, because an idle
+cabinet still reports humidity.
+[mockups/multiace-g.html](../../resources/web/print_processing/mockups/multiace-g.html)
+is the three modes across D, E and G.
+
+**The Prepare tab disagrees about multi, and it matters.** `Plater.cpp:9845` says *"Units
+pooled onto a single ACE head"* and `PrintConfig.cpp:3995` *"Combined pools several units
+onto a single head"* — every unit converging on one head. The Device page says every head
+gets a lane. Those are different machines and only one is the hardware; settling it needs
+a U1 in multi mode and a look at `ace_heads`.
+
+The badge moved **onto the head** on the way: which unit feeds a head is a property of the
+head (`ACE_SET_HEAD_ACE` binds one to one, and the Prepare tab's per-head `ACE` row is the
+same fact in the same place), so it is drawn once instead of on every chip, and a **stock
+feeder never wears a small ACE** — the first draft used the square glyph for both and at
+13 px they were one picture, which is the mistake `device.css` warns about in as many
+words.
+
+**G is now the merge, and one of the merges was a defect fix.** Model Information comes
+from D (the render, the file's numbers, and a strip of *every* filament — seven do not fit
+four cards, which is the point), the printer and the **plate** card from G, the grouping
+from G, and **Print Preferences from D and E**. The last is not taste: the flow G was
+adapted from offers three-state *Auto / On / Off* segments, and here `SET_PRINT_PREFERENCES`
+takes **booleans** — `prefsLine()` sends `1` or `0` — so an `Auto` position could never
+leave the page; and `PRINT_PREFERENCES` has **three** toggles, not four. The fourth row
+was the screenshot's, not this machine's. Check the macro before copying the widget.
+
+Green across 4 options x 8 scenarios with `drive/print-mockups-ace.js`, which found two
+real faults: option E blocked Send on `noace` and offered no override — a refusal with no
+door, on the one scenario where the page has no evidence either way — and option G drew
+**no filaments at all** on an ordinary plate, which is the regression item 7 of the doc
+exists to prevent. Multi mode then found a third: a head has no unit there, so
+`bayAddr(planned.unit, …)` rendered every chip as **`NaN1`**, on screen and green on every
+check that counted elements. An address is now asserted to be one of `A`-`D` and `1`-`4`. The suite had to be taught twice by a design arriving after it: ask
+about the fact rather than one design's class names, and *a way forward is not always an
+override*.
+
+## Option G is implemented (2026-09-02)
+
+**Built into `resources/web/print_processing/`, driven against the simulator only** — by
+instruction, and because there is nothing else to drive it against: no Orca on this branch
+produces a plate with an `ace_plan`.
+
+**It is inert on every plate that exists today.** `filePlan()` returns null without that
+key, the grouping panel is hidden, Edit Filament is the panel, and
+`drive/print-dialog.js` still passes **52/52** on the four-card dialog. `filament` and
+`grouping` are one slot in `registry.js` and the file picks between them.
+
+New: `core/session.js` gained `filePlan` / `refreshAce` / `syncBays` / `reconcile`;
+`views/grouping/` is the panel; Model Information gained the strip of every filament the
+plate uses. `drive/print-dialog-ace.js` is the suite, at **18/18** on both `?plan=1` and
+`?plan=mismatch` — the simulator's own machine, where a mismatch has to be *created*
+rather than assumed.
+
+**The one command it sends writes the IDENTITY tool map, and that is not optional.**
+`print_task_config.extruder_map_table` survives a print — a real U1 has been seen carrying
+`[0,1,1,0]` from an earlier job — so a page that sends nothing inherits it, and on an ACE
+plate any remap prints on the wrong heads. The suite asserts both that it went out and
+that no line moves a tool off its own head.
+
+**Building it found that `hidden` hid nothing.** `.card` is `display: flex`, and `hidden`
+is a UA rule any author `display:` beats — so the four filament cards went on being drawn
+beside the panel that had replaced them, head pickers and all. `[hidden] { display: none
+!important }` is in `preprint.css` now; the nozzle banner had only ever worked because it
+sets `hidden` on a `.bare` body with no `display` of its own.
+
 ## What is open
 
 [02-device-page/11-multiace-handover.md](02-device-page/11-multiace-handover.md) ends with

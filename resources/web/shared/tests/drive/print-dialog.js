@@ -35,7 +35,17 @@
     /* ---- the sections, in the bundle's order ----
        ?path=5 drops the print half entirely, which is the whole difference between the
        two routes. Run this script against both URLs; it checks whichever it is on. */
-    const ids = qq('#body .card, #body .bare').map((n) => n.id).join(',');
+    /* The bundle's five SLOTS, in its order.
+       `filament` and `grouping` are one slot that the FILE picks between - the four cards
+       for an ordinary plate, the ACE grouping for a plate with an `ace_plan` - and both
+       are mounted so neither has to be built after the shell arrives. So the hidden one
+       of that PAIR is dropped and the other is counted under the slot's name. Nothing
+       else is filtered: the nozzle banner is hidden when there is no mismatch and is
+       still one of the five. */
+    const ids = qq('#body .card, #body .bare')
+      .filter((n) => !((n.id === 'panel-filament' || n.id === 'panel-grouping') && n.hidden))
+      .map((n) => (n.id === 'panel-grouping' ? 'panel-filament' : n.id))
+      .join(',');
     if (pp.route === 'upload') {
       check('upload-only keeps two sections', ids, 'panel-model-info,panel-printer');
       check('and no filament cards', qq('.fil-card').length, 0);

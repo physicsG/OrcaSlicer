@@ -22,6 +22,7 @@
 
 import { CMD, SUBSCRIBE_OBJECTS, TOOLHEADS } from '../../../shared/js/protocol.js';
 import { connect } from '../../../shared/js/connection.js';
+import { aceBayAddr, aceOverridesUrl, parseAceOverrides } from '../../../shared/js/multiACE.js';
 import { cssColor, nozzleStr } from '../widgets/format.js';
 
 /**
@@ -292,4 +293,167 @@ export function initialAssignment(mapping, filaments) {
     out[f.key] = Number.isFinite(n) ? n : null;
   });
   return out;
+}
+
+/* ==================================================================== *
+ * The ACE half.
+ *
+ * Everything below is inert on every plate the slicer can produce today: `ace_plan` is
+ * a key `sw_GetFileFilamentMapping` does not send, so `filePlan()` returns null and the
+ * dialog is exactly the dialog that already ships. It lights up when the planner lands.
+ * See docs/u1-webui/03-print-processing/06-multiace.md.
+ * ==================================================================== */
+
+/**
+ * The plan the SLICER made, if this plate has one.
+ *
+ * Normalised rather than trusted: every field is defaulted, and a step's unit falls back
+ * to its head's. That fallback is not tidiness - in `head` mode a head is wired to one
+ * unit and carrying it per step is redundant, but in `multi` a head has NO unit and its
+ * places come one from each cabinet, so the step is the only thing that can say which.
+ * Reading the head's there produced `bayAddr(undefined, …)`, which renders as `NaN1`.
+ */
+export function filePlan(mapping) {
+  const raw = mapping && mapping.ace_plan;
+  if (!raw || !Array.isArray(raw.heads) || !raw.heads.length) return null;
+  return {
+    mode: raw.mode || 'head',
+    swaps: Number(raw.swaps) || 0,
+    purgeG: Number(raw.purge_g) || 0,
+    savedSwaps: Number(raw.saved_swaps) || 0,
+    savedPurgeG: Number(raw.saved_purge_g) || 0,
+    heads: raw.heads.map((h) => ({
+      head: Number(h.head) || 0,
+      feeder: !!h.feeder,
+      unit: h.unit != null ? Number(h.unit) : null,
+      lane: h.lane != null ? Number(h.lane) : null,
+      run: (Array.isArray(h.run) ? h.run : []).map((s) => ({
+        filament: Number(s.filament) || 0,
+        unit: s.unit != null ? Number(s.unit) : (h.unit != null ? Number(h.unit) : null),
+        slot: s.slot != null ? Number(s.slot) : null,
+      })),
+    })),
+  };
+}
+
+/**
+ * Read the `ace` object.
+ *
+ * On its own, because it is NOT on `SUBSCRIBE_OBJECTS` - that list is pinned to the
+ * shipped bundle's and adding to it would change what every other surface receives. The
+ * Device page reads it exactly this way and for exactly this reason.
+ *
+ * Fails quietly: no multiACE, no printer, or a host that does not know the object all
+ * mean the same thing here - there is no ACE to draw, and `ace().present` is false.
+ */
+export async function refreshAce(bridge, state) {
+  try {
+    const snap = await bridge.request(CMD.GET_MACHINE_STATE, {
+      objects: { ace: null, ace_bg_swap: null, save_variables: null },
+    });
+    state.applyPayload(snap);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * multiACE's override store, which is where a bay's NAME lives.
+ *
+ * The raw slots carry no identity - `{material:"", brand:"", rfid:0}` - so without this
+ * every bay a person named by hand reads as `?`. `/multiace/api/state` is CORS-refused;
+ * the store is a file under Moonraker's config root and Moonraker reflects the Origin.
+ * Same fetch the Device page makes, and it fails quietly for the same reasons.
+ */
+export async function syncBays(device, mock) {
+  if (mock && mock.aceOverrides) return mock.aceOverrides();
+  const url = aceOverridesUrl(device);
+  if (!url) return null;
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return parseAceOverrides(await r.json());
+  } catch (e) {
+    return null;
+  }
+}
+
+/** rfid and override are ASSERTED. derived is inferred, and is not evidence of a colour. */
+const TRUSTED = new Set(['rfid', 'override']);
+
+/**
+ * Does this bay hold what the plate wants of it?
+ *
+ * Colour and material, brand ignored: colour alone passes PLA where PETG is loaded, and
+ * a brand check flags a Kingroon-against-Generic difference nobody cares about.
+ *
+ * Four answers, and the third is the one that earns its keep. A bay whose identity was
+ * merely DERIVED - inferred from what the head last loaded, asserted by nobody - is not
+ * evidence of a wrong spool, and calling it one is a false accusation. A check that cries
+ * wolf gets ignored, which costs more than no check. An empty bay is always `differs`:
+ * the machine is not guessing about emptiness.
+ */
+export function judgeBay(bay, want) {
+  if (!bay) return { verdict: 'unchecked', say: 'Not reported' };
+  if (!bay.occupied) {
+    return { verdict: 'differs', say: 'Empty', fix: `Put the ${want.type} spool in` };
+  }
+  if (!TRUSTED.has(bay.source)) {
+    return { verdict: 'unsure', say: 'Occupied, nothing names it',
+             fix: 'Tag it, or name it in multiACE' };
+  }
+  const sameType = (bay.material || '') === want.type;
+  const bc = cssColor(bay.color);
+  const sameColour = !!bc && !!want.colors[0]
+    && bc.toUpperCase() === String(want.colors[0]).toUpperCase();
+  if (sameType && sameColour) {
+    return { verdict: 'agrees',
+             say: [bay.vendor, bay.material].filter(Boolean).join(' ') || bay.material };
+  }
+  if (!sameType) {
+    return { verdict: 'differs', say: `${bay.material || '?'}, not ${want.type}`,
+             fix: `Put the ${want.type} spool in` };
+  }
+  return { verdict: 'differs', say: `${bay.material}, wrong colour`,
+           fix: 'Put the right spool in' };
+}
+
+/**
+ * Every place the plate needs, in plan order, judged against the machine.
+ *
+ * A stock feeder is NOT judged, and the page has to say so rather than tick it: the ACE
+ * reports its own bays and nothing else, so a wrong colour on a feeder head goes
+ * undetected. A tick there would claim a check that was never made.
+ */
+export function reconcile(plan, ace, filaments) {
+  const rows = [];
+  if (!plan) return { rows, differs: 0, unsure: 0, checked: false };
+  const units = (ace && ace.units) || [];
+  const unitOf = (i) => units.find((u) => u.index === i) || null;
+  const checked = !!(ace && ace.present) && units.length > 0;
+  const filAt = (i) => filaments[i] || { index: i, type: '---', colors: [] };
+
+  plan.heads.forEach((h) => {
+    h.run.forEach((step, order) => {
+      const want = filAt(step.filament);
+      if (h.feeder) {
+        rows.push({ head: h.head, feeder: true, order, want, addr: null,
+                    verdict: 'unchecked',
+                    say: 'Stock feeder — the ACE does not report it' });
+        return;
+      }
+      const ui = step.unit != null ? step.unit : h.unit;
+      const u = unitOf(ui);
+      const bay = u && step.slot != null ? u.bays[step.slot] : null;
+      const j = checked && u ? judgeBay(bay, want)
+                             : { verdict: 'unchecked', say: 'No ACE reported' };
+      rows.push({ head: h.head, feeder: false, unit: ui, slot: step.slot, order,
+                  addr: aceBayAddr(ui, step.slot), want, bay, ...j });
+    });
+  });
+
+  return { rows, checked,
+           differs: rows.filter((r) => r.verdict === 'differs').length,
+           unsure: rows.filter((r) => r.verdict === 'unsure').length };
 }

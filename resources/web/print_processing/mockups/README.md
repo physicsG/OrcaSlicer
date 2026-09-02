@@ -76,5 +76,220 @@ squeezed to 22 px, and a lane that had fallen into the 54 px wire gutter.
 
 ## What is deliberately not here
 
-No printer picker, no ACE bays, no live state. The mockups answer *what shape should this
-dialog be*; the plumbing is settled and written down.
+No printer picker and no live state. The mockups answer *what shape should this dialog
+be*; the plumbing is settled and written down.
+
+The ACE bays were not here either, and now they are — in three more designs of their own,
+below, because a plate sliced onto an ACE asks the dialog a different question.
+
+---
+
+# multiACE — four more
+
+The three above answer *which toolhead does this filament print from*. A plate sliced onto
+an ACE cannot ask that: the gcode's `ACE_SWAP_HEAD HEAD=n` names the head directly, so
+remapping the tools without remapping the swaps prints on one head while the ACE feeds
+another. The map has to go out as the identity, and **none of these three has a head
+picker.** What is left is reconciliation — the file says which bay each filament comes
+from, the machine says what is in it, and the dialog says what to move — or, in G,
+offers to change the plan instead.
+
+The whole account, including what has to exist in C++ first, is
+[03-print-processing/06-multiace.md](../../../../docs/u1-webui/03-print-processing/06-multiace.md).
+
+```bash
+python3 resources/web/shared/tests/run_webkit.py --size 1500x980 --watch \
+    --page web/print_processing/mockups/multiace.html
+```
+
+| | | The bet |
+|---|---|---|
+| **D** | [Per head, two across](option-d.html) | The Prepare tab's Printer section, in the dialog: a bordered box per toolhead with its `ACE` row and the same green corner tick. Nobody learns a new picture. |
+| **E** | [The machine, whole](option-e.html) | The Device page's Filament panel as one row — every place a spool can be, the tubes to the head each feeds. A picture of the thing you are about to walk over to. |
+| **F** | [One line per filament](option-f.html) | The Prepare sidebar's Project Filaments list at print time. The only shape that survives four ACE units. |
+| **G** | [The grouping, and a way back](option-g.html) | Another slicer's two-nozzle flow, adapted. The only one that can fix a mismatch **without walking to the printer** — and the only one that fits with nothing below the fold. |
+
+## G is the one with a second door
+
+D, E and F treat the plan as fixed, so a mismatch is an errand: walk to the printer, move
+a spool. G is adapted from `ui-snapshots-inspiration/Slicing/`, whose four steps —
+*Slicing Result* → *Filament grouping* → *Send print job* → *Select filament* — carry one
+idea the other three do not have: **Convenience Mode**, which groups filaments around the
+spools that are *already* in the machine. A mismatch then stops existing rather than
+being reported. Where the printer is two floors away that is usually the cheaper door.
+
+It costs a re-slice, and it says so. On an ACE plate **both** levers are written into the
+gcode — the head as `T<n>`, the bay as `ACE_SWAP_HEAD SLOT=` — so changing either needs
+the plate sliced again, and G's button says **Re-slice** rather than Send. The flow it is
+adapted from sends its slot mapping at print time and pays nothing for the same move;
+that difference is a slicer decision, not a dialog one. The mapping of all four steps onto
+the U1 is
+[06-multiace.md §3a](../../../../docs/u1-webui/03-print-processing/06-multiace.md).
+
+## Where the drawing comes from
+
+Not from here. [`ace-art.js`](ace-art.js) says which mark is borrowed from where, and the
+sources are the three places this machine is already drawn:
+
+* **the Device page's Filament panel** — the cabinet and the feeder module with the seam
+  through the middle of the roll, the `A1` disc over a name chip, the eye/pencil and the
+  green tag mark, the tubes drawn *behind* the box
+* **the Prepare tab's Printer section** — the bordered box per head two across, the `ACE`
+  row with a badge or the words `Stock feeder`, and `SyncMarkBox`'s green corner tick
+* **Bambu Studio's AMS display** (`ui-snapshots-inspiration/`) — which is where both of
+  those came from: an addressed bay over a colour-filled spool, a humidity pill, tubes
+  converging on the toolhead
+
+The one mark that is new is a **ring behind a disc** carrying what the *plate* wants of
+that place. The Device page never needs it: it draws a machine, not a machine against a
+file.
+
+## The mode, and multi
+
+`SET_ACE_MODE MODE=normal|multi|head` is not a preference — it decides what a head's
+places *are*, so every design states it in a read-only pill using the Device page's own
+words. The three shapes are `shapeOf()`'s, followed rather than re-derived:
+
+| mode | a head's places | where the cabinets are named |
+|---|---|---|
+| **head** | its own feeder, or all four bays of **one** unit | on the head — the badge beside `Toolhead N` |
+| **multi** | its **lane**: bay *i* of *every* unit | a band **above** the grid |
+| **normal** | its own feeder | a band **below** the grid — an idle cabinet still reports humidity |
+
+In multi, toolhead 1 can be fed `A1` or `B1` and nothing else, so a head's box draws one
+bay from each cabinet — `laneBoxes()` in `ace-art.js`, the Device page's `laneBox` lifted
+rather than redrawn.
+
+**The Prepare tab disagrees.** `Plater.cpp:9845` calls this mode *"Units pooled onto a
+single ACE head"*; the Device page says every head gets a lane. Only one is true of the
+hardware. These follow the Device page, which was built against the live mode switch.
+
+```bash
+python3 resources/web/shared/tests/run_webkit.py --size 1500x980 --watch \
+    --page web/print_processing/mockups/multiace-g.html
+```
+
+## The badge goes on the head
+
+Which unit feeds a head is a property of **the head** — `ACE_SET_HEAD_ACE` binds one to
+one, and the Prepare tab's per-head `ACE` row is that fact in that place. So the badge sits
+beside `Toolhead N` and the chips carry only the address. Drawn on every chip it was the
+same cabinet three times on one toolhead.
+
+A **stock feeder** gets `feederBadge()` — the Device page's `moduleBadge()` — and never a
+small ACE: at 13 px the ACE's square glyph was the same picture, which is the mistake
+`device.css` warns about in as many words. In multi a head has no unit, so it carries its
+lane (`Lane · A3 · B3`) and no badge.
+
+## A second ACE, and the two bugs it found
+
+`?scenario=twoace` gives toolhead 3 its own unit: ten places, and the swap count falls
+**300 → 164**. `?scenario=multi` is the same two cabinets with far less freedom — a lane
+is fixed — at 214.
+
+- D, E and F each read `units[0]` for every head, so toolhead 3's bays were judged against
+  toolhead 4's cabinet. `reconcile()` had it too; a plan step now carries its own `unit`,
+  because in multi one head's places come from different cabinets.
+- In multi a head has no unit, so `bayAddr(planned.unit, …)` rendered every chip as
+  **`NaN1`** — on screen, and green on every check that counted elements. The drive script
+  now asserts an address is one of `A`–`D` and `1`–`4`.
+
+## G, settled
+
+Its four sections are taken from wherever each was best, which is what a set of mockups is
+for: **Model Information** from D (the render, the file's numbers, and a strip of every
+filament — seven do not fit four cards, which is the point), **Printer** and the **plate**
+card from G, **Filament** from G, and **Print Preferences** from D and E.
+
+That last one is a correction rather than a preference. The flow G is adapted from offers
+its settings as three-state segments — *Auto / On / Off* — and here that was wrong twice:
+`SET_PRINT_PREFERENCES` takes **booleans** (`prefsLine()` sends `1` or `0`), so an `Auto`
+segment could never leave the page; and `PRINT_PREFERENCES` has **three** toggles, not
+four — `shaper_calibrate` is a `print_task_config` field, not one of the popup's. The
+fourth row was the screenshot's, not this machine's.
+
+**Check the macro before copying the widget.** A control shape borrowed from another
+machine's UI carries that machine's capabilities with it.
+
+It costs height: 166 px of switches against 88 of segments, so G overflows the 650 px body
+by 42 where it fitted exactly. Still the smallest of the four, and only the last
+preference row is below the fold.
+
+## Switches
+
+| | |
+|---|---|
+| `?scenario=` | `ready` · `swapped` · `unnamed` · `wrong` · `twoace` · `multi` · `noace` · `plain` |
+| `?mode=` | `print` · `upload` |
+
+`wrong` is the one worth looking at: A2 holds PETG where the plate wants PLA and A4 is
+empty. `unnamed` is the one that separates a good design from a loud one — the bay is
+occupied by a spool nothing has named, so the honest verdict is *cannot tell*, and a
+design that calls it wrong is crying wolf. `plain` is a four-filament plate with no plan,
+which is **every plate the slicer can produce today**: all three must degrade to the
+dialog that already ships.
+
+## Checking them
+
+They have their own drive script. The four-card one reads `model.assignment`, which these
+do not have — and a drive script that throws sets no report, so the harness waits for it
+forever. That is how `print-mockups-ace.js` came to exist rather than being folded in.
+
+```bash
+R=resources/web/shared/tests
+python3 $R/run_webkit.py --size 714x750 \
+    --page 'web/print_processing/mockups/option-e.html?scenario=wrong' \
+    --drive $R/drive/print-mockups-ace.js
+```
+
+It asserts the handful of things that would be quietly wrong: every file filament reaches
+the screen (the four-card dialog draws four labels for seven), no head picker exists on an
+ACE plate, a disagreement is marked, **no green tick claims agreement that was never
+checked**, Send matches the scenario, what the arrangement costs is stated before Send,
+and **a blocked send offers a way forward** — an override, or a regroup, but never
+nothing.
+
+Two things it had to be taught, both by a design arriving after it:
+
+- **Ask about the fact, not the class name.** Three of its checks knew only D, E and F's
+  markup and reported G — which draws the same things under different names — as broken.
+  They are unions now, and "is every filament on screen" reads `data-fil` rather than
+  guessing from the text, because G legitimately draws three chips that read the same.
+- **A way forward is not always an override.** G has none, by design: it offers to change
+  the plan instead.
+
+Sweeping found one real fault: option E blocked Send on `noace` and offered no override —
+a refusal with no door, on the one scenario where the page has no evidence either way.
+
+## Opening them without a checkout
+
+`run_webkit.py` needs a display, a checkout and WebKitGTK, and the people who have to
+choose between three designs do not all have those. One command bundles all three into a
+single file that opens in any browser:
+
+```bash
+python3 resources/web/print_processing/mockups/build_standalone.py
+```
+
+It is a **generator, never a second copy** — every byte comes from the files beside it, so
+the bundle cannot drift from what the harness drives. Two things it has to do that are
+worth knowing, because both failed silently first:
+
+- **The modules stay modules.** Flattening them into one script is a SyntaxError:
+  `multiACE.js` and `ace-art.js` both have a private `r1`, and two `const r1` in one scope
+  takes the whole bundle down with no visible error. Each file is handed to the page as
+  source and made into a blob URL at load, with its specifiers rewritten to its
+  dependencies' blobs — which is what the module loader would have done with real files.
+- **`</script>` has to be split.** `json.dumps` leaves `/` alone, so an embedded
+  document's own closing tag ended the *outer* script and the page died quietly.
+
+It emits **two** pages — the four designs, and the three ACE modes — from the two chooser
+shells beside them. Both are gitignored: three quarters of a megabyte each of inlined
+copies of files already in the tree.
+
+## What is deliberately not here either
+
+**No machine actions.** It is tempting to offer a load, and the dialog must not: a swap is
+`ACE_UNLOAD_HEAD` then `ACE_LOAD_HEAD` (never `ACE_SWAP_HEAD` — that one hops Z), it takes
+three minutes and a purge, and naming a bay is not built at all. The operator's fix is
+spools. The dialog's job is to say precisely which.

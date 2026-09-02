@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>multiACE print — Option F</title>
+<link rel="stylesheet" href="../../shared/css/base.css">
+<link rel="stylesheet" href="mockup.css">
+<link rel="stylesheet" href="ace-mockup.css">
+<link rel="stylesheet" href="option-f.css">
+</head>
+<body class="mock-dialog">
+
+<!--
+  OPTION F - ONE LINE PER FILAMENT.
+
+  The Prepare sidebar's Project Filaments list, carried through to the print: one row per
+  file filament, in the plate's own order, each saying where that filament comes from and
+  whether it is there. The numbered colour badge is the same identity the sidebar gave it
+  and the same one the plate thumbnail is coloured by.
+
+  The bet: the list is the only shape that does not break. Seven filaments on one ACE is
+  this machine; four ACE units is sixteen, and a picture of sixteen bays does not fit a
+  714px dialog at any density. A row does.
+-->
+
+<div class="dlg-title">
+  <span id="title">Print Preprocessing</span>
+  <span class="sub" id="subtitle"></span>
+  <span class="spacer"></span>
+</div>
+
+<div class="dlg-body">
+  <section class="card" id="c-model"><h2>Model Information</h2><div class="card-body"></div></section>
+  <section class="card" id="c-list"><h2>Filaments<span class="spacer"></span>
+    <span class="cost" id="cost"></span></h2><div class="card-body"></div></section>
+  <section class="card" id="c-prefs"><h2>Print Preferences</h2><div class="card-body"></div></section>
+</div>
+
+<div class="dlg-foot">
+  <div class="bar">
+    <div class="bar-track"><div class="bar-fill" id="fill"></div></div>
+    <div class="bar-label"><span id="stage">Ready</span><b id="pct"></b></div>
+  </div>
+  <button class="primary" id="send">Send</button>
+</div>
+
+<script type="module" src="option-f.js"></script>
+</body>
+</html>

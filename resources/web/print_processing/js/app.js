@@ -17,6 +17,7 @@
 import { CMD, PRINT_PREFERENCES } from '../../shared/js/protocol.js';
 import { Sswcp } from '../../shared/js/sswcp.js';
 import { MachineState } from '../../shared/js/state.js';
+import { mergeAceBays } from '../../shared/js/multiACE.js';
 import { mountBuildBadge } from '../../shared/js/buildinfo.js';
 import { $, el } from '../../shared/js/dom.js';
 import { text, data } from '../../shared/js/render.js';
@@ -24,7 +25,8 @@ import { Pending } from '../../shared/js/pending.js';
 import { installMock } from './core/mock.js';
 import { buildShell } from './core/shell.js';
 import { readJob, subscribeState, fileFilaments, machineToolheads,
-         nozzleMismatch, initialAssignment, matchOf } from './core/session.js';
+         nozzleMismatch, initialAssignment, matchOf,
+         filePlan, refreshAce, syncBays, reconcile } from './core/session.js';
 import { runSend, close as closeDialog, SEND_STATE, BUSY } from './core/send.js';
 import { closePicker } from './widgets/picker.js';
 import { makeTrace } from '../../shared/js/trace.js';
@@ -33,10 +35,13 @@ import { percent0 } from './widgets/format.js';
 import * as printerCmds from './views/printer/printer-commands.js';
 import * as filamentCmds from './views/filament/filament-commands.js';
 import * as prefCmds from './views/preferences/preferences-commands.js';
+import * as groupCmds from './views/grouping/grouping-commands.js';
 import { MAPPING_STATUS } from '../../shared/js/protocol.js';
 
 const qs = new URLSearchParams(location.search);
 const ROUTE = qs.get('mode') === 'upload' ? 'upload' : 'print';
+/* Simulator only: give the mock a plate sliced onto an ACE. No Orca sends one yet. */
+const MOCK_PLAN = qs.get('plan');
 const WITH_PRINT_SETUP = ROUTE === 'print';
 const WANT_MOCK = qs.get('mock') === '1';
 
@@ -54,6 +59,13 @@ const pending = new Pending({ onChange: () => render() });
 const model = {
   file: null, mapping: null, legal: null, device: null, devices: [],
   filaments: [], toolheads: [], assignment: {}, prefs: {},
+  /*
+   * The ACE half. `plan` is null on every plate the slicer can produce on this branch,
+   * and everything below it is inert while it is: the grouping panel is hidden, the four
+   * cards are the panel, and the dialog is the one that already ships.
+   */
+  plan: null, ace: { present: false, units: [] }, aceBays: null,
+  check: { rows: [], differs: 0, unsure: 0, checked: false },
   nozzleMismatch: false, errors: [], connected: false,
   send: { state: SEND_STATE.IDLE, progress: 0, detail: '' },
 };
@@ -82,7 +94,7 @@ const ctx = {
     model.device = d;
     model.connected = false;
     render();
-    bringUpMachine();
+    bringUpMachine().then(bringUpAce);
   },
   addDevice() {
     printerCmds.addDevice(bridge).catch((e) => say(`add device: ${e.message}`, 'err'));
@@ -159,6 +171,7 @@ function say(message, kind = '') {
 /* ---- derive ----------------------------------------------------------- */
 function recomputeFile() {
   model.filaments = fileFilaments(model.mapping);
+  model.plan = filePlan(model.mapping);
   const fresh = initialAssignment(model.mapping, model.filaments);
   // Keep anything the operator has already chosen; only fill in what is new.
   model.filaments.forEach((f) => {
@@ -168,6 +181,23 @@ function recomputeFile() {
 
 function recomputeMachine() {
   model.toolheads = machineToolheads(state);
+  /*
+   * The ACE, merged with the override store. `state.ace()` is the same reader the Device
+   * page uses; the store is where a bay's NAME lives, because the raw slots carry none.
+   * With no plan this costs one object read and nothing is drawn from it.
+   */
+  const raw = state.ace();
+  /*
+   * Merged ONCE, here, so the verdict and the drawing read the same bays. `state.ace()`
+   * reports the raw slots - which carry no identity at all, `{material:"", rfid:0}` - and
+   * `mergeAceBays` folds in the override store, which is where a bay named by hand lives.
+   * Merging at draw time instead (as the Device page does, where nothing judges) would
+   * leave `reconcile` calling every named bay unnamed.
+   */
+  model.ace = { ...raw,
+                units: (raw.units || []).map(
+                  (u) => ({ ...u, bays: mergeAceBays(u, model.aceBays) })) };
+  model.check = reconcile(model.plan, model.ace, model.filaments);
   model.nozzleMismatch = WITH_PRINT_SETUP && nozzleMismatch(
     model.filaments.map((f) => f.nozzle),
     model.toolheads.map((h) => h.nozzleDiameter));
@@ -207,6 +237,14 @@ function render() {
   raf = requestAnimationFrame(() => {
     raf = 0;
     recomputeMachine();
+    /*
+     * The FILE picks which of the two filament panels is the panel. Both are mounted, so
+     * neither has to be built after the shell - and a plate with no plan hides `grouping`,
+     * which is every plate the slicer can produce on this branch.
+     */
+    const section = (id) => document.getElementById(`panel-${id}`);
+    if (section('filament')) section('filament').hidden = !!model.plan;
+    if (section('grouping')) section('grouping').hidden = !model.plan;
     mounted.forEach(({ panel, root }) => panel.update(root, model, ctx));
     renderSendBar();
   });
@@ -232,10 +270,23 @@ function renderSendBar() {
    * the only bad state left is one still unassigned - the `!` on the card - and sending
    * a plate with one would leave the machine to discover it.
    */
-  const unplaced = WITH_PRINT_SETUP
+  const unplaced = WITH_PRINT_SETUP && !model.plan
     && model.filaments.some((f) => model.assignment[f.key] == null);
+  /*
+   * On an ACE plate the gate is a different one, because the decision is. Nothing is
+   * unassigned - the file assigned everything - and what can be wrong is a BAY holding
+   * something other than what the plate was sliced for. `differs` blocks: a named spool
+   * that is not the one wanted, or an empty bay, is a fact, and printing it wastes the
+   * whole plate. `unsure` does not: nothing asserted what is in that bay, and refusing on
+   * an inferred identity is crying wolf.
+   *
+   * There is no override here yet. The mockups offered one and it is the right shape, but
+   * a tick that lifts a refusal is a decision this page cannot record anywhere the machine
+   * can see, so it is left to the panel that gains the regroup route with it.
+   */
+  const badBay = WITH_PRINT_SETUP && !!model.plan && model.check.differs > 0;
   btn.disabled = busy || s.state === SEND_STATE.DONE || !model.device || !model.connected
-              || unplaced;
+              || unplaced || badBay;
 }
 
 /* ---- boot ------------------------------------------------------------- */
@@ -246,6 +297,7 @@ async function boot() {
   if (WANT_MOCK || !Sswcp.hasHost()) {
     mockHost = mock = installMock({
       log: trace,
+      plan: MOCK_PLAN,
       onDialogClose: (ok) => say(ok ? 'dialog closed: success' : 'dialog closed: canceled',
                                  ok ? 'ok' : 'warn'),
     });
@@ -269,6 +321,7 @@ async function boot() {
   recomputeFile();
 
   await bringUpMachine();
+  await bringUpAce();
   // On the repaint is not good enough for anything whose consequence is elsewhere, but
   // this one only repaints - see device_page/js/core/orcasync.js for the other case.
   state.onChange(render);
@@ -282,6 +335,37 @@ async function boot() {
 
   window.__preprint.mock = mock;
   window.__preprint.ready = true;
+}
+
+/**
+ * The ACE half, which is a second read and not part of the subscription.
+ *
+ * `ace` is NOT on `SUBSCRIBE_OBJECTS` - that list is pinned to the shipped bundle's - so
+ * it is fetched on its own, and the override store is an HTTP GET against the printer
+ * rather than a bridge command at all. Both fail quietly: a machine with no multiACE and
+ * a machine that cannot be reached both mean "nothing to draw", and on a plate with no
+ * plan nothing was going to be drawn anyway.
+ *
+ * On an ACE plate this also writes the tool map, and writing it is not optional.
+ * `extruder_map_table` is machine state that SURVIVES a print - a real U1 has been seen
+ * carrying `[0,1,1,0]` left by an earlier job - so a page that sends nothing inherits
+ * whatever the last plate left, and on an ACE plate any remap prints on the wrong heads.
+ */
+async function bringUpAce() {
+  if (!model.connected) return;
+  await refreshAce(bridge, state);
+  model.aceBays = await syncBays(model.device, mockHost);
+  recomputeMachine();
+
+  if (model.plan && WITH_PRINT_SETUP) {
+    try {
+      await groupCmds.writeIdentityMap(bridge, { plan: model.plan,
+                                                 filaments: model.filaments });
+    } catch (e) {
+      say(`could not set the tool map: ${e.message}`, 'err');
+    }
+  }
+  render();
 }
 
 /**

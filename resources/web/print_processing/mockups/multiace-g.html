@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The three ACE modes</title>
+<link rel="stylesheet" href="../../shared/css/base.css">
+<style>
+body { margin: 0; }
+.top {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.top h1 { margin: 0; font-size: 15px; font-weight: 600; }
+.top .grow { flex: 1; }
+.ctl { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+.ctl select, .ctl button {
+  font: inherit; font-size: 12px; padding: 5px 8px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--ink); cursor: pointer;
+}
+.ctl button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-in); }
+
+.why {
+  margin: 0; padding: 9px 16px 11px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+  font-size: 12.5px; color: var(--ink-2); line-height: 1.5;
+}
+.why b { color: var(--ink); }
+.why + .why { border-top: 0; }
+
+.deck { display: flex; gap: 18px; padding: 18px 16px 26px; align-items: flex-start;
+        overflow-x: auto; }
+.slot { flex: none; width: 714px; }
+.slot.hidden { display: none; }
+.slot > header { margin-bottom: 8px; }
+.slot h2 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+.slot h2 .k { color: var(--accent); font-family: var(--mono); font-size: 12px; margin-right: 6px; }
+.slot .bet { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.slot .frame {
+  width: 714px; height: 750px;
+  border: 1px solid var(--line); border-radius: 10px;
+  overflow: hidden; background: var(--panel);
+  box-shadow: 0 1px 2px rgba(0,0,0,.10), 0 14px 34px rgba(0,0,0,.12);
+}
+.slot iframe { width: 714px; height: 750px; border: 0; display: block; }
+.slot .costs { margin: 9px 0 0; padding-left: 17px; font-size: 12px; color: var(--ink-2);
+               line-height: 1.55; }
+.slot .costs li + li { margin-top: 3px; }
+.slot .costs .against { color: var(--warn); }
+.note-scn { margin: 0 0 8px; padding: 8px 16px; font-size: 12px; color: var(--ink-2);
+            background: var(--panel); border-bottom: 1px solid var(--line); }
+.note-scn b { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>The three ACE modes</h1>
+  <div class="ctl">
+    <label for="scenario">Machine</label>
+    <select id="scenario">
+      <option value="multi" selected>Multi — every head has a lane</option>
+      <option value="twoace">Head — two ACE units</option>
+      <option value="ready">Head — one ACE unit</option>
+      <option value="plain">An ordinary plate (no ACE plan)</option>
+    </select>
+  </div>
+  <div class="grow"></div>
+  <div class="ctl" id="focus">
+    <span>Show</span>
+    <button data-only="" class="on">All</button>
+    <button data-only="d">D</button>
+    <button data-only="e">E</button>
+    <button data-only="g">G</button>
+  </div>
+</div>
+
+<p class="why">
+  <code>SET_ACE_MODE MODE=normal|multi|head</code> is the printer's own three-way switch,
+  and it decides what a bay address <b>means</b> — so every design that draws one states
+  it. In <b>head</b> mode a toolhead is its own feeder or wired to exactly one unit, and
+  <code>A2</code> is the second bay of that cabinet. In <b>multi</b> there is no such
+  wiring: <b>bay <i>i</i> of every unit is plumbed to head <i>i</i></b>, so a head has a
+  <b>lane</b> and its places are one bay out of each cabinet. Toolhead 1 can be fed
+  <code>A1</code> or <code>B1</code> and nothing else — <code>A2</code> is unreachable
+  from it at any price.
+  <br><br>
+  These follow <b>the Device page</b>, which is the surface built against the live mode
+  switch. Worth knowing: <b>the Prepare tab disagrees.</b>
+  <code>Plater.cpp:9845</code> labels this mode <i>“Units pooled onto a single ACE head”</i>
+  and <code>PrintConfig.cpp:3995</code> <i>“Combined pools several units onto a single
+  head”</i> — one says every head gets a lane, the other says every unit converges on one
+  head. Only one can be true of the hardware, and it has not been settled here.
+</p>
+
+<div class="deck" id="deck">
+
+  <section class="slot" data-key="g">
+    <header>
+      <h2><span class="k">G</span>The grouping, and a way back</h2>
+      <p class="bet">The badge sits beside <b>Toolhead N</b> — once per head, because
+        which unit feeds a head is a property of the head. In multi there is no unit to
+        name, so the head carries its lane instead and the cabinets move to a band.</p>
+    </header>
+    <div class="frame"><iframe data-key="g" title="Option G"></iframe></div>
+    <ul class="costs">
+      <li>One badge per head, not one per chip: the first draft drew the same cabinet
+        three times on one toolhead.</li>
+      <li>The band above the grid is the Device page's own placement for multi — nothing
+        about a cabinet belongs on a head that is not wired to one.</li>
+      <li class="against">A lane is four words where head mode is a picture.</li>
+    </ul>
+  </section>
+
+  <section class="slot" data-key="d">
+    <header>
+      <h2><span class="k">D</span>Per head, two across</h2>
+      <p class="bet">Each box draws the hardware behind its head — one cabinet's four bays
+        in head mode, one bay from each cabinet in multi.</p>
+    </header>
+    <div class="frame"><iframe data-key="d" title="Option D"></iframe></div>
+    <ul class="costs">
+      <li>The lane is <em>drawn</em>: two one-bay cabinets side by side is what the
+        plumbing actually is.</li>
+      <li class="against">Two boxes of two bays looks like less machine than it is.</li>
+    </ul>
+  </section>
+
+  <section class="slot" data-key="e">
+    <header>
+      <h2><span class="k">E</span>The machine, whole</h2>
+      <p class="bet">Every place and every tube in one row, so a lane is visibly a bay
+        from each cabinet converging on one head.</p>
+    </header>
+    <div class="frame"><iframe data-key="e" title="Option E"></iframe></div>
+    <ul class="costs">
+      <li>The only one where the <em>splitter</em> is legible — two cabinets, one head.</li>
+      <li class="against">Eight cabinets' worth of drawing in a 686 px card.</li>
+    </ul>
+  </section>
+
+</div>
+
+<script type="module">
+/*
+ * The same three designs, switched by MACHINE rather than by scenario: what changes here
+ * is how the printer is wired, and every design has to answer for all of it.
+ */
+const deck = document.getElementById('deck');
+const scenario = document.getElementById('scenario');
+const url = new URL(location.href);
+const ok = ['multi', 'twoace', 'ready', 'plain'];
+scenario.value = ok.includes(url.searchParams.get('scenario'))
+  ? url.searchParams.get('scenario') : 'multi';
+
+function load() {
+  deck.querySelectorAll('iframe').forEach((f) => {
+    f.src = `option-${f.dataset.key}.html?scenario=${scenario.value}`;
+  });
+  const u = new URL(location.href);
+  u.searchParams.set('scenario', scenario.value);
+  history.replaceState(null, '', u);
+}
+scenario.onchange = load;
+
+document.getElementById('focus').onclick = (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  document.querySelectorAll('#focus button').forEach((x) => x.classList.toggle('on', x === b));
+  const only = b.dataset.only;
+  deck.querySelectorAll('.slot').forEach((s) => {
+    s.classList.toggle('hidden', !!only && s.dataset.key !== only);
+  });
+};
+
+load();
+</script>
+</body>
+</html>

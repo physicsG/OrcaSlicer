@@ -25,6 +25,16 @@ import { installMockHost } from '../../../shared/js/mockhost.js';
 /** Commands only the print dialog issues, that the shared host does not answer. */
 const PREPRINT_HANDLERS = {};
 
-export function installMock({ log = () => {}, onDialogClose = null } = {}) {
-  return installMockHost({ log, handlers: PREPRINT_HANDLERS, onDialogClose });
+/*
+ * `?plan=1` gives the simulator a plate sliced onto the ACE; `?plan=mismatch` moves one
+ * file filament off the bay that holds it.
+ *
+ * A switch rather than the default, because the default has to be what a real Orca sends
+ * - and a real Orca sends no plan at all. The ACE half of this dialog is unreachable on
+ * this branch without it: the slicer has no planner and no emitter yet.
+ */
+export function installMock({ log = () => {}, onDialogClose = null, plan = null } = {}) {
+  const host = installMockHost({ log, handlers: PREPRINT_HANDLERS, onDialogClose });
+  if (plan && host.usePlan) host.usePlan({ mismatch: plan === 'mismatch' });
+  return host;
 }

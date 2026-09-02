@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>multiACE print dialog — four designs</title>
+<link rel="stylesheet" href="../../shared/css/base.css">
+<style>
+body { margin: 0; }
+.top {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.top h1 { margin: 0; font-size: 15px; font-weight: 600; }
+.top .grow { flex: 1; }
+.ctl { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+.ctl select, .ctl button {
+  font: inherit; font-size: 12px; padding: 5px 8px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--ink); cursor: pointer;
+}
+.ctl button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-in); }
+
+.why {
+  margin: 0; padding: 9px 16px 11px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+  font-size: 12.5px; color: var(--ink-2); line-height: 1.5;
+}
+.why b { color: var(--ink); }
+.why + .why { border-top: 0; }
+
+.deck { display: flex; gap: 18px; padding: 18px 16px 26px; align-items: flex-start;
+        overflow-x: auto; }
+.slot { flex: none; width: 714px; }
+.slot.hidden { display: none; }
+.slot > header { margin-bottom: 8px; }
+.slot h2 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+.slot h2 .k { color: var(--accent); font-family: var(--mono); font-size: 12px; margin-right: 6px; }
+.slot .bet { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.slot .frame {
+  width: 714px; height: 750px;
+  border: 1px solid var(--line); border-radius: 10px;
+  overflow: hidden; background: var(--panel);
+  box-shadow: 0 1px 2px rgba(0,0,0,.10), 0 14px 34px rgba(0,0,0,.12);
+}
+.slot iframe { width: 714px; height: 750px; border: 0; display: block; }
+.slot .costs { margin: 9px 0 0; padding-left: 17px; font-size: 12px; color: var(--ink-2);
+               line-height: 1.55; }
+.slot .costs li + li { margin-top: 3px; }
+.slot .costs .against { color: var(--warn); }
+.note-scn { margin: 0 0 8px; padding: 8px 16px; font-size: 12px; color: var(--ink-2);
+            background: var(--panel); border-bottom: 1px solid var(--line); }
+.note-scn b { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>multiACE print dialog — four designs</h1>
+  <div class="ctl">
+    <label for="scenario">Scenario</label>
+    <select id="scenario">
+      <option value="ready">Every place holds the plan</option>
+      <option value="swapped">Two bays the other way round</option>
+      <option value="unnamed">A bay nobody named</option>
+      <option value="wrong" selected>Wrong material, and an empty bay</option>
+      <option value="twoace">Two ACE units</option>
+      <option value="multi">Multi mode — every head has a lane</option>
+      <option value="noace">Plan, but no ACE on the machine</option>
+      <option value="plain">An ordinary plate (no ACE plan)</option>
+    </select>
+  </div>
+  <div class="ctl">
+    <label for="mode">Mode</label>
+    <select id="mode">
+      <option value="print">Upload and print (?path=4)</option>
+      <option value="upload">Upload only (?path=5)</option>
+    </select>
+  </div>
+  <div class="grow"></div>
+  <div class="ctl" id="focus">
+    <span>Show</span>
+    <button data-only="" class="on">All</button>
+    <button data-only="d">D</button>
+    <button data-only="e">E</button>
+    <button data-only="f">F</button>
+    <button data-only="g">G</button>
+  </div>
+</div>
+
+<p class="why">
+  The plate wants <b>seven filaments</b>; the machine has <b>seven places</b> — three
+  stock feeders and one ACE 2 Pro's four bays. The four-card dialog has <b>four labels</b>,
+  and that is the whole problem. All three designs run on the same fixture, the same
+  three-valued verdict (<b>agrees / differs / cannot tell</b>), and the same send
+  sequence — in which <code>SET_PRINT_EXTRUDER_MAP</code> goes out as the
+  <b>identity</b>, because the gcode's <code>ACE_SWAP_HEAD HEAD=<i>n</i></code> names the
+  head directly and a remap would desynchronise the swaps from the tool changes. None of
+  the three has a head picker, and that is deliberate.
+</p>
+<p class="note-scn" id="scn-note"></p>
+
+<div class="deck" id="deck">
+
+  <section class="slot" data-key="d">
+    <header>
+      <h2><span class="k">D</span>Per head, two across</h2>
+      <p class="bet">The Prepare tab's Printer section, in the dialog: a bordered box per
+        toolhead with its ACE row, and the green corner tick it already uses for
+        “agrees with the machine”.</p>
+    </header>
+    <div class="frame"><iframe data-src="option-d.html" title="Option D"></iframe></div>
+    <ul class="costs">
+      <li>Nobody learns a new picture — it is the grid from Prepare and the Device page.</li>
+      <li>A problem is inside one box, and the box says which toolhead it is.</li>
+      <li>The tick is the machine's own agreement mark, in the place it already lives.</li>
+      <li class="against">Two rows of boxes, so the fourth head — the ACE one, the only
+        one that can be wrong — is the furthest down the page.</li>
+      <li class="against">Four bays at 28px is the smallest a bay has ever been drawn here.</li>
+    </ul>
+  </section>
+
+  <section class="slot" data-key="e">
+    <header>
+      <h2><span class="k">E</span>The machine, whole</h2>
+      <p class="bet">The Device page's Filament panel as one row: every place a spool can
+        be, the tubes to the head each feeds, and the plate's demand marked on them.</p>
+    </header>
+    <div class="frame"><iframe data-src="option-e.html" title="Option E"></iframe></div>
+    <ul class="costs">
+      <li>The only one that shows seven places for seven filaments as a fact rather than
+        a claim.</li>
+      <li>It is a picture of the thing the operator is about to walk over to.</li>
+      <li>Bays at full 36px, with the address, the tag mark and the provenance mark all
+        legible.</li>
+      <li class="against">One row of four columns is a fixed budget: a second ACE unit
+        has nowhere to go.</li>
+      <li class="against">The tubes need real layout measurement; they are the fragile part.</li>
+    </ul>
+  </section>
+
+  <section class="slot" data-key="f">
+    <header>
+      <h2><span class="k">F</span>One line per filament</h2>
+      <p class="bet">The Prepare sidebar's Project Filaments list, carried through to the
+        print: the same numbered colour badge, plus where it comes from and whether it is
+        there.</p>
+    </header>
+    <div class="frame"><iframe data-src="option-f.html" title="Option F"></iframe></div>
+    <ul class="costs">
+      <li>The only shape that does not break: sixteen bays is sixteen rows.</li>
+      <li>Everything fits above the fold, including the fix for each bad row.</li>
+      <li>The badge is the identity the operator already assigned in Prepare.</li>
+      <li class="against">No picture of the machine — one line names the ACE and that is all.</li>
+      <li class="against">A sequence of four filaments on one head is a bracket, not a lane.</li>
+    </ul>
+  </section>
+
+  <section class="slot" data-key="g">
+    <header>
+      <h2><span class="k">G</span>The grouping, and a way back</h2>
+      <p class="bet">Adapted from the two-nozzle flow: what was grouped onto each
+        toolhead, what the grouping saved, and a way to change it — re-group around what
+        is loaded, and slice again.</p>
+    </header>
+    <div class="frame"><iframe data-src="option-g.html" title="Option G"></iframe></div>
+    <ul class="costs">
+      <li>The only one that can fix a mismatch <em>without walking to the printer</em>:
+        “What is loaded” re-groups around the spools that are actually in the bays.</li>
+      <li>Says what the grouping bought, which is the answer to “why is it arranged
+        like this”.</li>
+      <li>The only one that fits at 714 × 750 with nothing below the fold.</li>
+      <li>Three-state options (Auto / On / Off) say what a switch cannot.</li>
+      <li class="against">Every door it opens costs a re-slice, and on a big plate that
+        is minutes — the flow it is adapted from sends its slot mapping at print time
+        and pays nothing.</li>
+      <li class="against">It draws no machine at all: a chip says <code>A2</code>, and
+        which cabinet that is has to be known.</li>
+    </ul>
+  </section>
+
+</div>
+
+<script type="module">
+/*
+ * The chooser. Scenario and mode are query parameters on the three frames, so a change
+ * here reloads all three into the same state - which is the only way to compare them.
+ */
+const NOTES = {
+  ready:   'All seven places hold what the plate was sliced for, and every ACE bay is either tag-read or named by hand. The comparison here is what each design costs when there is nothing to say.',
+  swapped: 'A2 holds white and A3 holds red; the plate wants the reverse. Both are named, so the machine is sure — this is the case a design has to make obvious, because the two spools are both present and both correct in isolation.',
+  unnamed: 'A4 holds a spool with no tag and no override. Its identity is derived, not asserted, so the honest verdict is “cannot tell”. A design that calls this wrong is crying wolf; one that calls it fine is lying.',
+  wrong:   'A2 has Kingroon PETG where the plate wants PLA, and A4 is empty. Emptiness is never a judgement call. This is the scenario worth looking at.',
+  twoace:  'ACE A feeds toolhead 4 and ACE B feeds toolhead 3, so ten places hold seven filaments and the swap count falls from 300 to 164. Every design has to name WHICH cabinet a bay is in — G has three answers to that, in multiace-g.html.',
+  multi:   'SET_ACE_MODE multi: bay i of EVERY unit is plumbed to head i, so a head has a lane rather than a cabinet and toolhead 1 can only be fed A1 or B1. Eight places, but far less freedom than head mode has on the same two cabinets - 214 swaps against 164. The three modes side by side are in multiace-g.html.',
+  noace:   'The file was sliced for an ACE-fed head and the printer reports no `ace` object at all. Nothing can be checked — and a tick meaning “could not check” is worse than no tick.',
+  plain:   'Four filaments, four heads, nothing in the file about an ACE — which is EVERY plate the slicer can produce today. All three must degrade to the dialog that already ships.',
+};
+
+const deck = document.getElementById('deck');
+const scenario = document.getElementById('scenario');
+const mode = document.getElementById('mode');
+const note = document.getElementById('scn-note');
+
+const url = new URL(location.href);
+scenario.value = NOTES[url.searchParams.get('scenario')] ? url.searchParams.get('scenario') : 'wrong';
+mode.value = url.searchParams.get('mode') || 'print';
+
+function load() {
+  const q = `?scenario=${scenario.value}&mode=${mode.value}`;
+  deck.querySelectorAll('iframe').forEach((f) => { f.src = f.dataset.src + q; });
+  note.textContent = NOTES[scenario.value] || '';
+  const u = new URL(location.href);
+  u.searchParams.set('scenario', scenario.value);
+  u.searchParams.set('mode', mode.value);
+  history.replaceState(null, '', u);
+}
+
+scenario.onchange = load;
+mode.onchange = load;
+
+document.getElementById('focus').onclick = (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  document.querySelectorAll('#focus button').forEach((x) => x.classList.toggle('on', x === b));
+  const only = b.dataset.only;
+  deck.querySelectorAll('.slot').forEach((s) => {
+    s.classList.toggle('hidden', !!only && s.dataset.key !== only);
+  });
+};
+
+load();
+</script>
+</body>
+</html>

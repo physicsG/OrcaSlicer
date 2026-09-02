@@ -534,6 +534,8 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
             nozzle_diameters: j.fileNozzle.slice(),
             nozzle_info: [...new Set(j.fileNozzle)],
             filament_extruder_map: Object.assign({}, j.extruderMap),
+            // Absent unless the job has one, because absent is what a real Orca sends.
+            ...(j.acePlan ? { ace_plan: j.acePlan } : {}),
             // `thumbnails[0].url` is a data: PNG. One pixel is enough to prove the
             // plumbing; what matters is that the popup reads it instead of a grey box.
             thumbnails: [{ url: `data:image/png;base64,${PNG_1PX}`, width: 512, height: 512 }],
@@ -659,6 +661,14 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
     // HTTP, so with no printer there is nothing to answer it. Same seam as the camera's
     // frames.
     aceOverrides: () => printer.aceOverrides,
+    /**
+     * Swap the job for a plate sliced onto the ACE.
+     *
+     * A function rather than a second fixture, so the machine half is untouched: the
+     * plate has to be satisfiable by the SAME simulator the four-filament one runs on, or
+     * a check of the match is a check of two fixtures agreeing with each other.
+     */
+    usePlan: (opts) => { Object.assign(printer.job, mockAceJobFields(opts)); },
     // Klipper's console, in Moonraker's own `server.gcode_store` shape. Same seam and the
     // same reason: it is an HTTP GET against the printer, and a refused mode switch says
     // so here and nowhere else.
@@ -746,6 +756,64 @@ function mockAce() {
       gate_status: [1, 1, 1, 1],
       slots: [slot(0), slot(1), slot(2), slot(3)],
     }],
+  };
+}
+
+/**
+ * An ACE plate, on THIS simulator's own machine.
+ *
+ * Seven filaments where the machine has four heads, which is the whole shape the popup is
+ * being rebuilt for. It is built to agree with the rest of the fixture rather than
+ * beside it:
+ *
+ *   T0 T1 T2   the three stock feeders, carrying what `filamentType` /
+ *              `filamentColorRgba` already say is in heads 0-2
+ *   T3         the ACE-fed head - `head_feeder[3]` is false and `head_ace[3]` is 0 - and
+ *              its four filaments are the four bays that `mockAceOverrides` names
+ *
+ * So the default ACE plate is SATISFIABLE and a check that wants a mismatch has to make
+ * one, exactly as the four-filament default does. `mismatch: true` is that: it moves one
+ * file filament off the bay that holds it, so bay 0_1 disagrees and nothing else does.
+ */
+function mockAcePlan({ mismatch = false } = {}) {
+  return {
+    mode: 'head',
+    swaps: 300,
+    purge_g: 40.4,
+    saved_swaps: 212,
+    saved_purge_g: 28.6,
+    heads: [
+      { head: 0, feeder: true, run: [{ filament: 0 }] },
+      { head: 1, feeder: true, run: [{ filament: 1 }] },
+      { head: 2, feeder: true, run: [{ filament: 2 }] },
+      { head: 3,
+        feeder: false,
+        unit: 0,
+        run: [{ filament: 3, unit: 0, slot: 0 }, { filament: 4, unit: 0, slot: 1 },
+              { filament: 5, unit: 0, slot: 2 }, { filament: 6, unit: 0, slot: 3 }] },
+    ],
+    _mismatch: mismatch,
+  };
+}
+
+/** The seven-filament file that plan describes. */
+function mockAceJobFields({ mismatch = false } = {}) {
+  const colors = ['#E03131', '#1971C2', '#2F9E44',
+                  '#83AFFF', '#8FA7C8', '#632C2C', '#C47053'];
+  // One file filament moved off the spool that is actually in its bay.
+  if (mismatch) colors[4] = '#11CC55';
+  return {
+    filename: 'colour_cube_7.gcode',
+    filepath: '/tmp/SnapmakerOrca/plate_1.gcode',
+    estimatedTime: 14232,
+    fileFilamentType: ['PLA', 'PLA', 'PETG', 'PETG', 'PETG', 'PETG', 'PETG'],
+    fileFilamentColor: colors,
+    fileFilamentColorMulti: [null, null, null, null, null, null, null],
+    fileFilamentWeight: [12.4, 9.1, 6.7, 6.6, 7.2, 6.9, 7.1],
+    fileFilamentUsedMm: [4123, 3027, 2229, 2210, 2431, 2240, 2173],
+    fileNozzle: ['0.4', '0.4', '0.4', '0.4', '0.4', '0.4', '0.4'],
+    extruderMap: { 0: '0', 1: '1', 2: '2', 3: '3', 4: '3', 5: '3', 6: '3' },
+    acePlan: mockAcePlan({ mismatch }),
   };
 }
 
@@ -887,6 +955,17 @@ export function makePrinter() {
       fileNozzle: ['0.4', '0.4', '0.4', '0.4'],
       // Orca's own filament -> extruder map, from AppConfig. The popup starts here.
       extruderMap: { 0: '0', 1: '1', 2: '2', 3: '3' },
+      /*
+       * PROPOSED - `ace_plan`, and null is the honest default.
+       *
+       * No Orca sends this today: the slicer on this branch has no planner and no ACE
+       * emitter, so every plate it can produce has no plan and the popup must be the
+       * dialog that already ships. `usePlan()` below switches the job to one that does,
+       * which is the only way to exercise the ACE half at all.
+       *
+       * See docs/u1-webui/03-print-processing/06-multiace.md §3 item 1.
+       */
+      acePlan: null,
       sizeBytes: 12684221,
       checksum: 'kBqDdG0mZ0nH0mockCHECKSUMbase64PADDINGxxxxxxx=',
       /** Set by the close protocol so a check can read what the page reported. */

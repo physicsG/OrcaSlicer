@@ -15,8 +15,8 @@
 'use strict';
 
 import { el } from '../../../../shared/js/dom.js';
-import { text } from '../../../../shared/js/render.js';
-import { duration, grams2 } from '../../widgets/format.js';
+import { text, keyedList } from '../../../../shared/js/render.js';
+import { duration, grams2, inkOn } from '../../widgets/format.js';
 
 export function mount(root) {
   const row = el('div', 'mi');
@@ -37,12 +37,23 @@ export function mount(root) {
   facts.appendChild(el('div', 'mi-fact', ''));   // Estimated Time
   facts.appendChild(el('div', 'sp-10'));
   facts.appendChild(el('div', 'mi-fact', ''));   // Estimated Materials
+  /*
+   * Every filament the plate uses, as a wrapping strip of numbered swatches.
+   *
+   * Not in the shipped dialog, and the reason it is here is the reason this surface is
+   * being rebuilt: a plate sliced onto an ACE uses SEVEN filaments where the machine has
+   * four heads, and three text facts cannot say that. The number on each is the identity
+   * the Prepare sidebar already gave it, so the thing numbered there is the thing seen
+   * here. On an ordinary four-filament plate it is four swatches and costs one line.
+   */
+  facts.appendChild(el('div', 'sp-10'));
+  facts.appendChild(el('div', 'mi-strip'));
   row.appendChild(facts);
 
   root.appendChild(row);
 }
 
-export function update(root, { mapping, file }) {
+export function update(root, { mapping, file, filaments }) {
   const img = root.querySelector('.mi-thumb');
   const thumb = mapping && Array.isArray(mapping.thumbnails) && mapping.thumbnails[0];
   const url = thumb && thumb.url;
@@ -65,4 +76,17 @@ export function update(root, { mapping, file }) {
   // toStringAsFixed(2) - "31.40 g", not "31.4 g".
   text(facts[2], `Estimated Materials: ${
     mapping ? grams2(mapping.filament_weight_total) : 'N/A'}`);
+
+  keyedList(root.querySelector('.mi-strip'), filaments || [], {
+    key: (f) => f.key,
+    create: () => el('span', 'mi-fil'),
+    update: (node, f) => {
+      const colour = f.colors[0] || '#B7BDC6';
+      text(node, String(f.index + 1));
+      node.dataset.fil = String(f.index);
+      node.style.background = colour;
+      node.style.color = inkOn(colour);
+      node.title = `Filament ${f.index + 1} · ${f.type}`;
+    },
+  });
 }

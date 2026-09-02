@@ -29,8 +29,10 @@ js/views/filament/
     filament-commands.js   everything it can ask the machine to do
 ```
 
-[`js/registry.js`](js/registry.js) lists the five, in the order `A.bi3` builds them; the
-shell is built from it and nothing else names them.
+[`js/registry.js`](js/registry.js) lists the five **slots**, in the order `A.bi3` builds
+them; the shell is built from it and nothing else names them. There are six entries,
+because one slot has two panels: `filament` (the four cards) and `grouping` (an ACE
+plate's), and the FILE picks between them — see below.
 
 | | |
 |---|---|
@@ -216,6 +218,47 @@ timed out**. All of it, with the wire, is
 [05-hardware-e2e.md](../../../docs/u1-webui/03-print-processing/05-hardware-e2e.md); the
 procedure is the `u1-hardware-test` skill.
 
+## The ACE grouping panel
+
+A plate sliced onto an ACE gets a different filament section, and the FILE picks: with an
+`ace_plan` in the mapping reply the grouping panel is the panel, without one Edit Filament
+is. **Every plate the slicer can produce on this branch has no plan**, so on a real Orca
+today nothing changes at all — `drive/print-dialog.js` still passes 52/52 on the four-card
+dialog.
+
+Why it is a different panel rather than a bigger one: Edit Filament asks *which toolhead
+does this filament print from*, and an ACE plate cannot be asked that. The file already
+decided, and its `ACE_SWAP_HEAD HEAD=n` names the head directly — so a picker would offer
+a way to desynchronise the swaps from the tool changes and print on the wrong heads. What
+is left is reconciliation: the file says which bay each filament comes from, the machine
+says what is in it, the panel says what to move.
+
+It is option G from [the mockups](mockups/), and the whole account is
+[06-multiace.md](../../../docs/u1-webui/03-print-processing/06-multiace.md).
+
+```bash
+R=resources/web/shared/tests
+python3 $R/run_webkit.py --size 714x750 \
+    --page 'web/print_processing/index.html?mock=1&plan=1' \
+    --drive $R/drive/print-dialog-ace.js
+```
+
+`?plan=1` gives the simulator a seven-filament plate on **its own machine** — three stock
+feeders and one four-bay ACE head — and `?plan=mismatch` moves one file filament off the
+bay that holds it. Both run on the same simulator the four-filament default does, so a
+mismatch has to be *created*: a check of the match must not be a check of two fixtures
+agreeing with each other.
+
+**One command, and it writes the identity.** `extruder_map_table` is machine state that
+survives a print — a real U1 has been seen carrying `[0,1,1,0]` from an earlier job — so
+sending nothing inherits it, and on an ACE plate any remap prints on the wrong heads. The
+drive script asserts the map went out *and* that no line moves a tool off its own head.
+
+**`hidden` hid nothing, and that is why this needed a check.** `.card` is `display: flex`
+and `hidden` is a UA rule any author `display:` beats, so the four cards went on being
+drawn beside the panel replacing them. `[hidden] { display: none !important }` is in
+`preprint.css` now.
+
 ## Honest limits
 
 - **Confirming a machine command against its ack is still wrong**, even though the
@@ -237,3 +280,10 @@ procedure is the `u1-hardware-test` skill.
   not say how to pair them. See `fileFilaments` in `core/session.js`.
 - **`filament_color_multi` is read and drawn**, but no plate observed so far has carried
   a gradient or segmented spool, so only the simulator has exercised those two branches.
+- **The ACE grouping panel has never met a printer**, and cannot: no Orca on this branch
+  produces a plate with an `ace_plan`. It is driven against the simulator only, and its
+  `multi` and `normal` branches are drawn but unexercised — the simulator reports `head`.
+- **The build badge covers the panel's last note at one scroll position.** It is fixed to
+  the bottom-right and the body scrolls under it; this is the first panel on this surface
+  long enough to put a line there. Scrolling reveals it, and the suite already guards the
+  one thing that must never be covered — the Send button.

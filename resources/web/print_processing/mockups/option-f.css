@@ -1,0 +1,98 @@
+/*
+ * option-f.css - one line per filament.
+ *
+ * The Prepare sidebar's Project Filaments row, at print time: a numbered colour badge,
+ * the filament, where it comes from, and whether it is there. Fixed row height, so seven
+ * rows and sixteen cost the same per row and the section is the only thing that grows.
+ */
+
+.flist { display: flex; flex-direction: column; }
+
+.frow {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 2px; min-width: 0;
+  position: relative;
+}
+.frow + .frow { border-top: 1px solid var(--line); }
+
+/* The head this filament prints from. It groups the rows without a second heading level:
+   consecutive rows on one head share a bracket down the left, which is what makes four
+   rows on Toolhead 4 read as one head's sequence rather than four unrelated filaments. */
+.frow .lane { flex: 0 0 74px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.frow.is-same .lane { visibility: hidden; }
+/* A continuous rule down the left of the grouped rows, not an elbow per row: the elbow
+   was measured on screen as a stray tick beside each row rather than a bracket joining
+   them, which is the opposite of what it is for. */
+.frow.is-same::before {
+  content: ""; position: absolute; left: 9px; top: -1px; bottom: 0;
+  border-left: 1px solid var(--line);
+}
+/* The last row of a group closes it, so the rule ends on a filament rather than in air. */
+.frow.is-same.is-last::before { bottom: 50%; }
+.frow.is-same.is-last::after {
+  content: ""; position: absolute; left: 9px; top: 50%; width: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.frow .name { flex: 1; min-width: 0; font-size: 12px; color: var(--ink);
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frow .used { flex: none; font-size: 11px; color: var(--muted);
+              font-variant-numeric: tabular-nums; }
+
+/* Where it comes from: the bay's address and what is in it, or the feeder. A fixed
+   column, so the eye runs down the sources rather than hunting for them. */
+.frow .from { flex: 0 0 148px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.frow .from .what { font-size: 11px; color: var(--ink-2);
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frow .from .sw {
+  flex: none; width: 15px; height: 15px; border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, .22);
+}
+.frow .from .sw.empty {
+  background:
+    repeating-conic-gradient(var(--line) 0 25%, transparent 0 50%) 0 0 / 8px 8px,
+    var(--panel-2);
+}
+
+.frow .verdict { flex: 0 0 96px; display: flex; align-items: center; gap: 5px;
+                 font-size: 11px; }
+.frow .verdict.ok { color: var(--ok); }
+.frow .verdict.bad { color: var(--err); }
+.frow .verdict.warn { color: var(--warn); }
+.frow .verdict.muted { color: var(--muted); }
+
+/* The fix, on the row that needs one. Second line rather than a wider row: at 714px the
+   four columns above are already at their minimum. */
+.frow-fix {
+  margin: 0 0 6px 83px; padding: 5px 9px;
+  border-left: 2px solid var(--err); border-radius: 0 5px 5px 0;
+  background: color-mix(in srgb, var(--err) 6%, transparent);
+  font-size: 11px; color: var(--ink-2);
+}
+.frow-fix.warn { border-left-color: var(--warn);
+                 background: color-mix(in srgb, var(--warn) 7%, transparent); }
+
+/* ---- the machine, as a header rather than a picture -------------------- */
+
+/* One line naming what is plugged in. F does not draw the machine, so this is where the
+   ACE is acknowledged at all - and the badge is the same 44x26 the Prepare tab's ACE row
+   and the Device page's unit strip both use. */
+.mach-line {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 0 7px; margin-bottom: 5px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11.5px; color: var(--muted);
+}
+.mach-line .spacer { flex: 1; }
+
+/* ---- Model Information ------------------------------------------------- */
+.model-row { display: flex; gap: 11px; align-items: flex-start; }
+.model-facts { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.model-name { font-size: 12.5px; color: var(--ink); overflow: hidden;
+              text-overflow: ellipsis; white-space: nowrap; }
+.model-meta { display: flex; gap: 12px; font-size: 11.5px; color: var(--muted); }
+
+/* Two ACE units is two badges on one line, so each needs its own grouping or the second
+   unit's humidity reads as belonging to the first. */
+.mach-unit { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; }
+.mach-unit .dim { color: var(--muted); }

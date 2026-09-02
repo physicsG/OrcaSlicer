@@ -11,7 +11,7 @@ export default {
   id: 'model-info',
   title: 'Model Information',
   route: 'both',
-  reads: ['mapping', 'file'],
+  reads: ['mapping', 'file', 'filaments'],
   mount: view.mount,
   update: view.update,
 };

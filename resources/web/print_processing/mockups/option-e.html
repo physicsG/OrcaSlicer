@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>multiACE print — Option E</title>
+<link rel="stylesheet" href="../../shared/css/base.css">
+<link rel="stylesheet" href="mockup.css">
+<link rel="stylesheet" href="ace-mockup.css">
+<link rel="stylesheet" href="option-e.css">
+</head>
+<body class="mock-dialog">
+
+<!--
+  OPTION E - THE MACHINE, WHOLE.
+
+  One picture, the Device page's: every place a spool can be, drawn once, with the tubes
+  running to the toolhead each one feeds. Three stock feeder modules and one ACE cabinet
+  is the machine this plate was sliced for, and it is seven places for seven filaments -
+  which is a thing a four-card dialog can only assert and this one can show.
+
+  The bet: the operator is about to walk to the printer, and what they need is a picture
+  of the printer with the spools they have to move marked on it.
+-->
+
+<div class="dlg-title">
+  <span id="title">Print Preprocessing</span>
+  <span class="sub" id="subtitle"></span>
+  <span class="spacer"></span>
+</div>
+
+<div class="dlg-body">
+  <section class="card" id="c-model"><h2>Model Information</h2><div class="card-body"></div></section>
+  <section class="card" id="c-machine"><h2>What is loaded<span class="spacer"></span>
+    <span class="cost" id="cost"></span></h2><div class="card-body"></div></section>
+  <section class="card" id="c-todo"><h2>Before this can print</h2><div class="card-body"></div></section>
+  <section class="card" id="c-prefs"><h2>Print Preferences</h2><div class="card-body"></div></section>
+</div>
+
+<div class="dlg-foot">
+  <div class="bar">
+    <div class="bar-track"><div class="bar-fill" id="fill"></div></div>
+    <div class="bar-label"><span id="stage">Ready</span><b id="pct"></b></div>
+  </div>
+  <button class="primary" id="send">Send</button>
+</div>
+
+<script type="module" src="option-e.js"></script>
+</body>
+</html>

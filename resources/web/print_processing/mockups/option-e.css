@@ -1,0 +1,57 @@
+/*
+ * option-e.css - the machine, whole.
+ *
+ * One row of columns, each column a source and the head it feeds. The widths are the
+ * drawing's own: a feeder module is one bay wide and a cabinet is four, so the columns
+ * are unequal and the row is 628px inside a 686px card - which is why this option can
+ * afford the full 36px disc where D cannot.
+ */
+
+/* `position: relative` because each column draws its own tubes into its own box, and the
+   SVG is measured against the column rather than the row. */
+.machine {
+  display: flex; gap: 12px; justify-content: center; align-items: flex-start;
+  padding: 2px 0 0;
+}
+.mcol { position: relative; display: flex; flex-direction: column; align-items: center;
+        gap: 0; min-width: 0; }
+
+/* The unit's own line sits over the thing it describes, which is where the AMS display
+   puts it. A feeder column gets the same row height so the four boxes line up. */
+.mcol > .ace-strip { align-self: stretch; justify-content: center; min-height: 20px; }
+.mcol.is-feeder > .ace-strip { color: var(--muted); font-size: 11px; }
+
+/* The lane the manifold needs. The tubes are drawn behind the box, so this is only the
+   room between the box's bottom and the head's inlet. */
+.mlane { position: relative; height: 26px; align-self: stretch; }
+
+/* A head this plate never prints on is drawn and dimmed rather than left out: an
+   operator counting four heads and finding three has to work out which is missing. */
+.mcol.is-idle { opacity: .5; }
+
+/* The verdict marks live under the head, not on the bay: at 36px a bay already carries
+   an address, a colour, a name chip and two provenance marks, and a fifth thing on it is
+   where this drawing stops being readable. */
+.mhead { position: relative; z-index: 2; display: flex; flex-direction: column;
+         align-items: center; gap: 1px; }
+.mhead .mname { font: 11px/1.3 var(--sans); color: var(--ink-2); white-space: nowrap; }
+.mhead .mruns { display: flex; gap: 3px; align-items: center; }
+
+/* ---- the to-do list ---------------------------------------------------- */
+
+/* Only what has to change. A row per place that is not ready, and nothing at all when
+   everything is - a section that says "3 of 3 fine" is three lines of nothing. */
+.todo-row { display: flex; align-items: center; gap: 9px; padding: 5px 2px; }
+.todo-row + .todo-row { border-top: 1px solid var(--line); }
+.todo-row .grow { flex: 1; min-width: 0; }
+.todo-row .what { font-size: 12px; color: var(--ink); }
+.todo-row .why { font-size: 11px; color: var(--muted); }
+
+.all-good { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ok); }
+
+/* ---- Model Information ------------------------------------------------- */
+.model-row { display: flex; gap: 11px; align-items: flex-start; }
+.model-facts { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.model-name { font-size: 12.5px; color: var(--ink); overflow: hidden;
+              text-overflow: ellipsis; white-space: nowrap; }
+.model-meta { display: flex; gap: 12px; font-size: 11.5px; color: var(--muted); }

@@ -53,6 +53,19 @@ body.dlg {
 .gap-20 { flex: none; width: 20px; }   /* B.lr */
 
 /* ---- a section --------------------------------------------------------- */
+/*
+ * `hidden` is a UA rule at the very bottom of the cascade, and ANY author `display:`
+ * beats it. `.card` is `display: flex`, so `section.hidden = true` on a card hid nothing
+ * at all - the four filament cards went on being drawn beside the grouping panel that had
+ * replaced them. Author-level and `!important`, so it wins wherever it is used.
+ *
+ * The nozzle banner never hit this because it sets `hidden` on its `.bare` body, which
+ * has no `display` of its own. The rule below is what makes that an accident that does
+ * not matter rather than the only reason a thing works.
+ */
+[hidden] { display: none !important; }
+
+
 .card {
   display: flex;
   align-items: flex-start;          /* B.a6 = CrossAxisAlignment.start */
@@ -505,3 +518,103 @@ body.dlg {
   font-family: var(--mono); padding: 6px; border-radius: 4px;
 }
 .trace-wrap .t { white-space: pre; }
+
+/* ---- Model Information: the plate's filaments -------------------------
+   Every filament the plate uses, numbered as the Prepare sidebar numbers them. Four on an
+   ordinary plate; seven on one sliced onto an ACE, which is the case three text facts
+   cannot describe. */
+.mi-strip { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.mi-fil {
+  flex: none; display: grid; place-items: center;
+  width: 22px; height: 22px; border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, .22);
+  font: 600 11px/1 var(--mono);
+}
+
+/* ---- the grouping panel -----------------------------------------------
+   What the slicer grouped onto each toolhead, drawn in the language this machine already
+   has: the Device page's Filament panel and the Prepare tab's Printer section. The whole
+   panel is absent on a plate with no ace_plan, which is every plate today. */
+
+/* The mode decides what an address MEANS, so it is stated above everything that draws
+   one. Read-only: SET_ACE_MODE re-plumbs the printer and some of it needs a restart. */
+.g-mode { display: flex; align-items: baseline; gap: 9px; margin-bottom: 8px; min-width: 0; }
+.g-pill {
+  flex: none; padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--pill);
+  font: 500 11px/1.5 var(--sans); color: var(--ink-2); white-space: nowrap;
+}
+.g-pill.dim { color: var(--ink-dim); }
+.g-say { font-size: 11px; color: var(--ink-dim); min-width: 0;
+         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The units, where no head is wired to one: above the grid in multi, below in normal.
+   The Device page's own placement, and its reason - an idle cabinet is a footnote. */
+.g-band {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
+  padding: 6px 9px; margin-bottom: 8px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--pill);
+}
+.band-below .g-band { margin: 8px 0 0; order: 2; }
+.band-below { display: flex; flex-direction: column; }
+.g-unit { display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+          font-size: 11.5px; color: var(--ink-2); }
+.g-unit b { color: var(--ink); font-weight: 600; }
+.g-dim { color: var(--ink-dim); font-size: 10.5px; }
+.g-hum { font: 10.5px/1 var(--mono); color: var(--ink-2); }
+
+/* One box per toolhead, two across - the Prepare tab's own grid. */
+.g-heads { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.g-head {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--pill); padding: 7px 9px 9px; min-width: 0;
+}
+.g-head.is-idle { opacity: .5; }
+.g-hrow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; min-width: 0; }
+.g-hrow h4 { margin: 0; font: 500 11.5px/1 var(--sans); color: var(--ink-2);
+             white-space: nowrap; }
+.g-spacer { flex: 1; }
+
+/* What feeds this head. One badge, on the head, because ACE_SET_HEAD_ACE binds a head to
+   exactly one unit - drawn per chip it was the same cabinet three times on one toolhead. */
+.g-src { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.g-srcname { font: 11px/1 var(--sans); color: var(--ink); white-space: nowrap; }
+.g-srcname.dim { color: var(--ink-dim); }
+.g-srcname.mono { font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); }
+.g-feedmark { display: block; flex: none; }
+.g-src .ace-badge { display: block; flex: none; }
+
+/* One filament: the material on a bar in its own colour, and where it comes from. */
+.g-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.g-chip {
+  flex: none; width: 62px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); overflow: hidden;
+}
+.g-chip.is-bad { border-color: var(--err); }
+.g-chip.is-warn { border-color: var(--warn); }
+.g-type {
+  display: block; height: 19px; line-height: 19px;
+  font: 600 10.5px/19px var(--sans); text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+.g-from {
+  display: block; height: 22px; line-height: 22px;
+  font: 10.5px/22px var(--mono); color: var(--ink-2); text-align: center;
+}
+.g-chip.is-bad .g-from { color: var(--err); }
+.g-chip.is-warn .g-from { color: var(--warn); }
+
+.g-verdict { margin-top: 5px; font-size: 11px; line-height: 1.4; min-height: 15px; }
+.g-verdict.ok { color: var(--ok); }
+.g-verdict.warn { color: var(--warn); }
+.g-verdict.bad { color: var(--err); }
+.g-verdict.dim { color: var(--ink-dim); }
+
+/* The limit, stated once, and the cost, before Send rather than after. */
+.g-note { margin-top: 7px; font-size: 11px; line-height: 1.45; color: var(--ink-dim); }
+.g-note.warn { color: var(--warn); }
+.g-cost { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px;
+          margin-top: 6px; font-size: 11.5px; color: var(--ink-dim); }
+.g-cost b { font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.g-saved { margin-left: 4px; }

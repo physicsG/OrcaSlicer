@@ -41,10 +41,21 @@
 import modelInfo from './views/model-info/model-info-panel.js';
 import printer from './views/printer/printer-panel.js';
 import filament from './views/filament/filament-panel.js';
+import grouping from './views/grouping/grouping-panel.js';
 import preferences from './views/preferences/preferences-panel.js';
 import nozzle from './views/nozzle/nozzle-panel.js';
 
-export const PANELS = [modelInfo, printer, filament, preferences, nozzle];
+/*
+ * `filament` and `grouping` are the SAME slot, and the FILE picks between them: a plate
+ * with an `ace_plan` gets the grouping, one without gets the four cards. Both are mounted
+ * and app.js hides one, rather than the registry choosing - the plan arrives with the
+ * mapping reply, which is after the shell is built, and a panel that has to be built
+ * later is a panel that cannot be reconciled.
+ *
+ * Every plate the slicer can produce on this branch has no plan, so `grouping` is hidden
+ * on all of them and nothing about the shipped dialog changes.
+ */
+export const PANELS = [modelInfo, printer, filament, grouping, preferences, nozzle];
 
 /** The panels this route draws, in order. */
 export function panelsFor(route) {

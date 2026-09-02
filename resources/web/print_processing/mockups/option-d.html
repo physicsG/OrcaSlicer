@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>multiACE print — Option D</title>
+<link rel="stylesheet" href="../../shared/css/base.css">
+<link rel="stylesheet" href="mockup.css">
+<link rel="stylesheet" href="ace-mockup.css">
+<link rel="stylesheet" href="option-d.css">
+</head>
+<body class="mock-dialog">
+
+<!--
+  OPTION D - PER HEAD, TWO ACROSS.
+
+  The Prepare tab's Printer section, in this dialog. One bordered box per toolhead
+  wrapped two across, each with the ACE row it already has - the key `ACE`, then a badge
+  when a unit feeds that head or the words `Stock feeder` when it does not - and each
+  wearing the green corner tick when what is in it is what the plate was sliced for.
+
+  The bet: the operator has seen this exact grid twice already, in Prepare and on the
+  Device page, and a print dialog that draws the machine a third way is asking them to
+  learn it a third time. Whatever is wrong is wrong inside one box, and the box says
+  which head it is.
+-->
+
+<div class="dlg-title">
+  <span id="title">Print Preprocessing</span>
+  <span class="sub" id="subtitle"></span>
+  <span class="spacer"></span>
+</div>
+
+<div class="dlg-body">
+  <section class="card" id="c-model"><h2>Model Information</h2><div class="card-body"></div></section>
+  <section class="card" id="c-heads"><h2>Toolheads<span class="spacer"></span>
+    <span class="cost" id="cost"></span></h2><div class="card-body"></div></section>
+  <section class="card" id="c-prefs"><h2>Print Preferences</h2><div class="card-body"></div></section>
+</div>
+
+<div class="dlg-foot">
+  <div class="bar">
+    <div class="bar-track"><div class="bar-fill" id="fill"></div></div>
+    <div class="bar-label"><span id="stage">Ready</span><b id="pct"></b></div>
+  </div>
+  <button class="primary" id="send">Send</button>
+</div>
+
+<script type="module" src="option-d.js"></script>
+</body>
+</html>

@@ -1,0 +1,247 @@
+/*
+ * option-g.css - the grouping, and a way back.
+ *
+ * The layout is the Send print job dialog's from ui-snapshots-inspiration/Slicing/03: a
+ * job row across the top, then labelled sections with a hairline under the label rather
+ * than boxed cards, then a foot. Lighter than mockup.css's `.card`, which is what lets a
+ * dialog carrying four toolhead boxes AND four option rows stay near one screen.
+ */
+
+/* ---- Model Information ------------------------------------------------- */
+
+/* D's block: the render beside the file's own numbers, with a wrapping strip of every
+   filament the plate uses. The strip is `.plate-strip` in ace-mockup.css, because seven
+   filaments not fitting four cards is the point every design here is answering. */
+.model-row { display: flex; gap: 12px; align-items: flex-start; }
+.model-facts { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.model-name {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  font: 600 13px/1.3 var(--sans); color: var(--ink);
+}
+.model-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-name .pencil { flex: none; color: var(--muted); }
+.model-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; color: var(--ink-2); }
+
+/* ---- a section: a label, a hairline, a body --------------------------- */
+
+.grp { margin-bottom: 12px; }
+.grp > h3 {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 0 0 7px; padding-bottom: 5px;
+  border-bottom: 1px solid var(--line);
+  font: 500 11.5px/1 var(--sans); letter-spacing: .03em;
+  color: var(--muted); text-transform: uppercase;
+}
+.grp > h3 .spacer { flex: 1; }
+
+/* What the grouping bought. Not a warning and not a boast - one line, in the section's
+   own register, because it is the answer to "why is it arranged like this". */
+.saving { font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--ink-2); }
+.saving b { color: var(--ok); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---- the printer row --------------------------------------------------- */
+
+.pcards { display: flex; gap: 8px; align-items: stretch; }
+.pcard {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius);
+}
+.pcard .pname { font-size: 12.5px; color: var(--ink); }
+.pcard .pmodel { font-size: 11px; color: var(--muted); }
+.pcard .grow { flex: 1; min-width: 0; }
+.pcard button { border: 0; background: none; color: var(--muted); cursor: pointer;
+                padding: 2px; border-radius: 4px; }
+.pcard button:hover { color: var(--accent); }
+.plate-card {
+  flex: 0 0 84px; flex-direction: column; gap: 3px; justify-content: center;
+  padding: 6px; text-align: center;
+}
+.plate-card .pname { font-size: 11px; color: var(--ink-2); }
+
+/* ---- the toolhead boxes ------------------------------------------------ */
+
+.heads { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.hbox {
+  position: relative; min-width: 0;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel-2); padding: 7px 9px 9px;
+}
+.hbox > h4 { margin: 0 0 6px; font: 500 11.5px/1 var(--sans); color: var(--ink-2); }
+.hbox.is-idle { opacity: .5; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---- a filament chip --------------------------------------------------- */
+
+/* The material name on a bar in the filament's own colour, and under it where the
+   filament comes from. Two facts, stacked, in the order they are asked: WHAT, then
+   WHERE. */
+.chip {
+  flex: none; width: 62px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); overflow: hidden;
+  cursor: pointer; padding: 0; font: inherit; text-align: left;
+}
+.chip:hover { border-color: var(--accent); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chip-type {
+  display: block; height: 19px; line-height: 19px;
+  font: 600 10.5px/19px var(--sans); text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+.chip-from {
+  display: flex; align-items: center; justify-content: center; gap: 3px;
+  height: 23px; font: 10.5px/1 var(--mono); color: var(--ink-2);
+}
+.chip-from .caret { color: var(--muted); font-size: 8px; font-family: var(--sans); }
+/* A source the plate cannot use as it stands. The chip still says what it says - the
+   mark is added, never substituted, because "A2" is still where the plan looks. */
+.chip.is-bad { border-color: var(--err); }
+.chip.is-bad .chip-from { color: var(--err); }
+.chip.is-warn { border-color: var(--warn); }
+.chip.is-warn .chip-from { color: var(--warn); }
+/* Changed by hand and not yet sliced. */
+.chip.is-dirty { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* The way back, in the flow's own words and its own weight: a link, under the thing it
+   would change. */
+.regroup {
+  display: block; margin-top: 8px;
+  border: 0; background: none; padding: 0;
+  font: inherit; font-size: 11.5px; color: var(--ok);
+  cursor: pointer; text-align: left;
+}
+.regroup:hover { text-decoration: underline; }
+
+/* ---- print preferences ------------------------------------------------- */
+
+/* D and E's switch rows, not the flow's three-state segments: the macro behind these
+   takes 1 or 0, so a middle position could never be sent. `.pref` and `.switch` are in
+   mockup.css already - all that is needed here is the room. */
+.grp-body > .pref:first-child { padding-top: 0; }
+
+/* ---- the source picker ------------------------------------------------- */
+
+/* Every place that could feed this head, drawn as the units they live in, with the ones
+   that cannot greyed rather than hidden - the flow this is from greys the other nozzle's
+   AMS, and greying beats hiding because "why is my other unit not listed" is a question
+   an absence cannot answer. */
+.pick-scrim { position: fixed; inset: 0; z-index: 60; background: rgba(9, 14, 20, .38); }
+.pick {
+  position: fixed; z-index: 61; width: 340px; max-width: calc(100vw - 24px);
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .28);
+  padding: 11px 13px 12px;
+}
+.pick h4 { margin: 0 0 9px; font: 600 12px/1.35 var(--sans); color: var(--ink); }
+.pick-unit { margin-bottom: 9px; }
+.pick-unit > .ul { font-size: 10.5px; color: var(--muted); margin-bottom: 4px; }
+.pick-row { display: flex; gap: 5px; }
+.pick-unit.is-off { opacity: .42; pointer-events: none; }
+
+/* One selectable place. The corner wedge marks the chosen one - the same corner the
+   Prepare tab puts its sync tick in, filled rather than green because this is a choice
+   the operator made and not an agreement with the machine. */
+.pbay {
+  position: relative; flex: 1; min-width: 0; padding: 0; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
+  font: inherit; overflow: hidden;
+}
+.pbay:hover { border-color: var(--accent); }
+.pbay .pb-top { display: block; height: 7px; }
+.pbay .pb-addr { display: block; font: 500 10.5px/1 var(--mono); color: var(--ink);
+                 padding: 4px 0 1px; text-align: center; }
+.pbay .pb-mat { display: block; font-size: 9.5px; color: var(--muted); padding: 0 2px 4px;
+                text-align: center; overflow: hidden; text-overflow: ellipsis;
+                white-space: nowrap; }
+.pbay[aria-pressed="true"] { border-color: var(--ink); }
+.pbay[aria-pressed="true"]::after {
+  content: ""; position: absolute; right: 0; top: 0;
+  border-width: 0 13px 13px 0; border-style: solid;
+  border-color: transparent var(--ink) transparent transparent;
+}
+.pbay[aria-pressed="true"] .tickmark {
+  position: absolute; right: 1px; top: 1px; width: 8px; height: 8px; color: var(--panel);
+}
+.pick-note { margin: 2px 0 10px; font-size: 11px; line-height: 1.45; color: var(--muted); }
+.pick-foot { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---- the regroup sheet ------------------------------------------------- */
+
+/* Local rather than shared/js/dialog.js: that module's CSS lives in the DEVICE page's
+   stylesheet, which this surface does not load and the standalone bundler does not
+   inline. A mockup that depended on it would look right here and be unstyled there. */
+.sheet { position: fixed; z-index: 61; left: 50%; top: 50%; transform: translate(-50%, -50%);
+         width: 470px; max-width: calc(100vw - 24px);
+         border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+         box-shadow: 0 10px 34px rgba(0, 0, 0, .28); }
+.sheet h4 { margin: 0; padding: 11px 14px; border-bottom: 1px solid var(--line);
+            font: 600 13px/1 var(--sans); color: var(--ink); }
+.sheet-body { padding: 12px 14px 4px; }
+.sheet-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px 12px; }
+
+.modes { display: flex; gap: 8px; margin-bottom: 10px; }
+.mode {
+  flex: 1; min-width: 0; text-align: left; cursor: pointer; font: inherit;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+  padding: 9px 10px;
+}
+.mode:hover { border-color: var(--accent); }
+.mode[aria-pressed="true"] { border-color: var(--ok);
+                             background: color-mix(in srgb, var(--ok) 8%, transparent); }
+.mode .mtitle { display: flex; align-items: center; gap: 6px;
+                font-size: 12.5px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+.mode .mbody { font-size: 11px; line-height: 1.45; color: var(--ink-2); }
+.mode[aria-pressed="true"] .mtitle { color: var(--ok); }
+/* What choosing it would actually do to THIS plate. The flow this is from describes each
+   mode in the abstract; with the machine already read, the consequence is knowable. */
+.mode .mcost { margin-top: 6px; font: 10.5px/1.4 var(--mono); color: var(--muted); }
+
+/* ---- the mode, and where the cabinets are named ------------------------ */
+
+/* Stated, not offered: `SET_ACE_MODE` re-plumbs the printer and some of it needs a
+   restart, so this is a fact about the machine the way the printer's name is. */
+.mode-row {
+  display: flex; align-items: baseline; gap: 9px;
+  margin-bottom: 7px; min-width: 0;
+}
+.mode-pill {
+  flex: none; padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel-2);
+  font: 500 11px/1.5 var(--sans); color: var(--ink-2); white-space: nowrap;
+}
+.mode-pill.dim { color: var(--muted); }
+.mode-say { font-size: 11px; color: var(--muted); min-width: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* In multi and normal no head is wired to a cabinet, so the cabinets belong to the panel.
+   Above the grid in multi, below it in normal - the Device page's own placement, and for
+   its reason: in normal they are idle, and an idle cabinet is a footnote. */
+.unit-band {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
+  padding: 6px 9px; margin-bottom: 8px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.heads + .unit-band { margin: 8px 0 0; }
+.unit-one { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.unit-model { font-size: 10.5px; color: var(--muted); }
+.unit-hum { font: 10.5px/1 var(--mono); color: var(--ink-2); }
+
+/* ---- the head's own row ------------------------------------------------ */
+
+/* `Toolhead N` and what feeds it on ONE line. The Prepare tab gives them two - a heading
+   and an `ACE` row - and has the sidebar's height for it; this dialog has 215px for four
+   boxes and the two facts are short enough to share. */
+.hhead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; min-width: 0; }
+.hhead h4 { margin: 0; font: 500 11.5px/1 var(--sans); color: var(--ink-2); white-space: nowrap; }
+.hhead .spacer { flex: 1; }
+
+.hsrc { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.hsrc-name { font: 11px/1 var(--sans); color: var(--ink); white-space: nowrap; }
+.hsrc-name.dim { color: var(--muted); }
+/* A lane is not a cabinet and gets no badge: bay i of EVERY unit feeds this head, so one
+   badge would name one cabinet out of a set and be wrong about the rest. The bays it
+   lists are the whole answer. */
+.hsrc.is-lane .hsrc-name { font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); }
+
+.chip-from .addr-t { font: 10.5px/1 var(--mono); }

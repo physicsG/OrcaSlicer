@@ -1,0 +1,47 @@
+/*
+ * option-d.css - per head, two across.
+ *
+ * Almost nothing: the head box, the grid and the marks are in ace-mockup.css because
+ * more than one option draws them. What is here is what only D does.
+ */
+
+/* No toolhead artwork in this option, deliberately. The Prepare tab has none either -
+   the box IS the head, and its heading names it. Two rows of artwork at 70px would cost
+   140 of the 654 this dialog's body has, and buy a picture of something already named. */
+.head-grid { margin-top: 2px; }
+
+/* The places sit at the bottom of the box, so two boxes side by side line their spools
+   up whether one holds four and the other one. */
+.head-box .ace-box { margin-top: 5px; }
+
+/* A head the plate never prints on. Drawn, not hidden: an operator counting four heads
+   and finding three has to work out which is missing. */
+.head-box.is-idle { opacity: .55; }
+.head-box.is-idle:hover { border-color: #EEEEEE; }
+
+/* The plate's demand on this head, under the heading: one badge per filament this head
+   runs, in the order it runs them. On a feeder head that is one badge; on the ACE head
+   it is the reason this dialog exists. */
+.head-runs { display: flex; align-items: center; gap: 4px; margin: 0 0 4px; }
+.head-runs .arrow { color: var(--muted); font-size: 10px; }
+
+/* min-height, so a box with nothing to say keeps its neighbour's spool on the same
+   line as its own. An empty verdict is layout, not silence. */
+.head-verdict { margin-top: 5px; font-size: 11px; line-height: 1.4; min-height: 15px; }
+.grid-note { margin-top: 7px; font-size: 11px; }
+.head-verdict.ok   { color: var(--ok); }
+.head-verdict.warn { color: var(--warn); }
+.head-verdict.bad  { color: var(--err); }
+.head-verdict.muted { color: var(--muted); }
+
+/* ---- Model Information, this option's -------------------------------- */
+.model-row { display: flex; gap: 11px; align-items: flex-start; }
+.model-facts { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.model-name { font-size: 12.5px; color: var(--ink); overflow: hidden;
+              text-overflow: ellipsis; white-space: nowrap; }
+.model-meta { display: flex; gap: 12px; font-size: 11.5px; color: var(--muted); }
+
+/* The device line inside Model Information. `align-items: center` so the Connected pill
+   sits on the text's line rather than on its box. */
+.model-meta { align-items: center; }
+.model-meta .who { color: var(--ink); }
