@@ -113,6 +113,28 @@ python3 $R/run_webkit.py --real --device-ip 192.0.2.1 --size 714x750 \
     --drive $R/drive/print-dialog-real.js
 ```
 
+### Bringing the transport up
+
+`sw_GetMachineState` answers out of a Moonraker host, and **something has to attach one
+first** — `sw_mqtt_set_engine` is what does it. Inside Orca the Device tab usually has,
+and this popup inherits it. Opened without the Device tab having connected, or run
+outside Orca, nothing has, and every state command comes back
+
+```
+no engine attached yet (sw_mqtt_set_engine has not run)
+```
+
+So the dialog brings it up itself, with the Device page's own connect path
+(`shared/js/connection.js`): it tries, and on that error connects and tries again.
+**Choosing a printer does the same**, because nothing has connected to *that* machine
+either.
+
+Getting this wrong is quiet rather than loud. An unattached transport draws four
+toolheads reading `NONE` with no nozzles — which is exactly what a printer with nothing
+loaded looks like, and is plausible enough for an operator to map filaments against. When
+the connect fails the dialog says so and Send stays refused; a device *record* is not a
+printer that answered.
+
 ### The one command that moves a machine
 
 `sw_StartLocalPrint` starts a print. The bridge refuses it unless `--allow-print` is
@@ -135,9 +157,11 @@ Four things here are not what the previous reconstruction did, each read off the
 
 ## Honest limits
 
-- **Never driven against a connected printer.** The Orca half runs on a real plate and
-  the not-connected branch is covered; nothing in the send path past
-  `sw_GetFileStream` has been observed with a machine on the other end.
+- **Never driven against a connected printer.** The Orca half runs on a real plate, the
+  not-connected branch is covered, and the connect path is exercised as far as
+  `sw_mqtt_connect` — against `192.0.2.1` it fails with `No route to host`, which is the
+  right answer. What has *not* been seen is the other side of that: a machine answering,
+  `print_task_config` arriving, and anything in the send path past `sw_GetFileStream`.
 - **The multi-plate Model Information layout is not built.** `A.J9` has a second
   branch for a file with `partitions`, and `sw_GetFileFilamentMapping` as Orca
   implements it has no such key — the branch is unreachable through this host. It is

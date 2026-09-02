@@ -21,6 +21,7 @@
 'use strict';
 
 import { CMD, SUBSCRIBE_OBJECTS, TOOLHEADS } from '../../../shared/js/protocol.js';
+import { connect } from '../../../shared/js/connection.js';
 import { cssColor, nozzleStr } from '../widgets/format.js';
 
 /**
@@ -207,18 +208,62 @@ export async function readJob(bridge, { log = () => {} } = {}) {
   return out;
 }
 
-/** Bring the state subscription up. The same objects and filter the Device tab uses. */
-export async function subscribeState(bridge, state, { log = () => {} } = {}) {
+/**
+ * Bring the machine half up: a transport if nothing has one, then the subscription.
+ *
+ * `sw_GetMachineState` answers out of a Moonraker host, and something has to ATTACH one
+ * first - `sw_mqtt_set_engine` is what does it. Inside Orca the Device tab usually has,
+ * and this popup inherits it. Opened without the Device tab having connected, or run
+ * outside Orca against u1_bridge.py, nothing has: every state command comes back
+ *
+ *     no engine attached yet (sw_mqtt_set_engine has not run)
+ *
+ * and the dialog draws four toolheads reading NONE with no nozzles - which looks exactly
+ * like a printer with nothing loaded. That is the worst kind of wrong: it is a plausible
+ * screen, and the operator would map filaments against it.
+ *
+ * So: try, and if the host says there is no engine, connect and try again. The connect
+ * path is the Device page's, unchanged - `shared/js/connection.js`.
+ *
+ * A device that has never been paired cannot be brought up from here. Pairing needs the
+ * PIN the printer is showing, and asking for it is the Device tab's job; this returns the
+ * failure rather than growing a second pairing flow.
+ */
+export async function subscribeState(bridge, state, device,
+                                     { log = () => {}, onStep = () => {} } = {}) {
+  const filterAndSubscribe = async () => {
+    try {
+      await bridge.request(CMD.SET_SUBSCRIBE_FILTER, { objects: SUBSCRIBE_OBJECTS });
+    } catch (e) {
+      // Best-effort, as on the Device page: the filter narrows what arrives, and a host
+      // that refuses it still pushes everything.
+      log('subscribe filter', e);
+    }
+    const snap = await bridge.request(CMD.GET_MACHINE_STATE, { objects: SUBSCRIBE_OBJECTS });
+    state.applyPayload(snap);
+    await bridge.subscribe(CMD.SUBSCRIBE_MACHINE_STATE, {}, (d) => state.applyPayload(d));
+  };
+
   try {
-    await bridge.request(CMD.SET_SUBSCRIBE_FILTER, { objects: SUBSCRIBE_OBJECTS });
+    await filterAndSubscribe();
+    return { connected: false };            // something already had a host attached
   } catch (e) {
-    // Best-effort, as on the Device page: the filter narrows what arrives, and a host
-    // that refuses it still pushes everything.
-    log('subscribe filter', e);
+    if (!needsEngine(e) || !device) throw e;
+    log('no engine attached; connecting', e);
   }
-  const snap = await bridge.request(CMD.GET_MACHINE_STATE, { objects: SUBSCRIBE_OBJECTS });
-  state.applyPayload(snap);
-  await bridge.subscribe(CMD.SUBSCRIBE_MACHINE_STATE, {}, (d) => state.applyPayload(d));
+
+  onStep('Connecting to the printer…');
+  const engine = await connect(bridge, device, { onStep, trace: (m) => log('connect', m) });
+  await filterAndSubscribe();
+  return { connected: true, engine };
+}
+
+/**
+ * Did that fail because no transport is attached, rather than because the machine said
+ * no? The host answers with that sentence and nothing else does.
+ */
+function needsEngine(e) {
+  return /no engine attached/i.test((e && e.message) || '');
 }
 
 /**

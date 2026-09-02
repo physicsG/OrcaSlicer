@@ -253,7 +253,7 @@ def all_views():
     return "\n".join(out)
 
 
-cfile = os.path.join(JS, "core", "connection.js")
+cfile = os.path.join(SHARED, "js", "connection.js")
 if os.path.exists(cfile):
     conn_src = open(cfile, encoding='utf-8').read()
 check("connection.js exists", bool(conn_src))

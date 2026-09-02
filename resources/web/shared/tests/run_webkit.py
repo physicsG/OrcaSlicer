@@ -533,9 +533,10 @@ def main():
                          "command and refused there, which is what a suite wants.")
     ap.add_argument("--page", metavar="PATH",
                     help="load this path under resources/ instead of the Device page, "
-                         "e.g. web/print_processing/mockups/option-a.html?scenario="
-                         "mismatch. The built-in checks are the Device page's, so pass "
-                         "--drive with it, or --watch to look by hand.")
+                         "e.g. web/print_processing/index.html?mock=1. The built-in "
+                         "checks are the Device page's and are SKIPPED with this - pass "
+                         "--drive with the surface's own script, or --watch to look by "
+                         "hand.")
     ap.add_argument("--watch", type=float, nargs="?", const=0.0, default=None,
                     metavar="SECONDS",
                     help="leave the window open after the checks so it can be used by "
@@ -767,6 +768,22 @@ def main():
                          + f"  and attached an engine for {bridge.sn}")
             state["report"] = "\n".join(lines)
             state["rc"] = 1 if "FAIL" in state["report"] else 0
+            return wrap_up()
+        if args.page:
+            # The built-in checks are the DEVICE PAGE's - they look for
+            # window.__devicePage and report "the page did not finish booting" against
+            # anything else, which reads as a failure of the page under test rather than
+            # of the check. A surface loaded with --page brings its own; say so instead
+            # of running the wrong ones.
+            state["report"] = (
+                "INFO  --page: the built-in checks are the Device page's and were not "
+                "run.\n"
+                "INFO  Pass --drive with this surface's own script, e.g.\n"
+                "INFO    resources/web/shared/tests/drive/print-dialog.js       "
+                "(simulator)\n"
+                "INFO    resources/web/shared/tests/drive/print-dialog-real.js  "
+                "(--real, read-only)")
+            state["rc"] = 0
             return wrap_up()
         view.evaluate_javascript(REAL_CHECKS if args.real else CHECKS,
                                  -1, None, None, None, done)

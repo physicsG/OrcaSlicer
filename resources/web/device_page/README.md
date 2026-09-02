@@ -66,7 +66,7 @@ js/views/device-control/camera/
 | `../shared/js/render.js` | The one update discipline: rebuild on a signature, reconcile by key. **Shared** |
 | `../shared/js/dom.js` | `$`, `el`, `icon` — the three primitives every view builds with. **Shared** |
 | `js/core/session.js` | Having a printer on the other end: connect, staleness, retry, the stream |
-| `js/core/connection.js` | The connect path itself: pairing, mTLS, the MQTT engine |
+| `../shared/js/connection.js` | The connect path itself: pairing, mTLS, the MQTT engine |
 | `js/core/overlay.js` | Menus, dialogs and popovers |
 | `js/core/diag.js` | The `?diag=1` beacon |
 | `js/core/mock.js` | Installs the shared simulator, so the page runs with no hardware |

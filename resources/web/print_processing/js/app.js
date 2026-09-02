@@ -41,6 +41,8 @@ const WITH_PRINT_SETUP = ROUTE === 'print';
 const WANT_MOCK = qs.get('mock') === '1';
 
 const state = new MachineState();
+/** Every status line this page has shown, oldest first. Read by --drive scripts. */
+const said = [];
 /*
  * A request is held until the machine reports it. `onChange` fires when one starts or is
  * refused - the two moments there is something new to show and nothing on the state
@@ -52,7 +54,7 @@ const pending = new Pending({ onChange: () => render() });
 const model = {
   file: null, mapping: null, legal: null, device: null, devices: [],
   filaments: [], toolheads: [], assignment: {}, prefs: {},
-  nozzleMismatch: false, errors: [],
+  nozzleMismatch: false, errors: [], connected: false,
   send: { state: SEND_STATE.IDLE, progress: 0, detail: '' },
 };
 
@@ -65,10 +67,21 @@ const ctx = {
   get: () => model,
   dialog: () => document.body,
 
+  /*
+   * Picking a printer is not only bookkeeping: nothing has brought a transport up to
+   * THAT machine, so the machine half has to come up again against it. Without this the
+   * dialog would show a chosen printer and four toolheads reading NONE - which looks
+   * like a printer with nothing loaded, and is the one wrong state that is plausible
+   * enough to be acted on.
+   */
   chooseDevice(id) {
     const d = model.devices.find(
       (x) => String(x.dev_id || x.sn || x.ip || x.dev_name) === String(id));
-    if (d) { model.device = d; render(); }
+    if (!d || d === model.device) return;
+    model.device = d;
+    model.connected = false;
+    render();
+    bringUpMachine();
   },
   addDevice() {
     printerCmds.addDevice(bridge).catch((e) => say(`add device: ${e.message}`, 'err'));
@@ -128,7 +141,14 @@ const ctx = {
 };
 
 /* ---- status line ------------------------------------------------------ */
+/*
+ * The one-line host status. Every call is also kept on `__preprint.said`, because a
+ * drive script needs to know WHAT the page reported and not merely what is on screen
+ * now - "connecting", then "no route to host" is a different story from never trying,
+ * and only the second line survives to be read off the DOM.
+ */
 function say(message, kind = '') {
+  said.push(`${kind || '-'}: ${message}`);
   const n = $('#status');
   n.hidden = !message;
   text(n, message || '');
@@ -197,7 +217,9 @@ function renderSendBar() {
   data(btn, 'busy', busy ? '1' : null);
   text(btn, busy ? '' : (s.state === SEND_STATE.DONE ? 'Sent'
                        : ROUTE === 'upload' ? 'Send' : 'Send'));
-  btn.disabled = busy || s.state === SEND_STATE.DONE || !model.device;
+  // A device RECORD is not a printer that answered. Sending to one that never did
+  // would fail at the upload, after the dialog had implied the mapping was checked.
+  btn.disabled = busy || s.state === SEND_STATE.DONE || !model.device || !model.connected;
 }
 
 /* ---- boot ------------------------------------------------------------- */
@@ -230,11 +252,7 @@ async function boot() {
                : (job.devices || []).find((d) => d.connected) || null;
   recomputeFile();
 
-  try {
-    await subscribeState(bridge, state, { log: (w, e) => trace('warn', { w, e }) });
-  } catch (e) {
-    say(`no machine state: ${e.message}`, 'warn');
-  }
+  await bringUpMachine();
   // On the repaint is not good enough for anything whose consequence is elsewhere, but
   // this one only repaints - see device_page/js/core/orcasync.js for the other case.
   state.onChange(render);
@@ -248,6 +266,35 @@ async function boot() {
 
   window.__preprint.mock = mock;
   window.__preprint.ready = true;
+}
+
+/**
+ * Bring the machine half up against whatever printer is currently chosen.
+ *
+ * This can legitimately fail - a printer that is off, a device that was never paired -
+ * and when it does the dialog must SAY so. An unattached transport draws four toolheads
+ * reading NONE with no nozzles, which is indistinguishable from a printer with nothing
+ * loaded, and is the one wrong state plausible enough to be acted on.
+ */
+async function bringUpMachine() {
+  if (!model.device) {
+    model.connected = false;
+    say('No printer chosen. Pick one to read what is loaded.', 'warn');
+    render();
+    return;
+  }
+  try {
+    await subscribeState(bridge, state, model.device, {
+      log: (w, e) => trace('warn', { w, e }),
+      onStep: (m) => say(m),
+    });
+    model.connected = true;
+    say('');
+  } catch (e) {
+    model.connected = false;
+    say(`could not read the printer: ${e.message}`, 'warn');
+  }
+  render();
 }
 
 /* ---- the send --------------------------------------------------------- */
@@ -285,6 +332,8 @@ window.__preprint = {
   get model() { return model; },
   get pending() { return pending; },
   ctx, render, mock: null, ready: false,
+  /** What the page has reported, in order. See `say`. */
+  get said() { return said; },
   /** Cancelling takes the close protocol's other outcome. */
   cancel: () => closeDialog(bridge, MAPPING_STATUS.CANCELED),
 };

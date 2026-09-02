@@ -78,7 +78,36 @@
           `${Math.round(c.width)}x${Math.round(c.height)}`, '80x100');
     check('nothing threw', window.__ppError || '-', '-');
 
-    window.__report = L.join('\n');
+    /* ---- picking a printer brings the transport up ----
+       `sw_GetMachineState` answers out of a Moonraker host and something has to attach
+       one. Nothing has here, so choosing a printer must try - and against an unroutable
+       address it must FAIL AND SAY SO rather than leave four toolheads reading NONE,
+       which is indistinguishable from a printer with nothing loaded. */
+    say('');
+    say('--- picking a printer ---');
+    q('.picker').click();
+    setTimeout(() => {
+      const items = qq('.menu-printer .menu-item');
+      check('the saved devices are offered', items.length > 1, true);
+      if (items.length > 1) {
+        items[0].click();
+        setTimeout(() => {
+          const said = pp.said || [];
+          say(`reported: ${JSON.stringify(said.slice(-2))}`);
+          check('it tried to connect',
+                said.some((x) => /Connecting to the printer/.test(x)), true);
+          check('it reached the transport',
+                said.some((x) => /Opening mqtt/.test(x)), true);
+          check('and reported the failure instead of pretending',
+                said.some((x) => /^warn: could not read the printer/.test(x)), true);
+          check('the machine half is still down', pp.model.connected, false);
+          check('so Send stays refused', q('#send').disabled, true);
+          window.__report = L.join('\n');
+        }, 4000);
+      } else {
+        window.__report = L.join('\n');
+      }
+    }, 600);
   };
 
   window.addEventListener('error', (e) => {

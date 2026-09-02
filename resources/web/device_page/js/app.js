@@ -16,7 +16,7 @@ import { CMD, SUBSCRIBE_OBJECTS, NAMED, LIMITS, TASK_CONFIG, PRINT_PREFERENCES,
   from '../../shared/js/protocol.js';
 import { openMenu } from './core/overlay.js';
 import { openDialog, openBlockingDialog, toggleField, numberField } from '../../shared/js/dialog.js';
-import { connect as connectDevice, disconnect as disconnectDevice } from './core/connection.js';
+import { connect as connectDevice, disconnect as disconnectDevice } from '../../shared/js/connection.js';
 import { Sswcp, isTimeout } from '../../shared/js/sswcp.js';
 import { MachineState } from '../../shared/js/state.js';
 import { machineActivity, isBusy } from '../../shared/js/activity.js';
