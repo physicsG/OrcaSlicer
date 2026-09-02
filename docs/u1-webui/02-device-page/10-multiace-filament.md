@@ -290,7 +290,7 @@ full table is in the study. Two rules apply without amendment: the settings that
 once live behind the header's overflow, not on the face of the panel; and **an instant
 `ok` is indistinguishable from success** — `ACE_BG_UNLOAD`'s own help says ~3 min — so
 nothing is awaited and everything is confirmed against machine state through
-[`core/pending.js`](../../../resources/web/device_page/js/core/pending.js).
+[`shared/pending.js`](../../../resources/web/shared/js/pending.js).
 
 The `[EXPERIMENTAL]` macros (`ACE_BG_SWAP`, `ACE_BG_UNLOAD`, `ACE_BG_MOVE`) carry
 preconditions in their own help — *requires head mode, 1:1 wiring, an OPEN dock below the

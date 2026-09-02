@@ -3,11 +3,11 @@
  */
 'use strict';
 
-import { $, el, icon } from '../../../core/dom.js';
+import { $, el, icon } from '../../../../../shared/js/dom.js';
 import { clock } from '../../../widgets/format.js';
 import { illustration, placeholder } from '../../../widgets/art.js';
 import { jobThumbUrl } from '../../../../../shared/js/protocol.js';
-import { rebuildOn, keyedList, text, data } from '../../../core/render.js';
+import { rebuildOn, keyedList, text, data } from '../../../../../shared/js/render.js';
 
 /** Klipper's own job outcomes; anything else is shown verbatim. */
 const JOB_STATUS = {

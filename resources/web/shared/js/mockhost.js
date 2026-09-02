@@ -924,7 +924,7 @@ export function makePrinter() {
    * success, and ACE_BG_UNLOAD's own help says ~3 min - so it confirms what it asked for
    * against machine state instead. That only means anything if the state actually moves,
    * which is what this is for: the simulator answers `ok` AND changes, so
-   * core/pending.js has something to resolve against.
+   * shared/pending.js has something to resolve against.
    *
    * Deliberately instant. Modelling the three minutes belongs in a test that wants to
    * watch a wait time out, not in the default path.

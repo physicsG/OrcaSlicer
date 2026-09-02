@@ -4,7 +4,7 @@
  */
 'use strict';
 
-import { $ } from '../core/dom.js';
+import { $ } from '../../../shared/js/dom.js';
 import { illustration } from './art.js';
 
 /** hh:mm:ss from seconds, the granularity the shipped page uses for a job. */

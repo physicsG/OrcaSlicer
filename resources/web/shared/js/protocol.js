@@ -609,6 +609,15 @@ export const PURIFIER_MODES = { 0: 'Off', 1: 'Recirculation Mode', 2: 'Exhaust M
  *
  * Derived from SSWCP.cpp by finding every handler whose body reaches
  * `on_mqtt_msg_arrived`, and re-derived by the conformance suite so it cannot drift.
+ *
+ * Two were wrong until the derivation learned to end a handler at its own closing brace
+ * rather than at the next `sw_*` signature: `sw_GetFileStream` and
+ * `sw_UnsubscribeCacheKeys` both build `m_res_data` and call `send_to_js()`, and were
+ * credited with an `on_mqtt_msg_arrived` belonging to a function declared between them
+ * and the next handler the regex could see. The list and the check were written from the
+ * same derivation, so they agreed with each other and not with the C++. `sw_GetFileStream`
+ * is the one that would have bitten: it is how the print dialog fetches the file, and a
+ * client unwrapping it looks one level too deep for `file_url`.
  */
 export const PRINTER_BACKED = new Set([
   'sw_BedMesh_AbortProbeMesh', 'sw_CameraStartMonitor', 'sw_CameraStopMonitor',
@@ -617,14 +626,14 @@ export const PRINTER_BACKED = new Set([
   'sw_ControlPurifier', 'sw_DefectDetactionConfig', 'sw_DeleteCameraTimelapse',
   'sw_DeleteMachineFile', 'sw_FileGetStatus', 'sw_FilesThumbnailsBase64',
   'sw_GetCameraTimelapseInstance', 'sw_GetDeviceDataStorageSpace', 'sw_GetFileListPage',
-  'sw_GetFileStream', 'sw_GetMachineObjects', 'sw_GetMachineState', 'sw_GetPrintHistory', 'sw_GetPrintInfo',
+  'sw_GetMachineObjects', 'sw_GetMachineState', 'sw_GetPrintHistory', 'sw_GetPrintInfo',
   'sw_GetSystemInfo', 'sw_MachineFilesGetDirectory', 'sw_MachineFilesMetadata',
   'sw_MachineFilesRoots', 'sw_MachineFilesThumbnails', 'sw_MachineHeartbeat',
   'sw_MachinePrintCancel', 'sw_MachinePrintPause', 'sw_MachinePrintResume',
   'sw_MachinePrintStart', 'sw_PrinterDefectDetection', 'sw_PullCloudFile', 'sw_SendGCodes',
   'sw_ServerClientManagerSetUserinfo', 'sw_SetDeviceName', 'sw_SetMachineSubscribeFilter',
   'sw_StartCloudPrint', 'sw_StartLocalPrint', 'sw_SystemGetDeviceInfo',
-  'sw_UnSubscribeMachineState', 'sw_UnsubscribeCacheKeys',
+  'sw_UnSubscribeMachineState',
   'sw_UploadAsyncTimelapseInstance', 'sw_UploadCameraTimelapse', 'sw_exception_query'
 ]);
 

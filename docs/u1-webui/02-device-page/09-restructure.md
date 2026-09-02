@@ -142,7 +142,7 @@ shape — state with no single home:
   working rather than the outcome only — `switch=true machine=false` at 102 ms, the
   request on screen while the mirror still disagrees.
 
-  [`pending.js`](../../../resources/web/device_page/js/core/pending.js) is that one mechanism. A
+  [`pending.js`](../../../resources/web/shared/js/pending.js) is that one mechanism. A
   request has three ends — confirmed, refused, lost — and the third is the one that
   matters: *an instant `ok` is indistinguishable from success*, so a silently-ignored
   command has to be timed out and reported rather than left looking applied. It touches
@@ -173,12 +173,12 @@ shape — state with no single home:
 Two of the three things the last section left open are done. The third — the sixteen
 module-level `let`s in `app.js` — is next; `ctx` is already the door they all go through.
 
-**[`pending.js`](../../../resources/web/device_page/js/core/pending.js).** See the LED table
+**[`pending.js`](../../../resources/web/shared/js/pending.js).** See the LED table
 above for the measurement. Three controls had the same bug and two different fixes
 between them; there is one mechanism now, it touches no DOM, and `unit_jsc.py` tests it
 directly against an injected clock.
 
-**[`render.js`](../../../resources/web/device_page/js/core/render.js).** Four disciplines
+**[`render.js`](../../../resources/web/shared/js/render.js).** Four disciplines
 answered *the state changed, what do I do with the DOM* — and they were spelled with four
 different attributes, `data-built`, `data-sig`, `data-state` and `data-code`, which is
 what made them hard to see as one question:

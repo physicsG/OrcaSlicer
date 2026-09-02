@@ -71,10 +71,10 @@ they are three because they answer three different questions:
 The third exists separately for a reason worth carrying: **a request stored in the thing
 that mirrors the machine gets overwritten by the next push.** That bug was found in three
 unrelated controls before it got one mechanism —
-[`core/pending.js`](../../resources/web/device_page/js/core/pending.js).
+[`shared/pending.js`](../../resources/web/shared/js/pending.js).
 
 Two more single-answer modules, each replacing several hand-rolled ones:
-[`core/render.js`](../../resources/web/device_page/js/core/render.js) (build once, key
+[`shared/render.js`](../../resources/web/shared/js/render.js) (build once, key
 structural change on a signature, reconcile lists by key) and
 [`core/session.js`](../../resources/web/device_page/js/core/session.js) (connect,
 staleness, retry, heartbeat, the state stream — no panel reads any of it).
@@ -1106,7 +1106,7 @@ carrying:
   it timed out and reported itself lost, because nothing pushes the object that would
   confirm it.
 - **Fifteen macros, none awaited.** `ACE_BG_UNLOAD`'s own help says ~3 min, so every one
-  goes through `core/pending.js` and is confirmed against machine state.
+  goes through `shared/pending.js` and is confirmed against machine state.
 - **`check_coverage.py` now has a second surface.** The panel's controls are not bridge
   commands at all, so the old accounting could not see them and a macro deliberately not
   offered would have been silent rather than merely unbuilt. All 21 ACE macros are now

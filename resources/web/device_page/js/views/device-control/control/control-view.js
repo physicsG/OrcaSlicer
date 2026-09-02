@@ -7,11 +7,11 @@
  */
 'use strict';
 
-import { $, el, icon } from '../../../core/dom.js';
+import { $, el, icon } from '../../../../../shared/js/dom.js';
 import { LIMITS, PURIFIER_MODES } from '../../../../../shared/js/protocol.js';
 import { openPopover, closePopover } from '../../../core/overlay.js';
 import { placeholder } from '../../../widgets/art.js';
-import { rebuildOn, text, data } from '../../../core/render.js';
+import { rebuildOn, text, data } from '../../../../../shared/js/render.js';
 
 // Print speed moves in whole 50% steps: 50 / 100 / 150 across LIMITS.printSpeed.
 const SPEED_STEP = 50;

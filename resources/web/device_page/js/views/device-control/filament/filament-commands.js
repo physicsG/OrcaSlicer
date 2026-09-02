@@ -15,7 +15,7 @@
  *
  *   Nothing is awaited. An instant `ok` is indistinguishable from success -
  *   ACE_BG_UNLOAD's own help says ~3 min - so what was asked for is held by
- *   core/pending.js and confirmed against machine state, never against the ack.
+ *   shared/pending.js and confirmed against machine state, never against the ack.
  *
  *   `ace` is not on the subscription, so the mirror does not move on its own. Anything
  *   that changes the ACE re-reads it: confirmAce() below is the whole of that, and
@@ -39,7 +39,7 @@ import { ACE, FEEDER, DRY_MINUTES_PER_HOUR, aceUnitId, aceLine, aceOverridesUrl,
   from '../../../../../shared/js/multiACE.js';
 import { openDialog, openBlockingDialog, numberField, toggleField }
   from '../../../core/overlay.js';
-import { el } from '../../../core/dom.js';
+import { el } from '../../../../../shared/js/dom.js';
 
 
 /**

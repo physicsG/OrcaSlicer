@@ -28,6 +28,9 @@
  *
  * Nothing here touches the DOM, so it runs in JavaScriptCore under unit_jsc.py against
  * whatever clock the test hands it.
+ *
+ * SHARED by both surfaces. The print dialog holds a filament assignment with it for
+ * exactly the reason above: the machine echoes `print_task_config` a second later.
  */
 'use strict';
 

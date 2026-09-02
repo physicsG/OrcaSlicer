@@ -23,8 +23,8 @@
  */
 'use strict';
 
-import { $, el, icon } from './core/dom.js';
-import { text, data } from './core/render.js';
+import { $, el, icon } from '../../shared/js/dom.js';
+import { text, data } from '../../shared/js/render.js';
 import { repaintPopover } from './core/overlay.js';
 import { PANELS, VIEWS } from './registry.js';
 
