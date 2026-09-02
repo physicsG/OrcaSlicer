@@ -24,8 +24,14 @@ study — the drawings for all three modes.
 | `resources/web/device_page/` | Reconstructed **Device tab** — see below |
 | `resources/web/print_processing/` | Reconstructed **print-processing popup** |
 
-Orca shows either implementation. `PrinterWebView` has an **Original / Rebuilt** switcher;
-the choice persists in the `u1_reconstructed_ui` app-config key.
+**The Device tab is the reconstruction, and only the reconstruction.** Nothing loads
+`flutter_web?path=2` any more and the Original / Rebuilt switcher is gone. The print
+popup still has both, on the `u1_reconstructed_ui` app-config key; the bundle also stays
+for the Home tab, the preset dialog and the Add-Device dialog, and the Snapmaker login is
+Orca's own `SMUserLogin` on `id.snapmaker.com` and never was the bundle's. What had to be
+true first — chiefly that this page, and not the shipped one, tells Orca what filament is
+in the machine — is
+[02-device-page/12-orca-integration.md](02-device-page/12-orca-integration.md).
 
 ## How the Device page is put together
 
@@ -140,6 +146,95 @@ that says the operation finished.
   a duplicate key either. Only hardware has enough recordings to show this; the
   simulator holds three. `drive/storage-real.js` is the witness,
   `drive/storage-paging.js` poses the collision offline.
+
+## Retiring the shipped Device page (2026-09-01)
+
+Three defects, all of them invisible to every suite, all of them from **one command whose
+name reads like the opposite of what it does**. `sw_UpdateMachineFilamentInfo` never
+reaches the printer: it writes ORCA's filament record, which is the only source the
+Prepare sidebar's filament combo boxes have.
+
+- **Nothing was calling it.** The shipped Device page was, and it was the only caller. So
+  with the reconstruction as the tab, Orca never learned what was loaded — a whole feature
+  lost by switching pages, and nothing on either side said so.
+- **Two controls were calling it for the wrong thing.** Naming a filament, and applying the
+  print preferences, sent a flat `print_task_config` patch to it. The host wants
+  `{objects:[{key,value}]}` and fails at its first `if`; neither control awaits its own
+  request; so both did nothing, silently, on a real machine. The print popup had the same
+  two calls. What writes the printer is `SET_PRINT_FILAMENT_CONFIG` and
+  `SET_PRINT_PREFERENCES`, recovered verbatim from the shipped bundle — including that the
+  first is single-quoted, the second is not, and that Auto Leveling goes out as
+  **`BED_LEVEL`** while the machine reports it as `auto_bed_leveling`.
+- **A malformed payload could take the app down.** `handle_web_message` had no try/catch
+  above 129 commands' worth of JSON indexing, and `update_filament_info` indexes five
+  arrays with one loop counter. Fixed at the top rather than at the instance.
+
+And two more that only **starting the app** could show, both about a message that never
+arrived rather than a message that was wrong:
+
+- **A side effect must not ride on the repaint.** The sync was called from `render()`,
+  inside its `requestAnimationFrame` — which looked right, since `print_task_config` only
+  moves on a state push and a push is what causes the frame. It ran in every suite and
+  **never once in Orca**: WebKit does not fire animation frames into a view that is not
+  being composited, and the Device tab is not the selected page at startup. Everything
+  else worked, because everything else render() does is drawing, and a page nobody is
+  looking at does not need to draw. This one's consequence is on *another tab*. It hangs
+  off `state.onChange` now, and `conformance_test.py` reads the rAF body and fails if it
+  goes back.
+- **A push-only channel needs an initial value.** Reported as "it shows my name, then a
+  popup, then I am logged out". The account was never lost — the token and `login: 1` were
+  still in the config, and every start logged `sm_restore_login: restored account …`.
+  `sw_SubscribeUserLoginState` registered the subscriber and replied with *nothing*, so it
+  could only ever report changes; the account is restored in `init_app_config()`, whose
+  `notify()` reaches nobody, and `post_init()`'s re-announce runs **4.1 seconds** before
+  the Flutter bundle finishes parsing and subscribes. The subscription answers with the
+  current state now.
+
+Why no suite saw the first three: `u1_bridge.py` **refuses** that command with a written
+reason (which is correct — it is Orca's record, not the printer's), so `--real` cannot
+reach it; the simulator had no handler; and `check_coverage.py` counts a reference from a
+panel's module, which there was. The simulator now validates it exactly as the C++ does, and
+`drive/orca-sync.js` is the witness. The generalisation worth keeping: **a command that
+Orca answers itself is not covered by anything that talks to the printer**, and there are
+eight of them.
+
+### And making it work switched on code that had never run
+
+Telling Orca what is loaded makes `m_connect_machine_info_list` non-empty, and several
+things in the Prepare page are gated on exactly that. **The first press of Sync info after
+this landed segfaulted**, at address 0:
+
+```
+#0  0x0000000000000000
+#1  Slic3r::GUI::Sidebar::refresh_filament_sync_marks()
+#2  Slic3r::GUI::Sidebar::show_sync_filament_dialog()
+#3  Slic3r::GUI::Sidebar::finish_printer_sync()
+```
+
+`SyncMarkOverlay` is a child window of the filament combo, `filament_sync_marks` holds a
+raw pointer to it, and both places that shrink the row list `Destroy()` the combo — which
+frees the mark — without dropping the pointer. `SetSynced()` then calls `IsShown()`, which
+is virtual, through a freed vtable. The invariant was written on the member as a comment
+and enforced nowhere. Fixed at both removal sites and bounded in the loop.
+
+Also newly live, and the reason the sidebar's **"Machine Filament" section had never
+appeared on this firmware**: it is filtered by `currentNozzleInfo != machine_nozzles`, and
+`nozzle_info` was always `""` because `print_task_config` does not carry
+`nozzle_diameters`. Reading them from `machine.system_info` is what fills the section.
+
+The general lesson, and it is the same one as the two above: **a feature that has never
+run has never been tested.** Finishing a half-connected path lights up everything gated on
+it, and what lights up first is whatever was written on the assumption it never would.
+
+Verified in Orca, against `811002511261022618B3`:
+
+```
+[WCP] [rebuilt-device] filament inventory synced to Orca (state)
+[WCP] [rebuilt-device] filament inventory synced to Orca (stream)
+```
+
+The full account is
+[02-device-page/12-orca-integration.md](02-device-page/12-orca-integration.md).
 
 ## Not verified
 

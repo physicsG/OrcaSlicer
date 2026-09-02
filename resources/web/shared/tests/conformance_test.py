@@ -1171,5 +1171,63 @@ check("no hover on the page carries the machine's schema",
       "neither is what the control is or what state it is in. The wire has a home, and "
       "it is the trace pane")
 
+# --- what Orca is told, and when -------------------------------------------
+#
+# Two rules about core/orcasync.js, both of which were broken and both of which are
+# invisible from this page: its consequence is on the PREPARE tab.
+print("\n== the filament record Orca keeps ==")
+
+_app = open(os.path.join(JS, "app.js"), encoding="utf-8").read()
+_sync = open(os.path.join(JS, "core", "orcasync.js"), encoding="utf-8").read()
+
+# 1. Driven by the state change, not by the repaint. render() defers its work to a
+#    requestAnimationFrame, and WebKit does not fire animation frames into a view that is
+#    not being composited - which the Device tab is not, at startup, in Orca. The sync ran
+#    on every suite and never once in the app.
+_raf = re.search(r"requestAnimationFrame\(\(\)\s*=>\s*\{(.*?)\n  \}\)", _app, re.S)
+check("the filament sync is not driven off the repaint",
+      _raf is not None and "orcaSync.sync" not in _raf.group(1),
+      "orcaSync.sync() is inside render()'s requestAnimationFrame. A hidden webview gets "
+      "no animation frames, so it would never run in Orca while running in every test")
+check("it is driven off the state change instead",
+      re.search(r"state\.onChange\(\s*\(\)\s*=>\s*\{[^}]*orcaSync\.sync", _app, re.S)
+      is not None)
+
+# 1b. Forgotten BEFORE the snapshot, not after it. Orca clears its filament record on
+#     disconnect, so a fresh stream has to re-send one it would otherwise call unchanged -
+#     and resyncOrca() is what makes an unchanged value count as new. Run after the
+#     snapshot, its forget() lands on a push the snapshot itself has just made and the
+#     identical inventory goes out twice, ~5 ms apart. Each one costs Orca a
+#     load_current_presets() on the stack of a webview message handler.
+#
+#     Checked here rather than in the browser because the two pushes race: in the
+#     simulator the second finds the first still in flight and skips, so a drive script
+#     sees one push whichever order the calls are in. The ordering is the invariant.
+_sess = open(os.path.join(JS, "core", "session.js"), encoding="utf-8").read()
+_stream = _sess[_sess.index("async function startStateStream"):]
+_resync = _stream.find("handlers.resyncOrca")
+_snap = _stream.find("CMD.GET_MACHINE_STATE")
+check("Orca's filament record is forgotten before the snapshot, not after",
+      _resync != -1 and _snap != -1 and _resync < _snap,
+      "resyncOrca() runs after the snapshot, so its forget() re-sends an inventory the "
+      "snapshot has already pushed - two load_current_presets() milliseconds apart")
+
+# 2. Sent in the shape update_filament_info() parses. The two panels that used to send a
+#    flat print_task_config patch to this command failed its first `if` and did nothing.
+check("the inventory goes out as objects:[{key,value}] with value a JSON string",
+      "objects: [{ key: sn, value }]" in _sync and "JSON.stringify(inv)" in _sync)
+check("every array Orca indexes is cut to filament_official's length",
+      "filament_official" in _sync and "fixed(" in _sync and "slotCount" in _sync)
+
+# 3. print_task_config is WRITTEN with macros, never with that command.
+for _name, _rel in (("Filament", os.path.join("views", "device-control", "filament",
+                                              "filament-commands.js")),
+                    ("Control", os.path.join("views", "device-control", "control",
+                                             "control-commands.js"))):
+    _mod = open(os.path.join(JS, _rel), encoding="utf-8").read()
+    check(f"the {_name} panel writes print_task_config with a macro, not sw_UpdateMachineFilamentInfo",
+          "UPDATE_MACHINE_FILAMENT_INFO" not in _mod,
+          "that command never reaches the printer - it writes Orca's own filament record")
+
 print(f"\n{checks - len(fails)}/{checks} checks passed")
 sys.exit(1 if fails else 0)

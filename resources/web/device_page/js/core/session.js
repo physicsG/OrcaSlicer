@@ -362,6 +362,19 @@ export function createSession({ bridge, state, store, setStatus, render, refresh
       .then(() => hostLog(`filter accepted (${reason})`))
       .catch((e) => hostLog(`filter skipped (${reason}): ${e.message}`));
 
+    // BEFORE the snapshot, and that ordering is the whole of it. Orca clears its filament
+    // record when a machine disconnects, so a fresh stream has to re-send one it would
+    // otherwise consider unchanged - and `resyncOrca` is what makes an unchanged value
+    // count as new. Run after the snapshot, its forget() lands on a push the snapshot
+    // itself has just made, and the identical inventory goes out a second time 5 ms
+    // later. Each one costs a `load_current_presets()`: every preset tab reloaded, the
+    // page tree rebuilt, the bed forced to update. Twice, from inside a webview message
+    // handler.
+    //
+    // Here, it forgets while there is nothing to forget, reads the nozzle sizes the
+    // inventory needs, and the snapshot below does the one push.
+    if (handlers.resyncOrca) await handlers.resyncOrca();
+
     let ok = false;
     try {
       const snap = await bridge().request(CMD.GET_MACHINE_STATE, { objects: SUBSCRIBE_OBJECTS });

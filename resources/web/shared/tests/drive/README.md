@@ -23,6 +23,7 @@ nobody runs.
 | `homing.js` | The Homing dialog against a scripted G28. `homed_axes` reaching "xyz" is not the end of the procedure - the bed goes on moving - and the wait used to close on it. The simulator models neither `homed_axes` nor `motion_report`, so both are posed on `state`; the loop under test is the page's. |
 | `storage-real.js` | Storage against a real printer, read-only. Where the paging was actually settled: the simulator holds too few items to page and none that collide, and this printer holds sixty recordings of which one file appears four times - which is what showed the grid drawing 72 cards for 60 items. Needs `--real`, and Orca closed. |
 | `homing-real.js` | The same dialog against a **real G28**, and the only witness that counts - this one MOVES THE MACHINE. Two attempts at this wait passed every offline check and closed the dialog over a moving bed; what settled it was pressing the button with the printer in sight. Needs `--real`, and Orca closed. Takes a minute. |
+| `orca-sync.js` | What the page sends to **Orca** rather than to the printer, and the three writes that were going to the wrong one of the two. Checks the filament inventory reaches Orca unprompted and in the exact shape `update_filament_info()` parses, that an unchanged one is not re-sent, that naming a filament and applying the print preferences send G-code macros, and that signing in opens Orca's own dialog rather than a form on this page. 22 checks. |
 | `task-card.js` | That the Printing Task panel is as tall as its card. It was pinned at 150 px against a 304 px card, and `.panel-body` hides its overflow — so the progress bar and both job buttons were cut off with nothing to say they had been. |
 
 ```bash
@@ -35,6 +36,7 @@ python3 $R/run_webkit.py --real --sn <SN> --drive $R/drive/storage-real.js
 python3 $R/run_webkit.py --size 1920x1080 --drive $R/drive/dom-dump.js > /tmp/before.txt
 python3 $R/run_webkit.py --real --size 1920x1080 --drive $R/drive/camera-real.js
 python3 $R/run_webkit.py --size 1920x1080 --drive $R/drive/ace-panel.js
+python3 $R/run_webkit.py --size 1920x1080 --drive $R/drive/orca-sync.js
 python3 $R/run_webkit.py --real --size 1920x1080 --drive $R/drive/ace-real.js
 python3 $R/run_webkit.py --real --device-ip 192.0.2.1 --drive $R/drive/no-printer.js
 ```

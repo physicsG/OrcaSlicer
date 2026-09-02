@@ -84,7 +84,6 @@ EXCLUDED = {
     "sw_UploadFileResult": "cloud file transfer; no host handler either",
 
     # --- account: Orca owns the session, the page only reads it -----------
-    "sw_UserLogin": "account surface; the Device tab only reads login state",
     "sw_UserLogout": "account surface",
     "sw_SubscribeUserLoginState": "read once at boot instead; no live re-auth UI",
     "sw_GetUserUpdatePrivacy": "privacy-consent surface",
@@ -197,6 +196,10 @@ OWNED_ELSEWHERE = {
     "sw_SubscribeMachineState": "state stream",
     "sw_GetMachineState": "state stream + the toolchange wait's polling",
     "sw_MachineHeartbeat": "session supervisor",
+    # Not a control at all, and the only command on this page that goes to ORCA rather
+    # than to the printer: it is how the sidebar's filament combo boxes learn what is
+    # loaded. No panel offers it because nobody presses it - the state stream does.
+    "sw_UpdateMachineFilamentInfo": "Orca's filament record (core/orcasync.js)",
 }
 
 

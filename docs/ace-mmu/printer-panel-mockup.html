@@ -21,6 +21,12 @@
     --sb-text:#26292c; --sb-dim:#7a8288; --sb-label:#7d8b96; --sb-inset:#f6f7f8;
     --ace-hood:#e8e8e8; --ace-base:#cfcfcf; --ace-bay:#ffffff;
     --orca:#00ae42;
+    /* Candidates for the agreement mark - see "What colour the mark is". The live panel
+       above still draws --orca; these are what the swatches below are painted with. */
+    --mk-a:#0C63E2;   /* the Device page's --accent, as it is                     */
+    --mk-b:#0C63E2;   /* same blue, but only on the MARK - see option B           */
+    --mk-c:#0C63E2;   /* light half of the paired option                          */
+    --mk-c-dark:#4D93F0;
     --view:#dfe1e3; --toast:#2b2f33; --toast-ink:#f1f3f4;
   }
   @media (prefers-color-scheme: dark){
@@ -38,6 +44,7 @@
       --sb-text:#e6eaed; --sb-dim:#98a1a8; --sb-label:#8fa0ac; --sb-inset:#1f2428;
       --ace-hood:#3d444a; --ace-base:#2f353a; --ace-bay:#59616a;
       --orca:#00c24b;
+      --mk-c:var(--mk-c-dark);
       --view:#15191c; --toast:#31363b; --toast-ink:#f1f3f4;
     }
   }
@@ -55,6 +62,7 @@
     --sb-text:#e6eaed; --sb-dim:#98a1a8; --sb-label:#8fa0ac; --sb-inset:#1f2428;
     --ace-hood:#3d444a; --ace-base:#2f353a; --ace-bay:#59616a;
       --orca:#00c24b;
+      --mk-c:var(--mk-c-dark);
     --view:#15191c; --toast:#31363b; --toast-ink:#f1f3f4;
   }
 
@@ -130,6 +138,29 @@
   .corner{position:absolute;top:0;right:0;width:0;height:0;border-top:17px solid var(--orca);
           border-left:17px solid transparent;}
   .corner::after{content:"\2713";position:absolute;top:-16px;right:1px;font-size:9px;line-height:1;color:#fff;}
+
+  /* ---- the mark-colour comparison ------------------------------------------
+     Same geometry as .corner above, painted with a variable so the four swatches differ
+     in exactly one thing. Drawn on both grounds because the mark has two contrast jobs:
+     the triangle against the card, and the white check against the triangle. */
+  .mkgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:14px 0 4px;}
+  .mkopt h5{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--text);}
+  .mkopt .pair{display:flex;gap:8px;}
+  .mkcard{position:relative;flex:1 1 0;height:62px;border-radius:8px;overflow:hidden;
+          border:1px solid var(--sb-field-line);background:var(--sb-panel);}
+  .mkcard.on-dark{background:#181c20;border-color:#272d33;}
+  .mkcard .corner{--orca:var(--mk);}
+  .mkcard .lab{position:absolute;left:8px;bottom:6px;font-size:11px;color:var(--sb-label);}
+  .mkcard.on-dark .lab{color:#98a2aa;}
+  /* B is the only option whose point is not the mark's own colour but what sits NEXT to
+     it, so its swatch carries the green affordance too - two accents in one card, which
+     is the thing being chosen. */
+  .mkcard .aff{position:absolute;left:8px;top:8px;font-size:10px;font-weight:600;
+               padding:2px 6px;border-radius:4px;background:var(--orca);color:#fff;}
+  .mknum{margin:8px 0 0;font-size:12px;color:var(--dim);line-height:1.5;}
+  .mknum b{color:var(--text);}
+  .mknum .bad{color:var(--bad);font-weight:600;}
+  .mknum .good{color:var(--text);font-weight:600;}
 
   /* per-head boxes — Bambu's Left/Right Nozzle panes, wrapped to 2x2 */
   .heads{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
@@ -489,6 +520,132 @@
       &mdash; it is drawn honestly and warns &mdash; but the planner's per-unit pool should be the very
       next PR, because a wrong capacity is a silently wrong plate.</p>
   </div>
+
+  <!-- ======================= what colour the mark is ======================= -->
+  <section class="case">
+    <div class="eyebrow"><span class="k">Deferred</span><span>What colour the agreement mark is &mdash; <b>today's green stands</b></span></div>
+
+    <p style="margin:0 0 10px;max-width:78ch;padding:9px 11px;border-radius:7px;
+              background:var(--inset);border:1px solid var(--line)">
+      <b>In use: <code>#00AE42</code>, the leftmost swatch.</b> Weighed and left alone, because the
+      mark is not the only green: it is <b>one of four sites</b>, and recolouring it on its own would
+      put a blue tick inside a green outline. The rest of this section is kept as the working, not as
+      a pending change &mdash; if the swap is ever made it is these four together, and the numbers
+      below are what it would buy.</p>
+
+    <div class="scroll" style="margin:0 0 12px">
+      <table class="tp">
+        <thead><tr><th>Where the green is</th><th>Site</th><th>What it colours</th></tr></thead>
+        <tbody>
+          <tr><td><b>The mark</b></td><td class="mono">Plater.cpp:1075</td>
+            <td><code>draw_sync_mark</code> &mdash; the corner triangle. The only one that
+              <i>states a fact</i></td></tr>
+          <tr><td><b>The printer card</b></td><td class="mono">Plater.cpp:2215&ndash;2216</td>
+            <td><code>panel_bd_col</code> &mdash; hovered and pressed border</td></tr>
+          <tr><td><b>The head boxes</b></td><td class="mono">Plater.cpp:9878</td>
+            <td><code>head_bd_col</code> &mdash; hovered border</td></tr>
+          <tr><td><b>The assign popover</b></td><td class="mono">AceAssignPopup.cpp:19</td>
+            <td><code>ORCA_GREEN</code> &mdash; the selected row and its tick</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin:0 0 4px;max-width:78ch">The corner tick is <code>#00AE42</code> &mdash; Orca's
+      green, inherited from Bambu, and the same colour the app uses for a hover border and a primary
+      button. The Device page next to it is built on one accent, <code>#0C63E2</code>, and the mark
+      is the only thing on the Prepare sidebar that answers a question the Device page also answers:
+      <i>is this what the machine has?</i></p>
+
+    <p style="margin:8px 0 0;max-width:78ch">Two numbers decide this, and they are not the same
+      number. The triangle has to be visible <b>against the card</b>, and the white check has to be
+      legible <b>against the triangle</b>. On a white card those are the same measurement; on a dark
+      one they pull in opposite directions, which is why the green already has a second value in
+      dark mode and why one of the options below has one too.</p>
+
+    <div class="mkgrid">
+      <div class="mkopt">
+        <h5>In use &mdash; <code>#00AE42</code></h5>
+        <div class="pair">
+          <div class="mkcard" style="--mk:#00AE42"><span class="corner"></span><span class="lab">light</span></div>
+          <div class="mkcard on-dark" style="--mk:#00C24B"><span class="corner"></span><span class="lab">dark</span></div>
+        </div>
+        <p class="mknum">check on triangle <span class="bad">2.94</span><br>
+          triangle on card <b>2.94</b> / 7.19</p>
+      </div>
+
+      <div class="mkopt">
+        <h5>A &mdash; the accent, straight</h5>
+        <div class="pair">
+          <div class="mkcard" style="--mk:var(--mk-a)"><span class="corner"></span><span class="lab">light</span></div>
+          <div class="mkcard on-dark" style="--mk:var(--mk-a)"><span class="corner"></span><span class="lab">dark</span></div>
+        </div>
+        <p class="mknum">check on triangle <span class="good">5.39</span><br>
+          triangle on card <b>5.39</b> / <span class="bad">3.18</span></p>
+      </div>
+
+      <div class="mkopt">
+        <h5>B &mdash; the mark only</h5>
+        <div class="pair">
+          <div class="mkcard" style="--mk:var(--mk-b)"><span class="corner"></span>
+            <span class="aff">Sync info</span><span class="lab">light</span></div>
+          <div class="mkcard on-dark" style="--mk:var(--mk-b)"><span class="corner"></span>
+            <span class="aff">Sync info</span><span class="lab">dark</span></div>
+        </div>
+        <p class="mknum">the mark's numbers are A's.<br>
+          What changes is the <b>pair</b>: blue states, green acts</p>
+      </div>
+
+      <div class="mkopt">
+        <h5>C &mdash; a pair, one per ground</h5>
+        <div class="pair">
+          <div class="mkcard" style="--mk:var(--mk-c)"><span class="corner"></span><span class="lab">light</span></div>
+          <div class="mkcard on-dark" style="--mk:#4D93F0"><span class="corner"></span><span class="lab">dark</span></div>
+        </div>
+        <p class="mknum">check on triangle <span class="good">5.39</span> / 3.11<br>
+          triangle on card <b>5.39</b> / <b>5.50</b></p>
+      </div>
+    </div>
+
+    <p style="margin:12px 0 0;max-width:78ch"><b>What the numbers say.</b> The green is the weakest
+      of the four where it matters most: a white check on <code>#00AE42</code> is
+      <b>2.94:1</b>, under the 3:1 that non-text graphics are held to, and it is the reason the tick
+      reads as a green corner with something in it rather than as a check. Every blue here fixes
+      that on a white card.</p>
+
+    <div class="match" style="margin-top:12px">
+      <div class="mrow"><div class="mtxt" style="max-width:none">
+        <h4>A &mdash; one accent, everywhere the green was</h4>
+        <p>Replace <code>#00AE42</code> with <code>#0C63E2</code> in <code>draw_sync_mark</code>, and
+          the two surfaces agree without a second token to keep in step. <b>Costs:</b> the hover
+          border and the Sync-info button go blue with it, and on a dark card the triangle drops to
+          <b>3.18:1</b> against the panel &mdash; visible, but weaker than the green it replaces.
+          Simplest to hold: one value, one place.</p>
+
+        <h4>B &mdash; the mark is blue, the affordances stay green</h4>
+        <p>Only <code>draw_sync_mark</code> changes. A corner tick <b>states a fact</b> &mdash; this
+          agrees with the machine &mdash; while a hover border and a primary button <b>invite an
+          action</b>; they have shared one colour for no reason beyond inheritance. Blue then means
+          <i>read from the machine</i> on both surfaces, and green goes on meaning <i>go</i>.
+          <b>Costs:</b> two accents live in one sidebar, and someone has to be told which is which.</p>
+
+        <h4>C &mdash; a pair, one value per ground</h4>
+        <p>As A, plus <code>#4D93F0</code> when <code>dark_color_mode</code> is on &mdash; the only
+          option that holds both contrast jobs on both grounds (<b>5.50:1</b> against the dark panel,
+          against A's 3.18). <b>Costs:</b> <code>draw_sync_mark</code> gains a branch it does not have
+          today; the green never had one either, so this is new work rather than a swap.</p>
+
+        <p style="margin-top:10px"><b>Not offered, and why.</b> A blue <i>outline</i> tick instead of
+          a filled triangle: it reads as a control at 22&nbsp;dip, and the mark must not look
+          pressable &mdash; it already forwards its clicks to the combo underneath precisely so that
+          it is not a dead spot.</p>
+      </div></div>
+    </div>
+
+    <p style="margin:12px 0 0;font-size:13px;color:var(--dim)">Contrast is WCAG relative luminance,
+      computed rather than judged: the seam between two colours is the thing the eye is worst at and
+      the arithmetic is exact. Light card <code>#FFFFFF</code>, dark card <code>#181C20</code>,
+      check <code>#FFFFFF</code> in every case.</p>
+  </section>
 
   <!-- ============================ touch points ============================ -->
   <div class="foot">

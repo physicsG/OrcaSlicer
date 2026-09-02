@@ -28,7 +28,8 @@
  */
 'use strict';
 
-import { CMD, TASK_CONFIG, cssColor } from '../../../../../shared/js/protocol.js';
+import { CMD, cssColor, quotedLine, PRINT_TASK }
+  from '../../../../../shared/js/protocol.js';
 import { isTimeout } from '../../../../../shared/js/sswcp.js';
 import { machineActivity, isBusy } from '../../../../../shared/js/activity.js';
 // Everything about the ACE comes from one module - see shared/js/multiACE.js for why.
@@ -592,27 +593,35 @@ export function create(deps) {
   /* ---- the head's own filament, unchanged --------------------------- */
 
   return {
+    /**
+     * Name what is in one head.
+     *
+     * `SET_PRINT_FILAMENT_CONFIG` is the write, and it is the write the firmware gates:
+     * `print_task_config.py` refuses an `official` slot without `FORCE=1`, which is the
+     * same `filament_edit` the panel reads before offering the form at all. Colour goes
+     * out in the form the printer sends - RRGGBBAA, no '#'; writing CSS here would put a
+     * value on the machine that nothing else on it can read.
+     *
+     * This used to send `sw_UpdateMachineFilamentInfo` with the slot arrays as its
+     * parameters. That command never reaches the printer - it writes ORCA's filament
+     * record, wants `{objects:[{key,value}]}`, and answered every one of these with
+     * "param [objects] required or wrong type!". Nothing on the machine changed, and the
+     * panel had no way to know: it does not await this, by design. Orca's record is now
+     * kept by core/orcasync.js, which is a different job in the opposite direction.
+     */
     setFilament: (index, type, color, vendor) => {
-      // print_task_config carries these as parallel per-slot arrays. Colour goes back in
-      // the form the printer sends: RRGGBBAA, no '#'. Writing CSS here would put a value
-      // on the machine that nothing else on it can read.
-      const tc = state.taskConfig();
-      const types = (tc[TASK_CONFIG.TYPE] || []).slice();
-      const vendors = (tc[TASK_CONFIG.VENDOR] || []).slice();
-      const rgba = (tc[TASK_CONFIG.COLOR_RGBA] || []).slice();
-      const argb = (tc[TASK_CONFIG.COLOR] || []).slice();
-
       const hex = (cssColor(color) || '#CCCCCC').slice(1).toUpperCase();
-      types[index] = type;
-      if (vendor !== undefined) vendors[index] = vendor;
-      rgba[index] = `${hex}FF`;
-      argb[index] = (0xFF000000 | parseInt(hex, 16)) >>> 0;
-
-      const patch = { [TASK_CONFIG.TYPE]: types,
-                      [TASK_CONFIG.COLOR]: argb,
-                      [TASK_CONFIG.COLOR_RGBA]: rgba };
-      if (vendor !== undefined) patch[TASK_CONFIG.VENDOR] = vendors;
-      send(CMD.UPDATE_MACHINE_FILAMENT_INFO, patch, 'set filament');
+      // SAVE=1 is the bundle's own: without it the machine forgets on the next restart.
+      // An undefined vendor is dropped rather than sent empty, because an absent argument
+      // leaves the field alone and an empty one clears it.
+      const script = quotedLine(PRINT_TASK.FILAMENT_CONFIG, {
+        CONFIG_EXTRUDER: index,
+        FILAMENT_TYPE: type,
+        FILAMENT_COLOR_RGBA: `${hex}FF`,
+        VENDOR: vendor === undefined ? null : vendor,
+        SAVE: 1,
+      });
+      send(CMD.SEND_GCODES, { script }, 'set filament');
     },
 
     syncBays: () => syncBays(),

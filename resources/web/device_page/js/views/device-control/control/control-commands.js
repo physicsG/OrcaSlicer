@@ -15,7 +15,7 @@
  */
 'use strict';
 
-import { CMD, NAMED, LIMITS, PRINT_PREFERENCES }
+import { CMD, NAMED, LIMITS, PRINT_PREFERENCES, prefsLine }
   from '../../../../../shared/js/protocol.js';
 import { openDialog, openBlockingDialog, toggleField } from '../../../core/overlay.js';
 import { isTimeout } from '../../../../../shared/js/sswcp.js';
@@ -287,19 +287,30 @@ export function create(deps) {
                   { script: `G91\nG0 ${axis}${d} F${feed}\nG90` }, `jog ${axis}`);
     },
 
+    /*
+     * The three job-time toggles.
+     *
+     * Read from `print_task_config` and written with `SET_PRINT_PREFERENCES`, which is
+     * the macro the shipped page sends for the same three switches. It used to send
+     * `sw_UpdateMachineFilamentInfo` with the toggles as its parameters, and that command
+     * never reaches the printer at all - it is Orca's own filament record, it wants
+     * `{objects:[{key,value}]}`, and against a real host every one of these clicks
+     * failed its first `if` and changed nothing. See core/orcasync.js.
+     */
     printPrefs: () => {
       const tc = state.taskConfig();
       const boxes = [];
       openDialog({
         title: 'Print Preferences',
-        build: (b) => PRINT_PREFERENCES.forEach(({ key, label }) => {
-          boxes.push([key, toggleField(b, { label, checked: !!tc[key] })]);
+        build: (b) => PRINT_PREFERENCES.forEach(({ key, arg, label }) => {
+          boxes.push([arg, toggleField(b, { label, checked: !!tc[key] })]);
         }),
         confirmLabel: 'Apply',
         onConfirm: () => {
-          const patch = {};
-          boxes.forEach(([k, input]) => { patch[k] = input.checked; });
-          send(CMD.UPDATE_MACHINE_FILAMENT_INFO, patch, 'set print preferences');
+          const prefs = {};
+          boxes.forEach(([arg, input]) => { prefs[arg] = input.checked; });
+          const script = prefsLine(prefs);
+          if (script) send(CMD.SEND_GCODES, { script }, 'set print preferences');
         },
       });
     },

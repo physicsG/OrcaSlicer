@@ -3560,6 +3560,13 @@ void Sidebar::remove_unused_filament_combos(const size_t current_extruder_count)
         sizer_filaments->Remove(last / 2);
         (*p->combos_filament[last]).Destroy();
         p->combos_filament.pop_back();
+        // The sync mark is a CHILD of that combo, so Destroy() has just taken it with it.
+        // Dropping the pointer here is what keeps "one per filament combo" true - left
+        // behind, it dangles, and refresh_filament_sync_marks() calls SetSynced() on it,
+        // which calls the virtual IsShown() through a freed vtable. That is a jump to
+        // address 0, and it is what crashed the app the first time the Prepare page had
+        // any machine filament to sync against.
+        p->filament_sync_marks.resize(p->combos_filament.size());
     }
     // BBS:  filament double columns
     auto sizer_filaments0 = this->p->sizer_filaments->GetItem((size_t)0)->GetSizer();
@@ -8183,6 +8190,9 @@ void Sidebar::on_filaments_delete(size_t filament_id)
         PlaterPresetComboBox* to_delete_combox = p->combos_filament[filament_id];
         (*p->combos_filament[last]).Destroy();
         p->combos_filament.pop_back();
+        // Same as remove_unused_filament_combos(): the mark is the combo's child and has
+        // just been destroyed with it. See the note there.
+        p->filament_sync_marks.resize(p->combos_filament.size());
 
         // BBS:  filament double columns
         auto sizer_filaments0 = this->p->sizer_filaments->GetItem((size_t) 0)->GetSizer();
@@ -9725,7 +9735,14 @@ void Sidebar::refresh_filament_sync_marks()
     std::vector<FilamentData> project;
     build_design_filament_list(wxGetApp().preset_bundle, project);
 
-    for (size_t i = 0; i < p->filament_sync_marks.size(); ++i) {
+    // Only as far as there are combos. Each mark is a child window of the combo it rides
+    // on, so a combo that has gone has taken its mark with it; an entry past the end of
+    // combos_filament is a pointer to freed memory, and SetSynced() below reaches a
+    // virtual through it. The two removal sites keep this in step - this bound is the
+    // second line of defence, because the cost of being wrong here is a null-jump rather
+    // than a wrong mark.
+    const size_t count = std::min(p->filament_sync_marks.size(), p->combos_filament.size());
+    for (size_t i = 0; i < count; ++i) {
         SyncMarkOverlay* mark = p->filament_sync_marks[i];
         if (!mark)
             continue;

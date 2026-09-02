@@ -16,7 +16,8 @@
  */
 'use strict';
 
-import { CMD, SUBSCRIBE_OBJECTS, MAPPING_STATUS, TASK_CONFIG }
+import { CMD, SUBSCRIBE_OBJECTS, MAPPING_STATUS, PRINT_PREFERENCES, PRINT_TASK,
+         plainLine, prefsLine }
   from '../../shared/js/protocol.js';
 import { Sswcp } from '../../shared/js/sswcp.js';
 import { MachineState } from '../../shared/js/state.js';
@@ -124,20 +125,41 @@ const handlers = {
 
   refreshFilament: async () => { await loadMapping(); render(); },
 
+  /*
+   * Both of these write `print_task_config`, and both did it with
+   * `sw_UpdateMachineFilamentInfo` - which does not reach the printer. It is Orca's own
+   * filament record, it wants `{objects:[{key,value}]}`, and a flat patch fails its first
+   * `if`. The macros below are what the shipped popup sends for the same two actions,
+   * recovered from `setPrePrintConfiguration` in main.dart.js; it emits all three lines in
+   * one script, so they are joined the same way here.
+   */
   assignSlot: (filamentIndex, toolhead) => {
     if (!mapping || !mapping.filaments[filamentIndex]) return;
     mapping.filaments[filamentIndex].extruder = toolhead;
-    const table = mapping.filaments.map((f) => Number(f.extruder) || 0);
-    bridge.request(CMD.UPDATE_MACHINE_FILAMENT_INFO,
-                   { [TASK_CONFIG.MAP_TABLE]: table })
+    // EXTRUDERS is the set of TOOLHEADS in use, not the file's filament indices - the
+    // bundle joins the map's values, and `extruders_used` on the machine is one flag per
+    // toolhead. De-duplicated because two filaments can share one head.
+    const heads = [...new Set(mapping.filaments.map((f) => Number(f.extruder) || 0))];
+    const script = [
+      // Bare, not quoted: the bundle builds these two by plain concatenation, and only
+      // SET_PRINT_FILAMENT_CONFIG goes through the quoting map.
+      plainLine(PRINT_TASK.EXTRUDER_MAP,
+                { CONFIG_EXTRUDER: filamentIndex, MAP_EXTRUDER: Number(toolhead) || 0 }),
+      plainLine(PRINT_TASK.USED_EXTRUDERS, { EXTRUDERS: heads.join(',') }),
+    ].join('\n');
+    bridge.request(CMD.SEND_GCODES, { script })
           .catch((e) => console.warn('[preprint] update mapping:', e.message));
     render();
   },
 
   setPreference: (key, value) => {
     prefs[key] = value;
-    bridge.request(CMD.UPDATE_MACHINE_FILAMENT_INFO, { [key]: value })
-          .catch((e) => console.warn('[preprint] update preference:', e.message));
+    const pref = PRINT_PREFERENCES.find((p) => p.key === key);
+    const script = pref ? prefsLine({ [pref.arg]: value }) : '';
+    if (script) {
+      bridge.request(CMD.SEND_GCODES, { script })
+            .catch((e) => console.warn('[preprint] update preference:', e.message));
+    }
     render();
   },
 

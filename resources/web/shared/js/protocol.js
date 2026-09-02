@@ -32,6 +32,9 @@ export const CMD = {
   // docs/u1-webui/02-device-page/06-connection.md
   FILE_LOG: 'sw_FileLog',            // { level, content } -> Orca's own log file
   GET_USER_LOGIN_STATE: 'sw_GetUserLoginState',  // -> { status, userid, nickname, ... }
+  // Opens ORCA's own login dialog on Snapmaker's real login page (id.snapmaker.com).
+  // The page never sees a credential; it asks for the dialog and re-reads the state.
+  USER_LOGIN: 'sw_UserLogin',                   // { show }
   GET_PINCODE: 'sw_GetPincode',                 // { ip, userid, nickname, port=1884 }
   CREATE_MQTT_CLIENT: 'sw_create_mqtt_client',  // { server_address, clientId, ca?, cert?,
                                                 //   key?, username?, password?,
@@ -641,12 +644,87 @@ export const TASK_CONFIG = {
   AUTO_LEVEL: 'auto_bed_leveling',
 };
 
-/** The popup's three toggles, in the order the shipped UI lists them. */
+/**
+ * The three toggles, in the order the shipped UI lists them.
+ *
+ * `key` reads the state, `arg` writes it, and they are two fields because for one of the
+ * three they are not the same word: the machine reports `auto_bed_leveling` and the macro
+ * that sets it takes `BED_LEVEL`. Recovered from the shipped bundle, where the toggle
+ * writes into a map literally keyed `["bed_level", "flow_calibrate", "time_lapse_camera"]`
+ * and that map is what `SET_PRINT_PREFERENCES` is built from. Sending `AUTO_BED_LEVELING=`
+ * is an argument the macro does not have, which a G-code macro answers `ok` to.
+ */
 export const PRINT_PREFERENCES = [
-  { key: TASK_CONFIG.FLOW_CALIBRATE, label: 'Extrusion Flow Calibration' },
-  { key: TASK_CONFIG.TIME_LAPSE, label: 'Time-lapse Camera' },
-  { key: TASK_CONFIG.AUTO_LEVEL, label: 'Auto Leveling' },
+  { key: TASK_CONFIG.FLOW_CALIBRATE, arg: 'flow_calibrate', label: 'Extrusion Flow Calibration' },
+  { key: TASK_CONFIG.TIME_LAPSE, arg: 'time_lapse_camera', label: 'Time-lapse Camera' },
+  { key: TASK_CONFIG.AUTO_LEVEL, arg: 'bed_level', label: 'Auto Leveling' },
 ];
+
+/* ------------------------------------------------------------------ *
+ * Writing print_task_config
+ *
+ * `print_task_config` is READ off the state stream and WRITTEN with G-code macros - four
+ * of them, none of which appears in `printer.gcode.help` and all four recovered verbatim
+ * from the shipped bundle (`setPrintFilamentConfig` / `setPrePrintConfiguration` in
+ * main.dart.js; see docs/u1-webui/02-device-page/12-orca-integration.md).
+ *
+ * They are here rather than in a panel because two surfaces send them and because the
+ * quoting differs between the two families, which is exactly the kind of detail that
+ * gets re-derived slightly wrong the second time:
+ *
+ *   SET_PRINT_FILAMENT_CONFIG   KEY='value'   single-quoted; a vendor with a space in it
+ *                                             is one argument only because of the quotes
+ *   SET_PRINT_PREFERENCES       KEY=value     bare, and the key is upper-cased from the
+ *                                             `print_task_config` field name
+ *
+ * What does NOT write print_task_config is `sw_UpdateMachineFilamentInfo`. That name
+ * reads like the write and is not one: it never reaches the printer. See
+ * device_page/js/core/orcasync.js.
+ * ------------------------------------------------------------------ */
+export const PRINT_TASK = {
+  FILAMENT_CONFIG: 'SET_PRINT_FILAMENT_CONFIG',
+  PREFERENCES: 'SET_PRINT_PREFERENCES',
+  EXTRUDER_MAP: 'SET_PRINT_EXTRUDER_MAP',
+  USED_EXTRUDERS: 'SET_PRINT_USED_EXTRUDERS',
+};
+
+/**
+ * `SET_PRINT_FILAMENT_CONFIG` + `{CONFIG_EXTRUDER: 3, FILAMENT_TYPE: 'PETG'}`
+ * -> `SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='3' FILAMENT_TYPE='PETG'`
+ *
+ * Null and undefined are dropped, as the bundle drops them - the macro treats an absent
+ * argument as "leave this field alone", so passing an empty string instead would clear
+ * the field rather than skip it. An empty string is therefore kept: it is a value.
+ */
+export function quotedLine(macro, args) {
+  return [macro].concat(
+    Object.entries(args || {})
+      .filter(([, v]) => v !== undefined && v !== null)
+      .map(([k, v]) => `${k}='${v}'`)).join(' ');
+}
+
+/** `SET_PRINT_EXTRUDER_MAP` + `{CONFIG_EXTRUDER: 0}` -> `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=0`. */
+export function plainLine(macro, args) {
+  return [macro].concat(
+    Object.entries(args || {})
+      .filter(([, v]) => v !== undefined && v !== null)
+      .map(([k, v]) => `${k}=${v}`)).join(' ');
+}
+
+/**
+ * `SET_PRINT_PREFERENCES` + `{flow_calibrate: true}` -> `... FLOW_CALIBRATE=1`.
+ *
+ * Keyed by PRINT_PREFERENCES `arg`, not by the state field name. Booleans go out as 1/0
+ * because that is what the bundle sends: it keeps two parallel maps of the same three
+ * toggles, bools for the checkboxes and ints for the wire, and the int one is the one
+ * the macro line is built from.
+ */
+export function prefsLine(prefs) {
+  const args = Object.entries(prefs || {})
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k.toUpperCase()}=${typeof v === 'boolean' ? (v ? 1 : 0) : v}`);
+  return args.length ? [PRINT_TASK.PREFERENCES].concat(args).join(' ') : '';
+}
 
 /* ------------------------------------------------------------------ *
  * Control limits - DEVICE TAB ONLY.

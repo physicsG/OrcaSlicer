@@ -546,14 +546,13 @@ private:
     // ---- Snapmaker U1 embedded web surfaces --------------------------------
     //
     // The Device tab and the print-processing popup are pages served from the
-    // loopback HTTP server. Two implementations exist: the shipped Flutter
-    // bundle (resources/web/flutter_web) and the reconstructions documented in
-    // docs/u1-webui (resources/web/device_page, resources/web/print_processing).
+    // loopback HTTP server, documented in docs/u1-webui.
     //
-    // Which one loads is decided in ONE place - get_u1_surface_url() - keyed on
-    // the "u1_reconstructed_ui" app config flag. Build the URLs through it
-    // rather than by hand, and test them with the helpers below, so the two
-    // implementations cannot drift apart.
+    // The Device tab is always resources/web/device_page. The popup still has
+    // two implementations - resources/web/print_processing and the shipped
+    // Flutter bundle - and "u1_reconstructed_ui" chooses. Both decisions live in
+    // ONE place, get_u1_surface_url(); build the URLs through it rather than by
+    // hand, and test them with the helpers below.
     enum class U1Surface {
         DeviceTab,        // Orca's Device tab
         PrintAndUpload,   // the popup, uploading and then printing

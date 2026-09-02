@@ -41,10 +41,9 @@ export function create(deps) {
     await session.startStateStream('refresh');     // filter + snapshot + subscription, and it
                                            // re-reads homed_axes on its own way out
     cmd.queryException();
-    // `startStateStream` above re-reads the ACE and its bays on its own way out, so
-    // there is nothing to ask for here - two triggers for one read is how a subsystem
-    // ends up defined in more than one place.
-    deps.bridge.request(CMD.GET_MACHINE_SYSTEM_INFO, {}).catch(() => {});
+    // `startStateStream` above re-reads the ACE, its bays and the nozzle sizes on its
+    // own way out, so there is nothing to ask for here - two triggers for one read is
+    // how a subsystem ends up defined in more than one place.
     deps.bridge.request(CMD.FILE_STATUS, {}).catch(() => {});
     deps.bridge.request(CMD.FILES_ROOTS, {}).catch(() => {});
     render();
@@ -62,6 +61,27 @@ export function create(deps) {
     render();
   }
 
+  /**
+   * Orca's copy of the machine's filament inventory, after anything that could have
+   * invalidated it.
+   *
+   * Two halves, and the first is the reason this is not just "push again": Orca CLEARS
+   * `machine_filaments` whenever a machine disconnects (SSWCP.cpp:4186, :6618), so after
+   * a reconnect an unchanged inventory still has to be re-sent. `forget()` is what makes
+   * an unchanged value count as new.
+   */
+  async function resyncOrca() {
+    deps.orcaSync.forget();
+    await deps.orcaSync.readSystemInfo();
+    // Then push, for the case where the snapshot that follows changes nothing: on a
+    // refresh the state is already there and applyPayload may have nothing new to
+    // announce. At boot this declines - no state has arrived yet - and the snapshot's
+    // own change does it. Either way it is ONE push, because the second caller finds the
+    // inventory unchanged.
+    await deps.orcaSync.sync('stream');
+    render();
+  }
+
   function showView(next) {
     store.view = next;
     render();
@@ -72,6 +92,9 @@ export function create(deps) {
     refreshAll: () => refreshAll(),
     /** Orca's device list. session.js needs it too, on a reconnect. */
     refresh: () => refresh(),
+
+    /** Orca's filament record. session.js calls it when a state stream comes up. */
+    resyncOrca: () => resyncOrca(),
 
     showView: (v) => showView(v),
 

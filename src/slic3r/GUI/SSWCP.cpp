@@ -1658,7 +1658,18 @@ void SSWCP_Instance::update_filament_info(const json& objects, bool send_message
             }
             if (need_load_preset) {
                 tmp_filaments = filaments;
-                wxGetApp().load_current_presets();
+                // DEFERRED, and it matters. This runs on the stack of a
+                // wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED handler - a page asked for it -
+                // and load_current_presets() is not a small thing: update_pages(),
+                // force_print_bed_update(), load_current_preset() on every tab and
+                // rebuild_page_tree() on the model tabs. Destroying and rebuilding
+                // widgets while GTK is still dispatching the webview's message is how a
+                // sidebar refresh turns into a crash on the next tab switch.
+                //
+                // The containers above are already updated, so nothing waits on this but
+                // the redraw. Every other GUI action in this file goes through CallAfter
+                // for the same reason.
+                wxGetApp().CallAfter([]() { wxGetApp().load_current_presets(); });
             }
 
             if (send_message) {
@@ -5780,10 +5791,39 @@ void SSWCP_UserLogin_Instance::sw_SubUserUpdatePrivacy()
     wxGetApp().m_user_update_privacy_subscribers[m_webview] = weak_ptr;
 }
 
+// A subscription that answers nothing only ever reports CHANGES, and the change a page
+// most needs to hear about happened before it existed: the account is restored from
+// app_config in init_app_config(), and the notify() that goes with it reaches no
+// subscribers. post_init() re-announces, but that runs when the frame is built - several
+// seconds before a 5 MB Flutter bundle has parsed and subscribed. The page then sits on
+// its default, which is signed out, over a live session that is right there in the
+// config.
+//
+// So the subscription replies with the state as it stands. `notify()` builds the same
+// payload for a change, and a page cannot tell - nor should it care - whether what it
+// received was the current value or a new one.
 void SSWCP_UserLogin_Instance::sw_SubscribeUserLoginState()
 {
     std::weak_ptr<SSWCP_Instance> weak_ptr = shared_from_this();
     wxGetApp().m_user_login_subscribers[m_webview]  = weak_ptr;
+
+    auto* info = wxGetApp().sm_get_userinfo();
+    if (!info)
+        return;
+
+    json data;
+    if (info->is_user_login()) {
+        data["status"]   = "online";
+        data["nickname"] = info->get_user_name();
+        data["icon"]     = info->get_user_icon_url();
+        data["token"]    = info->get_user_token();
+        data["userid"]   = info->get_user_id();
+        data["account"]  = info->get_user_account();
+    } else {
+        data["status"] = "offline";
+    }
+    m_res_data = data;
+    send_to_js();
 }
 
 // SSWCP_MachineManage_Instance
@@ -7251,7 +7291,25 @@ std::shared_ptr<SSWCP_Instance> SSWCP::create_sswcp_instance(std::string cmd, co
 }
 
 // Handle incoming web messages
+// Anything a PAGE can send arrives here, and everything below parses JSON and indexes
+// into it. Nothing above catches: this is called straight out of a
+// wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED handler, so an unexpected shape - a missing key,
+// a string where a number was expected, an array shorter than the loop reading it - left
+// a nlohmann exception to unwind through wxWidgets and terminate the app. The same shape
+// of bug that made an unreachable printer abort Orca at launch, and the same fix: report
+// it and carry on. A malformed command is the page's problem to see in the log, not the
+// application's to die of.
 void SSWCP::handle_web_message(std::string message, wxWebView* webview) {
+    try {
+        handle_web_message_impl(message, webview);
+    } catch (const std::exception& e) {
+        BOOST_LOG_TRIVIAL(error) << "[WCP] handle_web_message threw: " << e.what();
+    } catch (...) {
+        BOOST_LOG_TRIVIAL(error) << "[WCP] handle_web_message threw an unknown exception";
+    }
+}
+
+void SSWCP::handle_web_message_impl(std::string message, wxWebView* webview) {
     {
 
         if (!webview) {

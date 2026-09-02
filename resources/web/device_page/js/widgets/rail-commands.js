@@ -29,6 +29,44 @@ export function create(deps) {
 
 
   return {
+    /**
+     * The Snapmaker account.
+     *
+     * There is no login screen on this page and there is not going to be one:
+     * `sw_UserLogin` opens ORCA's own dialog, which loads Snapmaker's real login page at
+     * id.snapmaker.com. Credentials are typed there and nowhere else. All this does is
+     * ask for that dialog and then re-read who came back from it.
+     *
+     * Worth having because the Device tab is now the only Device page: pairing a machine
+     * to an account, and anything cloud-side, needs a session, and the tab that needs it
+     * should be able to ask for it rather than sending someone to another tab.
+     */
+    signIn: async () => {
+      try {
+        await deps.bridge.request(CMD.USER_LOGIN, { show: true });
+      } catch (e) {
+        setStatus(`sign-in failed: ${e.message}`, 'err');
+        return;
+      }
+      // The dialog is modal in Orca and this call returns before it closes, so who is
+      // signed in is re-read on a clock rather than once. Six seconds of asking, then it
+      // stops: a person who cancelled the dialog is not signed in, and a page that keeps
+      // asking is a page that never settles.
+      for (let i = 0; i < 12; i += 1) {
+        await new Promise((r) => setTimeout(r, 500));
+        try {
+          const u = await deps.bridge.request(CMD.GET_USER_LOGIN_STATE, {});
+          if (u && u.status === 'online') {
+            store.loginUser = { userid: u.userid, nickname: u.nickname };
+            setStatus(`Signed in as ${u.nickname || u.userid}`);
+            render();
+            return;
+          }
+        } catch (e) { /* asked too early, or not signed in; try again */ }
+      }
+      render();
+    },
+
     showSystemInfo: async () => {
       const gather = async (cmd, params = {}) => {
         try { return await deps.bridge.request(cmd, params); } catch (e) { return { error: e.message }; }
@@ -58,7 +96,15 @@ export function create(deps) {
           add('Address', store.device && `${store.device[DEVICE.IP]}:${store.device[DEVICE.PORT] || 8883}`);
           add('State', printer.state);
           add('Host name', printer.hostname);
-          add('Firmware', printer.software_version || sys.firmware_version || dev.firmware);
+          // `machine.system_info` nests everything under `system_info`, and its
+          // `product_info` is the only place the nozzle sizes are published. Read as it
+          // is sent - `sys.firmware_version` was a flat field the machine never had, and
+          // it only ever looked right because printer.info answers first.
+          const prod = (sys && sys.system_info && sys.system_info.product_info) || {};
+          add('Firmware', printer.software_version || prod.firmware_version || dev.firmware);
+          add('Machine', prod.machine_type);
+          add('Nozzles', Array.isArray(prod.nozzle_diameter)
+                         ? prod.nozzle_diameter.join(' / ') : undefined);
           add('Klipper objects', Array.isArray(objects && objects.objects)
                                  ? objects.objects.length : undefined);
           b.appendChild(dl);

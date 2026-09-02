@@ -39,12 +39,6 @@ public:
 
     void load_url(wxString& url, wxString apikey = "");
 
-    // The Device tab can show either implementation: the shipped Flutter page
-    // or the reconstruction in resources/web/device_page. Both are reachable
-    // from a switcher above the webview; only one is loaded at a time, because
-    // two live Device pages would open two MQTT sessions to the same printer.
-    void show_surface(bool reconstructed);
-    bool showing_reconstructed() const { return m_reconstructed; }
     void UpdateState();
     void OnClose(wxCloseEvent& evt);
     void OnError(wxWebViewEvent& evt);
@@ -59,14 +53,7 @@ public:
 private:
     void SendAPIKey();
 
-    void build_switcher(wxSizer* topsizer);
-    void update_switcher();
-
     wxWebView* m_browser;
-    wxPanel*   m_switcher   = nullptr;
-    wxButton*  m_btn_original = nullptr;
-    wxButton*  m_btn_rebuilt  = nullptr;
-    bool       m_reconstructed = false;
     long m_zoomFactor;
     wxString m_apikey;
 

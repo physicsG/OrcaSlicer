@@ -118,6 +118,22 @@ The reconstructed U1 web UI needs **no rebuild** — `build/resources` is a syml
 `resources/`, the HTTP server reads files per request and sends no cache headers, so
 edit and reload. Only C++ changes need `ninja`.
 
+**It is the only Device page.** Nothing loads `flutter_web?path=2` any more and the
+Original / Rebuilt switcher is gone. That was not a matter of deleting a button: the
+shipped page was the **only** caller of `sw_UpdateMachineFilamentInfo`, which despite its
+name never reaches the printer — it writes Orca's `machine_filaments`, the one source the
+Prepare sidebar's filament combos have. `core/orcasync.js` does that now, on every state
+change, guarded by a comparison and re-forced on reconnect (Orca clears the record when a
+machine disconnects). **What writes the PRINTER is a macro**, not that command:
+`SET_PRINT_FILAMENT_CONFIG` (single-quoted `KEY='value'`, `SAVE='1'`) and
+`SET_PRINT_PREFERENCES` (bare `KEY=value`, and Auto Leveling goes out as **`BED_LEVEL`**
+though the machine reports `auto_bed_leveling`). Two panels sent the flat patch to the
+Orca command instead and did nothing at all on a real machine, silently, because neither
+awaits its own request. The **login is untouched and stays Orca's**: `sw_UserLogin` opens
+the native `SMUserLogin` on `id.snapmaker.com`, no reconstructed page has a login form,
+and the rail asks for that dialog rather than offering one. The whole account is
+[docs/u1-webui/02-device-page/12-orca-integration.md](docs/u1-webui/02-device-page/12-orca-integration.md).
+
 **Where things are.** The page has two destinations in one webview — Device control and
 Storage — switched by the left rail with no reload.
 [`js/registry.js`](resources/web/device_page/js/registry.js) lists them and their panels;
@@ -278,6 +294,29 @@ python3 resources/web/shared/tests/run_webkit.py --original --sn <SN> --watch
 Use it to check engine behaviour that source-text checks cannot see: focus and
 selection, whether a committed value survives the next state push, layout that must not
 shift, and anything about a real machine's timing.
+
+**Two things that only starting Orca can show.** Both are about a message that never
+arrives, and neither has any on-screen symptom on this page:
+
+- **A side effect must not ride on the repaint.** `render()` defers to a
+  `requestAnimationFrame`, and WebKit fires none into a view that is not being composited
+  — which the Device tab is not at startup. Anything whose consequence is on *another*
+  tab hangs off `state.onChange`, never off `render()`. `core/orcasync.js` was on the
+  repaint, passed every suite, and ran zero times in the app.
+- **A push-only channel needs an initial value.** `sw_SubscribeUserLoginState` registered
+  a subscriber and replied with nothing, so it reported only changes — and the account is
+  restored 4 s before the Flutter bundle finishes parsing and subscribes, so the Home tab
+  showed signed-out over a live session. A subscription answers with the current state.
+
+**Finishing a half-connected path lights up code that has never run.** Telling Orca what
+filament is loaded makes `m_connect_machine_info_list` non-empty for the first time on
+this firmware, and the Prepare page gates several things on exactly that. The first one to
+run segfaulted at address 0: `SyncMarkOverlay` is a child of the filament combo,
+`filament_sync_marks` keeps a raw pointer, and both removal sites `Destroy()` the combo
+without dropping it — so `SetSynced()` reached the virtual `IsShown()` through a freed
+vtable. The invariant was a comment on the member and nothing else. The same switch-on is
+why the sidebar's "Machine Filament" section had never been drawn: it is filtered on a
+nozzle diameter the page never used to send.
 
 **Every suite has been green while the page was visibly broken.** A `ReferenceError` left
 the page with no motion column and all 17 browser checks passed; a rename broke `boot()`

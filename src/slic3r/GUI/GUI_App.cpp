@@ -4372,41 +4372,45 @@ wxString GUI_App::get_international_url(const wxString& origin_url) {
 
 // ---- Snapmaker U1 embedded web surfaces ------------------------------------
 //
-// One place decides whether the Device tab and the print-processing popup are
-// served by the shipped Flutter bundle or by the reconstructions in
-// resources/web/. See docs/u1-webui/ for what the reconstructions cover, and
-// note they are deliberately narrower than the bundle - flipping
-// "u1_reconstructed_ui" back to false restores the shipped pages.
+// One place decides which page each surface loads. See docs/u1-webui/.
+//
+// The **Device tab is the reconstruction, always**: it is the only Device page
+// now, and nothing loads `flutter_web?path=2` any more. What that page owed Orca
+// - the machine's filament inventory, which the sidebar's filament combos are
+// built from - it now pays itself; see device_page/js/core/orcasync.js.
+//
+// The print-processing popup still has two implementations, and
+// "u1_reconstructed_ui" still chooses between them. The bundle also stays for the
+// Home tab (?path=0), the preset dialog (?path=3) and the Add-Device dialog, none
+// of which was reconstructed.
 wxString GUI_App::get_u1_surface_url(U1Surface surface) const
 {
     const std::string port = std::to_string(get_page_http_port());
     const bool reconstructed = app_config->get_bool("u1_reconstructed_ui");
 
     std::string path;
-    if (reconstructed) {
-        switch (surface) {
-        case U1Surface::DeviceTab:      path = "/web/device_page/index.html"; break;
-        case U1Surface::PrintAndUpload: path = "/web/print_processing/index.html?mode=print"; break;
-        case U1Surface::UploadOnly:     path = "/web/print_processing/index.html?mode=upload"; break;
-        }
-    } else {
-        switch (surface) {
-        case U1Surface::DeviceTab:      path = "/web/flutter_web/index.html?path=2"; break;
-        case U1Surface::PrintAndUpload: path = "/web/flutter_web/index.html?path=4"; break;
-        case U1Surface::UploadOnly:     path = "/web/flutter_web/index.html?path=5"; break;
-        }
+    switch (surface) {
+    case U1Surface::DeviceTab:
+        path = "/web/device_page/index.html";
+        break;
+    case U1Surface::PrintAndUpload:
+        path = reconstructed ? "/web/print_processing/index.html?mode=print"
+                             : "/web/flutter_web/index.html?path=4";
+        break;
+    case U1Surface::UploadOnly:
+        path = reconstructed ? "/web/print_processing/index.html?mode=upload"
+                             : "/web/flutter_web/index.html?path=5";
+        break;
     }
     return wxString::FromUTF8(LOCALHOST_URL + port + path);
 }
 
 bool GUI_App::is_u1_device_tab_url(const wxString& url)
 {
-    // The Flutter bundle distinguishes its surfaces by ?path=; the reconstruction
-    // uses a directory per surface. Accept either, so callers do not have to know
-    // which implementation is active.
-    if (url.find("device_page/index.html") != wxString::npos)
-        return true;
-    return url.find("flutter_web") != wxString::npos && url.find("path=2") != wxString::npos;
+    // One Device page, one URL. `flutter_web?path=2` is deliberately NOT accepted:
+    // the tab never loads it, and treating it as the Device tab would register a
+    // second page for the state pushes that only one document can own.
+    return url.find("device_page/index.html") != wxString::npos;
 }
 
 bool GUI_App::is_u1_surface_url(const wxString& url)

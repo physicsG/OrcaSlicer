@@ -24,6 +24,7 @@ import { installMock } from './core/mock.js';
 import { Pending } from './core/pending.js';
 import { createStore } from './core/store.js';
 import { createSession } from './core/session.js';
+import { createOrcaSync } from './core/orcasync.js';
 import { DIAG, createLog } from './core/diag.js';
 import { mountBuildBadge } from '../../shared/js/buildinfo.js';
 import { $ } from './core/dom.js';
@@ -77,6 +78,16 @@ const session = createSession({
   render: () => render(),
   refresh: () => all.refresh(),
   handlers: all,
+});
+
+/**
+ * What this page owes Orca rather than the printer: the machine's filament inventory,
+ * which the sidebar's filament combo boxes are built from and which has exactly one
+ * writer. The shipped Device page was that writer; see core/orcasync.js.
+ */
+const orcaSync = createOrcaSync({
+  bridge: () => bridge,
+  state, store, hostLog,
 });
 
 function setStatus(text, kind = '') {
@@ -157,7 +168,23 @@ async function boot() {
   // Fails harmlessly when nothing is connected yet; the connect path re-runs it.
   await session.startStateStream('boot');
 
-  state.onChange(render);
+  /*
+   * Repaint, and tell Orca what is loaded.
+   *
+   * Both hang off the state change, and the second one deliberately does NOT hang off the
+   * first. It did, inside render()'s requestAnimationFrame, and it never ran once in
+   * Orca: the Device tab's webview is not the visible page at startup, and WebKit does
+   * not fire animation frames into a view that is not being composited. Everything else
+   * carried on - the session connected, the snapshot arrived, the log said so - and the
+   * one thing that has no on-screen consequence was the one thing that stopped.
+   *
+   * It showed up as an empty filament list on the PREPARE tab, which is the tab this page
+   * cannot see. Drawing may wait for someone to look; a side effect may not.
+   */
+  state.onChange(() => {
+    render();
+    orcaSync.sync('state');
+  });
   render();
   session.supervise();
 
@@ -242,7 +269,7 @@ const deps = {
   // answer them - the simulator has to, or the camera is the one panel a simulated run
   // cannot exercise.
   get mock() { return window.__devicePage.mock; },
-  state, store, pending, session, cmd: all,
+  state, store, pending, session, orcaSync, cmd: all,
   send, setpoint, setStatus, render: () => render(),
 };
 const byModule = {};
@@ -365,6 +392,17 @@ function wireDeviceMenu() {
                  onClick: () => send(CMD.ADD_DEVICE, {}, 'add device') });
     items.push({ label: 'Connect another machine…', icon: 'iconHome',
                  onClick: () => ctx.handlers.connectOther() });
+    // The account, last, because it is about Orca rather than about any printer. Signed
+    // in it is a statement and not a control; signed out it opens ORCA's login dialog on
+    // Snapmaker's own page - this page has no login screen and is not getting one.
+    items.push(null);
+    if (store.loginUser && store.loginUser.userid) {
+      items.push({ label: `Signed in as ${store.loginUser.nickname || store.loginUser.userid}`,
+                   icon: 'iconHome', muted: true });
+    } else {
+      items.push({ label: 'Sign in to Snapmaker…', icon: 'iconHome',
+                   onClick: () => ctx.handlers.signIn() });
+    }
     openMenu(sel, items);
   };
 }
