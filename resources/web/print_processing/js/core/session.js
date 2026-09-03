@@ -36,7 +36,7 @@ import { cssColor, nozzleStr } from '../widgets/format.js';
  * `A.bEE` is the bundle's own filter: a filament the plate does not actually use is
  * dropped from the grid rather than drawn empty.
  */
-export function fileFilaments(mapping) {
+export function fileFilaments(mapping, keep = null) {
   if (!mapping) return [];
   const arr = (k) => (Array.isArray(mapping[k]) ? mapping[k] : []);
   const types = arr('filament_type');
@@ -82,10 +82,29 @@ export function fileFilaments(mapping) {
     used: Number(weight[i]) || 0,
     usedMm: Number(usedMm[i]) || 0,
     nozzle: nozzleFor(i),
-  })).filter(usesMaterial);
+  })).filter((f) => usesMaterial(f) || (keep && keep.has(f.index)));
 }
 
-/** `A.bEE`: keep a filament the plate actually consumes. -1 mm means "unknown, keep". */
+/**
+ * `A.bEE`: keep a filament the plate actually consumes. -1 mm means "unknown, keep".
+ *
+ * `keep` overrides it, and it exists because on a real ACE plate this filter is WRONG.
+ * Measured on `Test_Cube_PLA_4h15m_multiACE.gcode`: the file declares seven filaments and
+ * reports usage for four -
+ *
+ *     filament_type      PLA;PLA;PLA;PLA;PLA;PLA;PLA
+ *     filament used [g]  7.27, 7.36, 7.58, 26.52, 0.00, 0.00, 0.00
+ *
+ * - because `filament_type` is indexed by PROJECT filament and the usage arrays come from
+ * `total_volumes_per_extruder`, which is indexed by EMITTED extruder and padded with
+ * zeros. The two coincide on an ordinary printer, which is why the filter has always
+ * looked right; an ACE plate puts several filaments on one head and they diverge.
+ *
+ * So three of the seven have zero usage and are not unused: the plan says the machine
+ * prints them. Dropping them left the grouping panel drawing `---` chips for filaments
+ * the file names. The real repair is in `sw_GetFileFilamentMapping` - item 2 of
+ * 06-multiace.md - and until it lands, a filament the PLAN references is kept.
+ */
 function usesMaterial(f) {
   return f.used > 0 || f.usedMm > 0 || f.usedMm === -1;
 }

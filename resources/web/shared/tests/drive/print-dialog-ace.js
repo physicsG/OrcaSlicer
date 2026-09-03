@@ -16,7 +16,7 @@
  * The four cards going on being drawn beside the panel that replaced them was found here
  * - `hidden` is a UA rule and `.card` is `display: flex`, so setting it hid nothing.
  */
-(function () {
+(async function () {
   const L = [];
   const say = (s) => L.push(s);
   try {
@@ -90,14 +90,36 @@
           `disabled=${send && send.disabled}, differs=${m.check.differs}`);
     /* The identity map has to have gone out: extruder_map_table survives a print, and on
        an ACE plate any remap prints on the wrong heads. */
-    /* The simulator records every sw_SendGCodes script in `gcodeLog`. */
-    const sent = ((pp.mock && pp.mock.printer && pp.mock.printer.gcodeLog) || []).join('\n');
-    check('the identity tool map was written',
-          /SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=0 MAP_EXTRUDER=0/.test(sent)
-          && /SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=6 MAP_EXTRUDER=6/.test(sent),
-          (sent.match(/SET_PRINT_EXTRUDER_MAP[^\n]*/g) || []).length + ' lines');
-    check('and no line remaps a tool off its own head',
-          !/SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=(\d+) MAP_EXTRUDER=(?!\1\b)/.test(sent));
+    /*
+     * The tool map goes out on SEND, not on open - opening a dialog to look at a plate
+     * must not change the machine. So this presses Send, and presses it ONLY against the
+     * simulator: against a real printer that would upload a file to it, and this script
+     * is read-only by contract.
+     */
+    if (pp.mock) {
+      const btn = document.querySelector('.send');
+      const blocked = btn.disabled;
+      btn.click();
+      await new Promise((r) => setTimeout(r, 900));
+      const sent = ((pp.mock.printer && pp.mock.printer.gcodeLog) || []).join('\n');
+      const lines = (sent.match(/SET_PRINT_EXTRUDER_MAP[^\n]*/g) || []).length;
+      if (blocked) {
+        /* A refused send writes NOTHING. The map is machine state that survives a print,
+           so a dialog that sets it and then declines to send has changed the machine for
+           the next job on the strength of a plate it would not print. */
+        check('a refused send writes no tool map', lines === 0, `${lines} lines`);
+      } else {
+        check('the identity tool map is written on send',
+              /SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=0 MAP_EXTRUDER=0/.test(sent)
+              && /SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=6 MAP_EXTRUDER=6/.test(sent),
+              `${lines} lines`);
+        check('and no line remaps a tool off its own head',
+              !/SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=(\d+) MAP_EXTRUDER=(?!\1\b)/.test(sent));
+      }
+    } else {
+      L.push('NOTE  read-only against a real machine: Send was not pressed, so the tool '
+           + 'map was not exercised here. The simulator covers it.');
+    }
     check('the dialog does not scroll past its own body',
           document.body.scrollHeight <= document.documentElement.clientHeight + 1);
     window.__report = L.join('\n');

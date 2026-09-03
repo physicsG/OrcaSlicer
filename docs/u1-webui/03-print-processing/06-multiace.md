@@ -463,9 +463,56 @@ built.
   no identity at all, so merging late would have `reconcile()` call every named bay
   unnamed.
 
+### Verified against the real U1 — 2026-09-03
+
+Driven against `811002511261022618B3` at 192.168.2.242, Orca closed, **read-only**: the
+machine was left at `standby`, `extruder_map_table` at the identity, 184 files in the
+gcodes root and nothing uploaded. `drive/print-dialog-ace.js` **16/16**.
+
+**The plate is real, and it carries the plan in its own header.**
+`Test_Cube_PLA_4h15m_multiACE.gcode`, sliced by the unmerged branch, opens with
+
+```
+; multiACE plan: T0:H3S3 T1:H3S0 T2:H0S0 T3:H1S0 T4:H2S0 T5:H3S2 T6:H3S1 swaps:300 optimal:1
+```
+
+followed by one `ACE_SWAP_HEAD HEAD=h ACE=u SLOT=0` per ACE-fed head, and 302
+`ACE_SWAP_HEAD` / 301 `ACE_SET_PURGE` through the body. That is the emitter's own format
+and it was not known when `ace_plan` was designed — so `u1_bridge.py` now **parses it**
+rather than being handed a fixture, the same discipline it already follows for the
+filament list and the thumbnails. The C++ can build the proposed key from exactly this.
+
+**What the machine said.** `ace` present, `mode: head`, one unit; the override store
+fetched over Moonraker and merged, naming all four bays. The plate wants seven PLA colours
+and the ACE holds four PETG spools, so the verdict was **4 differs** and Send was refused
+— a real reconciliation, against real hardware, with the right answer.
+
+**Two defects it found that the simulator could not:**
+
+- **The usage filter drops filaments on a real ACE plate.** The file declares seven and
+  reports usage for four — `filament used [g] = 7.27, 7.36, 7.58, 26.52, 0.00, 0.00,
+  0.00` — because the type array is indexed by project filament and the usage arrays come
+  from `total_volumes_per_extruder`, indexed by emitted extruder and zero-padded. This is
+  §3 item 2 *in the wild*, and `A.bEE`'s "keep what the plate consumes" filter therefore
+  threw away three of the seven. A filament the plan references is now kept whatever the
+  numbers say.
+- **Opening the dialog changed the machine.** The identity tool map was written by
+  `bringUpAce()`, so merely *looking* at an ACE plate rewrote `extruder_map_table`. It is
+  written by the **send** now, before the upload — which is where the shipped page emits
+  its own map, and it is right to. A refused send writes nothing, and the suite asserts
+  that too.
+
+Also cosmetic: the real header carries no purge figure, so the cost line read
+"300 ACE swaps — purged". The clause is drawn only when there is one.
+
 ### Not covered
 
-- **No hardware.** By instruction.
+- **No print was started**, and the ACE half of the send path is therefore unobserved:
+  rung 3 of the `u1-hardware-test` ladder was not run. The tool-map write is covered by
+  the simulator only.
+- **The plate cannot be satisfied on this machine** — it wants PLA and the ACE holds PETG
+  — so the `agrees` path was exercised against the simulator and the `differs` path
+  against hardware, not the other way round.
 - **The build badge covers the note at one scroll position.** It is `position: fixed` at
   the bottom-right, the body scrolls under it, and this panel is the first on this surface
   long enough to put a line there — measured: the plain plate covers nothing. Scrolling

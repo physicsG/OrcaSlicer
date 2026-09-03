@@ -170,8 +170,17 @@ function say(message, kind = '') {
 
 /* ---- derive ----------------------------------------------------------- */
 function recomputeFile() {
-  model.filaments = fileFilaments(model.mapping);
+  /*
+   * The plan first, because it decides which filaments survive the usage filter. On a
+   * real ACE plate three of seven report zero grams - the usage arrays are indexed by
+   * emitted extruder while the type array is indexed by project filament - and a filament
+   * the plan references is printed whatever the numbers say.
+   */
   model.plan = filePlan(model.mapping);
+  const planned = model.plan
+    ? new Set(model.plan.heads.flatMap((h) => h.run.map((s) => s.filament)))
+    : null;
+  model.filaments = fileFilaments(model.mapping, planned);
   const fresh = initialAssignment(model.mapping, model.filaments);
   // Keep anything the operator has already chosen; only fill in what is new.
   model.filaments.forEach((f) => {
@@ -346,25 +355,16 @@ async function boot() {
  * a machine that cannot be reached both mean "nothing to draw", and on a plate with no
  * plan nothing was going to be drawn anyway.
  *
- * On an ACE plate this also writes the tool map, and writing it is not optional.
- * `extruder_map_table` is machine state that SURVIVES a print - a real U1 has been seen
- * carrying `[0,1,1,0]` left by an earlier job - so a page that sends nothing inherits
- * whatever the last plate left, and on an ACE plate any remap prints on the wrong heads.
+ * READ-ONLY. The tool map is written by the SEND, not here - see doSend. Writing it on
+ * open meant that merely opening the dialog changed machine state, which was noticed by
+ * running it against a real printer: the shipped page emits its map as the last thing
+ * before the print starts, and it is right to.
  */
 async function bringUpAce() {
   if (!model.connected) return;
   await refreshAce(bridge, state);
   model.aceBays = await syncBays(model.device, mockHost);
   recomputeMachine();
-
-  if (model.plan && WITH_PRINT_SETUP) {
-    try {
-      await groupCmds.writeIdentityMap(bridge, { plan: model.plan,
-                                                 filaments: model.filaments });
-    } catch (e) {
-      say(`could not set the tool map: ${e.message}`, 'err');
-    }
-  }
   render();
 }
 
@@ -427,6 +427,30 @@ async function simulatedUpload({ blob, filename, onProgress, onReply }) {
 async function doSend() {
   closePicker();
   say('');
+
+  /*
+   * On an ACE plate, the tool map goes out as the IDENTITY, and it goes out HERE.
+   *
+   * `extruder_map_table` is machine state that survives a print - a real U1 has been seen
+   * carrying `[0,1,1,0]` left by an earlier job - so a page that sends nothing inherits
+   * whatever the last plate left, and on an ACE plate any remap prints on the wrong
+   * heads: the gcode's `ACE_SWAP_HEAD HEAD=n` names the head directly.
+   *
+   * Before the upload rather than after the start, so a machine that refuses the map is a
+   * send that never began. And on SEND rather than on open, because opening a dialog to
+   * look at a plate must not change the machine - which is what it did until this was run
+   * against a real printer.
+   */
+  if (model.plan && WITH_PRINT_SETUP) {
+    try {
+      await groupCmds.writeIdentityMap(bridge, { plan: model.plan,
+                                                 filaments: model.filaments });
+    } catch (e) {
+      say(`could not set the tool map: ${e.message}`, 'err');
+      return;
+    }
+  }
+
   const ok = await runSend({
     bridge,
     device: model.device,

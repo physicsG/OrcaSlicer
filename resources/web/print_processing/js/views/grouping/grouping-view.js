@@ -322,8 +322,15 @@ function paintCost(node, plan) {
   if (!plan.swaps) return;
   node.appendChild(el('b', null, String(plan.swaps)));
   node.appendChild(el('span', null, 'ACE swaps'));
-  node.appendChild(el('b', null, grams1(plan.purgeG)));
-  node.appendChild(el('span', null, 'purged'));
+  /*
+   * Only when there IS one. The emitter's own header line carries `swaps:` and
+   * `optimal:` and no purge figure - measured on a real multiACE plate - so the page must
+   * not draw the clause with an em-dash in it and read "300 ACE swaps — purged".
+   */
+  if (plan.purgeG > 0) {
+    node.appendChild(el('b', null, grams1(plan.purgeG)));
+    node.appendChild(el('span', null, 'purged'));
+  }
   if (plan.savedSwaps) {
     node.appendChild(el('span', 'g-saved',
       `saves ${plan.savedSwaps} swaps against one spool per head`));

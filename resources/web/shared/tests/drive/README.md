@@ -29,6 +29,7 @@ nobody runs.
 | `print-dialog.js` | The rebuilt **print dialog** against the simulator, in the 714 × 750 the host opens. Every geometry assertion is a row of the specification mockup, checked after a real layout; then the behaviour the bundle carries - a toolhead whose type or nozzle does not match is passed `enabled: false` and **cannot be picked**, which this checks by clicking one and asserting nothing moved. 43 checks. |
 | `print-dialog-real.js` | The same dialog against `u1_bridge.py` with a **real sliced plate** (`--gcode`) and no printer (`--device-ip 192.0.2.1`). The filament list, the weights and the thumbnail all come out of the file Orca's own slicer wrote, so this is the Orca half on real data rather than a fixture. **Read-only on purpose**: the send path ends in `sw_StartLocalPrint`. 15 checks. |
 | `print-dialog-machine.js` | The dialog against a **connected U1**, and the first thing here to see one. Prints `print_task_config` and the extruder objects raw — this surface had never seen either from hardware — then checks the refusal rule against whatever the machine actually holds, recomputed from the raw objects so a bug in the page cannot make it agree with itself. **Read-only**: it opens the picker and never picks. |
+| `print-dialog-ace.js` | The dialog on a plate sliced onto an **ACE** — the grouping panel, the mode, the bay verdicts. Against the simulator with `?plan=1` / `?plan=mismatch`, and against a real U1 with a real multiACE `.gcode`, whose own `; multiACE plan:` header `u1_bridge.py` parses. **Read-only against hardware**: it presses Send only when there is a mock behind it, because against a printer that would upload a file. Found that `hidden` hid nothing — `.card` is `display: flex` — so the four cards went on being drawn beside the panel replacing them. |
 | `print-cancel-real.js` | Whether `sw_MachinePrintCancel` reaches this firmware, asked **before** anything is sent to it. Refuses outright if a print is in progress. Proves the route and the round trip; it cannot prove a running print stops, and says so. |
 | `cancel-latency-real.js` | Why a machine command answered slowly. Blocks Klipper's queue with `G4` — a dwell, so **nothing moves** — and times a cancel behind it. Measured `dwell + ~250 ms` every time, which is what turned "this firmware does not answer a cancel" into "the client's clock was too short". Run it before concluding a command was ignored. |
 
@@ -54,6 +55,9 @@ python3 $R/run_webkit.py --real --device-ip 192.0.2.1 --size 714x750 \
 python3 $R/run_webkit.py --real --sn <SN> --size 714x750 --settle 25 \
     --gcode ~/models/plate_1.gcode --page web/print_processing/index.html \
     --drive $R/drive/print-dialog-machine.js
+python3 $R/run_webkit.py --real --sn <SN> --size 714x750 --settle 25 \
+    --gcode ~/models/plate_multiACE.gcode --page web/print_processing/index.html \
+    --drive $R/drive/print-dialog-ace.js
 python3 $R/run_webkit.py --real --sn <SN> --size 714x750 --settle 25 \
     --gcode ~/models/plate_1.gcode --page web/print_processing/index.html \
     --drive $R/drive/print-cancel-real.js

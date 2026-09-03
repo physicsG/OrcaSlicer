@@ -240,7 +240,7 @@ class PreprintJob:
         self.log = log
         self.name = os.path.basename(self.path)
         self.size = os.path.getsize(self.path)
-        self.meta, self.thumbnails = self._parse()
+        self.meta, self.thumbnails, self.ace_plan = self._parse()
         self.zip_path = None
         # What the page reported through the close protocol, so a drive script can read
         # back what the dialog actually said rather than trusting that it said it.
@@ -284,7 +284,66 @@ class PreprintJob:
                 cur = None
             elif cur is not None and t.startswith(";"):
                 cur["b64"].append(t[1:].strip())
-        return meta, thumbs
+        return meta, thumbs, self._parse_plan(head)
+
+    # `; multiACE plan: T0:H3S3 T1:H3S0 … swaps:300 optimal:1`
+    _PLAN_STEP = re.compile(r"\bT(\d+):H(\d+)S(\d+)\b")
+    _PLAN_SWAPS = re.compile(r"\bswaps:(\d+)\b")
+    # The preload block the emitter writes at the top, one line per ACE-fed head.
+    _PRELOAD = re.compile(r"^ACE_SWAP_HEAD\s+HEAD=(\d+)\s+ACE=(\d+)", re.M)
+
+    def _parse_plan(self, head):
+        """The ACE plan, out of the file's OWN header.
+
+        The emitter writes one summary line - `T<filament>:H<head>S<slot>` per filament,
+        plus `swaps:` and `optimal:` - and a preload block of `ACE_SWAP_HEAD HEAD=h ACE=u
+        SLOT=0` immediately after it, one line per ACE-fed head. Between them that is the
+        whole plan, and it is read here rather than invented: the same discipline the rest
+        of this class follows for the filament list and the thumbnails.
+
+        A head that appears in a preload line is ACE-fed and the line says which unit; any
+        other head carrying filament is on its stock feeder. `ace_plan` in the page's
+        shape is a straight rearrangement of those two facts.
+
+        Returns None when the file has no plan, which is every plate this branch's slicer
+        can produce - and then the popup is the four-card dialog, as it should be.
+        """
+        line = None
+        for raw in head.splitlines():
+            if raw.startswith("; multiACE plan:") and "{" not in raw:
+                line = raw
+                break
+        if not line:
+            return None
+        steps = self._PLAN_STEP.findall(line)
+        if not steps:
+            return None
+
+        units = {int(h): int(u) for h, u in self._PRELOAD.findall(head)}
+        swaps = self._PLAN_SWAPS.search(line)
+
+        by_head = {}
+        for fil, h, s in steps:
+            by_head.setdefault(int(h), []).append((int(fil), int(s)))
+
+        heads = []
+        for h in sorted(by_head):
+            aced = h in units
+            # Ordered by SLOT, which is the bay order and not the print order - the
+            # summary does not carry the sequence, and inventing one would be a claim.
+            run = sorted(by_head[h], key=lambda x: x[1] if aced else x[0])
+            heads.append({
+                "head": h,
+                "feeder": not aced,
+                "unit": units.get(h),
+                "run": [({"filament": f, "unit": units[h], "slot": s} if aced
+                         else {"filament": f}) for f, s in run],
+            })
+        plan = {"mode": "head", "heads": heads,
+                "swaps": int(swaps.group(1)) if swaps else 0}
+        self.log(f"[gcode] multiACE plan: {len(steps)} filaments over "
+                 f"{len(heads)} heads, {plan['swaps']} swaps")
+        return plan
 
     def _list(self, key, sep=None):
         raw = self.meta.get(key)
@@ -360,6 +419,12 @@ class PreprintJob:
                                   "width": int(t["w"] or 0), "height": int(t["h"] or 0)}]
         else:
             out["thumbnails"] = []
+
+        # PROPOSED - `ace_plan`. No Orca sends this yet; this host can, because the file
+        # itself carries it. Absent on a plate with no plan, which is what a real Orca
+        # sends for every plate its slicer can currently produce.
+        if self.ace_plan:
+            out["ace_plan"] = self.ace_plan
 
         # Orca's own filament->extruder map lives in its config, which this host does not
         # have; identity is what the popup falls back to when the key is absent.
