@@ -1363,6 +1363,17 @@ beside the panel that had replaced them, head pickers and all. `[hidden] { displ
 !important }` is in `preprint.css` now; the nozzle banner had only ever worked because it
 sets `hidden` on a `.bare` body with no `display` of its own.
 
+## Picking this up next: the print popup and multiACE
+
+**Start at
+[03-print-processing/08-handover.md](03-print-processing/08-handover.md)** — where it
+stopped, the three routes, the recommendation, the hook point, and the traps.
+
+The one-line state: **the popup understands multiACE and the machine cannot yet be told to
+use it.** The panel describes an ACE-fed printer; nothing carries a bay choice from the
+dialog to the print, because `SET_PRINT_EXTRUDER_MAP` names a toolhead and no runtime
+tool→bay resolution exists anywhere.
+
 ## The mapping question, answered (2026-09-03)
 
 **A plate sliced knowing nothing about the ACE does NOT need re-slicing to use ACE
