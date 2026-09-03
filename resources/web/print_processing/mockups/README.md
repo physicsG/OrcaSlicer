@@ -298,43 +298,76 @@ spools. The dialog's job is to say precisely which.
 
 # Plan choice — what to offer when the plan and the machine disagree
 
-`plan-choice.html`, one file, no modules, no bake step. It answers a question the four
-above could not have asked, because the answer was not available when they were drawn.
+`plan-choice.html`. **It is the popup, not a picture of one:** it loads the dialog's own
+two stylesheets and mounts the shipped panels — `model-info`, `printer`, `grouping` or the
+four cards, `preferences` — straight out of `../js/views/`, on this directory's fixture.
+Exactly one thing in it is new, and everything new is prefixed `pc-`. A difference between
+this and the live dialog is therefore a bug in one of them, not a drawing choice in here.
 
 ```bash
 python3 resources/web/shared/tests/run_webkit.py --size 714x750 --watch \
     --page 'web/print_processing/mockups/plan-choice.html?scenario=aware'
 ```
 
-`?scenario=` is `aware` (sliced onto the ACE, two bays hold another spool) or `unaware`
-(sliced with no ACE in the preset, and the printer has one). The page carries its own
-switcher, so `--watch` reaches both without a reload.
+`?scenario=` is `aware` (sliced onto the ACE; two bays hold the other spool, so the real
+reconciliation refuses the send) or `unaware` (sliced with no ACE in the preset, on a
+printer that has one; seven filaments, four heads, and the real four-card panel marks
+three of them `!`). The page carries its own switcher, so `--watch` reaches both.
 
-**What it is for.** D, E and F treat the plan as fixed and a mismatch as an errand. G
-offers to change the plan and says the button must read **Re-slice**, because when G was
-drawn the plan was emitted by the slicer and both levers were baked into the gcode. Route C
-moved the work into the host, after export, and that split the two levers apart:
+## What it is for
 
-| lever | where it lives | what changing it costs |
+D, E and F treat the plan as fixed and a mismatch as an errand. G offers to change the plan
+and says the button must read **Re-slice**, because when G was drawn the slicer emitted the
+plan and both levers were baked into the gcode. Route C does the rewrite in the host *after*
+export, and that splits them apart:
+
+| lever | where it lives | changing it costs |
 |---|---|---|
 | which toolhead a filament prints from | the tool number itself | re-export the gcode |
 | which bay feeds an ACE-fed head | one argument per swap line | a text edit, free |
 
-So there is a third answer none of the earlier designs could offer — *keep the layout, fix
-the bay addresses* — which turns a refused send into a send with nothing to carry to the
-printer. Drawing that is the whole point of this mockup.
+So there is a third answer none of the earlier designs could offer — **keep the layout, fix
+the bay addresses** — which costs nothing and turns a refused send into a send with nothing
+to carry to the printer. Drawing that is the whole point.
 
-The reasoning behind it, and the measurement that says preferring Orca's own filament
-assignment is **not** on its own enough, is
+The reasoning, and the measurement that says preferring Orca's own filament assignment is
+**not** on its own enough, is
 [03-print-processing/10-plan-choice.md](../../../../docs/u1-webui/03-print-processing/10-plan-choice.md).
 
-**Why one file.** The others are ES modules that `build_standalone.py` bundles for people
-without a checkout. This one is a decision aid rather than a redrawing of the machine, so it
-carries the few marks it needs and can be opened anywhere as it stands — nothing to bake,
-and therefore nothing to drift. Where it draws a bay or a spool it follows
-[16-ace-visuals](../../../../docs/ace-mmu/16-ace-visuals.md): outlined chassis, solid bays,
-the address on a disc over a colour-filled roll.
+## Where the answers sit, and what that cost
 
-**Measured**, WebKitGTK at 714 x 750: 25 checks pass, and the body overflows its 663 px by
-121 — better than D (242), E (255) and F (211), worse than G (0). What falls below the fold
-is the last Print Preferences row.
+Above the toolhead grid, not below it. The decision is what the section is for and the boxes
+are what justifies it — and measured, a chooser under four boxes and seven chips is three
+hundred pixels below the fold. One line per answer for the same reason: prose rows took the
+body past 500 px of overflow.
+
+| | body overflow at 714 × 750 |
+|---|---|
+| the shipped dialog on this fixture | 182 |
+| with the answers added | 356 |
+
+## Checking it
+
+```bash
+python3 resources/web/shared/tests/run_webkit.py --size 714x750 \
+    --page 'web/print_processing/mockups/plan-choice.html?scenario=aware' \
+    --drive resources/web/shared/tests/drive/plan-choice.js
+```
+
+33 checks, and most of them are about the shipped panels rather than the new block: the
+sections in the registry's order, the real grouping view drawing four heads and seven chips,
+two of them marked by the real three-valued reconciliation, and the real four-card panel
+marking three filaments unset in the other state.
+
+## Sharing it
+
+```bash
+python3 resources/web/print_processing/mockups/bake_page.py plan-choice.html
+```
+
+`bake_page.py` is the general form of `build_standalone.py`: it walks the page's import
+graph rather than carrying a fixed chain, so a mockup that mounts a dozen of the popup's
+modules bundles without anyone maintaining a list. Modules stay modules — flattening them
+is a silent `SyntaxError` — and are handed to the page as source, turned into blob URLs
+with their specifiers rewritten. The bundle passes the same 33 checks with the same
+measurements, which is the point of generating it rather than writing it.
