@@ -1,7 +1,7 @@
 # Route C, made ready: the host-side rewriter
 
 **Branch:** `feat/u1-print-multiace`. **Written:** 2026-09-03 against `b9b6224989`, plus the
-lift described in §4. **Decision:** route C of [08-handover.md](08-handover.md) §3 — rewrite
+lift and the rewriter described in §4. **Decision:** route C of [08-handover.md](08-handover.md) §3 — rewrite
 the sliced gcode in Orca, after slicing, the way multiACE's preflight does on the printer.
 Nothing below re-opens that.
 
@@ -215,16 +215,25 @@ first-use order.
   The first marker (layer -1) names the initial tool and opens the body. The planner takes
   the body sequence. Reading the file rather than `ToolOrdering` keeps the rewriter
   standalone, testable on a fixture, and identical to what the preflight sees.
-- **R2 `T<n>` lines.** Before the body: `T<head>`, no swap (the start gcode's two
-  `T{initial_extruder}`). In the body: `T<head>`; then, for an ACE-fed tool whose
-  (unit, slot) differs from what the head holds in the simulation:
+- **R2 `T<n>` lines.** In the body every `T<n>` is logical: `T<head>`; then, for an
+  ACE-fed tool whose bay differs from what the head holds in the simulation:
   `; multiACE: head h must present ACE u slot s`, the purge stamp (R7),
-  `ACE_SWAP_HEAD HEAD=h ACE=u SLOT=s`. If it is what the head holds:
-  `; ACE_SWAP_HEAD … ; skipped (already loaded)`.
-- **R3 `M104` / `M109 … T<n>`.** `T<n>` → `T<head>`. Then the standby replay (§2.3): a
-  temperature line that leaves the printing head under 170 °C before it extrudes again
-  becomes `; multiACE dropped: <line> ; would cool the printing head below 170 C`. A file
-  with no collision comes out with none dropped.
+  `ACE_SWAP_HEAD HEAD=h ACE=u SLOT=s`. If the head already holds it, nothing is added.
+  **Before the body only the initial tool is logical.** The stock start gcode selects
+  `T{initial_extruder}` twice and shuts the physical heads down as `M104 S0 T<n> A0`; the
+  two use the same digits. So pre-body, a `T<n>` with `n` equal to the initial tool maps to
+  its head, and any other `T<n>` below the head count is left alone. Route B mapped none of
+  them, and its reference file selected, preheated and primed head 1 while the initial
+  filament sat on head 3 (`Test_Cube_PLA_4h15m_multiACE.gcode:582-623`); multiACE maps all
+  of them and redirects the shutdowns. Neither is right, and this is the narrow rule that is.
+- **R3 `M104` / `M109 … T<n>`.** In the body, `T<n>` → `T<head>`. Pre-body the initial tool's
+  lines are recognisable by the template's own spelling: it writes the logical tool as
+  `M104 T{initial_extruder} S…` (T before S) and the physical heads as `M104 S0 T<n> A0`
+  (S before T). A pre-body temperature line is mapped only when its `T` precedes its `S`
+  or there is no `S`. Then the standby replay (§2.3): a temperature line that leaves the
+  printing head under 170 °C before it extrudes again becomes
+  `; multiACE dropped: <line>  ; would cool the printing head below 170 C`. A file with no
+  collision comes out with none dropped.
 - **R4 `SM_PRINT_PREEXTRUDE_FILAMENT INDEX=<n>`.** A feeder tool: `INDEX=<head>`. An ACE
   tool: dropped, except the head's first body use, which keeps `INDEX=<head>` — the reference
   file's behaviour (its template: `if ace_is_ace then if ace_first_use then …`). The
@@ -254,8 +263,10 @@ first-use order.
   line is `ACE_SWAP_HEAD HEAD=h ACE=s SLOT=h`. That is the slot→(unit, slot) map the second
   planner defect asks for, and it is one table. **Gated off in v1** with a message: the page
   has never observed the mode either (`STATUS.md`, "What is open").
-- **R10 Nothing to do.** No ACE-fed head, or every used tool on a feeder: no sibling, no
-  header, nothing changes.
+- **R10 Nothing to do.** `normal` mode, or every used tool already on its own stock feeder:
+  no sibling, no header, nothing changes. The second case is decided before the optimiser
+  runs - the identity is priced with `evaluate_assignment` and kept when it is feasible - so
+  a tie-break can never move an ordinary plate's filament to another feeder.
 - **R11 Refusal.** Used tools exceed places, or two heads share a unit (until the pool
   constraint lands): throw a `SlicingError` in route B's wording — *"this plate uses 7
   filaments, but this printer has 5 places for them — 3 stock feeder(s) and 2 ACE
@@ -324,15 +335,57 @@ has its own. Four assertions elsewhere in the binary fail before and after the l
 (`test_3mf.cpp:128`, `test_config.cpp:22/29/68` — unknown legacy option names and a
 segfault in the config test); they are not this branch's and not touched.
 
-### 4.2 The drift check, to build with the rewriter
+### 4.2 The rewriter - step 1 of §5, done 2026-09-03
+
+| file | lines | what |
+|---|---|---|
+| `src/libslic3r/AceMmuRewrite.hpp` | 137 | the contract: `RewriteInput` (mode, per-head unit and capacity, per-filament colour/type/diameter/density, the flush matrix and multiplier, an optional head override), `ToolSequence`, `RewriteResult`, `RewriteRefusal` |
+| `src/libslic3r/AceMmuRewrite.cpp` | 793 | pass A `scan_tool_sequence`, `plan_heads`, `plan_for`, `needs_rewrite`, pass B (the standby replay), pass C (emission), `rewrite_gcode` over streams and `rewrite_file` over paths, the header writer and parser, the two purge formulas, `format_length` |
+| `tests/libslic3r/test_ace_mmu_rewrite.cpp` | 478 | 12 cases, 235 assertions, `[ace_mmu_rewrite]`; green with the other ACE suites unchanged (`[ace_mmu]` 30/191, `[ace_mmu_plan]` 20/140) |
+
+It is pure: STL, `AceMmuPlan.hpp`, and `boost::nowide` for the file streams. No `Print`,
+no config, no GUI. What the hook (step 2) has to do is fill a `RewriteInput` from
+`m_fff_print->config()` and the filament presets, call `rewrite_file(tmp, sibling, input,
+tick)` with a `tick` that calls `throw_if_canceled()`, turn a `RewriteRefusal` into a
+`SlicingError`, and keep the `RewriteResult` on the plate for `ace_plan`.
+
+**What the tests pin down.** The synthetic input is built in the stock template's shape -
+the start gcode with its two selections of the initial tool, the four physical shutdowns
+and the prime line; the layer -1 marker; then one `change_filament_gcode` block per tool
+change with OozePrevention's cooldown before it and the writer's temperature line after.
+A two-filament plate forced onto the ACE head is checked **line by line** (the exact
+block, the exact swap triplet, which pre-body lines move and which stay, the purge
+lengths to the third decimal). The seven-filament plate checks the invariants: no tool
+above `T3` survives, emitted swaps equal the planner's count, every swap carries its
+stamp, the busy pair never lands on the ACE, the header round-trips. The standby replay
+is checked on the print-by-object shape that makes it necessary, with the harmless
+cooldowns on either side of it kept. Refusals: more filaments than places (with the
+counts and the cheapest filament to drop named), a tool the project has no filament for,
+Combined mode, a shared unit, an ACE-fed head with no unit. `rewrite_file` creates the
+sibling only when there is something to write, leaves the input byte-identical, gives
+the same bytes as the stream version, and leaves nothing behind on a refusal.
+
+**Deliberate differences from `v0.99.8b`**, which the drift check (§4.3) normalises:
+
+| | multiACE | here | why |
+|---|---|---|---|
+| pre-body `T` and `M104`/`M109` | every one mapped through the plan | only the initial tool's (R2, R3) | the stock start gcode's physical shutdowns must stay physical |
+| a body `T` whose bay is already presented | `; ACE_SWAP_HEAD … ; skipped (already loaded)` | nothing added | a comment per skipped swap is noise on the machine's console |
+| the preload's first body use | a real `ACE_SWAP_HEAD`, relying on the plugin's already-loaded skip | no swap (R6) | the reference file; fewer lines |
+| purge stamp | `clamp(40, 150, 0.45 × …)`, integer mm | the slicer's own pair length, three decimals (R7) | the reference file; the other policy is recorded in the result |
+| pre-extrude on an ACE head | dropped, then `FORCE=1` at first use | dropped, the template's own line kept at first use (R4) | `FORCE=1` is unverified on this firmware |
+| the `; multiACE: head h must present …` comment and the plan header | not written | written | the bridge and the page read the header; the comment is route B's and reads well in a trace |
+| `ANTI_OOZE=` on swaps, `ACE_BG_SWAP`, `ACE_PICKUP_CLEAN` | written when enabled | not written | out of scope (§1) |
+
+### 4.3 The drift check, to build with the rewriter
 
 `docs/u1-webui/tools/ace_rewrite_diff.py`: extract `rewrite_head_mode_to_file` and
 `inject_auto_load_to_file` from `git show v0.99.8b:…` (an `ast` walk does it in ten lines),
 run them over the same logical file with the same assignment, and diff against Orca's
-sibling after normalising the deliberate differences (R4, R6, R7). The known-different lines
+sibling after normalising the deliberate differences (the table in §4.2). The known-different lines
 are a list in the script, so a new difference is a failure, not noise.
 
-### 4.3 The fixture that is still missing
+### 4.4 The fixture that is still missing
 
 There is no *logical* 7-filament U1 file on disk: the reference file is route B's output.
 `snapmaker-orca --allow-newer-file --slice 0 …` over `~/proj/models/Test_Cube_U1_multiACE.3mf`
@@ -347,13 +400,12 @@ whole for the drift check.
 
 Each step ends green on every existing suite plus its own.
 
-1. **`AceMmuRewrite`** (pure, `libslic3r`) — R1-R11 over a file, `RewriteResult`,
-   `AceMmuPlanHeader`. Unit tests on a synthetic file in the stock template's shape (start
-   gcode with its two `T` selections and the prime line, the layer -1 marker, a handful of
-   body changes with `M109`, `M104 ;cooldown` and pre-extrude lines) and a golden output.
-   *Done when:* swaps and header match `plan_loading` on the same sequence; the preload sits
-   before `画起始线`; a plan-less input comes out byte-identical; an over-capacity input
-   throws; a standby that would cool the printing head is dropped and no other is.
+1. **`AceMmuRewrite`** (pure, `libslic3r`) — **done, §4.2.** R1-R11 over a file,
+   `RewriteResult`, the header writer and parser in the same module. The tests are the
+   synthetic file in the stock template's shape and the checks listed there. Swaps and the
+   header match the planner on the same sequence; the preload sits before `画起始线`; a
+   plan-less input is not touched; an over-capacity input throws; the one dangerous standby
+   is dropped and no other is.
 2. **The hook and the sibling** — the gate at `:242`, `get_print_gcode_path()`, the four
    consumers, delete-before / write-after. *Done when:* an ordinary plate's temp file and
    every export are byte-identical to before; an ACE plate's send, export and Ctrl+G all
@@ -368,7 +420,7 @@ Each step ends green on every existing suite plus its own.
 6. **Hardware**, on `u1-hardware-test`'s ladder: read-only first (the popup over the
    sibling, verdicts against the real bays), then one send-and-cancel, then a short ACE
    print — the first time the ACE half of a send is observed at all.
-7. **The drift check and the fixture** (§4.2, §4.3), alongside step 1 and kept as a script.
+7. **The drift check and the fixture** (§4.3, §4.4), alongside step 1 and kept as a script.
 
 Later cuts, by value: re-map (§3.7); the per-unit pool constraint, which lifts the
 shared-unit refusal; Combined mode (R9); pins and "what is loaded".

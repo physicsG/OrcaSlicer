@@ -22,6 +22,8 @@ set(lisbslic3r_sources
     AABBMesh.cpp
     AABBMesh.hpp
     AABBTreeIndirect.hpp
+    AceMmuRewrite.cpp
+    AceMmuRewrite.hpp
     AABBTreeLines.hpp
     Algorithm/LineSplit.cpp
     Algorithm/LineSplit.hpp

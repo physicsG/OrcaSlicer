@@ -8,6 +8,7 @@ add_executable(${_TEST_NAME}_tests
 	test_ace_mmu_plan.cpp
 	test_ace_mmu_reconcile.cpp
 	test_ace_mmu_tool_map.cpp
+	test_ace_mmu_rewrite.cpp
 	test_aabbindirect.cpp
 	test_clipper_offset.cpp
 	test_clipper_utils.cpp
