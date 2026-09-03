@@ -1,0 +1,82 @@
+{
+  "title": "Snapmaker Orca \u00b7 U1 print popup + multiACE",
+  "branch": "feat/u1-print-multiace",
+  "state_when_idle": "done",
+  "summary": "Route C: a plate sliced for a U1 with an ACE-fed toolhead is rewritten in Orca after export, so the gcode names physical heads and the bays that feed them. The plan now keeps Orca's own filament-to-toolhead assignment whenever it costs the same, and the bay can be re-chosen from the print popup without slicing anything again.",
+  "features": [
+    {
+      "what": "The gcode rewriter, in libslic3r",
+      "why": "Reads the exported gcode, plans each filament's (head, bay), and writes a sibling file the machine can run: physical T numbers, an ACE_SWAP_HEAD where a head must present another bay, purge stamps, a preload block before the prime line, and the `; multiACE plan:` header the popup and the bridge already read. Ported from multiACE's own preflight at tag v0.99.8b, behaviour not code."
+    },
+    {
+      "what": "One hook, and a sibling file rather than an in-place rewrite",
+      "why": "It runs straight after export, on the file the U1 send zips and Ctrl+G packages. Writing beside the temp gcode leaves the preview mapping the logical file, makes a re-map a re-run rather than a re-export, and keeps multiACE's own rewriter runnable over the same input to measure drift - which is 0 differing lines."
+    },
+    {
+      "what": "Orca's own filament assignment wins a tie",
+      "why": "The optimiser minimises swaps and is silent about everything else, so among equal-cost plans it took an arbitrary one - on a four-colour plate it moved all four filaments for no gain. The identity is now priced and kept when it ties."
+    },
+    {
+      "what": "The ACE bay can be re-chosen from the popup, for nothing",
+      "why": "A filament's toolhead IS the tool number, so moving it re-exports the file; its bay is one argument on each swap line. `sw_SetAceBays` re-runs the rewriter over the same logical gcode, and the panel offers `Use the bays they are in` only when re-addressing would clear EVERY bay."
+    },
+    {
+      "what": "Two pre-existing defects fixed on the way",
+      "why": "The send zip was named by display name alone and reused whenever it existed, so a resend after a re-slice could ship the previous bytes with a checksum that could not tell; it is keyed to its source and stamped now. And nothing refused a SET_PRINT_EXTRUDER_MAP that moves a tool off its own head on an ACE plate."
+    }
+  ],
+  "verify": [
+    "Slice a multi-filament plate with Toolhead 4 set to `ACE - 4 slots` / `ACE 1`. A `.ace.gcode` sibling appears beside the plate's temp gcode in the project backup.",
+    "The post-slice notification names the swap count and the purge.",
+    "Set Toolhead 4 back to `Stock feeder` and re-slice: the sibling is gone and the plate is untouched.",
+    "Send the ACE plate: the popup draws toolhead boxes with bay addresses, not four cards.",
+    "With a bay holding another spool, Send is refused; if every spool the plate wants is in the unit, `Use the bays they are in` clears it without re-slicing.",
+    "Export G-code and `grep -c ACE_SWAP_HEAD` the result."
+  ],
+  "checks": [
+    "libslic3r: 260 assertions in 16 cases `[ace_mmu_rewrite]`, plus `[ace_mmu]` 191 and `[ace_mmu_plan]` 140",
+    "Drift against multiACE v0.99.8b's own rewriter: 0 differing lines on all three fixtures",
+    "Simulator: bay-fix 16/16, ACE dialog 18/18, print dialog 52/52, Device page 99/99",
+    "Conformance 165/165, unit (JavaScriptCore) 231/231, command coverage clean",
+    "Real U1 811002511261022618B3, read-only: 15/15 with Test_Cube_PLA_4h15m, 15/15 with ChickenPark, 17/17 with the multiACE plate"
+  ],
+  "builds": [
+    {
+      "name": "app",
+      "target": "snapmaker-orca",
+      "log": "/tmp/orca_build.log",
+      "errors": 0,
+      "lines": 1417
+    },
+    {
+      "name": "tests",
+      "target": "libslic3r_tests",
+      "log": "/tmp/orca_tests_build.log",
+      "errors": 0,
+      "lines": 13
+    }
+  ],
+  "open": [
+    "No print has been run past its first seconds with the ACE half engaged. Everything on hardware so far is read-only.",
+    "Combined (`multi`) ACE mode is refused with a message: the emitter's slot -> (unit, bay) map is not written, and the page has never been driven in that mode either.",
+    "Two heads sharing one ACE unit is refused - the planner counts that unit's capacity twice.",
+    "The bay re-map is offered only when it would clear every bay. When a colour the plate wants is in no bay at all, the panel still cannot say which bay to put it in: writing a bay's identity (`ACE_SPOOL_ASSIGN`) is unbuilt.",
+    "Whether the stock pre-extrude macro accepts `FORCE=1` on this firmware is unverified, so the rewriter emits the plain form the hardware-verified reference file used."
+  ],
+  "running": false,
+  "state": "done",
+  "binary": "19:54:33",
+  "binary_age": "2h 22m ago",
+  "binary_stale": false,
+  "binary_note": "newer than every source file",
+  "debug_binary": "not built",
+  "generated": "22:17:10",
+  "progress": {
+    "done": 111,
+    "total": 111,
+    "pct": 100,
+    "eta": "",
+    "what": "snapmaker-orca",
+    "log": "/tmp/orca_build.log"
+  }
+}

@@ -39,7 +39,17 @@ src/Snapmaker_Orca-doc/
 resources/profiles/user/default
 *.code-workspace
 deps_src/build/
-.claude/
+# The dev tooling and the hardware-test procedure are project knowledge and are tracked;
+# whatever else Claude leaves here is not. `.claude/*` and not `.claude/` on purpose: git
+# does not descend into a directory it has ignored whole, so a negation inside one never
+# fires - which is why the re-inclusion the tools README has always claimed did nothing,
+# and why those tools were lost once already.
+.claude/*
+!.claude/tools/
+!.claude/skills/
+# Generated, and built on demand. The sources and build-status.json are the tracked half.
+.claude/tools/bin/
+.claude/tools/build-status.html
 .hermes/
 CLAUDE.md
 # UI reference snapshots — third-party imagery, design reference only (see the folder's README)
