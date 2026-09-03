@@ -618,3 +618,31 @@ body.dlg {
           margin-top: 6px; font-size: 11.5px; color: var(--ink-dim); }
 .g-cost b { font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .g-saved { margin-left: 4px; }
+
+/* ---- Edit Filament: the machine, when it has an ACE --------------------
+   The four cards are the mapping control for a plate that addresses no bays, and they
+   stay. What they could not do is describe an ACE-fed head - `head 4: PLA` for a head
+   whose filament is whichever of the unit's spools was last loaded. This line and the
+   `.menu-src` note below are that repair, and both are drawn from the machine alone, so
+   they appear on every plate rather than only on one with a plan. */
+.fil-machine {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px;
+  margin-bottom: 10px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11.5px; color: var(--ink-dim);
+}
+.fil-mode {
+  padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--pill);
+  color: var(--ink-2); white-space: nowrap;
+}
+.fil-unit { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); }
+.fil-unit .ace-badge { display: block; flex: none; }
+.fil-feeds { white-space: nowrap; }
+
+/* Where a toolhead's filament came from, in its own picker row. Only an ACE-fed or
+   hand-fed head carries one: a stock feeder is the ordinary case, and naming it on every
+   row would bury the one row that differs. */
+.menu-src {
+  margin-left: 6px; font: 10.5px/1 var(--mono); color: var(--ink-dim); white-space: nowrap;
+}

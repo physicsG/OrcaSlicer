@@ -505,8 +505,43 @@ and the ACE holds four PETG spools, so the verdict was **4 differs** and Send wa
 Also cosmetic: the real header carries no purge figure, so the cost line read
 "300 ACE swaps — purged". The clause is drawn only when there is one.
 
+### The integration was gated on the wrong fact — 2026-09-03
+
+Found by running it against a machine that HAS an ACE with a plate that has no plan,
+which is the only combination that exists today.
+
+The page read the whole `ace` object, fetched multiACE's override store, merged three
+named bays and resolved `T4:ace(A)` — and then drew **none of it**, because the grouping
+panel is gated on `ace_plan` and the four-card panel knew nothing about an ACE. Measured:
+`anything on screen naming a bay or a unit: 0`, and the picker offering `head 4: PLA` for
+a head whose filament is whichever of the unit's three spools was last loaded.
+
+**Two independent facts had been conflated:**
+
+| | decides |
+|---|---|
+| does the FILE address bays (`ace_plan`) | whether the mapping is a *choice* (four cards) or fixed (no picker) |
+| is the MACHINE ACE-fed (`ace.present`, `ace_heads`) | how to *describe* what feeds each head |
+
+Only the first was wired, so on every plate the slicer can currently produce the whole
+integration was dead code. The four-card panel now draws the machine too — an `ACE mode`
+pill, the unit's badge, which toolheads it feeds, and a per-row source note in the picker
+(`ACE A`) — from `ace` alone, so it appears whatever the file says. A printer that reports
+no ACE sees the dialog it always saw, and the plan still decides whether there is a picker
+at all.
+
+**The bay number is absent when the machine does not report one.** On the reference
+machine `head_source` is `{0:null,1:null,2:null,3:null}` even for the ACE-fed head, so the
+note reads `ACE A` and not `ACE A1`. The override store names what is IN each bay; it does
+not say which one is loaded. Inferring it by colour would be a guess, and two bays may
+hold the same colour.
+
 ### Not covered
 
+- **Colour is still not compared.** The bundle's match rule is type + nozzle, and a plate
+  wanting colours that exist nowhere on the machine — measured: a plate wanting yellow and
+  red on a machine holding black, off-white, maroon, cream and teal — assigns and enables
+  Send. That is design question 2, still unanswered on the plan-less path.
 - **No print was started**, and the ACE half of the send path is therefore unobserved:
   rung 3 of the `u1-hardware-test` ladder was not run. The tool-map write is covered by
   the simulator only.

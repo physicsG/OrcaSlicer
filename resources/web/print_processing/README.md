@@ -259,6 +259,29 @@ and `hidden` is a UA rule any author `display:` beats, so the four cards went on
 drawn beside the panel replacing them. `[hidden] { display: none !important }` is in
 `preprint.css` now.
 
+### The ACE is drawn on every plate, not only on one with a plan
+
+Two facts, and they are independent — this was got wrong once and found by running the
+page against a machine with an ACE and a plate without a plan, which is the only
+combination that exists today:
+
+| | decides |
+|---|---|
+| does the FILE address bays (`ace_plan`) | whether the mapping is a **choice** (the four cards) or fixed (the grouping panel, no picker) |
+| is the MACHINE ACE-fed (`ace.present`) | how to **describe** what feeds each head |
+
+Gating both on the first meant the page read the whole `ace` object, merged the override
+store, resolved `T4:ace(A)` — and drew none of it, offering `head 4: PLA` for a head whose
+filament is whichever of the unit's spools was last loaded. Edit Filament now carries the
+machine's own line (mode, unit badge, which toolheads it feeds) and a per-row source note
+in the picker, from `ace` alone. A printer with no ACE sees exactly the dialog it always
+saw.
+
+**No bay number when the machine reports none.** `head_source` is null on the reference
+machine even for the ACE-fed head, so the note reads `ACE A`, not `ACE A1`. The override
+store names what is in each bay; it does not say which is loaded, and inferring it by
+colour would be a guess.
+
 ## Honest limits
 
 - **Confirming a machine command against its ack is still wrong**, even though the

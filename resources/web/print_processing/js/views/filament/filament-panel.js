@@ -10,7 +10,7 @@ export default {
   // The refresh control lives in the title column, beside the heading, which is where
   // A.aiy puts it: `Row[title, IconButton(B.nw, 20)]` inside the 120..180 box.
   header: { kind: 'refresh', label: 'Re-read the file’s filaments' },
-  reads: ['filaments', 'toolheads', 'assignment'],
+  reads: ['filaments', 'toolheads', 'assignment', 'ace'],
   mount: view.mount,
   update: view.update,
 };
