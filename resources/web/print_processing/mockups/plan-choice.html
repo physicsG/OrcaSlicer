@@ -100,6 +100,103 @@
 .g-chip.pc-pick:hover { border-color: var(--f-blue); }
 .g-chip.pc-pick:focus-visible { outline: 2px solid var(--f-blue); outline-offset: 1px; }
 .g-chip.pc-pick .g-from::after { content: " \25BE"; color: var(--ink-dim); }
+
+/* ---- the source panel, after Bambu's "Select filament" ------------------ */
+.src-panel {
+  position: fixed; z-index: 60; background: var(--f-bg); color: var(--ink);
+  border: 1px solid var(--f-border); border-radius: 8px; padding: 10px 12px 9px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .22);
+  /* The dialog is 714 wide. Seven tiles in a row do not fit it, so the two boxes
+     wrap rather than the panel spilling past the edge. */
+  max-width: min(670px, calc(100vw - 16px));
+}
+.src-title { font: 600 12px/1.35 var(--sans); margin-bottom: 8px; }
+.src-cols { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+/* Outlined chassis, solid bays - docs/ace-mmu/16-ace-visuals.md. */
+.src-box { border: 1px solid var(--f-border); border-radius: 6px; padding: 6px 7px 5px; }
+.src-box.is-off { opacity: .45; }
+.src-boxname { font: 600 10px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase;
+               color: var(--ink-dim); margin-bottom: 6px; }
+.src-grid { display: flex; gap: 5px; }
+.src-tile {
+  position: relative; width: 56px; padding: 0 0 5px; overflow: hidden;
+  border: 1px solid var(--f-border); border-radius: 5px; background: var(--f-bg);
+  font: inherit; color: var(--ink); cursor: pointer; text-align: center;
+}
+.src-tile[disabled] { cursor: not-allowed; opacity: .55; }
+.src-tile:not([disabled]):hover { border-color: var(--f-blue); }
+.src-tile:focus-visible { outline: 2px solid var(--f-blue); outline-offset: 1px; }
+.src-tile.is-chosen { border-color: var(--f-blue); border-width: 2px; }
+.src-sw { display: block; height: 16px; }
+.src-sw.empty { background: repeating-linear-gradient(45deg, var(--f-track) 0 4px, transparent 4px 8px); }
+.src-addr { display: block; font: 600 11px/1.3 var(--mono); margin-top: 3px; }
+.src-mat { display: block; font: 10.5px/1.3 var(--sans); color: var(--ink-2); }
+.src-who { display: block; font: 9.5px/1.3 var(--sans); color: var(--ink-dim);
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 3px; }
+/* The corner wedge with a tick, which is how Bambu marks the chosen slot. */
+.src-wedge { position: absolute; top: 0; right: 0; width: 0; height: 0;
+             border-top: 15px solid var(--f-blue); border-left: 15px solid transparent; }
+.src-wedge::after { content: "\2713"; position: absolute; top: -15px; right: 1px;
+                    font: 700 9px/1 var(--sans); color: #fff; }
+.src-foot { margin-top: 6px; font: 9.5px/1.3 var(--sans); color: var(--ink-dim); }
+.src-note { margin-top: 8px; font: 10.5px/1.4 var(--sans); color: var(--ink-dim); }
+
+/* Bambu's green "Regroup and slice ->" line, in this dialog's own voice. */
+.src-regroup { margin: 7px 0 0; font: 11px/1.4 var(--sans); color: var(--ink-dim); }
+.src-link {
+  font: inherit; font-weight: 600; color: var(--f-blue); background: none; border: 0;
+  padding: 0; cursor: pointer; text-decoration: none;
+}
+.src-link:hover { text-decoration: underline; }
+.src-link:focus-visible { outline: 2px solid var(--f-blue); outline-offset: 2px; }
+.src-price {
+  font: 600 9px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase;
+  color: var(--warn); background: rgba(196, 101, 30, .14);
+  padding: 2px 5px; border-radius: 8px; margin-left: 6px; white-space: nowrap;
+}
+
+.pc { margin: 2px 0 9px; border-bottom: 1px solid var(--f-divider); padding-bottom: 8px; }
+.pc-h { font: 600 11px/1.3 var(--sans); color: var(--ink-2); margin-bottom: 6px; }
+.pc-opts { display: flex; flex-direction: column; gap: 3px; }
+.pc-opt {
+  display: flex; align-items: center; gap: 7px; width: 100%; text-align: left;
+  font: inherit; color: var(--ink); background: none; cursor: pointer;
+  border: 1px solid transparent; border-radius: 5px; padding: 3px 6px;
+}
+.pc-opt:hover { background: var(--f-divider); }
+.pc-opt[aria-pressed="true"] { border-color: var(--f-blue); background: none; }
+.pc-opt:focus-visible { outline: 2px solid var(--f-blue); outline-offset: 1px; }
+.pc-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex: none;
+  border: 1.5px solid var(--ink-dim);
+}
+.pc-opt[aria-pressed="true"] .pc-dot { border-color: var(--f-blue); border-width: 3.5px; }
+.pc-lab { font: 500 11.5px/1.3 var(--sans); flex: 1; min-width: 0;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-opt[aria-pressed="true"] .pc-lab { font-weight: 600; }
+.pc-num { font: 10.5px/1 var(--mono); color: var(--ink-2); white-space: nowrap;
+          font-variant-numeric: tabular-nums; }
+.pc-cost {
+  font: 600 9px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase;
+  padding: 2px 5px; border-radius: 8px; white-space: nowrap; flex: none;
+}
+.pc-cost.free { color: var(--ok, #1f9254); background: rgba(31, 146, 84, .13); }
+.pc-cost.work { color: var(--warn); background: rgba(196, 101, 30, .14); }
+.pc-cost.no   { color: var(--err); background: rgba(192, 57, 43, .13); }
+/* Only the chosen answer explains itself. Three explanations is a paragraph nobody reads. */
+.pc-detail { margin: 5px 0 0 23px; font: 10.5px/1.45 var(--sans); color: var(--ink-dim); }
+.pc-detail b { color: var(--ink-2); font-weight: 600; }
+.pc-detail ul { margin: 2px 0 0; padding-left: 15px; }
+.pc-why { margin: 5px 0 0 23px; font: 10.5px/1.45 var(--sans); color: var(--ink-dim); }
+.pc-why summary { cursor: pointer; color: var(--ink-2); }
+.pc-why code { font-family: var(--mono); font-size: 10px; }
+
+/* A chip that can be opened has to look like it can. The caret is the one the four-card
+   panel already puts on its own picker, at the size a 20px chip can carry. */
+.g-chip.pc-pick { cursor: pointer; }
+.g-chip.pc-pick:hover { border-color: var(--f-blue); }
+.g-chip.pc-pick:focus-visible { outline: 2px solid var(--f-blue); outline-offset: 1px; }
+.g-chip.pc-pick .g-from::after { content: " \25BE"; color: var(--ink-dim); }
 /* A heading inside the menu: which places these are, and what choosing one costs. */
 .menu-addr {
   font: 600 10px/1 var(--mono); flex: none; width: 20px; height: 20px; border-radius: 50%;
@@ -208,19 +305,22 @@ const FEEDER = (head, filament) => ({ head, feeder: true, run: [{ filament }] })
 const ACE = (head, run) => ({ head, feeder: false, unit: 0,
   run: run.map(([filament, slot]) => ({ filament, unit: 0, slot })) });
 
+/* Keys are `filePlan()`'s, not the wire's: the view reads `purgeG` and `savedSwaps`, and
+   spelling them the wire's way (`purge_g`) silently dropped the purge and the saving from
+   the cost line - which is the sentence Bambu puts under its own grouping. */
 const PLANS = {
   /* As sliced: a hand layout saved with the plate, so not the cheapest one. */
-  sliced: { mode: 'head', swaps: 349, purge_g: 47.0,
+  sliced: { mode: 'head', savedSwaps: 163, savedPurgeG: 21.2, swaps: 349, purgeG: 47.0,
     heads: [FEEDER(0, 1), FEEDER(1, 2), FEEDER(2, 3),
             ACE(3, [[0, 0], [4, 1], [5, 2], [6, 3]])] },
   /* Same toolheads, same slots' worth of swapping - only the two addresses change,
      so red is drawn from A3 and white from A2, which is where they actually are. */
-  addresses: { mode: 'head', swaps: 349, purge_g: 47.0,
+  addresses: { mode: 'head', savedSwaps: 163, savedPurgeG: 21.2, swaps: 349, purgeG: 47.0,
     heads: [FEEDER(0, 1), FEEDER(1, 2), FEEDER(2, 3),
             ACE(3, [[0, 0], [4, 2], [5, 1], [6, 3]])] },
   /* Black is the colour this plate prints most, so it goes on a free toolhead and
      amber - printed twice - goes behind the changer. Cheaper, and two spools move. */
-  replan: { mode: 'head', swaps: 300, purge_g: 40.4,
+  replan: { mode: 'head', savedSwaps: 212, savedPurgeG: 28.6, swaps: 300, purgeG: 40.4,
     heads: [FEEDER(0, 6), FEEDER(1, 2), FEEDER(2, 3),
             ACE(3, [[0, 0], [4, 2], [5, 1], [1, 3]])] },
 };
@@ -462,27 +562,40 @@ function paintPc() {
 }
 
 /* ====================================================================== *
- * The chip menu - the dropdown this dialog does not have yet.
+ * The source panel - adapted from Bambu Studio's "Select filament", which is in
+ * ui-snapshots-inspiration/Slicing/04.
  *
- * WHAT IT HOLDS, and what each row costs. A filament on an ACE-fed head can come from any
- * bay of THAT head's unit (head mode binds one unit per head, so the other cabinets are
- * not reachable from here at any price), or it can be moved to another toolhead. Those
- * two cost different things and EVERY ROW SAYS WHICH, rather than a heading per group:
+ * THREE THINGS TAKEN FROM IT, and one deliberately not.
  *
- *   the bays of this head's unit   one argument on each swap line   free
- *   the other toolheads            the tool numbers themselves      re-export
+ * 1. It is a PICTURE OF THE MACHINE, not a list. Bambu draws both AMS units as four
+ *    addressed slots each; you pick a slot by clicking the thing itself. A list of
+ *    addresses makes you hold the topology in your head, which is the one thing a
+ *    picture is for.
+ * 2. What cannot feed this nozzle is DRAWN AND GREYED, not hidden. Their left AMS is
+ *    fully rendered and unclickable when the right nozzle is being chosen. Hiding it
+ *    would leave the operator wondering where it went; greying it teaches the wiring.
+ *    Here the same rule falls out of head mode: an ACE-fed head draws from its own unit
+ *    and from nothing else, and the three stock feeders are the greyed half.
+ * 3. The chosen one wears a CORNER WEDGE with a tick, not a row tick.
  *
- * Headings were the first shape and they do not survive the widget: it focuses the first
- * enabled item when it opens, which scrolls a disabled heading out of the menu. The cost
- * is a property of the choice in any case, not of the group it sits in.
- *
- * A row is REFUSED, not merely discouraged, when the place cannot serve the filament:
- * an empty bay has nothing to draw from, and a bay whose material the machine is sure
- * about and which is not this filament's is the same refusal the toolhead menu already
- * makes (`matchOf`: type and nozzle, never colour). Colour is shown on every row and
- * blocks nothing - remapping colour is what this menu is FOR, and the verdict line under
- * the grid already says when one differs.
+ * NOT taken: their picker also has no way to move a filament to the other nozzle. That
+ * is deliberate on their side and right on ours too - see `regroupLink` below.
  * ====================================================================== */
+let panelOpen = null;
+
+function closeSource() {
+  if (!panelOpen) return;
+  panelOpen.node.remove();
+  if (panelOpen.trigger && panelOpen.trigger.isConnected)
+    panelOpen.trigger.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('pointerdown', onAway, true);
+  document.removeEventListener('keydown', onEsc, true);
+  panelOpen = null;
+}
+function onAway(e) { if (panelOpen && !panelOpen.node.contains(e.target)
+  && e.target !== panelOpen.trigger) closeSource(); }
+function onEsc(e) { if (e.key === 'Escape') { closeSource(); } }
+
 function wireChips(m) {
   const unit = (m.ace && m.ace.units || [])[0];
   bodies.filament.body.querySelectorAll('.g-chip').forEach((chip) => {
@@ -491,6 +604,7 @@ function wireChips(m) {
     if (!head) return;
     chip.classList.add('pc-pick');
     chip.setAttribute('role', 'button');
+    chip.setAttribute('aria-expanded', 'false');
     chip.tabIndex = 0;
     chip.onclick = () => openSource(chip, fil, head, m, unit);
     chip.onkeydown = (e) => {
@@ -499,89 +613,123 @@ function wireChips(m) {
   });
 }
 
-function openSource(chip, fil, head, m, unit) {
-  if (isPickerOpen(chip)) { closePicker(); return; }
-  const want = m.filaments[fil];
-  const step = head.run.find((r) => r.filament === fil);
-  const items = [];
-
-  if (!head.feeder && unit) {
-    unit.bays.forEach((bay) => {
-      const knownOther = bay.known && bay.material && bay.material !== want.type;
-      const enabled = bay.occupied && !knownOther;
-      items.push({
-        value: `b:${bay.index}`,
-        enabled,
-        title: !bay.occupied ? 'This bay is empty — nothing to draw from.'
-             : knownOther ? `This bay holds ${bay.material}; the plate wants ${want.type}.` : '',
-        build: (node) => {
-          const d = el('span', 'menu-addr', bay.addr);
-          if (bay.occupied) {
-            d.style.background = bay.color || '#B7BDC6';
-            d.style.color = bay.color ? inkFor(bay.color) : '#1a1a1a';
-          } else d.classList.add('empty');
-          node.appendChild(d);
-          /* Two lines, not two columns. The toolhead menu is 200px wide - the bundle's
-             own measurement - and a material, a vendor and a cost tag side by side
-             truncated all three. The row is 48px tall and was carrying one line of it. */
-          const col = el('span', 'menu-col');
-          col.appendChild(el('b', null, bay.occupied ? (bay.material || 'Unknown') : 'Empty'));
-          col.appendChild(el('span', bay.known ? '' : 'dim',
-            bay.occupied ? (bay.vendor || 'not named') : 'nothing to draw from'));
-          node.appendChild(col);
-          if (step && bay.index === step.slot) node.appendChild(el('span', 'menu-tick'));
-          else if (enabled) node.appendChild(el('span', 'menu-cost free', 'free'));
-          if (!enabled) node.appendChild(el('span', 'menu-warn'));
-        },
-      });
-    });
-  }
-
-  m.plan.heads.forEach((h) => {
-    if (h.head === head.head) return;
-    items.push({
-      value: `h:${h.head}`,
-      enabled: true,
-      build: (node) => {
-        const d = el('span', 'menu-addr', String(h.head + 1));
-        const other = m.filaments[(h.run[0] || {}).filament];
-        d.style.background = other ? other.colors[0] : '#B7BDC6';
-        d.style.color = other ? inkFor(other.colors[0]) : '#1a1a1a';
-        node.appendChild(d);
-        const col = el('span', 'menu-col');
-        col.appendChild(el('b', null, `Toolhead ${h.head + 1}`));
-        /* What that toolhead holds now - a state, not a sentence about consequences.
-           `swaps with Amber` was the first draft and it truncated at the menu's 200px;
-           the name alone says the same thing and the cost tag beside it says the rest. */
-        col.appendChild(el('span', 'dim',
-          h.feeder ? (other ? other.name : 'empty') : `ACE ${unit ? unit.id : ''}`));
-        node.appendChild(col);
-        node.appendChild(el('span', 'menu-cost', 're-export'));
-      },
-    });
-  });
-
-  openPicker({
-    trigger: chip, kind: 'head', within: document.querySelector('.dlg-body'),
-    /* No `value`: the picker scrolls the selected row into view, and with a heading as
-       the first row that scrolled the heading out of the menu. The tick in each row
-       already says which place is in use. */
-    items,
-    onPick: (v) => {
-      const [what, n] = String(v).split(':');
-      if (what === 'b') state.hand[fil] = { slot: Number(n) };
-      else if (what === 'h') state.hand[fil] = { head: Number(n) };
-      state.choice = 'hand';
-      paint();
-    },
-  });
+/** One place a spool can be: a colour block, its address, and what is in it. */
+function slotTile({ addr, colour, material, who, chosen, usable, onPick, title }) {
+  const t = el('button', 'src-tile');
+  t.type = 'button';
+  t.disabled = !usable;
+  if (chosen) t.classList.add('is-chosen');
+  if (title) t.title = title;
+  const sw = el('span', 'src-sw');
+  if (colour) sw.style.background = colour; else sw.classList.add('empty');
+  t.appendChild(sw);
+  t.appendChild(el('span', 'src-addr', addr));
+  t.appendChild(el('span', 'src-mat', material));
+  t.appendChild(el('span', 'src-who', who));
+  if (chosen) t.appendChild(el('span', 'src-wedge'));
+  if (onPick && usable) t.addEventListener('click', () => { closeSource(); onPick(); });
+  return t;
 }
 
-/* Readable ink on a filled disc - `inkOn` in the page's own widgets/format.js. */
-function inkFor(hex) {
-  const n = parseInt(String(hex).slice(1), 16);
-  const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-  return l > 0.6 ? '#1a1a1a' : '#ffffff';
+function openSource(chip, fil, head, m, unit) {
+  if (panelOpen && panelOpen.trigger === chip) { closeSource(); return; }
+  closeSource();
+  const want = m.filaments[fil];
+  const step = head.run.find((r) => r.filament === fil);
+
+  const panel = el('div', 'src-panel');
+  panel.appendChild(el('div', 'src-title',
+    `Where does Toolhead ${head.head + 1} draw ${want.name} from?`));
+
+  const cols = el('div', 'src-cols');
+
+  /* The head's own ACE. Usable only when the head is fed by one. */
+  if (unit) {
+    const box = el('div', 'src-box' + (head.feeder ? ' is-off' : ''));
+    box.appendChild(el('div', 'src-boxname', `ACE ${unit.id}`));
+    const grid = el('div', 'src-grid');
+    unit.bays.forEach((bay) => {
+      const knownOther = bay.known && bay.material && bay.material !== want.type;
+      const usable = !head.feeder && bay.occupied && !knownOther;
+      grid.appendChild(slotTile({
+        addr: bay.addr,
+        colour: bay.occupied ? (bay.color || '#B7BDC6') : null,
+        material: bay.occupied ? (bay.material || '?') : 'Empty',
+        who: bay.occupied ? (bay.vendor || 'not named') : '',
+        chosen: !head.feeder && step && bay.index === step.slot,
+        usable,
+        title: head.feeder ? `Toolhead ${head.head + 1} is on its stock feeder; no ACE feeds it.`
+             : !bay.occupied ? 'This bay is empty — nothing to draw from.'
+             : knownOther ? `This bay holds ${bay.material}; the plate wants ${want.type}.` : '',
+        onPick: () => { state.hand[fil] = { slot: bay.index }; state.choice = 'hand'; paint(); },
+      }));
+    });
+    box.appendChild(grid);
+    box.appendChild(el('div', 'src-foot', head.feeder
+      ? 'Not wired to this toolhead' : 'Free — one argument on each swap line'));
+    cols.appendChild(box);
+  }
+
+  /* The stock feeders. Bambu's `External` in the same position, and greyed for exactly
+     the same reason: they are not wired to the head being chosen for. */
+  const fbox = el('div', 'src-box' + (head.feeder ? '' : ' is-off'));
+  fbox.appendChild(el('div', 'src-boxname', 'Stock feeders'));
+  const fgrid = el('div', 'src-grid');
+  m.plan.heads.filter((h) => h.feeder).forEach((h) => {
+    const holds = m.filaments[(h.run[0] || {}).filament];
+    fgrid.appendChild(slotTile({
+      addr: `T${h.head + 1}`,
+      colour: holds ? holds.colors[0] : null,
+      material: holds ? holds.type : 'Empty',
+      who: holds ? holds.name : '',
+      chosen: head.feeder && h.head === head.head,
+      usable: false,
+      title: head.feeder
+        ? `A stock feeder holds one spool. Moving a filament here re-exports the file.`
+        : `Toolhead ${head.head + 1} is fed by the ACE, so a stock feeder cannot serve it.`,
+    }));
+  });
+  fbox.appendChild(fgrid);
+  fbox.appendChild(el('div', 'src-foot', head.feeder
+    ? 'One spool each — change it with Re-plan below' : 'Not wired to this toolhead'));
+  cols.appendChild(fbox);
+  panel.appendChild(cols);
+
+  panel.appendChild(el('div', 'src-note',
+    'A bay holding another colour can still be chosen — that is what this is for. One '
+    + 'holding another material cannot.'));
+
+  document.body.appendChild(panel);
+  const r = chip.getBoundingClientRect();
+  const w = panel.offsetWidth, h = panel.offsetHeight;
+  panel.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left - 20))}px`;
+  panel.style.top = `${r.bottom + h > window.innerHeight - 8 ? Math.max(8, r.top - h - 6)
+                                                             : r.bottom + 6}px`;
+  chip.setAttribute('aria-expanded', 'true');
+  panelOpen = { node: panel, trigger: chip };
+  document.addEventListener('pointerdown', onAway, true);
+  document.addEventListener('keydown', onEsc, true);
+  const first = panel.querySelector('.src-tile:not([disabled])');
+  if (first) first.focus();
+}
+
+/**
+ * Bambu's "Not satisfied with the grouping of filaments? Regroup and slice ->".
+ *
+ * Their picker cannot move a filament to the other nozzle and ours should not either:
+ * the two choices cost different things, and putting them in one list hides that. So the
+ * toolhead move lives here, in its own sentence, with its own price - and ours is a
+ * re-export where theirs is a re-slice, which is the one place this machine is cheaper.
+ */
+function regroupLink() {
+  const p = el('p', 'src-regroup');
+  p.appendChild(document.createTextNode('Not satisfied with the grouping? '));
+  const a = el('button', 'src-link', 'Re-plan which toolhead prints what \u2192');
+  a.type = 'button';
+  a.addEventListener('click', () => { state.choice = 'replan'; state.hand = {}; paint(); });
+  p.appendChild(a);
+  p.appendChild(el('span', 'src-price', 're-exports the gcode'));
+  return p;
 }
 
 /* ---- footer ------------------------------------------------------------- */
@@ -620,7 +768,15 @@ function paint() {
   const ctx = { model: m, pending: {}, commands: {}, say: () => {} };
   modelInfo.update(bodies['model-info'].body, m, ctx);
   printerView.update(bodies.printer.body, m, ctx);
-  if (m.plan) { grouping.update(bodies.filament.body, m, ctx); wireChips(m); }
+  if (m.plan) {
+    grouping.update(bodies.filament.body, m, ctx);
+    wireChips(m);
+    const b = bodies.filament.body;
+    let link = b.querySelector('.src-regroup');
+    if (link) link.remove();
+    const grid = b.querySelector('.g-heads');
+    if (grid) grid.after(regroupLink());
+  }
   else fourCards.update(bodies.filament.body, m, ctx);
   prefsView.update(bodies.preferences.body, m, ctx);
   paintPc();

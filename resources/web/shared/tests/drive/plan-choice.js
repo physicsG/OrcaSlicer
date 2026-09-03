@@ -40,6 +40,13 @@
     ok(/^A[1-4]:/.test(txt('.g-verdict.bad')), 'the real verdict line names the bay: '
        + txt('.g-verdict.bad').slice(0, 46));
 
+    /* The cost line is the real one, and it carries Bambu's counterfactual: their
+       "Save 25g filament and 100 nozzle purges compared to a printer with one nozzle". */
+    ok(/ACE swaps/.test(txt('.g-cost')), 'the cost line is drawn: ' + txt('.g-cost'));
+    ok(/purged/.test(txt('.g-cost')), 'with the purge, which needs the normalised key');
+    ok(/saves \d+ swaps against one spool per head/.test(txt('.g-cost')),
+       'and the saving against the counterfactual');
+
     const opts = $$('.pc-opt');
     ok(opts.length === 3, 'three answers, got ' + opts.length);
     ok($('#send').disabled === true, 'Send refused on the as-sliced answer');
@@ -74,45 +81,68 @@
     ok(/Sync and re-slice/.test($('#send').textContent), 'the button reads: '
        + $('#send').textContent.trim());
 
-    /* ---- the chip menu: what each dropdown holds ------------------------- */
+    /* ---- the source panel, after Bambu's "Select filament" --------------- */
     $('#s-aware').click(); await wait();
-    const aceChips = $$('.g-chip.pc-pick');
-    ok(aceChips.length === 7, 'every chip opens a source menu, got ' + aceChips.length);
+    ok($$('.g-chip.pc-pick').length === 7, 'every chip opens a source panel, got '
+       + $$('.g-chip.pc-pick').length);
     const aceChip = $$('.g-head')[3].querySelector('.g-chip');
     aceChip.click(); await wait();
-    const menu = $('.menu');
-    ok(!!menu, 'the page\'s own picker opened');
-    const rows = [...menu.querySelectorAll('.menu-item')];
-    ok(rows.length === 7, 'four bays of this head\'s unit and three other toolheads, got '
-       + rows.length);
-    const free = rows.filter((r) => r.querySelector('.menu-cost.free'));
-    const paid = rows.filter((r) => r.querySelector('.menu-cost:not(.free)'));
-    ok(free.length === 3, 'the bays are free, minus the one already in use: ' + free.length);
-    ok(paid.length === 3, 'the toolheads cost a re-export: ' + paid.length);
-    ok(/re-export/i.test(paid[0].textContent), 'and each says so: ' + paid[0].textContent.trim());
-    ok(/Toolhead \d/.test(paid[0].textContent), 'a toolhead row names itself in full: '
-       + paid[0].textContent.trim().slice(0, 40));
-    ok([...menu.querySelectorAll('.menu-col b, .menu-col span')]
-       .every((n) => n.scrollWidth <= n.clientWidth + 1),
-       'no row text is truncated at the menu\'s measured 200px');
-    ok(rows.slice(0, 4).every((r) => /^A[1-4]/.test(r.textContent.trim())),
-       'the bays come first, addressed');
-    /* Every bay here holds PLA and the plate is all PLA, so nothing is refused - and two
-       of the four hold the WRONG COLOUR. That is the assertion worth making: colour is
-       shown on every row and blocks none of them, exactly as the toolhead menu's own rule
-       (type and nozzle, never colour) already has it. */
-    const refused = rows.filter((r) => r.getAttribute('aria-disabled') === 'true');
-    ok(refused.length === 0, 'no place is refused on colour alone, got ' + refused.length);
-    ok(!!rows.find((r) => r.querySelector('.menu-tick')), 'the bay in use carries the tick');
+    const panel = $('.src-panel');
+    ok(!!panel, 'the panel opened');
+    ok(/Toolhead 4/.test(txt('.src-title')), 'it names the head it is choosing for: '
+       + txt('.src-title'));
 
-    /* Picking a bay is free, changes no swap count, and clears the verdict. */
+    const boxes = [...panel.querySelectorAll('.src-box')];
+    ok(boxes.length === 2, 'two sources drawn, got ' + boxes.length);
+    ok(/ACE/.test(boxes[0].textContent), 'the head\'s own ACE first');
+    ok(/Stock feeders/.test(boxes[1].textContent), 'and the stock feeders beside it');
+    /* Bambu draws the AMS that cannot feed this nozzle and greys it. Head mode gives the
+       same rule here: an ACE-fed head draws from its own unit and from nothing else. */
+    ok(boxes[1].classList.contains('is-off'), 'what cannot feed this head is greyed, not hidden');
+    ok([...boxes[1].querySelectorAll('.src-tile')].every((t) => t.disabled),
+       'and none of it can be clicked');
+    ok(boxes[0].querySelectorAll('.src-tile').length === 4, 'four addressed bays, got '
+       + boxes[0].querySelectorAll('.src-tile').length);
+    ok([...boxes[0].querySelectorAll('.src-addr')].map((n) => n.textContent).join(',')
+       === 'A1,A2,A3,A4', 'addressed the way the machine addresses them');
+    ok(!!panel.querySelector('.src-wedge'), 'the one in use wears the corner wedge');
+    const pr = panel.getBoundingClientRect();
+    ok(pr.left >= 0 && pr.right <= window.innerWidth + 1,
+       'the panel fits the dialog: ' + Math.round(pr.left) + '..' + Math.round(pr.right)
+       + ' in ' + window.innerWidth);
+    /* Every bay holds PLA here and two hold the wrong COLOUR - and colour must not refuse. */
+    ok([...boxes[0].querySelectorAll('.src-tile')].filter((t) => t.disabled).length === 0,
+       'no bay is refused on colour alone');
+
     const before = window.__mockup.model.check.differs;
-    const pick = rows.find((r) => r.querySelector('.menu-cost.free'));
-    pick.click(); await wait();
-    ok(!$('.menu'), 'the menu closes on a pick');
-    ok(window.__mockup.state.choice === 'hand', 'a hand pick becomes its own answer');
-    ok($$('.pc-opt').length === 4, 'and it appears in the list, got ' + $$('.pc-opt').length);
+    const other = [...boxes[0].querySelectorAll('.src-tile')]
+      .find((t) => !t.disabled && !t.querySelector('.src-wedge'));
+    other.click(); await wait();
+    ok(!$('.src-panel'), 'the panel closes on a pick');
+    ok(window.__mockup.state.choice === 'hand', 'a pick becomes its own answer');
     out.push('INFO differs before=' + before + ' after=' + window.__mockup.model.check.differs);
+
+    /* A chip on a FEEDER head: the ACE is the greyed half instead. */
+    $$('.g-head')[0].querySelector('.g-chip').click(); await wait();
+    const fboxes = [...$('.src-panel').querySelectorAll('.src-box')];
+    ok(fboxes[0].classList.contains('is-off'), 'for a feeder head the ACE is the greyed half');
+    ok(!fboxes[1].classList.contains('is-off'), 'and its own feeders are not');
+    /* Dismissal is on pointerdown, not click: it has to happen before focus moves, or a
+       click on another chip reopens the panel it just closed. A synthetic .click() emits
+       no pointerdown, so the test has to send the real thing. */
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await wait();
+    ok(!$('.src-panel'), 'pointing away closes it');
+
+    /* The toolhead move is NOT in the panel - it is Bambu's "Regroup and slice" line. */
+    ok($$('.src-panel .src-tile').length === 0, 'and nothing of it is left on the page');
+    const link = $('.src-regroup .src-link');
+    ok(!!link, 'the regroup line is under the grid');
+    ok(/Re-plan which toolhead/.test(link.textContent), 'and says what it does: '
+       + link.textContent.trim());
+    ok(/re-export/i.test(txt('.src-price')), 'with its price beside it: ' + txt('.src-price'));
+    link.click(); await wait();
+    ok(window.__mockup.state.choice === 'replan', 'it selects the re-plan answer');
 
     /* Choosing an answer redraws the grid, and Send follows the real verdict. */
     $$('.pc-opt')[1].click(); await wait();

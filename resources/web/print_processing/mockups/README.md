@@ -385,6 +385,61 @@ Picking by hand becomes a fourth answer, *Chosen by hand*, and the picks belong 
 alone: flipping between the four is non-destructive, because a suggestion is an alternative
 to your picks rather than a base for them.
 
+## Against Bambu Studio, which solves the same problem
+
+`ui-snapshots-inspiration/Slicing/` is their H2D flow: two nozzles, two AMS units, a plate
+with more colours than either nozzle can hold. Four screenshots, and this mockup is now
+adapted from the fourth.
+
+| their step | what it is | here |
+|---|---|---|
+| **01 Slicing Result** | in the Preview sidebar: the grouping per nozzle, *Why this grouping*, the saving stated against a one-nozzle printer, and *Regroup filament* | **we have none of this.** The grouping is only visible once the send dialog is open |
+| **02 Filament grouping** | a modal: **Auto** or **Custom**, and Auto offers **Filament-Saving Mode** and **Convenience Mode** | the three answers. *Re-plan for the fewest swaps* is Filament-Saving, *Keep the layout, fix the bay addresses* is Convenience, *Chosen by hand* is Custom |
+| **03 Send print job** | printer card **and a plate card**, a box per nozzle, chips carrying the AMS address and a caret, the green *Regroup and slice* line, four three-state options | the same shape, minus the plate card. Our preferences are two-state because `SET_PRINT_PREFERENCES` takes booleans, which is [06-multiace.md](../../../../docs/u1-webui/03-print-processing/06-multiace.md)'s own correction |
+| **04 Select filament** | a **picture of both AMS units**, four addressed slots each, the one that cannot feed this nozzle **drawn and greyed**, a corner wedge on the chosen slot, an *External* tile, a note | what the source panel is now |
+
+### What was taken
+
+- **A picture, not a list.** The first cut here was a dropdown of addresses, which makes
+  the reader hold the topology in their head. Theirs draws the machine and you click the
+  thing itself.
+- **The unreachable source is drawn and greyed, never hidden.** Their left AMS is fully
+  rendered and dead while the right nozzle is being chosen. Head mode gives us the same
+  rule for free: an ACE-fed head draws from its own unit and from nothing else, so the
+  stock feeders are the greyed half — and on a feeder head it is the other way round.
+  Hiding it leaves the operator wondering where it went; greying it teaches the wiring.
+- **The corner wedge** with a tick, rather than a tick in a row.
+- **The saving stated against a counterfactual.** Theirs: *"Save 25g filament and 100
+  nozzle purges compared to a printer with one nozzle."* Ours already had the sentence —
+  `paintCost` draws *saves N swaps against one spool per head* — and this mockup was not
+  feeding it, because the plans spelled the key the wire's way (`purge_g`) instead of
+  `filePlan()`'s (`purgeG`). Fixed, with a check.
+- **The free choice and the costly one are separated.** Their picker cannot move a
+  filament to the other nozzle at all; that is *Regroup and slice*, a different
+  affordance with its cost in its name. Ours had both in one list, which hid exactly the
+  asymmetry the panel exists to show. The toolhead move is now its own line under the
+  grid.
+
+### Where it differs, and why
+
+- **Their regroup costs a re-slice; ours costs a re-export.** They send the slot mapping
+  with the job, so the nozzle grouping is the only thing baked into the file. We do the
+  rewrite in the host after export, so a toolhead move re-writes the gcode and never
+  re-slices geometry. The link says so.
+- **Their slot choice is free because the mapping crosses with the job; ours is free
+  because it is a text edit on the swap lines.** Same outcome, different mechanism, and
+  worth keeping straight: theirs would still be free with no post-processing at all.
+- **Their `External` is our stock feeder.** One spool, no addressing, and on this machine
+  it is three of them.
+- **They have two Auto modes; we have three answers**, because *as sliced* is real here.
+  Their grouping is always recomputed; our file already carries a plan.
+
+### Still missing
+
+The Preview-side panel with the grouping and its saving, the plate card beside the
+printer, the editable job name, and their link to the matching rules. The first is the
+biggest: everything in this dialog is being decided at the last possible moment.
+
 ## Sharing it
 
 ```bash
