@@ -4,6 +4,10 @@ add_executable(${_TEST_NAME}_tests
 	${_TEST_NAME}_tests.cpp
 	test_3mf.cpp
 	test_ace_mmu_topology.cpp
+	test_ace_mmu_state.cpp
+	test_ace_mmu_plan.cpp
+	test_ace_mmu_reconcile.cpp
+	test_ace_mmu_tool_map.cpp
 	test_aabbindirect.cpp
 	test_clipper_offset.cpp
 	test_clipper_utils.cpp
