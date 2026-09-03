@@ -5,6 +5,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/nowide/fstream.hpp>
 
+#include <cstdlib>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -84,6 +85,20 @@ std::vector<std::string> lines_of(const std::string& s)
     while (std::getline(is, l))
         out.push_back(l);
     return out;
+}
+
+// With ACE_REWRITE_KEEP_DIR set, a case's input and output are kept as files, for
+// docs/u1-webui/tools/ace_rewrite_diff.py to run multiACE's own rewriter over.
+void keep_pair(const std::string& name, const std::string& logical, const std::string& sibling)
+{
+    const char* dir = std::getenv("ACE_REWRITE_KEEP_DIR");
+    if (dir == nullptr || *dir == '\0')
+        return;
+    boost::filesystem::create_directories(dir);
+    boost::nowide::ofstream a((boost::filesystem::path(dir) / (name + ".logical.gcode")).string(), std::ios::binary);
+    a << logical;
+    boost::nowide::ofstream b((boost::filesystem::path(dir) / (name + ".ace.gcode")).string(), std::ios::binary);
+    b << sibling;
 }
 
 int count_prefix(const std::vector<std::string>& lines, const std::string& pfx)
@@ -193,8 +208,8 @@ TEST_CASE("a two-filament plate forced onto the ACE head, line by line", "[ace_m
     // The preload block sits right before the prime section's header.
     const int hdr = index_of(out, "; multiACE plan: T0:H3S1 T1:H3S0 swaps:2 optimal:0");
     REQUIRE(hdr >= 0);
-    CHECK(out[hdr + 1] == "; multiACE processed: format=4");
-    CHECK(out[hdr + 2] == "; multiACE auto-load: load 1 head(s)");
+    CHECK(out[hdr + 1] == "; multiACE auto-load: load 1 head(s)");
+    CHECK(out[hdr + 2] == "; multiACE processed: format=4");
     CHECK(out[hdr + 3] == "ACE_SET_PURGE RESET=1");
     CHECK(out[hdr + 4] == "ACE_SWAP_HEAD HEAD=3 ACE=0 SLOT=0 INITIAL=1");
     CHECK(out[hdr + 5] == "; multiACE auto-load: end");
@@ -231,6 +246,7 @@ TEST_CASE("a two-filament plate forced onto the ACE head, line by line", "[ace_m
     CHECK(count_prefix(out, "SM_PRINT_PREEXTRUDE_FILAMENT") == 0);
     CHECK(r.dropped_standbys == 0);
     CHECK(r.header_line == out[hdr]);
+    keep_pair("two-on-ace", g, os.str());
 }
 
 TEST_CASE("seven filaments over three feeders and a four-bay head", "[ace_mmu_rewrite]")
@@ -296,6 +312,7 @@ TEST_CASE("seven filaments over three feeders and a four-bay head", "[ace_mmu_re
     CHECK(ace_primes <= 1);
     CHECK(feeder_primes > 0);
     CHECK(r.dropped_standbys == 0); // every cooldown here is followed by the M109 that re-heats
+    keep_pair("seven", g, os.str());
 }
 
 TEST_CASE("a standby that would cool the printing head is dropped, and no other is", "[ace_mmu_rewrite]")
@@ -327,6 +344,7 @@ TEST_CASE("a standby that would cool the printing head is dropped, and no other 
     const int c1 = index_of(out, "; Change Tool0 -> Tool1 (layer 1)");
     REQUIRE(c1 >= 0);
     CHECK(out[c1 - 2] == "M104 S70 T3 ; set nozzle temperature ;cooldown");
+    keep_pair("standby", g, os.str());
 }
 
 TEST_CASE("more filaments than places is refused with the counts", "[ace_mmu_rewrite]")

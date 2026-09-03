@@ -327,14 +327,16 @@ std::set<long> scan_standbys(std::istream& in, const Ctx& ctx)
 
 std::string preload_block(const Ctx& ctx, RewriteResult& res)
 {
+    // multiACE's own block, line for line (inject_auto_load_to_file at v0.99.8b), with the
+    // plan line the bridge and the page read placed above it.
     std::string s;
     s += res.header_line + "\n";
-    s += "; multiACE processed: format=" + std::to_string(kFormatVersion) + "\n";
     int count = 0;
     for (int h = 0; h < ctx.heads; ++h)
         if (res.preload_slot[h] >= 0)
             ++count;
     s += "; multiACE auto-load: load " + std::to_string(count) + " head(s)\n";
+    s += "; multiACE processed: format=" + std::to_string(kFormatVersion) + "\n";
     s += "ACE_SET_PURGE RESET=1\n";
     for (int h = 0; h < ctx.heads; ++h)
         if (res.preload_slot[h] >= 0)

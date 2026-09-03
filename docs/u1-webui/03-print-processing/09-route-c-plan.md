@@ -399,13 +399,34 @@ branch: *"This plate needs N filament swaps on the ACE, about X g of purge."* at
 `ImportantNotificationLevel`, from the plate's result; a plate that needed no rewrite says
 nothing.
 
-### 4.4 The drift check, to build with the rewriter
+### 4.4 The drift check - built, and run
 
-`docs/u1-webui/tools/ace_rewrite_diff.py`: extract `rewrite_head_mode_to_file` and
-`inject_auto_load_to_file` from `git show v0.99.8b:…` (an `ast` walk does it in ten lines),
-run them over the same logical file with the same assignment, and diff against Orca's
-sibling after normalising the deliberate differences (the table in §4.2). The known-different lines
-are a list in the script, so a new difference is a failure, not noise.
+[`tools/ace_rewrite_diff.py`](../tools/ace_rewrite_diff.py) loads multiACE's rewriter from
+`git show v0.99.8b:…` - never the working tree - reads the assignment out of the sibling's
+own header and preload block, runs `rewrite_head_mode_to_file` + `inject_auto_load_to_file`
+over the same logical file, and diffs the two outputs after normalising exactly the
+differences the table in §4.2 calls deliberate (plus multiACE's `ACE_BG_SWAP` look-ahead,
+out of scope here). Anything left is drift, and the exit code says so.
+
+```bash
+ACE_REWRITE_KEEP_DIR=/tmp/keep build/tests/libslic3r/Release/libslic3r_tests "[ace_mmu_rewrite]"
+for n in two-on-ace seven standby; do
+    python3 docs/u1-webui/tools/ace_rewrite_diff.py /tmp/keep/$n.logical.gcode /tmp/keep/$n.ace.gcode
+done
+```
+
+Run on 2026-09-03 over the three synthetic pairs the tests keep:
+
+| pair | multiACE lines | Orca lines | differing after normalising |
+|---|---|---|---|
+| two filaments forced onto the ACE head | 101 | 104 | **0** |
+| seven filaments, three feeders and a four-bay head | 513 | 522 | **0** |
+| the print-by-object standby collision | 103 | 104 | **0** |
+
+So on these inputs the port and the original place every `T`, every swap, every preload,
+every kept and every dropped temperature line identically; the extra lines on Orca's side
+are the plan header, the per-swap comment and the purge stamps. The script is the
+regression check for the real fixture (§4.5) once one exists.
 
 ### 4.5 The fixture that is still missing
 

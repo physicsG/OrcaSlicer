@@ -71,3 +71,11 @@ exception noted in `extract_state_model.py`. Re-running against a newer bundle s
 if a script returns zero rows, its anchor pattern is what needs updating.
 
 Bundle these were written against: **orca 2.3.26, build 20260813142841**.
+
+## `ace_rewrite_diff.py` - drift between Orca's ACE rewriter and multiACE's
+
+Runs multiACE's own `rewrite_head_mode_to_file` + `inject_auto_load_to_file`, taken from
+`git show v0.99.8b:…`, over the logical gcode Orca sliced, and diffs against the sibling Orca
+wrote, after normalising the differences `03-print-processing/09-route-c-plan.md` §4.2 lists
+as deliberate. Exit 1 on anything else. The unit tests keep synthetic pairs for it with
+`ACE_REWRITE_KEEP_DIR=dir`.
