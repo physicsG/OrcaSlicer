@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Print Preprocessing — plan choice</title>
+<!--
+  PLAN CHOICE - what the dialog should offer when the plan and the machine disagree.
+
+  Two states, because they ask different questions and only one of them is about swaps:
+
+    ?scenario=unaware   the plate was sliced with no ACE in the preset, and the printer
+                        has one. Nothing in the file mentions a bay, so there is no swap
+                        to re-map: the tool numbers themselves are wrong and that is a
+                        slice.
+    ?scenario=aware     the plate was sliced onto the ACE. The file names a bay per
+                        filament, the machine holds something else in two of them, and
+                        the question is which of three answers to take.
+
+  The point it exists to make is the cost asymmetry, which no earlier mockup drew because
+  it was not true when they were made. D/E/F treat the plan as fixed; G offers to change
+  it and says the button must read "Re-slice", because when G was drawn the plan was
+  emitted by the slicer and both levers were baked into the gcode. Under route C the
+  rewrite happens in Orca AFTER export, so:
+
+    the HEAD is the tool number          -> changing it re-exports the gcode
+    the BAY is one argument per swap     -> changing it is a text edit, and free
+
+  So the middle option below - keep the layout, fix the addresses - costs nothing and is
+  invisible in every previous design.
+
+  ONE FILE on purpose. The other mockups are ES modules that `build_standalone.py` bakes
+  into a bundle for people without a checkout; this one is a decision aid rather than a
+  redrawing of the machine, so it carries its own marks and can be opened anywhere with
+  no bake step and therefore nothing to drift from. Where it draws a bay or a spool it
+  follows docs/ace-mmu/16-ace-visuals.md - outlined chassis, solid bays, the address on a
+  disc over a colour-filled roll.
+
+  Numbers are the branch's own, not invented: 349 swaps / 47.0 g for a hand layout and
+  300 / 40.4 for the planner's, measured on the seven-colour cube (docs/ace-mmu/13-roadmap.md).
+-->
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f4f5f6;  --card: #ffffff;  --ink: #262e30;  --dim: #6b7476;
+  --line: #dcdfe0;  --brand: #00897b;  --brand-ink: #ffffff;
+  --ok: #1f9254;  --bad: #c0392b;  --warn: #c4651e;  --unsure: #8a8f91;
+  --chip: #f0f2f3;  --sel: #e6f4f1;
+}
+:root:not([data-theme="light"]) {
+  @media (prefers-color-scheme: dark) {
+    --bg: #1b1d1e; --card: #232628; --ink: #e6e9ea; --dim: #9aa2a4; --line: #383c3e;
+    --chip: #2c3032; --sel: #1d3a35;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1b1d1e; --card: #232628; --ink: #e6e9ea; --dim: #9aa2a4; --line: #383c3e;
+  --chip: #2c3032; --sel: #1d3a35;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 13px/1.45 "Segoe UI", Roboto, system-ui, sans-serif;
+  display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+}
+
+/* ---- the dialog frame, at the 714x750 the host opens ---- */
+.title {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; background: var(--card); border-bottom: 1px solid var(--line);
+  font-weight: 600;
+}
+.title .spacer { flex: 1; }
+.switch { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.switch button {
+  font: inherit; font-size: 11px; font-weight: 500; padding: 3px 9px; border: 0;
+  background: var(--card); color: var(--dim); cursor: pointer;
+}
+.switch button[aria-pressed="true"] { background: var(--brand); color: var(--brand-ink); }
+.mockmark {
+  font-size: 10px; font-weight: 500; color: var(--dim);
+  border: 1px dashed var(--line); border-radius: 4px; padding: 1px 5px;
+}
+
+.body { flex: 1 1 auto; overflow-y: auto; padding: 10px; display: flex;
+        flex-direction: column; gap: 8px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; }
+.card > h2 {
+  margin: 0 0 7px; font-size: 12px; font-weight: 600; letter-spacing: .01em;
+  display: flex; align-items: center; gap: 7px;
+}
+.card > h2 .spacer { flex: 1; }
+.pill {
+  font-size: 10.5px; font-weight: 500; padding: 1px 7px; border-radius: 9px;
+  background: var(--chip); color: var(--dim); white-space: nowrap;
+}
+.pill.ok { background: rgba(31,146,84,.14); color: var(--ok); }
+.pill.bad { background: rgba(192,57,43,.14); color: var(--bad); }
+
+/* ---- model line ---- */
+.model { display: flex; gap: 10px; align-items: flex-start; }
+.thumb { width: 62px; height: 62px; border-radius: 5px; border: 1px solid var(--line);
+         flex: 0 0 auto; background: var(--chip); }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--dim); font-size: 11.5px; }
+.name { font-weight: 600; color: var(--ink); font-size: 12.5px; }
+.strip { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.fnum {
+  width: 17px; height: 17px; border-radius: 4px; font-size: 10px; font-weight: 700;
+  display: grid; place-items: center; border: 1px solid rgba(0,0,0,.18);
+}
+.fnum.orphan { outline: 2px solid var(--bad); outline-offset: 1px; }
+
+/* ---- the notice above the choice ---- */
+.notice {
+  border-left: 3px solid var(--warn); background: rgba(196,101,30,.09);
+  padding: 6px 9px; border-radius: 0 5px 5px 0; font-size: 11.5px; margin-bottom: 8px;
+}
+.notice b { color: var(--ink); }
+
+/* ---- toolhead grid ---- */
+.heads { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.head { border: 1px solid var(--line); border-radius: 6px; padding: 6px 7px; position: relative; }
+.head.ace { border-color: var(--brand); }
+.head h3 { margin: 0 0 5px; font-size: 11.5px; font-weight: 600;
+           display: flex; align-items: center; gap: 6px; }
+.head h3 .spacer { flex: 1; }
+.src { font-size: 10px; color: var(--dim); font-weight: 500; }
+/* the cabinet glyph: outlined chassis, solid bays (16-ace-visuals) */
+.cab { display: inline-flex; gap: 1.5px; padding: 1.5px; border: 1px solid currentColor;
+       border-radius: 2px; color: var(--brand); vertical-align: -2px; }
+.cab i { width: 4px; height: 9px; display: block; border-radius: .5px; }
+.bays { display: flex; flex-direction: column; gap: 3px; }
+.bay { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.disc {
+  width: 19px; height: 19px; border-radius: 50%; flex: 0 0 auto;
+  display: grid; place-items: center; font-size: 9px; font-weight: 700;
+  border: 1px solid rgba(0,0,0,.2);
+}
+.disc.empty { background: repeating-linear-gradient(45deg, var(--chip) 0 3px, transparent 3px 6px);
+              border-style: dashed; }
+.bayname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.verdict { font-size: 10px; font-weight: 600; white-space: nowrap; }
+.verdict.ok { color: var(--ok); }
+.verdict.bad { color: var(--bad); }
+.verdict.unsure { color: var(--unsure); }
+.wants { color: var(--dim); font-size: 10.5px; }
+
+/* ---- the plan chooser ---- */
+.opts { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; }
+.opt {
+  display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: start;
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px;
+  cursor: pointer; background: none; text-align: left; font: inherit; color: inherit;
+  width: 100%;
+}
+.opt[aria-pressed="true"] { border-color: var(--brand); background: var(--sel); }
+.opt[disabled] { cursor: default; opacity: .95; }
+.radio { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--dim);
+         margin-top: 2px; }
+.opt[aria-pressed="true"] .radio { border-color: var(--brand); border-width: 4px; }
+.opt .lab { font-weight: 600; font-size: 12px; }
+.opt .why { color: var(--dim); font-size: 11px; margin-top: 2px; }
+.opt .cost { text-align: right; font-size: 11px; white-space: nowrap; }
+.opt .cost b { display: block; font-size: 12px; }
+.tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 9px; margin-left: 6px; }
+.tag.free { background: rgba(31,146,84,.14); color: var(--ok); }
+.tag.work { background: rgba(196,101,30,.14); color: var(--warn); }
+.tag.no { background: rgba(192,57,43,.14); color: var(--bad); }
+.todo { margin: 8px 0 0; padding: 7px 9px; background: var(--chip); border-radius: 6px;
+        font-size: 11.5px; }
+.todo ul { margin: 4px 0 0; padding-left: 17px; }
+.todo li { margin: 2px 0; }
+.foot-note { margin-top: 8px; font-size: 11px; color: var(--dim); }
+
+/* ---- preferences + footer ---- */
+.prefs { display: flex; flex-direction: column; gap: 5px; font-size: 11.5px; }
+.pref { display: flex; align-items: center; gap: 8px; }
+.pref .spacer { flex: 1; }
+.toggle { width: 30px; height: 17px; border-radius: 9px; background: var(--line);
+          position: relative; cursor: pointer; border: 0; flex: 0 0 auto; }
+.toggle[aria-pressed="true"] { background: var(--brand); }
+.toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px;
+                 border-radius: 50%; background: #fff; transition: left .12s; }
+.toggle[aria-pressed="true"]::after { left: 15px; }
+.foot {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; background: var(--card); border-top: 1px solid var(--line);
+}
+.track { flex: 1; height: 5px; background: var(--chip); border-radius: 3px; overflow: hidden; }
+.fill { height: 100%; width: 0; background: var(--brand); transition: width .18s; }
+.stage { font-size: 11px; color: var(--dim); min-width: 128px; }
+.primary {
+  font: inherit; font-weight: 600; padding: 7px 20px; border: 0; border-radius: 5px;
+  background: var(--brand); color: var(--brand-ink); cursor: pointer;
+}
+.primary[disabled] { background: var(--line); color: var(--dim); cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<div class="title">
+  <span>Print Preprocessing</span>
+  <span class="spacer"></span>
+  <div class="switch" role="group" aria-label="Scenario">
+    <button id="s-unaware" aria-pressed="false">Sliced without the ACE</button>
+    <button id="s-aware" aria-pressed="true">Sliced onto the ACE</button>
+  </div>
+  <span class="mockmark">mockup</span>
+</div>
+
+<div class="body">
+  <section class="card" id="c-model"><h2>Model Information</h2><div id="model"></div></section>
+
+  <section class="card">
+    <h2>Filament<span class="spacer"></span><span class="pill" id="modepill"></span></h2>
+    <div id="notice"></div>
+    <div class="heads" id="heads"></div>
+    <div class="opts" id="opts"></div>
+    <div id="todo"></div>
+    <p class="foot-note" id="asym"></p>
+  </section>
+
+  <section class="card"><h2>Print Preferences</h2>
+    <div class="prefs" id="prefs"></div>
+  </section>
+</div>
+
+<div class="foot">
+  <span class="stage" id="stage">Ready</span>
+  <div class="track"><div class="fill" id="fill"></div></div>
+  <button class="primary" id="go">Send</button>
+</div>
+
+<script>
+'use strict';
+
+/* ====================================================================== *
+ * Fixture. The seven-colour cube the rest of this work is measured on.
+ * ====================================================================== */
+const FIL = [
+  { i: 0, name: 'Magenta', hex: '#EC008C' },
+  { i: 1, name: 'Amber',   hex: '#FEC600' },
+  { i: 2, name: 'Green',   hex: '#00AE42' },
+  { i: 3, name: 'Blue',    hex: '#0056B8' },
+  { i: 4, name: 'Red',     hex: '#F44336' },
+  { i: 5, name: 'White',   hex: '#F2F2F2' },
+  { i: 6, name: 'Black',   hex: '#1A1A1A' },
+];
+const BAY = ['A1', 'A2', 'A3', 'A4'];
+
+/* What is PHYSICALLY on the machine. Read once when the dialog opens; the plan is judged
+   against this and never the other way round. */
+const LOADED = {
+  feeders: { 0: 1, 1: 2, 2: 3 },      // toolhead -> filament sitting in its stock feeder
+  bays:    { 0: 4, 1: 0, 2: 5, 3: 6 } // bay index -> filament. A1 and A2 are the wrong way round.
+};
+
+/* A layout is: which filament each toolhead runs, and for an ACE-fed head, the bay each
+   comes from. Costs are the branch's measured numbers for this plate. */
+const LAYOUTS = {
+  sliced: {
+    label: 'As sliced',
+    why: 'The layout in the file. It was saved with the plate by hand, so it is not the '
+       + 'cheapest one, and two of its bay addresses do not match the machine.',
+    swaps: 349, purge: 47.0,
+    feeders: { 0: 1, 1: 2, 2: 3 },
+    bays: { 0: 0, 1: 4, 2: 5, 3: 6 },
+    cost: 'nothing', costTag: 'free', move: [],
+  },
+  addresses: {
+    label: 'Keep the layout, fix the bay addresses',
+    why: 'Every filament stays on the toolhead it is on. Only the bay each one is drawn '
+       + 'from changes, so the two spools that look wrong stop being wrong.',
+    swaps: 349, purge: 47.0,
+    feeders: { 0: 1, 1: 2, 2: 3 },
+    bays: { 0: 4, 1: 0, 2: 5, 3: 6 },
+    cost: 'rewrites the swap lines', costTag: 'free', move: [],
+  },
+  replan: {
+    label: 'Re-plan for the fewest swaps',
+    why: 'The planner puts the colour the plate prints most on a free toolhead and the '
+       + 'rare one behind the ACE. Cheaper to print, and it asks you to move two spools.',
+    swaps: 300, purge: 40.4,
+    feeders: { 0: 6, 1: 2, 2: 3 },
+    bays: { 0: 4, 1: 0, 2: 5, 3: 1 },
+    cost: 're-exports the gcode', costTag: 'work',
+    move: ['Take Black out of bay A4 and put it in Toolhead 1',
+           'Put Amber, from Toolhead 1, into bay A4'],
+  },
+};
+
+/* Scenario 1: the preset had no ACE, so the file names seven tools on a four-head
+   machine. Three of them can never be honoured. */
+const UNAWARE = {
+  orphans: [4, 5, 6],
+  feeders: { 0: 0, 1: 1, 2: 2, 3: 3 },
+};
+
+const state = {
+  scenario: new URLSearchParams(location.search).get('scenario') === 'unaware'
+            ? 'unaware' : 'aware',
+  choice: 'sliced',
+  prefs: { flow: true, lapse: false, level: true },
+  sending: false,
+};
+
+/* ====================================================================== *
+ * Small helpers.
+ * ====================================================================== */
+const $ = (s) => document.querySelector(s);
+function el(tag, cls, txt) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (txt != null) n.textContent = txt;
+  return n;
+}
+/* Readable ink on a filled chip - the same rule the Device page uses. */
+function ink(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return l > 0.6 ? '#1a1a1a' : '#ffffff';
+}
+function chip(i, extra) {
+  const f = FIL[i];
+  const n = el('span', 'fnum' + (extra ? ' ' + extra : ''), String(i + 1));
+  n.style.background = f.hex;
+  n.style.color = ink(f.hex);
+  n.title = `Filament ${i + 1} — ${f.name}`;
+  return n;
+}
+function disc(i, label) {
+  const n = el('span', 'disc', label);
+  if (i == null) { n.classList.add('empty'); n.textContent = label; return n; }
+  n.style.background = FIL[i].hex;
+  n.style.color = ink(FIL[i].hex);
+  return n;
+}
+
+/* ====================================================================== *
+ * Model Information.
+ * ====================================================================== */
+function paintModel() {
+  const host = $('#model');
+  host.textContent = '';
+  const row = el('div', 'model');
+
+  const th = el('div', 'thumb');
+  th.style.background =
+    `conic-gradient(${FIL.map((f, k) => `${f.hex} ${k * 51.4}deg ${(k + 1) * 51.4}deg`).join(',')})`;
+  row.appendChild(th);
+
+  const facts = el('div');
+  facts.appendChild(el('div', 'name', 'colour_cube_7.gcode'));
+  const meta = el('div', 'meta');
+  ['3h 57m', '48.7 g', '7 filaments', 'U1 (workshop) · LAN'].forEach((t) =>
+    meta.appendChild(el('span', null, t)));
+  facts.appendChild(meta);
+
+  const strip = el('div', 'strip');
+  const orphans = state.scenario === 'unaware' ? UNAWARE.orphans : [];
+  FIL.forEach((f) => strip.appendChild(chip(f.i, orphans.includes(f.i) ? 'orphan' : null)));
+  facts.appendChild(strip);
+  if (orphans.length)
+    facts.appendChild(el('div', 'wants',
+      'Outlined: named by the file, with no toolhead to print from.'));
+  row.appendChild(facts);
+  host.appendChild(row);
+}
+
+/* ====================================================================== *
+ * The toolhead grid. It always draws what the CHOSEN layout would do, so
+ * selecting an option is the preview.
+ * ====================================================================== */
+function headBox(h, opts) {
+  const box = el('div', 'head' + (opts.ace ? ' ace' : ''));
+  const head = el('h3');
+  head.appendChild(el('span', null, `Toolhead ${h + 1}`));
+  head.appendChild(el('span', 'spacer'));
+  if (opts.ace) {
+    const cab = el('span', 'cab');
+    for (let b = 0; b < 4; b++) {
+      const i = el('i');
+      const f = opts.loadedBays[b];
+      i.style.background = f == null ? 'var(--line)' : FIL[f].hex;
+      cab.appendChild(i);
+    }
+    head.appendChild(cab);
+    head.appendChild(el('span', 'src', 'ACE A'));
+  } else {
+    head.appendChild(el('span', 'src', 'Stock feeder'));
+  }
+  box.appendChild(head);
+
+  const list = el('div', 'bays');
+  opts.rows.forEach((r) => {
+    const line = el('div', 'bay');
+    line.appendChild(disc(r.want, r.addr));
+    const nm = el('span', 'bayname');
+    nm.appendChild(el('span', null, r.want == null ? '—' : FIL[r.want].name));
+    if (r.have != null && r.have !== r.want)
+      nm.appendChild(el('span', 'wants', `  · holds ${FIL[r.have].name}`));
+    if (r.have == null && r.want != null && opts.ace)
+      nm.appendChild(el('span', 'wants', '  · empty'));
+    line.appendChild(nm);
+    const v = el('span', 'verdict ' + r.verdict.cls, r.verdict.word);
+    line.appendChild(v);
+    list.appendChild(line);
+  });
+  box.appendChild(list);
+  return box;
+}
+
+const AGREE  = { cls: 'ok', word: 'agrees' };
+const DIFFER = { cls: 'bad', word: 'differs' };
+const NONE   = { cls: 'unsure', word: 'no toolhead' };
+
+function paintHeads() {
+  const host = $('#heads');
+  host.textContent = '';
+
+  if (state.scenario === 'unaware') {
+    for (let h = 0; h < 4; h++) {
+      const want = UNAWARE.feeders[h];
+      host.appendChild(headBox(h, {
+        ace: false, loadedBays: {},
+        rows: [{ want, have: LOADED.feeders[h] != null ? LOADED.feeders[h] : want,
+                 addr: 'T' + (h + 1),
+                 verdict: AGREE }],
+      }));
+    }
+    const orph = el('div', 'head');
+    orph.style.gridColumn = '1 / -1';
+    orph.style.borderColor = 'var(--bad)';
+    const h3 = el('h3');
+    h3.appendChild(el('span', null, 'Nowhere to print from'));
+    orph.appendChild(h3);
+    const list = el('div', 'bays');
+    UNAWARE.orphans.forEach((i) => {
+      const line = el('div', 'bay');
+      line.appendChild(disc(i, ''));
+      const nm = el('span', 'bayname', FIL[i].name);
+      line.appendChild(nm);
+      line.appendChild(el('span', 'verdict bad', 'no toolhead'));
+      list.appendChild(line);
+    });
+    orph.appendChild(list);
+    host.appendChild(orph);
+    return;
+  }
+
+  const L = LAYOUTS[state.choice];
+  for (let h = 0; h < 3; h++) {
+    const want = L.feeders[h], have = LOADED.feeders[h];
+    host.appendChild(headBox(h, {
+      ace: false, loadedBays: {},
+      rows: [{ want, have, addr: 'T' + (h + 1),
+               verdict: want === have ? AGREE : DIFFER }],
+    }));
+  }
+  const rows = [0, 1, 2, 3].map((b) => {
+    const want = L.bays[b], have = LOADED.bays[b];
+    return { want, have, addr: BAY[b], verdict: want === have ? AGREE : DIFFER };
+  });
+  const aceBox = headBox(3, { ace: true, loadedBays: LOADED.bays, rows });
+  aceBox.style.gridColumn = '1 / -1';
+  host.appendChild(aceBox);
+}
+
+/* ====================================================================== *
+ * The chooser. One row per answer, each carrying BOTH costs: what it does
+ * to the print, and what it asks of the person.
+ * ====================================================================== */
+function disagreements(key) {
+  const L = LAYOUTS[key];
+  let n = 0;
+  for (let h = 0; h < 3; h++) if (L.feeders[h] !== LOADED.feeders[h]) n++;
+  for (let b = 0; b < 4; b++) if (L.bays[b] !== LOADED.bays[b]) n++;
+  return n;
+}
+
+function optRow({ key, label, why, cost, costTag, right, selected, onPick, disabled }) {
+  const b = el('button', 'opt');
+  b.type = 'button';
+  b.setAttribute('aria-pressed', String(!!selected));
+  if (disabled) b.disabled = true;
+  b.appendChild(el('span', 'radio'));
+
+  const mid = el('span');
+  const lab = el('span', 'lab', label);
+  const tag = el('span', 'tag ' + costTag, cost);
+  lab.appendChild(tag);
+  mid.appendChild(lab);
+  mid.appendChild(el('div', 'why', why));
+  b.appendChild(mid);
+
+  const c = el('span', 'cost');
+  c.appendChild(el('b', null, right.top));
+  c.appendChild(el('span', null, right.bottom));
+  b.appendChild(c);
+
+  if (onPick) b.addEventListener('click', onPick);
+  return b;
+}
+
+function paintOpts() {
+  const host = $('#opts');
+  host.textContent = '';
+
+  if (state.scenario === 'unaware') {
+    host.appendChild(optRow({
+      label: 'Send as sliced', costTag: 'no', cost: 'refused',
+      why: 'Three filaments have no toolhead. The file names T5, T6 and T7 and the '
+         + 'printer has four heads, so nothing maps them.',
+      right: { top: '—', bottom: 'cannot print' },
+      selected: false, disabled: true,
+    }));
+    host.appendChild(optRow({
+      label: 'Take the ACE into the preset and slice again', costTag: 'work',
+      cost: 'a re-slice',
+      why: 'Sync info reads the topology from the printer, Toolhead 4 becomes ACE-fed '
+         + 'with four bays, and the plate is sliced knowing it. Seven filaments then '
+         + 'have seven places.',
+      right: { top: '300 swaps', bottom: '40.4 g purged' },
+      selected: true, disabled: true,
+    }));
+    return;
+  }
+
+  Object.entries(LAYOUTS).forEach(([key, L]) => {
+    const bad = disagreements(key);
+    host.appendChild(optRow({
+      key, label: L.label, why: L.why, cost: L.cost, costTag: L.costTag,
+      right: { top: `${L.swaps} swaps`, bottom: `${L.purge.toFixed(1)} g purged` },
+      selected: state.choice === key,
+      onPick: () => { state.choice = key; paint(); },
+    }));
+    void bad;
+  });
+}
+
+/* What the operator would still have to do, and whether Send is open. */
+function paintTodo() {
+  const host = $('#todo');
+  host.textContent = '';
+  if (state.scenario === 'unaware') {
+    $('#asym').textContent =
+      'Nothing in this file mentions a bay, so there is no address to re-map. The tool '
+      + 'numbers themselves are wrong, and those are written when the plate is sliced.';
+    return;
+  }
+  const L = LAYOUTS[state.choice];
+  const bad = disagreements(state.choice);
+  const box = el('div', 'todo');
+  if (bad === 0 && !L.move.length) {
+    box.appendChild(el('b', null, 'Every place holds what this layout needs.'));
+    box.appendChild(el('div', 'why', 'Nothing to move. Send goes straight out.'));
+  } else if (L.move.length) {
+    box.appendChild(el('b', null, `Move ${L.move.length} spools first`));
+    const ul = el('ul');
+    L.move.forEach((m) => ul.appendChild(el('li', null, m)));
+    box.appendChild(ul);
+  } else {
+    box.appendChild(el('b', null, `${bad} places hold something else`));
+    box.appendChild(el('div', 'why',
+      'Send is refused while a bay the plan names holds another spool. Either move '
+      + 'them, or take the option above that re-addresses the bays instead.'));
+  }
+  host.appendChild(box);
+
+  $('#asym').textContent =
+    'Why the middle one is free: the toolhead a filament prints from IS the tool number '
+    + 'in the gcode, so moving it re-exports the file. The bay is one argument on each '
+    + 'swap line, so changing it is a text edit over the file already on disk. Neither '
+    + 'is a geometry re-slice.';
+}
+
+/* ====================================================================== *
+ * Preferences and the footer.
+ * ====================================================================== */
+const PREFS = [
+  ['flow',  'Extrusion Flow Calibration'],
+  ['lapse', 'Time-lapse Camera'],
+  ['level', 'Auto Leveling'],
+];
+function paintPrefs() {
+  const host = $('#prefs');
+  host.textContent = '';
+  PREFS.forEach(([k, label]) => {
+    const row = el('div', 'pref');
+    row.appendChild(el('span', null, label));
+    row.appendChild(el('span', 'spacer'));
+    const t = el('button', 'toggle');
+    t.type = 'button';
+    t.setAttribute('aria-pressed', String(state.prefs[k]));
+    t.setAttribute('aria-label', label);
+    t.addEventListener('click', () => { state.prefs[k] = !state.prefs[k]; paintPrefs(); });
+    row.appendChild(t);
+    host.appendChild(row);
+  });
+}
+
+function paintFoot() {
+  const go = $('#go');
+  const stage = $('#stage');
+  if (state.scenario === 'unaware') {
+    go.textContent = 'Sync and re-slice';
+    go.disabled = false;
+    stage.textContent = 'Sliced without the ACE';
+    return;
+  }
+  const L = LAYOUTS[state.choice];
+  const bad = disagreements(state.choice);
+  go.textContent = state.choice === 'replan' ? 'Re-export and send' : 'Send';
+  go.disabled = state.sending || (bad > 0);
+  stage.textContent = state.sending ? 'Working…'
+    : bad > 0 ? `${bad} places disagree` : `${L.swaps} swaps · ${L.purge.toFixed(1)} g`;
+}
+
+$('#go').addEventListener('click', () => {
+  if (state.sending) return;
+  state.sending = true;
+  paintFoot();
+  const fill = $('#fill');
+  let pct = 0;
+  const steps = state.scenario === 'unaware'
+    ? ['Reading the topology', 'Slicing', 'Planning the ACE', 'Done']
+    : state.choice === 'replan'
+      ? ['Re-planning', 'Re-exporting the gcode', 'Uploading', 'Done']
+      : ['Re-addressing the bays', 'Uploading', 'Done'];
+  let s = 0;
+  const t = setInterval(() => {
+    pct = Math.min(100, pct + 9);
+    fill.style.width = pct + '%';
+    s = Math.min(steps.length - 1, Math.floor((pct / 100) * steps.length));
+    $('#stage').textContent = steps[s];
+    if (pct >= 100) {
+      clearInterval(t);
+      state.sending = false;
+      $('#stage').textContent = steps[steps.length - 1];
+      $('#go').disabled = true;
+    }
+  }, 130);
+});
+
+/* ====================================================================== *
+ * Paint.
+ * ====================================================================== */
+function paint() {
+  $('#s-unaware').setAttribute('aria-pressed', String(state.scenario === 'unaware'));
+  $('#s-aware').setAttribute('aria-pressed', String(state.scenario === 'aware'));
+  $('#modepill').textContent = state.scenario === 'unaware'
+    ? 'No ACE in this file' : 'ACE mode · Head';
+  $('#modepill').className = 'pill ' + (state.scenario === 'unaware' ? 'bad' : '');
+
+  const n = $('#notice');
+  n.textContent = '';
+  const box = el('div', 'notice');
+  if (state.scenario === 'unaware') {
+    const b = el('b', null, 'This plate was sliced for stock feeders only. ');
+    box.appendChild(b);
+    box.appendChild(document.createTextNode(
+      'The printer reports ACE A on Toolhead 4, and nothing in this file uses it — there '
+      + 'is not one bay address in the whole gcode. Seven filaments were sliced onto four '
+      + 'heads, so three of them have nowhere to go.'));
+  } else {
+    const b = el('b', null, 'Two bays hold a different spool than the plan names. ');
+    box.appendChild(b);
+    box.appendChild(document.createTextNode(
+      'The file was sliced onto ACE A. What it asks for and what the machine reports are '
+      + 'below, and there are three answers — one of which costs nothing.'));
+  }
+  n.appendChild(box);
+
+  paintModel();
+  paintHeads();
+  paintOpts();
+  paintTodo();
+  paintFoot();
+}
+
+$('#s-unaware').addEventListener('click', () => {
+  state.scenario = 'unaware'; state.sending = false; $('#fill').style.width = '0';
+  history.replaceState(null, '', '?scenario=unaware'); paint();
+});
+$('#s-aware').addEventListener('click', () => {
+  state.scenario = 'aware'; state.choice = 'sliced'; state.sending = false;
+  $('#fill').style.width = '0';
+  history.replaceState(null, '', '?scenario=aware'); paint();
+});
+
+paintPrefs();
+paint();
+
+/* What a --drive script reads. */
+window.__mockup = {
+  name: 'plan-choice',
+  get state() { return JSON.parse(JSON.stringify(state)); },
+  layouts: LAYOUTS, loaded: LOADED, disagreements,
+};
+</script>
+</body>
+</html>

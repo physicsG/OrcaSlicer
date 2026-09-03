@@ -75,3 +75,8 @@ through cairo rather than reading back a window WebKit never composited into.
 
 **`--real` needs Orca closed** — it authenticates with the same saved `clientId`, and a
 broker evicts the older holder.
+
+- **`plan-choice.js`** — the plan-choice mockup, both states: three answers offered, the
+  as-sliced layout refused with two bays marked, the address-only fix clearing every
+  verdict without changing the swap count, the re-plan naming the two spools it wants
+  moved, and the unaware state marking three filaments as having no toolhead.

@@ -293,3 +293,48 @@ copies of files already in the tree.
 `ACE_UNLOAD_HEAD` then `ACE_LOAD_HEAD` (never `ACE_SWAP_HEAD` — that one hops Z), it takes
 three minutes and a purge, and naming a bay is not built at all. The operator's fix is
 spools. The dialog's job is to say precisely which.
+
+---
+
+# Plan choice — what to offer when the plan and the machine disagree
+
+`plan-choice.html`, one file, no modules, no bake step. It answers a question the four
+above could not have asked, because the answer was not available when they were drawn.
+
+```bash
+python3 resources/web/shared/tests/run_webkit.py --size 714x750 --watch \
+    --page 'web/print_processing/mockups/plan-choice.html?scenario=aware'
+```
+
+`?scenario=` is `aware` (sliced onto the ACE, two bays hold another spool) or `unaware`
+(sliced with no ACE in the preset, and the printer has one). The page carries its own
+switcher, so `--watch` reaches both without a reload.
+
+**What it is for.** D, E and F treat the plan as fixed and a mismatch as an errand. G
+offers to change the plan and says the button must read **Re-slice**, because when G was
+drawn the plan was emitted by the slicer and both levers were baked into the gcode. Route C
+moved the work into the host, after export, and that split the two levers apart:
+
+| lever | where it lives | what changing it costs |
+|---|---|---|
+| which toolhead a filament prints from | the tool number itself | re-export the gcode |
+| which bay feeds an ACE-fed head | one argument per swap line | a text edit, free |
+
+So there is a third answer none of the earlier designs could offer — *keep the layout, fix
+the bay addresses* — which turns a refused send into a send with nothing to carry to the
+printer. Drawing that is the whole point of this mockup.
+
+The reasoning behind it, and the measurement that says preferring Orca's own filament
+assignment is **not** on its own enough, is
+[03-print-processing/10-plan-choice.md](../../../../docs/u1-webui/03-print-processing/10-plan-choice.md).
+
+**Why one file.** The others are ES modules that `build_standalone.py` bundles for people
+without a checkout. This one is a decision aid rather than a redrawing of the machine, so it
+carries the few marks it needs and can be opened anywhere as it stands — nothing to bake,
+and therefore nothing to drift. Where it draws a bay or a spool it follows
+[16-ace-visuals](../../../../docs/ace-mmu/16-ace-visuals.md): outlined chassis, solid bays,
+the address on a disc over a colour-filled roll.
+
+**Measured**, WebKitGTK at 714 x 750: 25 checks pass, and the body overflows its 663 px by
+121 — better than D (242), E (255) and F (211), worse than G (0). What falls below the fold
+is the last Print Preferences row.
