@@ -93,6 +93,34 @@
 .pc-why { margin: 5px 0 0 23px; font: 10.5px/1.45 var(--sans); color: var(--ink-dim); }
 .pc-why summary { cursor: pointer; color: var(--ink-2); }
 .pc-why code { font-family: var(--mono); font-size: 10px; }
+
+/* A chip that can be opened has to look like it can. The caret is the one the four-card
+   panel already puts on its own picker, at the size a 20px chip can carry. */
+.g-chip.pc-pick { cursor: pointer; }
+.g-chip.pc-pick:hover { border-color: var(--f-blue); }
+.g-chip.pc-pick:focus-visible { outline: 2px solid var(--f-blue); outline-offset: 1px; }
+.g-chip.pc-pick .g-from::after { content: " \25BE"; color: var(--ink-dim); }
+/* A heading inside the menu: which places these are, and what choosing one costs. */
+.menu-addr {
+  font: 600 10px/1 var(--mono); flex: none; width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; border: 1px solid rgba(0, 0, 0, .2);
+}
+.menu-addr.empty { background: repeating-linear-gradient(45deg, var(--f-track) 0 3px, transparent 3px 6px); }
+.menu-col { display: flex; flex-direction: column; justify-content: center; gap: 1px;
+             flex: 1; min-width: 0; }
+.menu-col b, .menu-col span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;
+}
+.menu-col b { font: 600 12px/1.25 var(--sans); color: var(--ink); }
+.menu-col span { font: 10.5px/1.25 var(--sans); color: var(--ink-2); }
+.menu-col span.dim { color: var(--ink-dim); }
+.menu-cost {
+  font: 600 9px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase;
+  padding: 2px 5px; border-radius: 8px; flex: none;
+  color: var(--warn); background: rgba(196, 101, 30, .14);
+}
+.menu-cost.free { color: var(--ok, #1f9254); background: rgba(31, 146, 84, .13); }
+.menu-holds.dim { color: var(--ink-dim); }
 </style>
 </head>
 <body class="dlg">
@@ -130,6 +158,7 @@ import * as grouping from '../js/views/grouping/grouping-view.js';
 import * as fourCards from '../js/views/filament/filament-view.js';
 import * as prefsView from '../js/views/preferences/preferences-view.js';
 import { el } from '../../shared/js/dom.js';
+import { openPicker, closePicker, isPickerOpen } from '../js/widgets/picker.js';
 
 import { FILAMENTS, MAPPING, PLAN, SCENARIOS, DEVICE, PREFERENCES, reconcile }
   from './ace-fixture.js';
@@ -147,7 +176,7 @@ const FILS = FILAMENTS.map((f) => ({
 
 /* The four-card view reads a toolhead's `colors`/`colorMode` to fill its disc; the
    fixture stores one `color` per head, as the machine reports it. */
-const HEADS = (AWARE_HEADS) => AWARE_HEADS.map((h) => ({
+const HEADS = (heads) => heads.map((h) => ({
   ...h, colors: h.color ? [h.color] : ['#B7BDC6'], colorMode: 0,
 }));
 
@@ -167,19 +196,46 @@ const UNAWARE = {
 };
 
 /* ====================================================================== *
- * The answers. Costs are the branch's measured numbers.
+ * The answers. Each is a WHOLE PLAN in the fixture's own shape, so the grid
+ * below is the real grouping view reading it and the verdicts are the real
+ * three-valued reconciliation judging it. Nothing here decides what is wrong;
+ * `reconcile()` does, exactly as the page does.
+ *
+ * The machine (fixture scenario `swapped`) holds A1 magenta, A2 white,
+ * A3 red, A4 black. The file was sliced expecting red in A2 and white in A3.
  * ====================================================================== */
+const FEEDER = (head, filament) => ({ head, feeder: true, run: [{ filament }] });
+const ACE = (head, run) => ({ head, feeder: false, unit: 0,
+  run: run.map(([filament, slot]) => ({ filament, unit: 0, slot })) });
+
+const PLANS = {
+  /* As sliced: a hand layout saved with the plate, so not the cheapest one. */
+  sliced: { mode: 'head', swaps: 349, purge_g: 47.0,
+    heads: [FEEDER(0, 1), FEEDER(1, 2), FEEDER(2, 3),
+            ACE(3, [[0, 0], [4, 1], [5, 2], [6, 3]])] },
+  /* Same toolheads, same slots' worth of swapping - only the two addresses change,
+     so red is drawn from A3 and white from A2, which is where they actually are. */
+  addresses: { mode: 'head', swaps: 349, purge_g: 47.0,
+    heads: [FEEDER(0, 1), FEEDER(1, 2), FEEDER(2, 3),
+            ACE(3, [[0, 0], [4, 2], [5, 1], [6, 3]])] },
+  /* Black is the colour this plate prints most, so it goes on a free toolhead and
+     amber - printed twice - goes behind the changer. Cheaper, and two spools move. */
+  replan: { mode: 'head', swaps: 300, purge_g: 40.4,
+    heads: [FEEDER(0, 6), FEEDER(1, 2), FEEDER(2, 3),
+            ACE(3, [[0, 0], [4, 2], [5, 1], [1, 3]])] },
+};
+
 const ANSWERS = {
   aware: [
-    { key: 'sliced', label: 'As sliced', cost: 'refused', tag: 'no',
+    { key: 'sliced', label: 'As sliced', cost: 'as in the file', tag: 'no',
       say: 'The layout saved with the plate. Two bays it names hold the other spool.',
-      swaps: 349, purge: 47.0, blocked: true, move: [], button: 'Send' },
+      swaps: 349, purge: 47.0, move: [], button: 'Send' },
     { key: 'addresses', label: 'Keep the layout, fix the bay addresses', cost: 'free', tag: 'free',
       say: 'Every filament stays on its toolhead; only the bay it is drawn from changes.',
-      swaps: 349, purge: 47.0, blocked: false, move: [], button: 'Send' },
+      swaps: 349, purge: 47.0, move: [], button: 'Send' },
     { key: 'replan', label: 'Re-plan for the fewest swaps', cost: 're-export', tag: 'work',
       say: 'The most-printed colour moves to a free toolhead, the rare one behind the ACE.',
-      swaps: 300, purge: 40.4, blocked: false,
+      swaps: 300, purge: 40.4,
       move: ['Take Black out of bay A4 and put it in Toolhead 1',
              'Put Amber, from Toolhead 1, into bay A4'],
       button: 'Re-export and send' },
@@ -191,9 +247,14 @@ const ANSWERS = {
     { key: 'reslice', label: 'Take the ACE into the preset and slice again',
       cost: 're-slice', tag: 'work',
       say: 'Toolhead 4 becomes ACE-fed with four bays, so seven filaments have seven places.',
-      swaps: 300, purge: 40.4, blocked: false, move: [], button: 'Sync and re-slice' },
+      swaps: 300, purge: 40.4, move: [], button: 'Sync and re-slice' },
   ],
 };
+
+/* An answer chosen a chip at a time. It appears only once something has been picked. */
+const HAND = { key: 'hand', label: 'Chosen by hand', cost: 'varies', tag: 'work',
+  say: 'Your own picks, over the layout in the file.', swaps: null, purge: null,
+  move: [], button: 'Send' };
 
 const WHY = {
   aware: 'The toolhead IS the tool number, so moving it re-exports the gcode. The bay is '
@@ -213,23 +274,77 @@ const state = {
   scenario: new URLSearchParams(location.search).get('scenario') === 'unaware'
             ? 'unaware' : 'aware',
   choice: 'sliced',
+  hand: {},          // filament -> { slot } or { head }, picked in the chip menu
   sending: false,
 };
 
 function scn() { return state.scenario === 'aware' ? AWARE : UNAWARE; }
-function answers() { return ANSWERS[state.scenario]; }
+function answers() {
+  const base = ANSWERS[state.scenario];
+  return state.scenario === 'aware' && Object.keys(state.hand).length
+    ? base.concat([HAND]) : base;
+}
 function chosen() {
   return answers().find((a) => a.key === state.choice) || answers()[0];
 }
+
+/* A deep-enough copy that editing one answer's plan cannot mutate the table above. */
+const clonePlan = (p) => ({ ...p, heads: p.heads.map((h) => ({ ...h, run: h.run.map((r) => ({ ...r })) })) });
+
+/**
+ * The plan the grid draws: the chosen answer, then whatever has been picked by hand.
+ *
+ * A hand pick is one of two things and they cost different amounts, which is the whole
+ * point: a BAY only rewrites one argument on the swap lines, a TOOLHEAD renumbers the
+ * tools and re-exports the file.
+ */
+function planNow() {
+  if (state.scenario !== 'aware') return null;
+  /* Hand picks belong to the hand answer and to nothing else. Applying them on top of
+     whichever answer is selected made choosing a suggestion show a corrupted version of
+     it - the suggestion is an alternative TO the picks, not a base for them. Keeping them
+     here means flipping between the four is non-destructive. */
+  const plan = clonePlan(PLANS[state.choice === 'hand' ? 'sliced' : state.choice] || PLANS.sliced);
+  if (state.choice !== 'hand') return plan;
+
+  Object.entries(state.hand).forEach(([fil, pick]) => {
+    const f = Number(fil);
+    const here = plan.heads.find((h) => h.run.some((r) => r.filament === f));
+    if (!here) return;
+    const step = here.run.find((r) => r.filament === f);
+    if (pick.slot != null) { step.slot = pick.slot; return; }
+    if (pick.head == null || pick.head === here.head) return;
+    const to = plan.heads.find((h) => h.head === pick.head);
+    if (!to) return;
+    here.run = here.run.filter((r) => r.filament !== f);
+    if (to.feeder) {
+      /* A feeder holds one spool, so the filament already there is displaced onto the
+         head this one came from. Somebody has to carry two spools across the room; the
+         panel's job is to say so rather than to pretend the swap is free. */
+      const displaced = to.run[0];
+      to.run = [{ filament: f }];
+      if (displaced) here.run.push(here.feeder ? { filament: displaced.filament }
+        : { filament: displaced.filament, unit: 0, slot: step.slot != null ? step.slot : 0 });
+    } else {
+      const used = new Set(to.run.map((r) => r.slot));
+      let slot = 0; while (used.has(slot) && slot < 4) slot++;
+      to.run.push({ filament: f, unit: 0, slot });
+    }
+  });
+  return plan;
+}
+
+
 
 function model() {
   const s = scn();
   return {
     mapping: s.mapping, file: s.mapping, filaments: FILS,
     devices: [DEVICE], device: DEVICE, legal: { legal: true },
-    plan: s.plan, ace: s.ace, toolheads: HEADS(s.heads),
+    plan: planNow(), ace: s.ace, toolheads: HEADS(s.heads),
     assignment: s.assignment || {},
-    check: s.plan ? reconcile(s) : { rows: [], differs: 0, unsure: 0, checked: false },
+    check: planNow() ? reconcile({ ...s, plan: planNow() })
+                     : { rows: [], differs: 0, unsure: 0, checked: false },
     prefs,
   };
 }
@@ -275,7 +390,7 @@ function buildShell() {
    two different panels - which is exactly what app.js does with the same two. */
 let filamentKind = null;
 function mountFilament() {
-  const kind = scn().plan ? 'grouping' : 'four';
+  const kind = planNow() ? 'grouping' : 'four';
   if (kind === filamentKind) return;
   filamentKind = kind;
   const b = bodies.filament.body;
@@ -346,12 +461,140 @@ function paintPc() {
   why.querySelector('.pc-whybody').innerHTML = WHY[state.scenario];
 }
 
+/* ====================================================================== *
+ * The chip menu - the dropdown this dialog does not have yet.
+ *
+ * WHAT IT HOLDS, and what each row costs. A filament on an ACE-fed head can come from any
+ * bay of THAT head's unit (head mode binds one unit per head, so the other cabinets are
+ * not reachable from here at any price), or it can be moved to another toolhead. Those
+ * two cost different things and EVERY ROW SAYS WHICH, rather than a heading per group:
+ *
+ *   the bays of this head's unit   one argument on each swap line   free
+ *   the other toolheads            the tool numbers themselves      re-export
+ *
+ * Headings were the first shape and they do not survive the widget: it focuses the first
+ * enabled item when it opens, which scrolls a disabled heading out of the menu. The cost
+ * is a property of the choice in any case, not of the group it sits in.
+ *
+ * A row is REFUSED, not merely discouraged, when the place cannot serve the filament:
+ * an empty bay has nothing to draw from, and a bay whose material the machine is sure
+ * about and which is not this filament's is the same refusal the toolhead menu already
+ * makes (`matchOf`: type and nozzle, never colour). Colour is shown on every row and
+ * blocks nothing - remapping colour is what this menu is FOR, and the verdict line under
+ * the grid already says when one differs.
+ * ====================================================================== */
+function wireChips(m) {
+  const unit = (m.ace && m.ace.units || [])[0];
+  bodies.filament.body.querySelectorAll('.g-chip').forEach((chip) => {
+    const fil = Number(chip.dataset.fil);
+    const head = m.plan.heads.find((h) => h.run.some((r) => r.filament === fil));
+    if (!head) return;
+    chip.classList.add('pc-pick');
+    chip.setAttribute('role', 'button');
+    chip.tabIndex = 0;
+    chip.onclick = () => openSource(chip, fil, head, m, unit);
+    chip.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chip.click(); }
+    };
+  });
+}
+
+function openSource(chip, fil, head, m, unit) {
+  if (isPickerOpen(chip)) { closePicker(); return; }
+  const want = m.filaments[fil];
+  const step = head.run.find((r) => r.filament === fil);
+  const items = [];
+
+  if (!head.feeder && unit) {
+    unit.bays.forEach((bay) => {
+      const knownOther = bay.known && bay.material && bay.material !== want.type;
+      const enabled = bay.occupied && !knownOther;
+      items.push({
+        value: `b:${bay.index}`,
+        enabled,
+        title: !bay.occupied ? 'This bay is empty — nothing to draw from.'
+             : knownOther ? `This bay holds ${bay.material}; the plate wants ${want.type}.` : '',
+        build: (node) => {
+          const d = el('span', 'menu-addr', bay.addr);
+          if (bay.occupied) {
+            d.style.background = bay.color || '#B7BDC6';
+            d.style.color = bay.color ? inkFor(bay.color) : '#1a1a1a';
+          } else d.classList.add('empty');
+          node.appendChild(d);
+          /* Two lines, not two columns. The toolhead menu is 200px wide - the bundle's
+             own measurement - and a material, a vendor and a cost tag side by side
+             truncated all three. The row is 48px tall and was carrying one line of it. */
+          const col = el('span', 'menu-col');
+          col.appendChild(el('b', null, bay.occupied ? (bay.material || 'Unknown') : 'Empty'));
+          col.appendChild(el('span', bay.known ? '' : 'dim',
+            bay.occupied ? (bay.vendor || 'not named') : 'nothing to draw from'));
+          node.appendChild(col);
+          if (step && bay.index === step.slot) node.appendChild(el('span', 'menu-tick'));
+          else if (enabled) node.appendChild(el('span', 'menu-cost free', 'free'));
+          if (!enabled) node.appendChild(el('span', 'menu-warn'));
+        },
+      });
+    });
+  }
+
+  m.plan.heads.forEach((h) => {
+    if (h.head === head.head) return;
+    items.push({
+      value: `h:${h.head}`,
+      enabled: true,
+      build: (node) => {
+        const d = el('span', 'menu-addr', String(h.head + 1));
+        const other = m.filaments[(h.run[0] || {}).filament];
+        d.style.background = other ? other.colors[0] : '#B7BDC6';
+        d.style.color = other ? inkFor(other.colors[0]) : '#1a1a1a';
+        node.appendChild(d);
+        const col = el('span', 'menu-col');
+        col.appendChild(el('b', null, `Toolhead ${h.head + 1}`));
+        /* What that toolhead holds now - a state, not a sentence about consequences.
+           `swaps with Amber` was the first draft and it truncated at the menu's 200px;
+           the name alone says the same thing and the cost tag beside it says the rest. */
+        col.appendChild(el('span', 'dim',
+          h.feeder ? (other ? other.name : 'empty') : `ACE ${unit ? unit.id : ''}`));
+        node.appendChild(col);
+        node.appendChild(el('span', 'menu-cost', 're-export'));
+      },
+    });
+  });
+
+  openPicker({
+    trigger: chip, kind: 'head', within: document.querySelector('.dlg-body'),
+    /* No `value`: the picker scrolls the selected row into view, and with a heading as
+       the first row that scrolled the heading out of the menu. The tick in each row
+       already says which place is in use. */
+    items,
+    onPick: (v) => {
+      const [what, n] = String(v).split(':');
+      if (what === 'b') state.hand[fil] = { slot: Number(n) };
+      else if (what === 'h') state.hand[fil] = { head: Number(n) };
+      state.choice = 'hand';
+      paint();
+    },
+  });
+}
+
+/* Readable ink on a filled disc - `inkOn` in the page's own widgets/format.js. */
+function inkFor(hex) {
+  const n = parseInt(String(hex).slice(1), 16);
+  const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return l > 0.6 ? '#1a1a1a' : '#ffffff';
+}
+
 /* ---- footer ------------------------------------------------------------- */
 function paintFoot() {
   const a = chosen();
   const send = document.getElementById('send');
   send.textContent = a.button;
-  send.disabled = state.sending || a.blocked;
+  /* The gate is the page's own rule: a bay the plan names that holds another spool blocks
+     the send. Reading it off the live reconciliation rather than off the answer means the
+     mockup cannot claim an answer works when the machine says otherwise. */
+  const differs = state.scenario === 'aware' ? model().check.differs : 0;
+  send.disabled = state.sending || a.blocked || differs > 0;
+  send.title = differs > 0 ? `${differs} place(s) hold another spool` : '';
 }
 
 document.getElementById('send').addEventListener('click', () => {
@@ -377,7 +620,7 @@ function paint() {
   const ctx = { model: m, pending: {}, commands: {}, say: () => {} };
   modelInfo.update(bodies['model-info'].body, m, ctx);
   printerView.update(bodies.printer.body, m, ctx);
-  if (scn().plan) grouping.update(bodies.filament.body, m, ctx);
+  if (m.plan) { grouping.update(bodies.filament.body, m, ctx); wireChips(m); }
   else fourCards.update(bodies.filament.body, m, ctx);
   prefsView.update(bodies.preferences.body, m, ctx);
   paintPc();
@@ -387,6 +630,7 @@ function paint() {
 function pick(s) {
   state.scenario = s;
   state.choice = ANSWERS[s][0].key;
+  state.hand = {};
   state.sending = false;
   document.getElementById('bar-fill').style.width = '0';
   document.getElementById('pct').textContent = '0%';

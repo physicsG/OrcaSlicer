@@ -74,6 +74,54 @@
     ok(/Sync and re-slice/.test($('#send').textContent), 'the button reads: '
        + $('#send').textContent.trim());
 
+    /* ---- the chip menu: what each dropdown holds ------------------------- */
+    $('#s-aware').click(); await wait();
+    const aceChips = $$('.g-chip.pc-pick');
+    ok(aceChips.length === 7, 'every chip opens a source menu, got ' + aceChips.length);
+    const aceChip = $$('.g-head')[3].querySelector('.g-chip');
+    aceChip.click(); await wait();
+    const menu = $('.menu');
+    ok(!!menu, 'the page\'s own picker opened');
+    const rows = [...menu.querySelectorAll('.menu-item')];
+    ok(rows.length === 7, 'four bays of this head\'s unit and three other toolheads, got '
+       + rows.length);
+    const free = rows.filter((r) => r.querySelector('.menu-cost.free'));
+    const paid = rows.filter((r) => r.querySelector('.menu-cost:not(.free)'));
+    ok(free.length === 3, 'the bays are free, minus the one already in use: ' + free.length);
+    ok(paid.length === 3, 'the toolheads cost a re-export: ' + paid.length);
+    ok(/re-export/i.test(paid[0].textContent), 'and each says so: ' + paid[0].textContent.trim());
+    ok(/Toolhead \d/.test(paid[0].textContent), 'a toolhead row names itself in full: '
+       + paid[0].textContent.trim().slice(0, 40));
+    ok([...menu.querySelectorAll('.menu-col b, .menu-col span')]
+       .every((n) => n.scrollWidth <= n.clientWidth + 1),
+       'no row text is truncated at the menu\'s measured 200px');
+    ok(rows.slice(0, 4).every((r) => /^A[1-4]/.test(r.textContent.trim())),
+       'the bays come first, addressed');
+    /* Every bay here holds PLA and the plate is all PLA, so nothing is refused - and two
+       of the four hold the WRONG COLOUR. That is the assertion worth making: colour is
+       shown on every row and blocks none of them, exactly as the toolhead menu's own rule
+       (type and nozzle, never colour) already has it. */
+    const refused = rows.filter((r) => r.getAttribute('aria-disabled') === 'true');
+    ok(refused.length === 0, 'no place is refused on colour alone, got ' + refused.length);
+    ok(!!rows.find((r) => r.querySelector('.menu-tick')), 'the bay in use carries the tick');
+
+    /* Picking a bay is free, changes no swap count, and clears the verdict. */
+    const before = window.__mockup.model.check.differs;
+    const pick = rows.find((r) => r.querySelector('.menu-cost.free'));
+    pick.click(); await wait();
+    ok(!$('.menu'), 'the menu closes on a pick');
+    ok(window.__mockup.state.choice === 'hand', 'a hand pick becomes its own answer');
+    ok($$('.pc-opt').length === 4, 'and it appears in the list, got ' + $$('.pc-opt').length);
+    out.push('INFO differs before=' + before + ' after=' + window.__mockup.model.check.differs);
+
+    /* Choosing an answer redraws the grid, and Send follows the real verdict. */
+    $$('.pc-opt')[1].click(); await wait();
+    ok(window.__mockup.model.check.differs === 0, 'the address answer really clears every bay');
+    ok($('#send').disabled === false, 'so Send opens');
+    $$('.pc-opt')[2].click(); await wait();
+    ok(window.__mockup.model.check.differs > 0, 'the re-plan wants spools moved, so bays differ');
+    ok($('#send').disabled === true, 'and Send stays shut until they are');
+
     /* ---- it fits the dialog --------------------------------------------- */
     $('#s-aware').click(); await wait();
     const b = $('.dlg-body');

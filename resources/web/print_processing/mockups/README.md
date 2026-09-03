@@ -359,6 +359,32 @@ sections in the registry's order, the real grouping view drawing four heads and 
 two of them marked by the real three-valued reconciliation, and the real four-card panel
 marking three filaments unset in the other state.
 
+## The dropdowns, and what each one holds
+
+`picker.js` documents three, measured off the bundle — the item heights, widths and
+offsets are its `KINDS` table. Two are wired into the page; this mockup adds the fourth,
+which is the one an ACE plate needs and does not have.
+
+| dropdown | opened from | holds | refuses |
+|---|---|---|---|
+| **printer** | Select Printer | the saved devices: cover, name, LAN line, a tick on the current one | nothing |
+| **toolhead** | a card in Edit Filament | the four toolheads: the head's disc in its own colour, what it holds, where that came from | a head whose **type or nozzle** does not match the file filament, with one of two tooltips. Not a suggestion — `enabled: false`, and the widget will not fire `onPick` |
+| **plate** | — | the build surfaces. Measured (80 px items, matches the button, max 480) and unused in the reconstruction | — |
+| **source** *(new)* | a chip in the Filament grid | the four bays of **this head's own unit**, then the other toolheads. A bay row is its address on a disc in the bay's own colour, the material, and who named it; a toolhead row is its number and what it holds now | a bay that is **empty**, or whose material the machine is sure about and which is not this filament's. **Colour never refuses** — remapping colour is what the menu is for, and the verdict line already says when one differs |
+
+**Every row carries its own cost**, `free` on a bay and `re-export` on a toolhead, because
+that is the asymmetry the whole panel turns on. Headings per group were the first shape and
+the widget will not have them: it focuses the first enabled item when it opens, which
+scrolls a disabled heading out of the menu. The cost belongs to the choice anyway.
+
+**Two lines per row, not two columns.** The toolhead menu is 200 px — the bundle's own
+number — and a material, a vendor and a cost tag side by side truncated all three. The row
+is 48 px tall and was carrying one line of it. A check asserts nothing truncates.
+
+Picking by hand becomes a fourth answer, *Chosen by hand*, and the picks belong to it
+alone: flipping between the four is non-destructive, because a suggestion is an alternative
+to your picks rather than a base for them.
+
 ## Sharing it
 
 ```bash
