@@ -71,11 +71,15 @@ blast radius.
 2. **No dependency on an optional service.** `ace.py` is what makes the ACE work; the web
    stack (FastAPI, nginx, Pyodide, `S98multiace-web`) is a separate deployment that may be
    absent, versioned differently, and is unreachable from the webview.
-3. **Orca knows what the preflight has to guess.** The preflight reconstructs the colour
-   sequence from `; Change Tool` comments. Orca has the real tool ordering, the layer
-   structure, and the **flush matrix** — and `ACE_SET_PURGE`'s own help says it is
-   *"intended for multiACE Pro to set per-colour-pair purge from the slicer."* The printer
-   is asking for a number only the slicer has.
+3. **Orca has the flush matrix; the preflight cannot.** `ACE_SET_PURGE`'s own help says it
+   is *"intended for multiACE Pro to set per-colour-pair purge from the slicer"* — the
+   printer is asking for a number only the slicer holds.
+   **Caveat, measured:** for the U1 that matrix is flattened before the tower uses it.
+   `Print.cpp:3153` replaces every non-zero entry with the scalar `prime_volume` when
+   `!purge_in_prime_tower || !single_extruder_multi_material`, and `fdm_U1.json` sets both
+   to `0`. So the per-pair matrix is *available to feed `ACE_SET_PURGE`* but is **not** what
+   Orca's own wipe tower used, and the CONFIG_BLOCK copy is therefore not evidence of the
+   purge actually applied. Do not claim more than that.
 4. **The plan and its cost are visible before committing**, in Preview, with no printer.
 5. **Re-mapping is cheap** — re-run the rewrite over the same sliced gcode.
 
@@ -134,9 +138,34 @@ that the U1 send zips *and* that Ctrl+G packages. One hook covers every route. T
 is to widen its gate from `is_BBL_printer()` to include the U1 and call the rewriter there
 rather than an external script.
 
-> Not yet verified, and worth ten minutes before building: whether `Export G-code`
-> (`:800`) re-exports from the `Print` or copies `m_temp_output_path`. If it re-exports,
-> `:242` alone may not cover it and both sites need the call.
+**One hook is enough — verified.** `Export G-code` does *not* re-export: with a finished
+`Print` it takes the `m_print->finished()` branch at `BackgroundSlicingProcess.cpp:200`
+("skip slicing, to process previous gcode file"), sets `m_temp_output_path =
+get_tmp_gcode_path()` (`:209`) and `finalize_gcode()` copies it. Ctrl+G streams the same
+file into a 3MF (`bbs_3mf.cpp:7993`). The U1 send zips it (`SSWCP.cpp:264`). Every route
+reads the bytes that `:242` has just finished writing.
+
+### Three traps in that hook, all of them silent
+
+1. **`m_gcode_result->lines_ends` goes stale.** The preview memory-maps the tmp gcode and
+   indexes it by byte offset (`GCodeViewer.cpp:497`, `:517`), so a pass that changes offsets
+   and leaves `lines_ends` alone gives a garbage G-code window. This is exactly why the
+   PrusaSlicer hook at `:800` uses `make_copy=true` — the comment at `:796` says so. At
+   `:242` you are still ahead of the map, but you must rebuild `lines_ends` the way
+   `GCodeProcessor::run_post_process` does (`GCodeProcessor.cpp:4671`, `:4755`, `:4764`:
+   stream to `<name>.postprocess`, rebuild as you write, `rename_file` back).
+2. **The zip is cached.** `read_existing_zip` (`SSWCP.cpp:366`, used at `:426`) reuses
+   `<display_name>.zip` if it already sits beside the tmp gcode — so a rewrite that lands
+   after one exists is silently ignored.
+3. **The SHA-256 is over the gcode, the payload is the zip built from it**
+   (`SSWCP.cpp:396`, `:709`). A rewrite must land before `create_zip_with_miniz`.
+
+### Progress and cancellation come free
+
+The pass runs on the background thread (`thread_proc`, `:304`), so bill it with
+`m_print->set_status(...)` between the existing 80 ("Generating G-code", `Print.cpp:2719`)
+and 95 ("Running post-processing scripts", `:790`). That gets the notification progress bar
+(`Plater.cpp:15437`) and `throw_if_canceled()` for nothing.
 
 ---
 
@@ -158,6 +187,10 @@ rather than an external script.
 - **A `--drive` script that throws sets no report and the harness waits forever.** Two of
   mine did. `full.sh`-style sweeps must treat "no result" as a failure — `grep | tail` exits
   0 on empty input.
+- **The toolchange comment has NO space before the digit.** `[previous_extruder]` is legacy
+  placeholder syntax, so the emitted line is `; Change Tool0 -> Tool2 (layer 9)` — measured
+  on a real plate, 18 of them. multiACE's `^;\s*Change Tool\s*(\d+)\s*->\s*Tool\s*(\d+)`
+  matches it (`\s*` takes zero), and a hand-written matcher that assumed a space would not.
 - **Licence:** multiACE is **GPL-3.0**, Orca **AGPL-3.0**. AGPLv3 §13 permits the
   combination; attribution required if code is ported.
 
@@ -165,16 +198,15 @@ rather than an external script.
 
 ## 7. Open questions, in the order they will bite
 
-1. **Does `Export G-code` re-export or copy?** Decides whether `:242` is one hook or two.
-2. **What does the preflight do with more colours than places?** Orca's native path throws a
+1. **What does the preflight do with more colours than places?** Orca's native path throws a
   `SlicingError`; the preflight's behaviour is unread. Route C needs an answer.
-3. **`multi` and `normal` modes have never been exercised in the page** — the simulator
+2. **`multi` and `normal` modes have never been exercised in the page** — the simulator
   reports `head`. Only the mockups draw them.
-4. **Colour is not compared** in the match rule, by design (type + nozzle is the bundle's).
+3. **Colour is not compared** in the match rule, by design (type + nozzle is the bundle's).
   On a plan-less plate a plate wanting colours that exist nowhere still enables Send. Design
   question 2, still open — and probably *should* stay open, since remapping colours is what
   the panel is for.
-5. **No print has been run past its first seconds**, and the ACE half of the send path is
+4. **No print has been run past its first seconds**, and the ACE half of the send path is
   entirely unobserved.
 
 ---
