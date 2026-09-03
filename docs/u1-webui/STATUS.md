@@ -1363,6 +1363,40 @@ beside the panel that had replaced them, head pickers and all. `[hidden] { displ
 !important }` is in `preprint.css` now; the nozzle banner had only ever worked because it
 sets `hidden` on a `.bare` body with no `display` of its own.
 
+## The mapping question, answered (2026-09-03)
+
+**A plate sliced knowing nothing about the ACE does NOT need re-slicing to use ACE
+filaments. multiACE already solves it on the printer, and Orca bypasses the mechanism.**
+
+There is a preflight service on the machine — `preflight_core.py` +
+`post_process_virtual_toolheads.py`, served at `/multiace/api/preflight`, **verified live**:
+`livedata` returns this machine's bays and feeders, and the POST endpoints answer 422 for a
+missing body. It reads an unprocessed gcode, matches its tools against the live bay
+contents, **rewrites the file** with `ACE_SWAP_HEAD HEAD=h ACE=a SLOT=s` plus an auto-load
+block, and uploads the rewritten copy with `print=true`. It keys on `; Change Tool X ->
+Tool Y`, which the **stock** U1 profile already emits, so it needs nothing from the slicer.
+It offers three plans — `loadout` / `optimize` / `layer` — and accepts an externally
+computed `head_assignment`.
+
+Those three plans are the inspiration's Convenience / Filament-Saving modes and option G's
+regroup sheet, arrived at independently. **The planner this feature was going to build
+already exists, on the printer, and takes our answer as an argument.**
+
+**Why it is unused:** `send_gcode_legacy`'s U1 branch POSTs to Moonraker's
+`/server/files/upload`, and anything arriving that way is unprocessed. Routing through the
+preflight instead is a **C++ change**, not a page one — measured, `/multiace/` sends no CORS
+header where Moonraker `:7125` reflects the Origin, so the webview cannot POST it.
+
+**And it was considered and reversed in hours.** `11-assignment-dialog.md` §2b concluded
+`AceMmuPlan.hpp` duplicates multiACE's planner and that emitting `ACE_SWAP_HEAD` from
+`change_filament_gcode` was *"probably the wrong mechanism"*; `6b67565e9e` set the direction
+to "Orca owns the UX, multiACE owns the rewrite", and `2e71733a77` the same day replaced it
+with "DECIDED: native in Orca". Going native was a choice with real advantages — the flush
+matrix, the toolpath, an early feasibility refusal — not a necessity.
+
+The three routes and what each costs:
+[03-print-processing/07-ace-mapping-routes.md](03-print-processing/07-ace-mapping-routes.md).
+
 ## What is open
 
 [02-device-page/11-multiace-handover.md](02-device-page/11-multiace-handover.md) ends with
