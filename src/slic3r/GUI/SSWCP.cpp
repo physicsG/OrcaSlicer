@@ -8,6 +8,10 @@
 #include "nlohmann/json.hpp"
 #include "slic3r/GUI/Tab.hpp"
 #include "libslic3r/Model.hpp"
+#include "libslic3r/AceMmuRewrite.hpp"
+#include "libslic3r/AceMmuToolMap.hpp"
+#include <boost/nowide/fstream.hpp>
+#include <numeric>
 #include "sentry_wrapper/SentryWrapper.hpp"
 #include <algorithm>
 #include <iterator>
@@ -55,6 +59,9 @@ namespace pt = boost::property_tree;
 using namespace nlohmann;
 
 namespace Slic3r { namespace GUI {
+
+// Route C: defined beside sw_GetFileFilamentMapping; sw_SendGCodes needs it earlier.
+static bool ace_plan_for_current_plate(json& out);
 
 // WCP_Logger
 WCP_Logger::WCP_Logger() {
@@ -353,13 +360,52 @@ std::string generate_zip_path(const std::string& oriname, const std::string& tar
     // such as "c:/xxx/xxx/xxx"
     fs::path parent_dir = path1.parent_path();
 
-    // "target.gcode" -> "target.gcode.zip"
+    // "target.gcode" -> "target.gcode.<source file>.zip": keyed to the SOURCE as well as the
+    // display name. The temp gcode path is fixed per plate and the display name carries only
+    // the print's estimate, so two plates - or one plate around a re-slice - can share a
+    // display name, and a zip named by it alone was reused for the wrong bytes.
     fs::path new_filename = fs::path(targetname);
-    new_filename += ".zip"; 
+    new_filename += "." + path1.filename().string() + ".zip";
 
     // get the complete path
     fs::path zip_path = parent_dir / new_filename;
     return zip_path.string();
+}
+
+// What the zip was made from: the source's size and mtime, kept beside it. A reuse is
+// allowed only when the source still matches, because the gcode under a fixed temp path is
+// rewritten by every re-slice and by the ACE rewrite, and the zip used to be reused across
+// both - the printer got the previous slice, and its checksum could not tell.
+static std::string zip_source_stamp(const std::string& source_path)
+{
+    boost::system::error_code ec;
+    const auto size = fs::file_size(source_path, ec);
+    if (ec)
+        return std::string();
+    const auto mtime = fs::last_write_time(source_path, ec);
+    if (ec)
+        return std::string();
+    return std::to_string(size) + ":" + std::to_string(static_cast<long long>(mtime));
+}
+
+static std::string zip_stamp_path(const std::string& zip_path) { return zip_path + ".src"; }
+
+static bool zip_matches_source(const std::string& zip_path, const std::string& source_path)
+{
+    const std::string want = zip_source_stamp(source_path);
+    if (want.empty())
+        return false;
+    std::ifstream in(zip_stamp_path(zip_path));
+    std::string   have;
+    if (!in.is_open() || !std::getline(in, have))
+        return false;
+    return have == want;
+}
+
+static void write_zip_stamp(const std::string& zip_path, const std::string& source_path)
+{
+    std::ofstream out(zip_stamp_path(zip_path), std::ios::trunc);
+    out << zip_source_stamp(source_path) << '\n';
 }
 
 // check if reading file content
@@ -422,8 +468,8 @@ json get_or_create_zip_json(const std::string& name1,   // origin file "1.gcode"
 {
     std::vector<char> zip_stream;
 
-    // 1. check the same ZIP exist
-    if (read_existing_zip(zip_path, zip_stream)) {
+    // 1. reuse the ZIP only when its source has not changed since it was made
+    if (zip_matches_source(zip_path, name1) && read_existing_zip(zip_path, zip_stream)) {
         std::cout << "Reusing existing ZIP file: " << zip_path << std::endl;
     } else {
         // 2. not exist, creating target file
@@ -436,6 +482,8 @@ json get_or_create_zip_json(const std::string& name1,   // origin file "1.gcode"
         if (!out_file.good()) {
             throw std::runtime_error("Failed to write ZIP to: " + zip_path);
         }
+        out_file.close();
+        write_zip_stamp(zip_path, name1);
     }
 
     json j;
@@ -2328,6 +2376,23 @@ void SSWCP_MachineOption_Instance::sw_SendGCodes() {
                 return;
             }
 
+            // Route C: on an ACE plate the tool numbers in the file ARE head numbers, and its
+            // ACE_SWAP_HEAD lines name those heads. A SET_PRINT_EXTRUDER_MAP that moves a tool
+            // off its head prints on one head while the ACE feeds another. The page writes the
+            // identity; this refuses anything else. (AceMmuToolMap.hpp, 06-multiace.md §3.4)
+            {
+                json plan;
+                if (ace_plan_for_current_plate(plan)) {
+                    const auto moved = AceMmu::non_identity_tool_map(str_codes);
+                    if (!moved.empty()) {
+                        BOOST_LOG_TRIVIAL(warning) << "sw_SendGCodes: refused an extruder map on an ACE plate: T" << moved.front().logical
+                                                   << " -> toolhead " << moved.front().physical;
+                        handle_general_fail(-1, _L("This plate is planned onto the ACE. Its filaments cannot be moved to another toolhead."));
+                        return;
+                    }
+                }
+            }
+
             auto weak_self = std::weak_ptr<SSWCP_Instance>(shared_from_this());
             host->async_send_gcodes(str_codes, [weak_self](const json& response) {
                 auto self = weak_self.lock();
@@ -3036,6 +3101,98 @@ void SSWCP_MachineOption_Instance::sw_FinishFilamentMapping()
         }
     }
 }
+// Route C: the plan the rewriter made for the current plate, in the shape the print popup
+// normalises (resources/web/print_processing/js/core/session.js, filePlan): the mode, the
+// swaps and the purge, and per toolhead the filaments it prints in the order it first prints
+// them. When the plate carries no result - a sliced 3MF re-opened, whose gcode is already the
+// rewritten file - the plan is read back from the file's own header, the way the bridge reads
+// it (docs/u1-webui/tools/u1_bridge.py), with a head's run in bay order because the header
+// carries no sequence. Returns false when there is no plan, which is every ordinary plate.
+static bool ace_plan_for_current_plate(json& out)
+{
+    auto* plate = wxGetApp().plater()->get_partplate_list().get_curr_plate();
+    if (!plate || !plate->fff_print())
+        return false;
+    const PrintConfig& cfg   = plate->fff_print()->config();
+    const int          heads = int(cfg.nozzle_diameter.values.size());
+    auto unit_of  = [&cfg](int h) { return (h >= 0 && size_t(h) < cfg.ace_head_unit.values.size()) ? cfg.ace_head_unit.values[h] : -1; };
+    auto ace_head = [&cfg](int h) { return h >= 0 && size_t(h) < cfg.ace_head_capacity.values.size() && cfg.ace_head_capacity.values[h] > 1; };
+
+    AceMmu::LoadingPlan            plan;
+    std::vector<std::vector<int>>  runs;
+    double                         purge_g = 0.;
+    const AceMmu::RewriteResult&   r       = plate->ace_rewrite();
+    if (r.rewritten) {
+        plan    = r.plan;
+        runs    = r.runs;
+        purge_g = r.purge_g;
+    } else {
+        const std::string       path = SSWCP::get_active_filename();
+        boost::nowide::ifstream in(path);
+        if (!in.is_open())
+            return false;
+        std::string line;
+        bool        found  = false;
+        int         budget = 4000; // the header is in the first few hundred lines; the body is millions
+        while (budget-- > 0 && std::getline(in, line))
+            if (AceMmu::parse_plan_header(line, plan)) {
+                found = true;
+                break;
+            }
+        if (!found)
+            return false;
+        std::vector<int> order(plan.head_of.size());
+        std::iota(order.begin(), order.end(), 0);
+        std::sort(order.begin(), order.end(), [&](int a, int b) {
+            if (plan.head_of[a] != plan.head_of[b])
+                return plan.head_of[a] < plan.head_of[b];
+            const int ka = ace_head(plan.head_of[a]) ? plan.slot_of[a] : a;
+            const int kb = ace_head(plan.head_of[b]) ? plan.slot_of[b] : b;
+            return ka < kb;
+        });
+        runs.assign(size_t(std::max(0, heads)), {});
+        for (int f : order) {
+            const int h = plan.head_of[f];
+            if (h >= 0 && h < heads)
+                runs[h].push_back(f);
+        }
+    }
+
+    json heads_json = json::array();
+    for (int h = 0; h < heads && size_t(h) < runs.size(); ++h) {
+        if (runs[h].empty())
+            continue;
+        json hj      = json::object();
+        hj["head"]   = h;
+        hj["feeder"] = !ace_head(h);
+        if (ace_head(h))
+            hj["unit"] = unit_of(h);
+        else
+            hj["unit"] = nullptr;
+        json run = json::array();
+        for (int f : runs[h]) {
+            json step        = json::object();
+            step["filament"] = f;
+            if (ace_head(h)) {
+                step["unit"] = unit_of(h);
+                step["slot"] = (size_t(f) < plan.slot_of.size()) ? plan.slot_of[f] : 0;
+            }
+            run.push_back(step);
+        }
+        hj["run"] = run;
+        heads_json.push_back(hj);
+    }
+    if (heads_json.empty())
+        return false;
+    out            = json::object();
+    out["mode"]    = cfg.ace_mode.serialize();
+    out["swaps"]   = plan.swaps;
+    out["optimal"] = plan.optimal;
+    out["purge_g"] = purge_g;
+    out["heads"]   = heads_json;
+    return true;
+}
+
 void SSWCP_MachineOption_Instance::sw_GetFileFilamentMapping()
 {
     {
@@ -3289,6 +3446,14 @@ void SSWCP_MachineOption_Instance::sw_GetFileFilamentMapping()
         // file name
         response["filename"] = SSWCP::get_display_filename();
         response["filepath"] = SSWCP::get_active_filename();
+
+        // Route C: the ACE plan, when this plate has one. Absent on every other plate, and
+        // then the popup is exactly the dialog that already ships.
+        {
+            json ace_plan;
+            if (ace_plan_for_current_plate(ace_plan))
+                response["ace_plan"] = ace_plan;
+        }
 
         m_res_data = response;
         send_to_js();

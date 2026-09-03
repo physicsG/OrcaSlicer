@@ -2911,6 +2911,31 @@ std::string PartPlate::get_tmp_gcode_path()
     return m_tmp_gcode_path;
 }
 
+std::string PartPlate::ace_gcode_path() { return get_tmp_gcode_path() + ".ace.gcode"; }
+
+std::string PartPlate::get_print_gcode_path()
+{
+    const std::string sibling = ace_gcode_path();
+    boost::system::error_code ec;
+    if (m_ace_rewrite.rewritten && boost::filesystem::exists(sibling, ec) && !ec)
+        return sibling;
+    return get_tmp_gcode_path();
+}
+
+void PartPlate::clear_ace_rewrite()
+{
+    m_ace_rewrite = Slic3r::AceMmu::RewriteResult();
+    if (m_tmp_gcode_path.empty())
+        return;
+    boost::system::error_code ec;
+    const std::string sibling = ace_gcode_path();
+    if (boost::filesystem::exists(sibling, ec) && !ec) {
+        boost::filesystem::remove(sibling, ec);
+        if (ec)
+            BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": could not remove " << sibling << ": " << ec.message();
+    }
+}
+
 std::string PartPlate::get_temp_config_3mf_path()
 {
 	if (m_temp_config_3mf_path.empty()) {
@@ -5457,7 +5482,8 @@ int PartPlateList::store_to_3mf_structure(PlateDataPtrs& plate_data_list, bool w
 					//	plate_data_item->pattern_file = "valid_pattern";
 					if (m_plate_list[i]->cali_bboxes_data.is_valid())
 						plate_data_item->pattern_bbox_file = "valid_pattern_bbox";
-					plate_data_item->gcode_file       = m_plate_list[i]->m_gcode_result->filename;
+					// Route C: the file the machine runs, which is the rewritten sibling on an ACE plate.
+					plate_data_item->gcode_file       = m_plate_list[i]->get_print_gcode_path();
 					plate_data_item->is_sliced_valid  = true;
 					plate_data_item->gcode_prediction = std::to_string(
 						(int) m_plate_list[i]->get_slice_result()->print_statistics.modes[static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Normal)].time);

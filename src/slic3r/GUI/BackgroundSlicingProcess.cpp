@@ -20,6 +20,8 @@
 #include "libslic3r/SLAPrint.hpp"
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/GCode/PostProcessor.hpp"
+#include "libslic3r/AceMmuRewrite.hpp"
+#include "libslic3r/Exception.hpp"
 #include "libslic3r/Format/SL1.hpp"
 #include "libslic3r/Thread.hpp"
 #include "libslic3r/libslic3r.h"
@@ -29,6 +31,7 @@
 #include <cctype>
 
 #include <boost/format/format_fwd.hpp>
+#include <boost/algorithm/string.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/nowide/cstdio.hpp>
@@ -237,9 +240,13 @@ void BackgroundSlicingProcess::process_fff()
 
 		//BBS: add plate index into render params
 		m_temp_output_path = this->get_current_plate()->get_tmp_gcode_path();
+		// Route C: a rewritten sibling must never outlive the file it was made from.
+		this->get_current_plate()->clear_ace_rewrite();
 		m_fff_print->export_gcode(m_temp_output_path, m_gcode_result, [this](const ThumbnailsParams& params) { return this->render_thumbnails(params); });
 		if(m_fff_print->is_BBL_printer())
 			run_post_process_scripts(m_temp_output_path, false, "File", m_temp_output_path, m_fff_print->full_print_config());
+		else
+			this->rewrite_for_ace();
 
 		BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": export gcode finished");
 	}
@@ -782,6 +789,69 @@ bool BackgroundSlicingProcess::invalidate_all_steps()
 	return m_step_state.invalidate_all([this](){ this->stop_internal(); });
 }
 
+// Route C: on a Snapmaker U1 whose preset wires an ACE to a toolhead, turn the logical gcode
+// just exported into the file the machine can run, written beside it (the sibling). The
+// preview keeps the logical file; every send, export and package asks the plate for the
+// sibling. A plate the rewriter cannot place is refused here, which reaches the UI as a
+// slicing error and leaves the plate invalid. docs/u1-webui/03-print-processing/09-route-c-plan.md
+void BackgroundSlicingProcess::rewrite_for_ace()
+{
+	const PrintConfig& cfg = m_fff_print->config();
+	const std::string& model = cfg.printer_model.value;
+	if (!(boost::algorithm::icontains(model, "Snapmaker") && boost::algorithm::icontains(model, "U1")))
+		return;
+	if (cfg.ace_mode.value == amNormal)
+		return;
+
+	AceMmu::RewriteInput in;
+	in.mode = cfg.ace_mode.serialize();
+	const size_t heads = cfg.nozzle_diameter.values.size();
+	bool any_ace = false;
+	for (size_t h = 0; h < heads; ++h) {
+		const int cap  = h < cfg.ace_head_capacity.values.size() ? cfg.ace_head_capacity.values[h] : 1;
+		const int unit = h < cfg.ace_head_unit.values.size() ? cfg.ace_head_unit.values[h] : -1;
+		in.head_capacity.push_back(std::max(1, cap));
+		in.head_unit.push_back(cap > 1 ? unit : -1);
+		any_ace = any_ace || cap > 1;
+	}
+	if (!any_ace)
+		return;
+
+	const size_t n = cfg.filament_diameter.values.size();
+	for (size_t i = 0; i < n; ++i) {
+		AceMmu::RewriteFilament f;
+		f.colour   = i < cfg.filament_colour.values.size() ? cfg.filament_colour.values[i] : std::string();
+		f.type     = i < cfg.filament_type.values.size() ? cfg.filament_type.values[i] : std::string();
+		f.diameter = cfg.filament_diameter.values[i];
+		f.density  = i < cfg.filament_density.values.size() ? cfg.filament_density.values[i] : 1.24;
+		in.filaments.push_back(f);
+	}
+	if (cfg.flush_volumes_matrix.values.size() == n * n)
+		in.flush_matrix.assign(cfg.flush_volumes_matrix.values.begin(), cfg.flush_volumes_matrix.values.end());
+	in.flush_multiplier = float(cfg.flush_multiplier.value);
+
+	GUI::PartPlate* plate = this->get_current_plate();
+	const std::string sibling = plate->ace_gcode_path();
+	m_print->set_status(90, _utf8(L("Planning filament swaps for the ACE")));
+	try {
+		AceMmu::RewriteResult res = AceMmu::rewrite_file(m_temp_output_path, sibling, in,
+			[this]() { m_fff_print->throw_if_canceled(); });
+		if (res.rewritten) {
+			plate->set_ace_rewrite(res);
+			BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": %1% -> %2%: %3% swaps, %4% purge stamps, %5% standbys dropped")
+				% m_temp_output_path % sibling % res.swaps % res.stamped % res.dropped_standbys;
+		} else
+			BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": " << m_temp_output_path << " needs no rewrite";
+	} catch (const AceMmu::RewriteRefusal& e) {
+		boost::nowide::remove(sibling.c_str());
+		throw Slic3r::SlicingError(e.what());
+	} catch (...) {
+		// A cancel or an I/O failure part-way through must not leave half a file behind.
+		boost::nowide::remove(sibling.c_str());
+		throw;
+	}
+}
+
 // G-code is generated in m_temp_output_path.
 // Optionally run a post-processing script on a copy of m_temp_output_path.
 // Copy the final G-code to target location (possibly a SD card, if it is a removable media, then verify that the file was written without an error).
@@ -791,7 +861,8 @@ void BackgroundSlicingProcess::finalize_gcode()
 
 	// Perform the final post-processing of the export path by applying the print statistics over the file name.
 	std::string export_path = m_fff_print->print_statistics().finalize_output_path(m_export_path);
-	std::string output_path = m_temp_output_path;
+	// Route C: the file the machine runs - the rewritten sibling on an ACE plate.
+	std::string output_path = this->get_current_plate()->get_print_gcode_path();
 	// Both output_path and export_path ar in-out parameters.
 	// If post processed, output_path will differ from m_temp_output_path as run_post_process_scripts() will make a copy of the G-code to not
 	// collide with the G-code viewer memory mapping of the unprocessed G-code. G-code viewer maps unprocessed G-code, because m_gcode_result 
@@ -915,7 +986,8 @@ void BackgroundSlicingProcess::prepare_upload()
         } else {
 		    m_print->set_status(95, _utf8(L("Running post-processing scripts")));
 		    std::string error_message;
-		    if (copy_file(m_temp_output_path, source_path.string(), error_message) != SUCCESS)
+		    // Route C: the file the machine runs - the rewritten sibling on an ACE plate.
+		    if (copy_file(this->get_current_plate()->get_print_gcode_path(), source_path.string(), error_message) != SUCCESS)
 		    	throw Slic3r::RuntimeError(_utf8(L("Copying of the temporary G-code to the output G-code failed")));
             m_upload_job.upload_data.upload_path = m_fff_print->print_statistics().finalize_output_path(m_upload_job.upload_data.upload_path.string());
 		    // Orca: skip post-processing scripts for BBL printers as we have run them already in finalize_gcode()

@@ -15808,6 +15808,14 @@ void Plater::priv::on_process_completed(SlicingProcessCompletedEvent &evt)
             // generate bbox data
             PlateBBoxData* plate_bbox_data = &partplate_list.get_curr_plate()->cali_bboxes_data;
             *plate_bbox_data = generate_first_layer_bbox();
+
+            // Route C: what the ACE plan costs, before anyone presses Send. The rewriter put it
+            // on the plate; a plate that needed no rewrite says nothing.
+            if (const AceMmu::RewriteResult& ace = partplate_list.get_curr_plate()->ace_rewrite(); ace.rewritten) {
+                notification_manager->push_notification(
+                    NotificationType::CustomNotification, NotificationManager::NotificationLevel::ImportantNotificationLevel,
+                    format(_L("This plate needs %d filament swaps on the ACE, about %.0f g of purge."), ace.swaps, ace.purge_g));
+            }
         }
     }
 
@@ -21950,7 +21958,8 @@ void Plater::send_gcode_legacy(int plate_idx, Export3mfProgressFn proFn, bool us
         default_output_file = prepare_upload_filename_for_dialog(std::move(default_output_file));
 
         // get file path
-        auto file_path = get_partplate_list().get_curr_plate()->get_tmp_gcode_path();
+        // Route C: on an ACE plate this is the rewritten sibling, not the file the preview maps.
+        auto file_path = get_partplate_list().get_curr_plate()->get_print_gcode_path();
         upload_job.upload_data.source_path = file_path;
         upload_job.upload_data.upload_path = default_output_file;
 

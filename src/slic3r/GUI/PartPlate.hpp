@@ -23,6 +23,7 @@
 #include "3DBed.hpp"
 #include "MeshUtils.hpp"
 #include "libslic3r/ParameterUtils.hpp"
+#include "libslic3r/AceMmuRewrite.hpp"
 
 class GLUquadric;
 typedef class GLUquadric GLUquadricObject;
@@ -112,6 +113,12 @@ private:
     int m_print_index;
 
     std::string m_tmp_gcode_path;       //use a temp path to store the gcode
+    // Route C: what the rewriter made of the temp gcode for an ACE-fed printer, and nothing
+    // when the plate needed no rewrite. The file itself sits beside the temp gcode
+    // (ace_gcode_path()). Set by the background process straight after export; cleared right
+    // before the next export, so it can never outlive the file it was made from.
+    // docs/u1-webui/03-print-processing/09-route-c-plan.md §3.2
+    Slic3r::AceMmu::RewriteResult m_ace_rewrite;
     std::string m_temp_config_3mf_path; //use a temp path to store the config 3mf
     std::string m_gcode_path_from_3mf;  //use a path to store the gcode loaded from 3mf
 
@@ -459,6 +466,14 @@ public:
     GCodeProcessorResult* get_slice_result() { return m_gcode_result; }
 
     std::string           get_tmp_gcode_path();
+    // The gcode the MACHINE runs: the rewritten sibling when this plate has one, else the temp
+    // gcode. Every path that sends, exports or packages a plate's gcode asks this, never
+    // get_tmp_gcode_path() - the preview keeps mapping the logical file.
+    std::string           get_print_gcode_path();
+    std::string           ace_gcode_path();
+    void                  clear_ace_rewrite();
+    void                  set_ace_rewrite(const Slic3r::AceMmu::RewriteResult& r) { m_ace_rewrite = r; }
+    const Slic3r::AceMmu::RewriteResult& ace_rewrite() const { return m_ace_rewrite; }
     std::string           get_temp_config_3mf_path();
     //this API should only be used for command line usage
     void set_tmp_gcode_path(std::string new_path)

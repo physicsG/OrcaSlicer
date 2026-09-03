@@ -1374,7 +1374,11 @@ stopped, the three routes, the recommendation, the hook point, and the traps.
 pre-implementation check:** the hook and every consumer verified, the specification pinned to
 multiACE `v0.99.8b` rather than the checkout, the preflight's over-capacity behaviour read,
 two pre-existing defects on the path named, the planner and reconcile lifted onto the branch
-with their tests, and the order of work. Build from there.
+with their tests, and the order of work. **Steps 1-5 are built** (2026-09-03): the rewriter
+with 235 assertions behind it, the hook that writes a sibling gcode beside the plate's temp
+file, the four consumers that send it, the zip fix, `ace_plan` in the popup's reply, the
+identity guard and the cost notification. The app compiles; none of it has been watched in
+the running app or on the printer yet - the plan's §5 says what to look at first.
 
 The one-line state: **the popup understands multiACE and the machine cannot yet be told to
 use it.** The panel describes an ACE-fed printer; nothing carries a bay choice from the

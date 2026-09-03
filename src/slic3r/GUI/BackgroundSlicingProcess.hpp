@@ -287,6 +287,8 @@ private:
     // If the background processing stop was requested, throw CanceledException.
     void                throw_if_canceled() const { if (m_print->canceled()) throw CanceledException(); }
 	void				finalize_gcode();
+	// Route C: the ACE rewrite of the exported gcode, see the definition.
+	void rewrite_for_ace();
 	void				export_gcode();
     void                prepare_upload();
     // To be executed at the background thread.

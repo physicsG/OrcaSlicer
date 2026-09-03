@@ -27,7 +27,10 @@ rewriter itself, and §5 says in what order.
   is an ancestor of the other, and the rewriter differs by 600 lines between them in ways
   that matter (§2.3). Read the spec with `git show v0.99.8b:…`, never from the working tree.
 - **The planner, the reconcile and the identity guard are here now**, lifted unchanged from
-  `origin/feat/ace-mmu-slicing` with 1,091 lines of tests (§4).
+  `origin/feat/ace-mmu-slicing` with 1,091 lines of tests (§4.1). **The rewriter is built
+  and tested (§4.2), and the hook, the sibling, the zip fix, the page contract and the cost
+  notification are built and compile (§4.3).** None of §4.3 has been observed in the running
+  app yet; §5 says what to look at.
 - **Two pre-existing defects sit on route C's path** and are part of the work: the cached
   send zip (§2.5) and the disabled extruder check (§2.4).
 - **What was unread is read.** The preflight does *not* refuse an over-capacity plate on its
@@ -377,7 +380,26 @@ the same bytes as the stream version, and leaves nothing behind on a refusal.
 | the `; multiACE: head h must present …` comment and the plan header | not written | written | the bridge and the page read the header; the comment is route B's and reads well in a trace |
 | `ANTI_OOZE=` on swaps, `ACE_BG_SWAP`, `ACE_PICKUP_CLEAN` | written when enabled | not written | out of scope (§1) |
 
-### 4.3 The drift check, to build with the rewriter
+### 4.3 The hook, the sibling, the zip and the page contract - steps 2 to 4 of §5
+
+| where | what changed |
+|---|---|
+| `BackgroundSlicingProcess.cpp`, `process_fff` | `clear_ace_rewrite()` right before `export_gcode`, then `rewrite_for_ace()` on the non-BBL branch of the hook. The method fills a `RewriteInput` from `m_fff_print->config()` alone - `printer_model` for the U1 gate, `ace_mode`, `ace_head_unit`, `ace_head_capacity`, the four per-filament vectors, `flush_volumes_matrix`, `flush_multiplier` - and calls `rewrite_file(tmp, sibling, input, tick)` with `throw_if_canceled()` as the tick. A `RewriteRefusal` becomes a `SlicingError`; a cancel or an I/O failure removes the half-written sibling and rethrows. Status 90, between the export's 80 and the post-process's 95. |
+| `PartPlate` | `m_ace_rewrite` (the `RewriteResult`), `ace_gcode_path()` = `<tmp>.ace.gcode`, `get_print_gcode_path()` = the sibling when the result says `rewritten` and the file exists, else the temp gcode; `clear_ace_rewrite()` forgets the result and deletes the file. |
+| the four consumers | `Plater.cpp` `send_gcode_legacy` (the U1 send), `BackgroundSlicingProcess.cpp` `finalize_gcode` (Export G-code) and `prepare_upload` (print host), `PartPlate.cpp` `store_to_3mf` (Ctrl+G) - each now asks `get_print_gcode_path()`. |
+| `SSWCP.cpp`, the zip | `generate_zip_path` keys the zip to the source file's name as well as the display name, and `get_or_create_zip_json` writes a `<zip>.src` stamp (the source's size and mtime) beside it and reuses the zip only when the stamp still matches. Two plates with one display name, or one plate around a re-slice or a re-map, get their own bytes. |
+| `SSWCP.cpp`, `sw_GetFileFilamentMapping` | `ace_plan` in the page's shape, from the plate's `RewriteResult`; for a re-opened sliced 3MF, whose gcode is already the rewritten file, it is read back from the file's `; multiACE plan:` header with a head's run in bay order, the way the bridge does it. |
+| `SSWCP.cpp`, `sw_SendGCodes` | when the current plate has a plan, a batch carrying a `SET_PRINT_EXTRUDER_MAP` that moves a tool off its head is refused with a message, and logged. |
+
+Nothing changed in the page: `filePlan()` was written for exactly this key, and
+`grouping-commands.js` already writes the identity.
+
+**Step 5** is one notification in `Plater::priv::on_process_completed`, on the success
+branch: *"This plate needs N filament swaps on the ACE, about X g of purge."* at
+`ImportantNotificationLevel`, from the plate's result; a plate that needed no rewrite says
+nothing.
+
+### 4.4 The drift check, to build with the rewriter
 
 `docs/u1-webui/tools/ace_rewrite_diff.py`: extract `rewrite_head_mode_to_file` and
 `inject_auto_load_to_file` from `git show v0.99.8b:…` (an `ast` walk does it in ten lines),
@@ -385,7 +407,7 @@ run them over the same logical file with the same assignment, and diff against O
 sibling after normalising the deliberate differences (the table in §4.2). The known-different lines
 are a list in the script, so a new difference is a failure, not noise.
 
-### 4.4 The fixture that is still missing
+### 4.5 The fixture that is still missing
 
 There is no *logical* 7-filament U1 file on disk: the reference file is route B's output.
 `snapmaker-orca --allow-newer-file --slice 0 …` over `~/proj/models/Test_Cube_U1_multiACE.3mf`
@@ -406,21 +428,27 @@ Each step ends green on every existing suite plus its own.
    header match the planner on the same sequence; the preload sits before `画起始线`; a
    plan-less input is not touched; an over-capacity input throws; the one dangerous standby
    is dropped and no other is.
-2. **The hook and the sibling** — the gate at `:242`, `get_print_gcode_path()`, the four
-   consumers, delete-before / write-after. *Done when:* an ordinary plate's temp file and
-   every export are byte-identical to before; an ACE plate's send, export and Ctrl+G all
-   carry the sibling; a thrown refusal leaves the plate invalid with no sibling.
-3. **The zip** — delete on (re)write, mtime and size compared in `get_or_create_zip_json`.
-   *Done when:* two sends of the same plate around a re-slice upload different bytes — the
-   harness can show it: `sw_GetFileStream` twice, compare `checksum`.
-4. **`ace_plan` and the guard** — `sw_GetFileFilamentMapping`, `sw_SendGCodes`. *Done when:*
+2. **The hook and the sibling** — **built, §4.3; compiles; not yet observed in the app.**
+   The gate at `:242`, `get_print_gcode_path()`, the four consumers, delete-before /
+   write-after. *Done when:* an ordinary plate's temp file and every export are
+   byte-identical to before; an ACE plate's send, export and Ctrl+G all carry the sibling;
+   a thrown refusal leaves the plate invalid with no sibling. What to look at in the app:
+   slice `~/proj/models/Test_Cube_U1_multiACE.3mf` with the stock U1 preset's head 4 set to
+   *ACE - 4 slots* / *ACE 1*, then `ls <project backup>/Metadata/` for `.<pid>.<n>.gcode` and
+   its `.ace.gcode` sibling, the log line `rewrite_for_ace: … swaps`, and the notification;
+   Export G-code and `grep -c ACE_SWAP_HEAD`; set head 4 back to *Stock feeder*, re-slice,
+   and the sibling is gone.
+3. **The zip** — **built, §4.3; compiles.** Keyed to the source and stamped with its size
+   and mtime. *Done when:* two sends of the same plate around a re-slice upload different
+   bytes — the harness can show it: `sw_GetFileStream` twice, compare `checksum`.
+4. **`ace_plan` and the guard** — **built, §4.3; compiles.** *Done when:*
    `print-dialog-ace.js` passes against Orca's reply and not only the bridge's; a
    non-identity batch on an ACE plate is refused and logged.
-5. **The cost notification.**
+5. **The cost notification** — **built, §4.3; compiles.**
 6. **Hardware**, on `u1-hardware-test`'s ladder: read-only first (the popup over the
    sibling, verdicts against the real bays), then one send-and-cancel, then a short ACE
    print — the first time the ACE half of a send is observed at all.
-7. **The drift check and the fixture** (§4.3, §4.4), alongside step 1 and kept as a script.
+7. **The drift check and the fixture** (§4.4, §4.5), alongside step 1 and kept as a script.
 
 Later cuts, by value: re-map (§3.7); the per-unit pool constraint, which lifts the
 shared-unit refusal; Combined mode (R9); pins and "what is loaded".
