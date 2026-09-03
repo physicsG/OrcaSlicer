@@ -1369,6 +1369,13 @@ sets `hidden` on a `.bare` body with no `display` of its own.
 [03-print-processing/08-handover.md](03-print-processing/08-handover.md)** — where it
 stopped, the three routes, the recommendation, the hook point, and the traps.
 
+**Route C is chosen (2026-09-03) and
+[03-print-processing/09-route-c-plan.md](03-print-processing/09-route-c-plan.md) is the
+pre-implementation check:** the hook and every consumer verified, the specification pinned to
+multiACE `v0.99.8b` rather than the checkout, the preflight's over-capacity behaviour read,
+two pre-existing defects on the path named, the planner and reconcile lifted onto the branch
+with their tests, and the order of work. Build from there.
+
 The one-line state: **the popup understands multiACE and the machine cannot yet be told to
 use it.** The panel describes an ACE-fed printer; nothing carries a bay choice from the
 dialog to the print, because `SET_PRINT_EXTRUDER_MAP` names a toolhead and no runtime

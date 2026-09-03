@@ -199,7 +199,9 @@ and 95 ("Running post-processing scripts", `:790`). That gets the notification p
 ## 7. Open questions, in the order they will bite
 
 1. **What does the preflight do with more colours than places?** Orca's native path throws a
-  `SlicingError`; the preflight's behaviour is unread. Route C needs an answer.
+  `SlicingError`; the preflight's behaviour is unread. Route C needs an answer. **Read, 09 §2.4:**
+  it refuses on `optimize`/`layer`, and on `loadout` its UI refuses while its rewriter passes
+  the unplaceable tool through as a bare `T<n>`.
 2. **`multi` and `normal` modes have never been exercised in the page** — the simulator
   reports `head`. Only the mockups draw them.
 3. **Colour is not compared** in the match rule, by design (type + nozzle is the bundle's).
@@ -212,6 +214,10 @@ and 95 ("Running post-processing scripts", `:790`). That gets the notification p
 ---
 
 ## 8. How to pick it up
+
+**Route C was chosen and made ready on 2026-09-03:** [09-route-c-plan.md](09-route-c-plan.md)
+holds the verified design, what was lifted onto the branch, and the order of work. Start
+there; this section is the harness.
 
 ```bash
 git checkout feat/u1-print-multiace

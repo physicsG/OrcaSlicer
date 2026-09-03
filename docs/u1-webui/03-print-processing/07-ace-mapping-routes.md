@@ -115,6 +115,10 @@ tool numbers are physical the printer's print-time remap becomes actively danger
 
 ## 4. The three routes
 
+> **Labels.** [08-handover.md](08-handover.md) §3 and [09-route-c-plan.md](09-route-c-plan.md)
+> number the routes differently: there **C** is *rewrite in Orca after slicing*, and "Today"
+> is not a route. When someone says "route C", they mean the handover's.
+
 ### A. Send through the preflight
 
 Orca uploads the **unmodified** gcode to `POST /multiace/api/preflight/print`, optionally
