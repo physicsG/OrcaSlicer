@@ -1380,6 +1380,15 @@ file, the four consumers that send it, the zip fix, `ace_plan` in the popup's re
 identity guard and the cost notification. The app compiles; none of it has been watched in
 the running app or on the printer yet - the plan's §5 says what to look at first.
 
+**And the first real ACE plate found the next decision** (2026-09-03): the rewriter fires, but
+it chooses which filament rides the ACE by print frequency and always names bay A1, reading
+neither the machine nor Orca's own assignment. On a four-colour plate it moved every filament
+to a different toolhead and then named a bay holding another colour, so the panel refused the
+send - correctly. Keeping Orca's assignment fixes the shuffle and not the refusal; the bay
+choice is the one that decides whether a plate can print.
+[03-print-processing/10-plan-choice.md](03-print-processing/10-plan-choice.md) is the analysis
+and the options. Nothing is changed yet.
+
 The one-line state: **the popup understands multiACE and the machine cannot yet be told to
 use it.** The panel describes an ACE-fed printer; nothing carries a bay choice from the
 dialog to the print, because `SET_PRINT_EXTRUDER_MAP` names a toolhead and no runtime

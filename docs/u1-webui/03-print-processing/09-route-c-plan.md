@@ -478,6 +478,13 @@ shared-unit refusal; Combined mode (R9); pins and "what is loaded".
 
 ## 6. Still open
 
+0. **Which plan to emit, when several cost the same.** The first real ACE plate through this
+   pipeline was rearranged across all four toolheads for no gain, and then refused at Send
+   because the bay it named held another colour. Both choices — which filament rides the ACE,
+   and which bay presents it — are taken without reading the machine, and preferring Orca's own
+   assignment fixes the first and not the second. The measurement and the options are
+   [10-plan-choice.md](10-plan-choice.md). **Decide this before building anything else here.**
+
 1. **`FORCE=1`** on the pre-extrude macro: what the stock firmware does with it.
    `printer.gcode.help` does not show arguments; read the macro on the machine or send one
    line.
