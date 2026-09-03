@@ -26,7 +26,7 @@ import { installMock } from './core/mock.js';
 import { buildShell } from './core/shell.js';
 import { readJob, subscribeState, fileFilaments, machineToolheads,
          nozzleMismatch, initialAssignment, matchOf,
-         filePlan, refreshAce, syncBays, reconcile } from './core/session.js';
+         filePlan, refreshAce, syncBays, reconcile, bayFix } from './core/session.js';
 import { runSend, close as closeDialog, SEND_STATE, BUSY } from './core/send.js';
 import { closePicker } from './widgets/picker.js';
 import { makeTrace } from '../../shared/js/trace.js';
@@ -96,6 +96,29 @@ const ctx = {
     render();
     bringUpMachine().then(bringUpAce);
   },
+  /**
+   * Take the bays the machine actually has, without slicing anything again.
+   *
+   * The host re-runs the rewriter over the same logical gcode with the chosen bays, which
+   * changes one argument on each swap line and nothing else, and answers with the new plan.
+   * A refusal comes back as a sentence and is shown rather than swallowed.
+   */
+  fixBays() {
+    const slots = model.bayFix;
+    if (!slots || model.busy) return;
+    model.busy = true;
+    render();
+    groupCmds.setAceBays(bridge, slots)
+      .then((reply) => {
+        const plan = reply && (reply.ace_plan || (reply.data && reply.data.ace_plan));
+        if (plan) model.mapping = { ...model.mapping, ace_plan: plan };
+        recomputeFile();
+        say('The bays were re-addressed. Nothing was re-sliced.', 'ok');
+      })
+      .catch((e) => say(`could not re-address the bays: ${e.message}`, 'err'))
+      .finally(() => { model.busy = false; render(); });
+  },
+
   addDevice() {
     printerCmds.addDevice(bridge).catch((e) => say(`add device: ${e.message}`, 'err'));
   },
@@ -207,6 +230,11 @@ function recomputeMachine() {
                 units: (raw.units || []).map(
                   (u) => ({ ...u, bays: mergeAceBays(u, model.aceBays) })) };
   model.check = reconcile(model.plan, model.ace, model.filaments);
+  /* The free fix, when there is one: every spool the plate wants is in the machine and
+     merely in another bay. Computed here rather than in the view, beside the verdict it
+     answers. */
+  model.bayFix = model.check.differs > 0
+    ? bayFix(model.plan, model.ace, model.filaments) : null;
   model.nozzleMismatch = WITH_PRINT_SETUP && nozzleMismatch(
     model.filaments.map((f) => f.nozzle),
     model.toolheads.map((h) => h.nozzleDiameter));

@@ -80,3 +80,8 @@ broker evicts the older holder.
   as-sliced layout refused with two bays marked, the address-only fix clearing every
   verdict without changing the swap count, the re-plan naming the two spools it wants
   moved, and the unaware state marking three filaments as having no toolhead.
+
+- **`print-dialog-bayfix.js`** — the free re-addressing, end to end against
+  `?plan=bayswap`: two bays refused, the offer made only because it would clear every
+  one of them, and after a click a clean verdict, an open Send and **the same swap
+  count** — which is the evidence that addressing is not a cost.

@@ -84,6 +84,17 @@
     const feedmark = document.querySelectorAll('.g-feedmark').length;
     check('feeder heads carry the feeder mark, not an ACE', feedmark >= 1,
           `${feedmark} feeder marks`);
+    /* Route C's free fix, and the rule that keeps it honest: re-addressing the bays helps
+       only when every spool the plate wants is already in the unit, merely in another bay.
+       On a plate wanting seven colours from a unit holding three, no permutation exists
+       and the offer must stay away - a button that clears half the marks leaves the plate
+       just as unprintable and the operator with less idea why. */
+    const fixNode = document.querySelector('.g-fix');
+    const offered = !!fixNode && !fixNode.hidden;
+    check('the free fix is offered exactly when it would clear every bay',
+          offered === !!m.bayFix, `offered=${offered}, possible=${!!m.bayFix}, `
+          + `differs=${m.check.differs}`);
+
     const send = document.querySelector('.send');
     const expect = m.check.differs > 0;
     check('Send matches the bay verdict', !!send && send.disabled === expect,

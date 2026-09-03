@@ -53,11 +53,12 @@ export function mount(root) {
   root.appendChild(el('div', 'g-mode'));
   root.appendChild(el('div', 'g-band'));
   root.appendChild(el('div', 'g-heads'));
+  root.appendChild(el('div', 'g-fix'));
   root.appendChild(el('div', 'g-note'));
   root.appendChild(el('div', 'g-cost'));
 }
 
-export function update(root, model) {
+export function update(root, model, ctx) {
   const { plan, ace, check, filaments } = model;
   if (!plan) return;                       // hidden by app.js; nothing to draw
 
@@ -75,6 +76,7 @@ export function update(root, model) {
   root.classList.toggle('band-below', mode === 'normal');
 
   paintHeads(root.querySelector('.g-heads'), plan, ace, check, filaments, mode);
+  paintFix(root.querySelector('.g-fix'), model, ctx);
   paintNote(root.querySelector('.g-note'), plan, check);
   paintCost(root.querySelector('.g-cost'), plan);
 }
@@ -284,6 +286,32 @@ function paintVerdict(node, h, rows) {
   if (rows.every((r) => r.verdict === 'unchecked')) { text(node, ''); return; }
   node.classList.add('ok');
   text(node, rows.length > 1 ? `All ${rows.length} bays hold the plan.` : rows[0].say);
+}
+
+/**
+ * The one thing this panel can fix without anybody walking anywhere.
+ *
+ * A bay that holds another spool is normally an errand: go to the machine, move it. But
+ * when every spool the plate wants IS in the machine and merely in another bay, nothing has
+ * to move at all - the addresses were chosen at slicing time, before anyone could see the
+ * ACE, and re-addressing them is one argument on each swap line. `bayFix` says whether that
+ * is the case; the host does it and answers with the new plan.
+ *
+ * Offered only when it would clear EVERY bay. A button that fixes half of them leaves the
+ * plate just as unprintable and the operator with less idea why.
+ */
+function paintFix(node, model, ctx) {
+  node.textContent = '';
+  node.hidden = !model.bayFix;
+  if (!model.bayFix) return;
+  node.appendChild(el('span', 'g-fixsay',
+    'Every spool this plate wants is in the ACE, in other bays.'));
+  const btn = el('button', 'g-fixbtn', 'Use the bays they are in');
+  btn.type = 'button';
+  btn.disabled = !!model.busy;
+  btn.title = 'Re-addresses the bays. Nothing is re-sliced.';
+  if (ctx && ctx.fixBays) btn.addEventListener('click', () => ctx.fixBays());
+  node.appendChild(btn);
 }
 
 /* ---- the limit, and the cost ------------------------------------------- */

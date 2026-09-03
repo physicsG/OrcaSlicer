@@ -133,6 +133,9 @@ export const CMD = {
   // byte. A 12 MB zip crosses as ~40 MB of JSON.
   GET_PRINT_ZIP: 'sw_GetPrintZip',                 // -> { name, content: number[] }
   GET_FILE_FILAMENT_MAPPING: 'sw_GetFileFilamentMapping',   // { filename }
+  // Route C: re-address the ACE bays of the current plate's plan. { slots: {fil: bay} },
+  // both 0-based. No re-slice - a bay is one argument on each swap line.
+  SET_ACE_BAYS: 'sw_SetAceBays',
   UPDATE_MACHINE_FILAMENT_INFO: 'sw_UpdateMachineFilamentInfo',
   SET_FILAMENT_MAPPING_COMPLETE: 'sw_SetFilamentMappingComplete', // { status }
   FINISH_FILAMENT_MAPPING: 'sw_FinishFilamentMapping',

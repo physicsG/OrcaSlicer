@@ -494,3 +494,122 @@ TEST_CASE("rewrite_file writes the sibling only when there is something to write
     boost::system::error_code ec;
     fs::remove_all(dir, ec);
 }
+
+TEST_CASE("a plate that fits one filament per toolhead is never rearranged", "[ace_mmu_rewrite]")
+{
+    // The plate that found this: four filaments, three feeders and a four-bay ACE on the
+    // last head. Every arrangement costs zero swaps, so the optimiser took an arbitrary one
+    // and moved all four. Orca's own assignment ties, so it wins.
+    RewriteInput in = u1_topology(4);
+    std::string  g  = start_gcode(0);
+    int          prev = 0;
+    const int    seq[] = {1, 2, 3, 0, 3, 1, 2, 0, 3, 2, 1, 0};
+    int          layer = 0;
+    for (int t : seq) { g += change(prev, t, layer++); prev = t; }
+    g += end_gcode();
+
+    std::istringstream is(g);
+    std::ostringstream os;
+    RewriteResult      r = rewrite_gcode(is, os, in);
+    REQUIRE(r.rewritten);                       // head 4 is ACE-fed, so it needs its preload
+    CHECK(r.plan.head_of == std::vector<int>{0, 1, 2, 3});
+    CHECK(r.plan.swaps == 0);
+    CHECK(r.swaps == 0);
+    CHECK(r.preload_slot == std::vector<int>{-1, -1, -1, 0});
+    // and the file still selects the same physical heads it always did
+    const auto out = lines_of(os.str());
+    CHECK(count_prefix(out, "T3") == count_prefix(lines_of(g), "T3"));
+    CHECK(index_of(out, "; multiACE plan: T0:H0S0 T1:H1S0 T2:H2S0 T3:H3S0 swaps:0 optimal:1") >= 0);
+}
+
+TEST_CASE("the optimiser still wins when it is actually cheaper", "[ace_mmu_rewrite]")
+{
+    // Five filaments on four heads: one pair has to share the ACE, and which pair matters.
+    // The identity cannot even place the fifth, so there is nothing to tie with.
+    RewriteInput in = u1_topology(5);
+    std::string  g  = start_gcode(0);
+    int          prev = 0;
+    const int    seq[] = {1, 0, 1, 0, 1, 0, 2, 3, 4, 2, 3, 4, 1, 0};
+    int          layer = 0;
+    for (int t : seq) { g += change(prev, t, layer++); prev = t; }
+    g += end_gcode();
+    std::istringstream is(g);
+    std::ostringstream os;
+    RewriteResult      r = rewrite_gcode(is, os, in);
+    REQUIRE(r.plan.feasible);
+    CHECK(r.plan.head_of[4] >= 0);              // the fifth got a place
+    // the busy alternating pair is not the one parked behind the changer
+    CHECK(r.plan.head_of[0] != r.plan.head_of[1]);
+}
+
+TEST_CASE("a chosen bay is honoured and the displaced filament moves", "[ace_mmu_rewrite]")
+{
+    RewriteInput in  = u1_topology(2);
+    in.head_override = {3, 3};                  // both on the ACE head
+    in.flush_matrix  = {0.f, 100.f, 120.f, 0.f};
+    std::string g    = start_gcode(1) + change(1, 0, 0) + change(0, 1, 1) + end_gcode();
+
+    // Unchosen, the planner puts filament 1 in bay 1 (first use) and filament 0 in bay 2.
+    {
+        std::istringstream is(g);
+        std::ostringstream os;
+        RewriteResult      r = rewrite_gcode(is, os, in);
+        CHECK(r.plan.slot_of == std::vector<int>{1, 0});
+    }
+
+    // Ask for filament 1 in bay 3. Nothing was in bay 3, so nothing has to move: a
+    // filament is displaced only when the bay it sits in is the one being claimed.
+    {
+        RewriteInput free_bay = in;
+        free_bay.slot_override = { -1, 2 };
+        std::istringstream is(g);
+        std::ostringstream os;
+        RewriteResult      r = rewrite_gcode(is, os, free_bay);
+        REQUIRE(r.rewritten);
+        CHECK(r.plan.slot_of == std::vector<int>{1, 2});
+        // Addressing is not a cost: the head presents a different bay just as often.
+        CHECK(r.swaps == 2);
+        const auto out = lines_of(os.str());
+        CHECK(index_of(out, "ACE_SWAP_HEAD HEAD=3 ACE=0 SLOT=2 INITIAL=1") >= 0);
+        CHECK(index_of(out, "ACE_SWAP_HEAD HEAD=3 ACE=0 SLOT=1") >= 0);
+        CHECK(r.header_line == "; multiACE plan: T0:H3S1 T1:H3S2 swaps:2 optimal:0");
+    }
+
+    // Now claim the bay filament 0 is sitting in. It has to go somewhere, and the lowest
+    // free bay of the same head is where.
+    {
+        RewriteInput taken = in;
+        taken.slot_override = { -1, 1 };
+        std::istringstream is(g);
+        std::ostringstream os;
+        RewriteResult      r = rewrite_gcode(is, os, taken);
+        REQUIRE(r.rewritten);
+        CHECK(r.plan.slot_of[1] == 1);
+        CHECK(r.plan.slot_of[0] == 0);
+        CHECK(r.swaps == 2);
+    }
+}
+
+TEST_CASE("a bay that cannot be honoured is refused, never quietly dropped", "[ace_mmu_rewrite]")
+{
+    RewriteInput base = u1_topology(2);
+    base.head_override = {3, 3};
+    const std::string g = start_gcode(1) + change(1, 0, 0) + change(0, 1, 1) + end_gcode();
+    auto run = [&](RewriteInput in) {
+        std::istringstream is(g);
+        std::ostringstream os;
+        return rewrite_gcode(is, os, in);
+    };
+
+    RewriteInput both = base; both.slot_override = {1, 1};
+    REQUIRE_THROWS_WITH(run(both), Catch::Contains("both put in the same bay"));
+
+    RewriteInput far = base; far.slot_override = {-1, 7};
+    REQUIRE_THROWS_WITH(run(far), Catch::Contains("has 4 bays"));
+
+    RewriteInput onFeeder = base; onFeeder.head_override = {0, 3}; onFeeder.slot_override = {2, -1};
+    REQUIRE_THROWS_WITH(run(onFeeder), Catch::Contains("stock feeder"));
+
+    RewriteInput wrongSize = base; wrongSize.slot_override = {0};
+    REQUIRE_THROWS_WITH(run(wrongSize), Catch::Contains("name 1 filaments"));
+}

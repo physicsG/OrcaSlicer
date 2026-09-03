@@ -2126,6 +2126,8 @@ void SSWCP_MachineOption_Instance::process()
         sw_SetFilamentMappingComplete();
     } else if (m_cmd == "sw_GetFileFilamentMapping") {
         sw_GetFileFilamentMapping();
+    } else if (m_cmd == "sw_SetAceBays") {
+        sw_SetAceBays();
     } else if (m_cmd == "sw_FinishFilamentMapping") {
         sw_FinishFilamentMapping();
     } else if(m_cmd == "sw_DownloadMachineFile"){
@@ -3191,6 +3193,74 @@ static bool ace_plan_for_current_plate(json& out)
     out["purge_g"] = purge_g;
     out["heads"]   = heads_json;
     return true;
+}
+
+/*
+ * Route C: choose which bay feeds a filament, without slicing anything again.
+ *
+ * The two halves of an ACE plan cost very different amounts and this is the cheap one. A
+ * filament's TOOLHEAD is the tool number in the gcode, so moving it means writing the file
+ * again; its BAY is one argument on each `ACE_SWAP_HEAD`, so changing it is the rewriter
+ * run a second time over the same logical gcode. Nothing is re-sliced and no geometry is
+ * touched - which is why the dialog can offer it while it is open.
+ *
+ * It exists because the plan is chosen at slicing time, when the machine's bays are not
+ * known, and the popup is the first moment they are. The account is
+ * docs/u1-webui/03-print-processing/10-plan-choice.md.
+ *
+ *   { "slots": { "<filament index>": <bay index>, ... } }   both 0-based, the wire's own
+ *
+ * A bay that cannot be honoured is refused with a sentence, never quietly dropped: silently
+ * ignoring a placement is how a plate prints in the wrong colour.
+ */
+void SSWCP_MachineOption_Instance::sw_SetAceBays()
+{
+    auto* plate = wxGetApp().plater()->get_partplate_list().get_curr_plate();
+    if (!plate || !plate->ace_rewrite().rewritten) {
+        handle_general_fail(-1, _L("This plate was not planned for an ACE."));
+        return;
+    }
+
+    AceMmu::RewriteInput in = plate->ace_input();
+    in.slot_override.assign(in.filaments.size(), -1);
+    if (m_param_data.count("slots") && m_param_data["slots"].is_object()) {
+        for (auto it = m_param_data["slots"].begin(); it != m_param_data["slots"].end(); ++it) {
+            int f = -1;
+            try { f = std::stoi(it.key()); } catch (...) { continue; }
+            if (f < 0 || f >= int(in.slot_override.size()) || !it.value().is_number_integer())
+                continue;
+            in.slot_override[f] = it.value().get<int>();
+        }
+    }
+
+    const std::string logical = plate->get_tmp_gcode_path();
+    const std::string sibling = plate->ace_gcode_path();
+    try {
+        AceMmu::RewriteResult res = AceMmu::rewrite_file(logical, sibling, in);
+        if (!res.rewritten) {
+            handle_general_fail(-1, _L("Nothing about this plate needs the ACE."));
+            return;
+        }
+        plate->set_ace_rewrite(in, res);
+        BOOST_LOG_TRIVIAL(info) << "sw_SetAceBays: re-addressed the bays, " << res.swaps
+                                << " swaps, " << res.stamped << " purge stamps";
+        /* The zip beside the gcode was made from the previous bytes. It is keyed to its
+           source and stamped, so it will not be reused - but removing it now means the
+           next send does not pay to notice. */
+        boost::system::error_code ec;
+        fs::remove(generate_zip_path(SSWCP::get_active_filename(), SSWCP::get_display_filename()), ec);
+        json ace_plan;
+        if (ace_plan_for_current_plate(ace_plan))
+            m_res_data["ace_plan"] = ace_plan;
+    } catch (const AceMmu::RewriteRefusal& e) {
+        handle_general_fail(-1, wxString::FromUTF8(e.what()));
+        return;
+    } catch (const std::exception& e) {
+        handle_general_fail(-1, wxString::FromUTF8(e.what()));
+        return;
+    }
+    send_to_js();
+    finish_job();
 }
 
 void SSWCP_MachineOption_Instance::sw_GetFileFilamentMapping()

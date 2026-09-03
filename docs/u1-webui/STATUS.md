@@ -1387,7 +1387,16 @@ to a different toolhead and then named a bay holding another colour, so the pane
 send - correctly. Keeping Orca's assignment fixes the shuffle and not the refusal; the bay
 choice is the one that decides whether a plate can print.
 [03-print-processing/10-plan-choice.md](03-print-processing/10-plan-choice.md) is the analysis
-and the options. Nothing is changed yet.
+and the options.
+
+**Both recommendations are now built** (2026-09-03). Orca's own filament assignment wins a
+tie, so a plate that fits one filament per toolhead is never rearranged. And the bay is no
+longer fixed at slicing time: `sw_SetAceBays` re-runs the rewriter over the same logical
+gcode, which changes one argument on each swap line and nothing else, so the popup can offer
+*Use the bays they are in* and clear a refusal without re-slicing. It is offered only when
+re-addressing would clear **every** bay — verified true on the simulator and false on the
+real machine, whose unit cannot serve a seven-colour plate however its bays are addressed.
+Read-only against the U1: 15/15 on each of two plan-less plates and 17/17 on the ACE one.
 
 The one-line state: **the popup understands multiACE and the machine cannot yet be told to
 use it.** The panel describes an ACE-fed printer; nothing carries a bay choice from the

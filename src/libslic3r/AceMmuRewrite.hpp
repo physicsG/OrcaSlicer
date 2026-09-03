@@ -53,6 +53,13 @@ struct RewriteInput
     float              flush_multiplier = 1.f;
     // Optional: a layout to price instead of planning one (filament -> head, -1 = unused).
     std::vector<int> head_override;
+    // Optional: per filament, the bay it must be drawn from (-1 = the planner's choice).
+    // This is the cheap half of a re-map: a bay is one argument on each `ACE_SWAP_HEAD`,
+    // so honouring it needs no re-planning and changes no swap count. Only meaningful on
+    // an ACE-fed head; naming a bay for a filament on a stock feeder is refused rather
+    // than ignored, because silently dropping a placement is how a plate prints in the
+    // wrong colour. docs/u1-webui/03-print-processing/10-plan-choice.md
+    std::vector<int> slot_override;
     std::int64_t     work_budget = 64ll * 1000 * 1000;
 };
 

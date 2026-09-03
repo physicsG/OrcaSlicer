@@ -398,6 +398,51 @@ export async function syncBays(device, mock) {
   }
 }
 
+/**
+ * The bay assignment that would make every bay agree, or null when there is none.
+ *
+ * This is the cheap half of a re-map and the reason the panel can offer a fix at all: a
+ * filament's toolhead is the tool number in the gcode and moving it re-writes the file,
+ * but which bay feeds it is one argument on each `ACE_SWAP_HEAD`. So when the spools the
+ * plate wants are all present and merely in the wrong bays, nothing has to be sliced,
+ * carried or re-planned - the addresses were simply chosen before anyone could see the
+ * machine.
+ *
+ * Greedy, per head, in the order the head prints: each step takes an unused bay of its own
+ * unit that AGREES with it. Greedy is enough because a bay either holds what the step wants
+ * or it does not - there is no cost to trade off and no reason to prefer one agreeing bay
+ * over another. Anything short of every step placed returns null: a partial fix would clear
+ * some marks and leave the plate just as unprintable.
+ *
+ * Returns `{ [filament]: slot }` only when it differs from what the plan already says.
+ */
+export function bayFix(plan, ace, filaments) {
+  if (!plan || !ace || !ace.present) return null;
+  const units = ace.units || [];
+  const unitOf = (i) => units.find((u) => u.index === i) || null;
+  const out = {};
+  let changed = false;
+
+  for (const h of plan.heads) {
+    if (h.feeder || !h.run.length) continue;
+    const used = new Set();
+    for (const step of h.run) {
+      const ui = step.unit != null ? step.unit : h.unit;
+      const u = unitOf(ui);
+      if (!u) return null;                     // the plan names a unit the machine has not got
+      const want = filaments[step.filament];
+      const bay = (u.bays || []).find(
+        (b, i) => !used.has(i) && judgeBay(b, want).verdict === 'agrees');
+      if (!bay) return null;                   // nothing loaded can serve this step
+      const slot = u.bays.indexOf(bay);
+      used.add(slot);
+      out[step.filament] = slot;
+      if (slot !== step.slot) changed = true;
+    }
+  }
+  return changed ? out : null;
+}
+
 /** rfid and override are ASSERTED. derived is inferred, and is not evidence of a colour. */
 const TRUSTED = new Set(['rfid', 'override']);
 

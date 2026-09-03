@@ -837,7 +837,7 @@ void BackgroundSlicingProcess::rewrite_for_ace()
 		AceMmu::RewriteResult res = AceMmu::rewrite_file(m_temp_output_path, sibling, in,
 			[this]() { m_fff_print->throw_if_canceled(); });
 		if (res.rewritten) {
-			plate->set_ace_rewrite(res);
+			plate->set_ace_rewrite(in, res);
 			BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": %1% -> %2%: %3% swaps, %4% purge stamps, %5% standbys dropped")
 				% m_temp_output_path % sibling % res.swaps % res.stamped % res.dropped_standbys;
 		} else

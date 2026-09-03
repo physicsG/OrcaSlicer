@@ -185,6 +185,44 @@ right before the dialog opens — not as the mechanism the feature depends on.
 
 ---
 
+## 8a. Decided and built, 2026-09-03
+
+**A and B, as recommended.** Both are in, both are tested, and one of them was tested on
+the machine that raised the question.
+
+**A — Orca's own assignment wins a tie.** `plan_for` prices the identity with
+`evaluate_assignment`, takes the optimiser's answer, and keeps the identity whenever the
+two cost the same. It could not be done inside the search, for the reason in §4: the greedy
+seed sets the bound and the first plan reaching it wins, so there is never a set of tied
+optima to choose from. The invariant is *a plate that fits one filament per toolhead is
+never rearranged*, and it is a test.
+
+**B — the bay is chosen late, and it is free.** Three pieces:
+
+| | |
+|---|---|
+| `RewriteInput::slot_override` | per filament, the bay it must come from. Honoured after the plan is priced, so `swaps` is untouched — addressing is not a cost. A named bay wins; a filament that was sitting in it and was not itself named moves to the lowest free bay of the same head. Two filaments named onto one bay is refused, not resolved. |
+| `sw_SetAceBays` | the host command. Re-runs the rewriter over the same logical gcode and answers with the new `ace_plan`. No re-slice, no geometry. A bay it cannot honour comes back as a sentence. |
+| `bayFix` + the panel's offer | the page computes whether re-addressing would clear **every** bay, and only then offers *Use the bays they are in*. A fix that clears half of them leaves the plate just as unprintable. |
+
+### What the machine said
+
+Driven read-only against the U1 (`811002511261022618B3`) with three plates:
+
+| plate | result |
+|---|---|
+| `Test_Cube_PLA_4h15m.gcode` (no plan) | 15/15 — the four-card panel, toolhead 3 reporting `NONE` and refused by the picker |
+| `ChickenPark-multicolor_PLA_2h3m.gcode` (no plan) | 15/15 — the same |
+| `Test_Cube_PLA_4h15m_multiACE.gcode` (a plan) | 17/17 — the grouping panel, four bays judged `differs`, Send refused |
+
+**And the offer correctly stayed away on all three.** The unit holds three named PLA spools
+and one empty bay against a plate wanting seven colours, so no permutation exists and
+`bayFix` returns null. That is the honest limit of the cheap fix and it is now a check that
+runs in both directions: offered exactly when it would clear every bay, verified true on the
+simulator's `?plan=bayswap` and false on the machine.
+
+---
+
 ## 9. What this does not settle
 
 - **Whether the head choice should be loadout-aware too.** It probably should, once B has

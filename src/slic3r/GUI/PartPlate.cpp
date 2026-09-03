@@ -2925,6 +2925,7 @@ std::string PartPlate::get_print_gcode_path()
 void PartPlate::clear_ace_rewrite()
 {
     m_ace_rewrite = Slic3r::AceMmu::RewriteResult();
+    m_ace_input   = Slic3r::AceMmu::RewriteInput();
     if (m_tmp_gcode_path.empty())
         return;
     boost::system::error_code ec;

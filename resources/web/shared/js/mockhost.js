@@ -510,6 +510,57 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
         }
 
         /*
+         * Route C: re-address the bays of the plan the FILE carries, without slicing.
+         *
+         * In Orca this re-runs the gcode rewriter over the same logical file, because a
+         * bay is one argument on each `ACE_SWAP_HEAD` and nothing else depends on it. Here
+         * there is no gcode, so the simulator does what the rewriter would end up having
+         * done: moves the filament to the bay it was given, and moves whatever was sitting
+         * there to the lowest free bay of the same head. The swap count is untouched,
+         * which is the whole point - addressing is not a cost.
+         *
+         * It refuses the same things the host refuses, because a mock that accepts what
+         * the real one rejects is a mock that hides the refusal until hardware.
+         */
+        case 'sw_SetAceBays': {
+          const plan = printer.job.acePlan;
+          if (!plan) return fail('This plate was not planned for an ACE.');
+          const want = (params && params.slots) || {};
+          const next = JSON.parse(JSON.stringify(plan));
+
+          for (const h of next.heads) {
+            if (h.feeder || !h.run.length) continue;
+            const cap = 4;
+            const named = new Map();
+            for (const step of h.run) {
+              const v = want[step.filament];
+              if (v == null) continue;
+              if (!(v >= 0 && v < cap)) return fail(`Bay ${v + 1} is not on this ACE.`);
+              if (named.has(v)) return fail('Two filaments were put in the same bay.');
+              named.set(v, step.filament);
+            }
+            const taken = new Set(named.keys());
+            const displaced = [];
+            for (const step of h.run) {
+              if (want[step.filament] != null) continue;
+              if (taken.has(step.slot)) displaced.push(step); else taken.add(step.slot);
+            }
+            for (const step of h.run)
+              if (want[step.filament] != null) step.slot = want[step.filament];
+            for (const step of displaced) {
+              let slot = 0;
+              while (slot < cap && taken.has(slot)) slot++;
+              if (slot >= cap) return fail('The chosen bays leave no room.');
+              step.slot = slot;
+              taken.add(slot);
+            }
+          }
+          printer.job.acePlan = next;
+          log('mock-note', { setAceBays: Object.keys(want).length });
+          return ok({ ace_plan: next });
+        }
+
+        /*
          * The reply shape is SSWCP.cpp:3039's, verbatim: PARALLEL ARRAYS, plus the
          * rendered plate. Not `{filaments: [...]}` - see printer.job.
          */
@@ -668,7 +719,19 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
      * plate has to be satisfiable by the SAME simulator the four-filament one runs on, or
      * a check of the match is a check of two fixtures agreeing with each other.
      */
-    usePlan: (opts) => { Object.assign(printer.job, mockAceJobFields(opts)); },
+    usePlan: (opts) => {
+      Object.assign(printer.job, mockAceJobFields(opts));
+      /* `bayswap`: the same four spools, two of them in each other's bay. Nothing is
+         missing, so the plate is printable the moment the addresses are re-chosen -
+         which is the one state the free fix exists for, and the state a plan chosen
+         before anyone could see the machine lands in most often. */
+      if (opts && opts.bayswap) {
+        const o = printer.aceOverrides;
+        const a = { ...o['0_1'] }, b = { ...o['0_2'] };
+        o['0_1'] = { ...b, slot: 1 };
+        o['0_2'] = { ...a, slot: 2 };
+      }
+    },
     // Klipper's console, in Moonraker's own `server.gcode_store` shape. Same seam and the
     // same reason: it is an HTTP GET against the printer, and a refused mode switch says
     // so here and nowhere else.

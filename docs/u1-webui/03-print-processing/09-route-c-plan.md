@@ -478,7 +478,11 @@ shared-unit refusal; Combined mode (R9); pins and "what is loaded".
 
 ## 6. Still open
 
-0. **Which plan to emit, when several cost the same.** The first real ACE plate through this
+0. ~~**Which plan to emit, when several cost the same.**~~ **Settled and built 2026-09-03**
+   — Orca's assignment wins a tie, and the bay can be re-chosen from the dialog for nothing.
+   [10-plan-choice.md](10-plan-choice.md) §8a. The original question follows.
+
+   **Which plan to emit, when several cost the same.** The first real ACE plate through this
    pipeline was rearranged across all four toolheads for no gain, and then refused at Send
    because the bay it named held another colour. Both choices — which filament rides the ACE,
    and which bay presents it — are taken without reading the machine, and preferring Orca's own

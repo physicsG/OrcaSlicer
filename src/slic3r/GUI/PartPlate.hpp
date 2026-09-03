@@ -119,6 +119,9 @@ private:
     // before the next export, so it can never outlive the file it was made from.
     // docs/u1-webui/03-print-processing/09-route-c-plan.md §3.2
     Slic3r::AceMmu::RewriteResult m_ace_rewrite;
+    // What it was made FROM, kept so a bay can be re-chosen without a Print: re-running the
+    // rewriter is the cheap half of a re-map, and the dialog is open long after slicing.
+    Slic3r::AceMmu::RewriteInput  m_ace_input;
     std::string m_temp_config_3mf_path; //use a temp path to store the config 3mf
     std::string m_gcode_path_from_3mf;  //use a path to store the gcode loaded from 3mf
 
@@ -472,8 +475,11 @@ public:
     std::string           get_print_gcode_path();
     std::string           ace_gcode_path();
     void                  clear_ace_rewrite();
-    void                  set_ace_rewrite(const Slic3r::AceMmu::RewriteResult& r) { m_ace_rewrite = r; }
+    void                  set_ace_rewrite(const Slic3r::AceMmu::RewriteInput&  in,
+                                            const Slic3r::AceMmu::RewriteResult& r)
+                          { m_ace_input = in; m_ace_rewrite = r; }
     const Slic3r::AceMmu::RewriteResult& ace_rewrite() const { return m_ace_rewrite; }
+    const Slic3r::AceMmu::RewriteInput&  ace_input() const { return m_ace_input; }
     std::string           get_temp_config_3mf_path();
     //this API should only be used for command line usage
     void set_tmp_gcode_path(std::string new_path)

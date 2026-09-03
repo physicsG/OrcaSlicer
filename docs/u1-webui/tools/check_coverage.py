@@ -70,6 +70,7 @@ EXCLUDED = {
     "sw_GetPrintZip": "print-processing popup",
     "sw_GetPrintLegal": "print-processing popup",
     "sw_GetFileFilamentMapping": "print-processing popup",
+    "sw_SetAceBays": "print-processing popup; route C, ours not the bundle's",
     "sw_SetFilamentMappingComplete": "print-processing popup",
     "sw_FinishFilamentMapping": "print-processing popup",
     "sw_FinishPreprint": "print-processing popup",

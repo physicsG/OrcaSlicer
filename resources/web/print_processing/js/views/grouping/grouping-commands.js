@@ -30,6 +30,24 @@ import { CMD, PRINT_TASK, plainLine } from '../../../../shared/js/protocol.js';
  * one head on an ACE plate, which is the whole point of the plan - and not the file's
  * filament indices. On the machine `extruders_used` is one flag per toolhead.
  */
+/**
+ * Re-address the bays, and nothing else.
+ *
+ * The one thing this panel can change about the plan without slicing anything again. A
+ * filament's TOOLHEAD is the tool number in the gcode, so moving it means writing the file
+ * again; its BAY is one argument on each `ACE_SWAP_HEAD`, so the host runs the rewriter a
+ * second time over the same logical gcode and nothing about the geometry is touched.
+ *
+ * `slots` is filament index -> bay index, both 0-based and both the wire's own. The host
+ * refuses a bay it cannot honour with a sentence rather than dropping it, because silently
+ * ignoring a placement is how a plate prints in the wrong colour.
+ *
+ * The reply carries the new `ace_plan`, so the caller does not have to re-read the mapping.
+ */
+export function setAceBays(bridge, slots) {
+  return bridge.request(CMD.SET_ACE_BAYS, { slots });
+}
+
 export function writeIdentityMap(bridge, { plan, filaments }) {
   if (!plan) return Promise.resolve(null);
   const heads = [...new Set(plan.heads.filter((h) => h.run.length).map((h) => h.head))]

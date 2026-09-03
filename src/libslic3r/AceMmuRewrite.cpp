@@ -574,21 +574,29 @@ LoadingPlan plan_for(const RewriteInput& in, const ToolSequence& seq, const std:
         return plan;
     }
 
-    // An ordinary plate: every used tool has its own stock feeder. Leave it exactly where it is
-    // rather than let a tie-break move it - the plain path must not change (06 §3.7).
-    bool identity_ok = true;
-    for (int t : seq.used)
-        if (t >= int(heads.size()) || heads[t].ace)
-            identity_ok = false;
+    /*
+     * Orca's own assignment - filament i on toolhead i - priced first, and kept whenever it
+     * ties the optimiser.
+     *
+     * The optimiser minimises one number and is silent about everything else, so among
+     * plans that cost the same it takes an arbitrary one: busiest colour to the lowest head
+     * index, which on a plate that fits one filament per toolhead moves every spool for no
+     * gain. Measured on a real four-colour plate, it relocated all four and then named a bay
+     * holding another colour, and the popup refused the send.
+     *
+     * A rearrangement that costs nothing and gains nothing is a defect. So: price the
+     * identity, take the optimum, and prefer the identity when the two agree. It cannot be
+     * done inside the search - the greedy seed sets the bound and the first plan reaching it
+     * wins, so there is never a set of tied optima to choose from.
+     */
+    LoadingPlan identity;
+    bool        identity_ok = seq.max_tool < int(heads.size());
     if (identity_ok) {
         std::vector<int> head_of(n, -1);
         for (int t : seq.used)
             head_of[t] = t;
-        plan = evaluate_assignment(heads, seq.body, n, head_of);
-        if (plan.feasible) {
-            plan.optimal = true; // zero swaps: nothing beats it
-            return plan;
-        }
+        identity    = evaluate_assignment(heads, seq.body, n, head_of);
+        identity_ok = identity.feasible;
     }
 
     plan = plan_loading(heads, seq.body, n, {}, in.work_budget);
@@ -612,7 +620,87 @@ LoadingPlan plan_for(const RewriteInput& in, const ToolSequence& seq, const std:
                              " stock feeder(s) and " + std::to_string(slots) + " ACE slot(s)." +
                              (drop.empty() ? "" : " Cheapest to drop: " + drop + "."));
     }
+    if (identity_ok && identity.swaps <= plan.swaps) {
+        // `optimal` is the search's word about the swap count, and the count is the same one.
+        identity.optimal = plan.optimal;
+        return identity;
+    }
     return plan;
+}
+
+/*
+ * Honour the bays the operator named, and move whatever they displaced.
+ *
+ * Slots are an addressing choice, not a cost: which bay a head presents does not change how
+ * often it has to present a different one. So this runs after the plan is priced and leaves
+ * `swaps` alone.
+ *
+ * A named bay wins outright; a filament that was already in it and was not itself named is
+ * moved to the lowest free bay of the same head. Two filaments named onto one bay is a
+ * contradiction and is refused rather than resolved, because either answer would be a guess
+ * about which colour the plate prints.
+ */
+static void apply_slot_override(const RewriteInput& in, const ToolSequence& seq, const std::vector<PlanHead>& heads,
+                                LoadingPlan& plan)
+{
+    if (in.slot_override.empty())
+        return;
+    const int n = int(in.filaments.size());
+    if (int(in.slot_override.size()) != n)
+        throw RewriteRefusal("The chosen bays name " + std::to_string(in.slot_override.size()) +
+                             " filaments; the project has " + std::to_string(n) + ".");
+
+    // head -> the bay each named filament claims, so a contradiction is seen before anything moves.
+    std::map<int, std::map<int, int>> claimed; // head -> slot -> filament
+    for (int f = 0; f < n; ++f) {
+        const int want = in.slot_override[f];
+        if (want < 0)
+            continue;
+        if (f >= int(plan.head_of.size()) || plan.head_of[f] < 0)
+            throw RewriteRefusal("A bay was chosen for " + filament_name(in, f) + ", which this plate does not print.");
+        const int h = plan.head_of[f];
+        if (h >= int(heads.size()) || !heads[h].ace)
+            throw RewriteRefusal("A bay was chosen for " + filament_name(in, f) + ", but toolhead " +
+                                 std::to_string(h + 1) + " is on its stock feeder.");
+        if (want >= heads[h].capacity)
+            throw RewriteRefusal("Bay " + std::to_string(want + 1) + " was chosen for " + filament_name(in, f) +
+                                 ", but its ACE has " + std::to_string(heads[h].capacity) + " bays.");
+        auto& per_head = claimed[h];
+        auto  it       = per_head.find(want);
+        if (it != per_head.end())
+            throw RewriteRefusal(filament_name(in, f) + " and " + filament_name(in, it->second) +
+                                 " were both put in the same bay.");
+        per_head[want] = f;
+    }
+
+    for (const auto& [h, per_head] : claimed) {
+        // What this head holds, so the displaced can be given somewhere free to go.
+        std::set<int> taken;
+        for (const auto& [slot, f] : per_head) {
+            (void) f;
+            taken.insert(slot);
+        }
+        std::vector<int> displaced;
+        for (int t : seq.used) {
+            if (plan.head_of[t] != h || in.slot_override[t] >= 0)
+                continue;
+            if (taken.count(plan.slot_of[t]))
+                displaced.push_back(t);
+            else
+                taken.insert(plan.slot_of[t]);
+        }
+        for (const auto& [slot, f] : per_head)
+            plan.slot_of[f] = slot;
+        for (int t : displaced) {
+            int slot = 0;
+            while (slot < heads[h].capacity && taken.count(slot))
+                ++slot;
+            if (slot >= heads[h].capacity)
+                throw RewriteRefusal("The chosen bays leave no room for " + filament_name(in, t) + ".");
+            plan.slot_of[t] = slot;
+            taken.insert(slot);
+        }
+    }
 }
 
 bool needs_rewrite(const RewriteInput& in, const ToolSequence& seq, const LoadingPlan& plan)
@@ -733,6 +821,7 @@ RewriteResult rewrite_gcode(std::istream& in, std::ostream& out, const RewriteIn
         tick();
     const std::vector<PlanHead> heads = plan_heads(input);
     res.plan                          = plan_for(input, res.sequence, heads);
+    apply_slot_override(input, res.sequence, heads, res.plan);
     if (!needs_rewrite(input, res.sequence, res.plan))
         return res;
     if (res.sequence.anchor < 0)
@@ -777,8 +866,10 @@ RewriteResult rewrite_file(const std::string& in_path, const std::string& out_pa
     probe.heads = int(input.head_capacity.size());
     if (input.mode == "normal")
         return probe;
-    probe.sequence = scan_tool_sequence(in);
-    probe.plan     = plan_for(input, probe.sequence, plan_heads(input));
+    probe.sequence                     = scan_tool_sequence(in);
+    const std::vector<PlanHead> pheads = plan_heads(input);
+    probe.plan                         = plan_for(input, probe.sequence, pheads);
+    apply_slot_override(input, probe.sequence, pheads, probe.plan);
     if (!needs_rewrite(input, probe.sequence, probe.plan))
         return probe;
 

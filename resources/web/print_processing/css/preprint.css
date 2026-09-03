@@ -606,6 +606,17 @@ body.dlg {
 .g-chip.is-warn .g-from { color: var(--warn); }
 
 .g-verdict { margin-top: 5px; font-size: 11px; line-height: 1.4; min-height: 15px; }
+
+/* The free fix: offered only when re-addressing the bays would clear every one of them. */
+.g-fix { display: flex; align-items: center; gap: 9px; margin-top: 8px; flex-wrap: wrap; }
+.g-fixsay { font-size: 11px; color: var(--ink-2); }
+.g-fixbtn {
+  font: 600 11px/1 var(--sans); color: var(--f-blue); background: none;
+  border: 1px solid var(--f-blue); border-radius: 5px; padding: 5px 10px; cursor: pointer;
+}
+.g-fixbtn:hover:not([disabled]) { background: rgba(0, 137, 123, .09); }
+.g-fixbtn[disabled] { opacity: .5; cursor: default; }
+.g-fixbtn:focus-visible { outline: 2px solid var(--f-blue); outline-offset: 2px; }
 .g-verdict.ok { color: var(--ok); }
 .g-verdict.warn { color: var(--warn); }
 .g-verdict.bad { color: var(--err); }

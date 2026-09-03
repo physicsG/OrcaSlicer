@@ -766,6 +766,18 @@
   "response": [],
   "rpc": []
  },
+ "sw_SetAceBays": {
+  "handlers": [
+   "sw_SetAceBays"
+  ],
+  "params": [
+   "slots"
+  ],
+  "response": [
+   "ace_plan"
+  ],
+  "rpc": []
+ },
  "sw_SetCache": {
   "handlers": [
    "sw_SetCache"

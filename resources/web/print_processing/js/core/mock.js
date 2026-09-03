@@ -27,7 +27,9 @@ const PREPRINT_HANDLERS = {};
 
 /*
  * `?plan=1` gives the simulator a plate sliced onto the ACE; `?plan=mismatch` moves one
- * file filament off the bay that holds it.
+ * file filament off the bay that holds it; `?plan=bayswap` leaves every spool in the
+ * machine and puts two of them in each other's bay - the state the free re-addressing
+ * fix exists for.
  *
  * A switch rather than the default, because the default has to be what a real Orca sends
  * - and a real Orca sends no plan at all. The ACE half of this dialog is unreachable on
@@ -35,6 +37,7 @@ const PREPRINT_HANDLERS = {};
  */
 export function installMock({ log = () => {}, onDialogClose = null, plan = null } = {}) {
   const host = installMockHost({ log, handlers: PREPRINT_HANDLERS, onDialogClose });
-  if (plan && host.usePlan) host.usePlan({ mismatch: plan === 'mismatch' });
+  if (plan && host.usePlan)
+    host.usePlan({ mismatch: plan === 'mismatch', bayswap: plan === 'bayswap' });
   return host;
 }
