@@ -63,7 +63,30 @@ std::string AceMmuProvider::resolve_connected_host()
         }
     }
 
-    // 4) Last resort: the edited printer preset's print_host, if any.
+    /*
+     * 4) A saved device record.
+     *
+     * This is where a U1's address actually lives, and none of the three above has it at
+     * SLICING time: the webview brings the transport up when the Device tab or the print
+     * popup opens, so at the moment the gcode is written there is no selected machine, no
+     * connected PrintHost and no host config - measured, by a plate that planned as though
+     * the ACE were empty while the popup a second later showed its three spools.
+     *
+     * Preferring a record marked connected, then any with an address. It is only ever used
+     * to ASK the printer what it is holding, and a wrong guess costs a failed HTTP call.
+     */
+    if (auto* cfg = wxGetApp().app_config) {
+        const std::vector<DeviceInfo> devices = cfg->get_devices();
+        for (bool want_connected : {true, false})
+            for (const DeviceInfo& d : devices)
+                if (!d.ip.empty() && d.connected == want_connected) {
+                    BOOST_LOG_TRIVIAL(info) << "AceMmuProvider::resolve_connected_host: saved device "
+                                            << d.dev_name << " ip=" << d.ip;
+                    return d.ip;
+                }
+    }
+
+    // 5) Last resort: the edited printer preset's print_host, if any.
     if (wxGetApp().preset_bundle) {
         const auto& cfg = wxGetApp().preset_bundle->printers.get_edited_preset().config;
         if (cfg.has("print_host")) {

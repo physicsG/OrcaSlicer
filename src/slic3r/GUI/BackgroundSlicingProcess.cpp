@@ -846,6 +846,8 @@ void BackgroundSlicingProcess::rewrite_for_ace()
 	 * and the plan exactly what it was before this existed. A slice must never fail, or
 	 * wait, for a printer.
 	 */
+	if (m_ace_host.empty())
+		BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": no printer address known, planning without the ACE";
 	if (!m_ace_host.empty()) {
 		GUI::AceMmuProvider provider(m_ace_host);
 		if (provider.fetch_once(2, 4)) {
@@ -876,10 +878,10 @@ void BackgroundSlicingProcess::rewrite_for_ace()
 				place.trusted  = true;
 				in.loadout.push_back(place);
 			}
-			BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": read " << in.loadout.size()
+			BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": read " << in.loadout.size()
 			                        << " loaded place(s) from " << m_ace_host;
 		} else
-			BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": could not read the ACE at " << m_ace_host
+			BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": could not read the ACE at " << m_ace_host
 			                        << "; planning without it";
 	}
 
