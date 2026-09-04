@@ -21,6 +21,7 @@
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/GCode/PostProcessor.hpp"
 #include "libslic3r/AceMmuRewrite.hpp"
+#include "AceMmuProvider.hpp"
 #include "libslic3r/Exception.hpp"
 #include "libslic3r/Format/SL1.hpp"
 #include "libslic3r/Thread.hpp"
@@ -494,6 +495,11 @@ void BackgroundSlicingProcess::thread_proc_safe() throw()
 
 void BackgroundSlicingProcess::join_background_thread()
 {
+	// Resolved here, on the GUI thread: the ACE read happens on the worker and
+	// resolve_connected_host() reads the selected machine and the print host, which the
+	// worker has no business touching. Empty is the ordinary answer and costs nothing.
+	m_ace_host = GUI::AceMmuProvider::resolve_connected_host();
+
 	std::unique_lock<std::mutex> lck(m_mutex);
 	if (m_state == STATE_INITIAL) {
 		// Worker thread has not been started yet.
@@ -829,6 +835,53 @@ void BackgroundSlicingProcess::rewrite_for_ace()
 	if (cfg.flush_volumes_matrix.values.size() == n * n)
 		in.flush_matrix.assign(cfg.flush_volumes_matrix.values.begin(), cfg.flush_volumes_matrix.values.end());
 	in.flush_multiplier = float(cfg.flush_multiplier.value);
+
+	/*
+	 * What the machine is holding, if it can be asked.
+	 *
+	 * The plan is otherwise chosen knowing only the preset, which is how a plate came to
+	 * name a bay for a colour the ACE did not have: correct by every measure the slicer
+	 * could see, and unprintable. Read here with short timeouts, on the worker, and
+	 * entirely optional - a printer that is off, slow or absent leaves the loadout empty
+	 * and the plan exactly what it was before this existed. A slice must never fail, or
+	 * wait, for a printer.
+	 */
+	if (!m_ace_host.empty()) {
+		GUI::AceMmuProvider provider(m_ace_host);
+		if (provider.fetch_once(2, 4)) {
+			const AceMmu::AceSnapshot snap = provider.snapshot();
+			for (const AceMmu::AceUnit& unit : snap.units)
+				for (const AceMmu::AceSlot& slot : unit.slots) {
+					if (!slot.occupied || !slot.identity_trusted() || slot.color_rrggbb.empty())
+						continue;
+					AceMmu::LoadedPlace place;
+					place.unit     = unit.idx;
+					place.slot     = slot.idx;
+					place.colour   = slot.color_rrggbb;
+					place.material = slot.material;
+					place.trusted  = true;
+					in.loadout.push_back(place);
+				}
+			// A stock feeder is only worth naming when the machine asserted what is in it;
+			// an inferred colour is not evidence to plan on, here or in the bays.
+			for (const AceMmu::AceToolhead& th : snap.toolheads) {
+				if (!th.feeder || !th.filament_detected || th.color_rrggbb.empty())
+					continue;
+				if (th.source != "rfid" && th.source != "override")
+					continue;
+				AceMmu::LoadedPlace place;
+				place.head     = th.idx;
+				place.colour   = th.color_rrggbb;
+				place.material = th.material;
+				place.trusted  = true;
+				in.loadout.push_back(place);
+			}
+			BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": read " << in.loadout.size()
+			                        << " loaded place(s) from " << m_ace_host;
+		} else
+			BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": could not read the ACE at " << m_ace_host
+			                        << "; planning without it";
+	}
 
 	GUI::PartPlate* plate = this->get_current_plate();
 	const std::string sibling = plate->ace_gcode_path();

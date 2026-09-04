@@ -39,6 +39,30 @@ struct RewriteFilament
     double      density  = 1.24; // g/cm3
 };
 
+/*
+ * One place on the machine that can hold a spool, as the machine reports it.
+ *
+ * Seven of them on the reference printer: three stock feeders and one four-bay ACE. A
+ * feeder names the toolhead it feeds; a bay names its unit and slot. Deliberately not
+ * `AceSnapshot` - that carries nlohmann and this header is reached from `PartPlate.hpp`,
+ * so the caller translates and the rewriter stays STL-only.
+ *
+ * `trusted` is the machine's own distinction: a spool read from its tag or named by hand
+ * is asserted, one merely inferred is not. Planning onto an inferred identity would be
+ * planning onto a guess, so only asserted places are matched against.
+ */
+struct LoadedPlace
+{
+    int         head = -1; // stock feeder: the toolhead it feeds (-1 when this is a bay)
+    int         unit = -1; // ACE bay: which unit
+    int         slot = -1; // ACE bay: which bay within it
+    std::string material;
+    std::string colour; // "#rrggbb"
+    bool        trusted = false;
+
+    bool is_bay() const { return unit >= 0 && slot >= 0; }
+};
+
 struct RewriteInput
 {
     // The machine's own words for its switch: normal | head | multi. `normal` never rewrites.
@@ -60,6 +84,10 @@ struct RewriteInput
     // than ignored, because silently dropping a placement is how a plate prints in the
     // wrong colour. docs/u1-webui/03-print-processing/10-plan-choice.md
     std::vector<int> slot_override;
+    // What the machine is holding, when it could be asked. Empty means it could not - the
+    // printer may be off, and a slice must never fail for that - and then the plan is
+    // chosen exactly as it was before this existed.
+    std::vector<LoadedPlace> loadout;
     std::int64_t     work_budget = 64ll * 1000 * 1000;
 };
 

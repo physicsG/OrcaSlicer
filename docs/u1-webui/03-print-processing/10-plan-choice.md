@@ -249,6 +249,66 @@ simulator's `?plan=bayswap` and false on the machine.
 
 ---
 
+## 8b. Loadout-aware planning, built 2026-09-04
+
+Option C of §7, which §8 recommended deferring. The run in §8a is why it did not stay
+deferred: the plate that started this refused to send even after the tie-break, because the
+identity puts a colour on the ACE-fed head that no bay holds.
+
+**The rule.** `plan_for` now weighs its candidates by three keys in order — fewest ACE
+swaps, then fewest places the machine cannot serve, then fewest filaments moved from where
+Orca has them. Swaps first, because a plan the machine can serve is no use if it doubles
+the print; and the third key is what keeps a plate still when nothing is gained by moving
+it.
+
+**The construction is a repair, not a fresh plan.** The obvious approach — build an
+assignment from the loadout — is wrong, and the first cut of this proved it: it moved a
+filament onto the ACE because a bay held it, when the toolhead it was already on was free,
+which costs swaps to fix nothing. So each base plan (the identity, and the optimiser's) is
+*repaired*: two filaments trade toolheads only when that leaves fewer unservable places and
+costs no more swaps, priced exactly by `evaluate_assignment` rather than estimated. Bays are
+re-addressed first, for nothing, because addressing is free.
+
+**Only asserted identities count.** `place_holds` is `spool_matches` from the reconcile
+header, used verbatim so the planner and the panel cannot disagree about what a bay holds,
+and it requires the machine to have asserted the spool — tag-read or named. Planning onto a
+derived colour is planning onto a guess. A place the machine says nothing about is silence,
+not a mismatch, which is why a plate sliced with the printer switched off scores zero
+unservable and plans exactly as it did before this existed.
+
+**Where the loadout comes from.** `rewrite_for_ace` reads it through `AceMmuProvider` with
+2 s / 4 s timeouts, on the slicing worker, and only when a printer is connected — the host
+is resolved in `start()` on the GUI thread, because `resolve_connected_host()` reads device
+state the worker has no business touching. Unreachable, slow or absent all mean the same
+thing: no loadout, and the plan is what it would have been.
+
+### The plate, before and after
+
+Real slice of `ChickenPark-multicolor_ACE.3mf`; the machine holding maroon in A1, nothing in
+A2, cream in A3, slate in A4.
+
+```
+without the loadout   ; multiACE plan: T0:H0S0 T1:H1S0 T2:H2S0 T3:H3S0 swaps:0 optimal:1
+with it               ; multiACE plan: T0:H3S2 T1:H1S0 T2:H2S0 T3:H0S0 swaps:0 optimal:1
+```
+
+Cream moved to the ACE-fed head **and to bay A3, where it actually is**; the light grey that
+no bay holds moved to a free stock feeder; the other two never moved; still zero swaps. The
+preload reads `ACE_SWAP_HEAD HEAD=3 ACE=0 SLOT=2 INITIAL=1`.
+
+Driven against the real machine, the same plate that refused an hour earlier:
+
+```
+before   places: T1=unchecked T2=unchecked T3=unchecked A1=differs   Send disabled
+after    places: T1=unchecked T2=unchecked T3=unchecked A3=agrees    Send enabled
+```
+
+17/17 both times. Four new cases cover the rule itself: the tie broken by the machine, a
+machine that could not be asked changing nothing, an inferred spool refused as evidence, and
+a cheaper plan still winning over a better-served one.
+
+---
+
 ## 9. What this does not settle
 
 - **Whether the head choice should be loadout-aware too.** It probably should, once B has

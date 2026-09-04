@@ -1,5 +1,10 @@
 #include "AceMmuRewrite.hpp"
 
+// For `spool_matches` only. The reconciliation's rule, used verbatim so the planner and the
+// panel cannot disagree about what a bay "holds". It lives in the .cpp because it drags
+// nlohmann in behind AceMmuState.hpp, and AceMmuRewrite.hpp is reached from PartPlate.hpp.
+#include "AceMmuReconcile.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -227,6 +232,172 @@ std::string filament_name(const RewriteInput& in, int f)
             s += " (" + fil.colour + (fil.colour.empty() || fil.type.empty() ? "" : " ") + fil.type + ")";
     }
     return s;
+}
+
+/*
+ * Does this place hold this filament?
+ *
+ * `spool_matches` is the reconciliation's rule and is used verbatim rather than restated:
+ * colour and material, with a blank on either side tolerated because a machine that has
+ * not said cannot contradict. If the planner and the panel disagreed about what "holds"
+ * means, the panel would refuse plans the planner had just chosen.
+ */
+bool place_holds(const LoadedPlace& place, const RewriteFilament& want)
+{
+    return place.trusted && spool_matches(want.colour, want.type, place.colour, place.material);
+}
+
+// The bay of `unit`/`slot`, or nullptr. Bays the machine did not assert are not returned:
+// an inferred identity is not evidence to plan on.
+const LoadedPlace* bay_at(const RewriteInput& in, int unit, int slot)
+{
+    for (const LoadedPlace& p : in.loadout)
+        if (p.is_bay() && p.unit == unit && p.slot == slot)
+            return &p;
+    return nullptr;
+}
+
+const LoadedPlace* feeder_of(const RewriteInput& in, int head)
+{
+    for (const LoadedPlace& p : in.loadout)
+        if (!p.is_bay() && p.head == head)
+            return &p;
+    return nullptr;
+}
+
+/*
+ * How many used filaments this plan puts where the machine cannot serve them.
+ *
+ * Only what the machine has ASSERTED counts. A place it says nothing about is not a
+ * mismatch - it is silence - which is the same three-valued discipline the panel's verdict
+ * uses, and the reason a plate on a printer that was switched off scores zero here rather
+ * than seven.
+ */
+int unservable_places(const RewriteInput& in, const ToolSequence& seq, const std::vector<PlanHead>& heads,
+                      const LoadingPlan& plan)
+{
+    if (in.loadout.empty())
+        return 0;
+    int bad = 0;
+    for (int t : seq.used) {
+        if (t >= int(plan.head_of.size()) || plan.head_of[t] < 0)
+            continue;
+        const int h = plan.head_of[t];
+        if (h >= int(heads.size()))
+            continue;
+        const RewriteFilament& want = in.filaments[t];
+        const LoadedPlace*     have = heads[h].ace ? bay_at(in, heads[h].ace_unit, plan.slot_of[t])
+                                                   : feeder_of(in, h);
+        if (have != nullptr && !place_holds(*have, want))
+            ++bad;
+    }
+    return bad;
+}
+
+// How far this plan moves things from where Orca has them. The tie-break that keeps a
+// plate still when nothing is gained by moving it.
+int moved_from_identity(const ToolSequence& seq, const LoadingPlan& plan)
+{
+    int moved = 0;
+    for (int t : seq.used)
+        if (t < int(plan.head_of.size()) && plan.head_of[t] != t)
+            ++moved;
+    return moved;
+}
+
+/*
+ * Point each filament on an ACE head at the bay that actually holds it.
+ *
+ * Pure addressing: which bay a head presents does not change how often it has to present a
+ * different one, so this never moves the swap count. A filament no bay holds keeps the
+ * lowest bay nobody claimed, which is what the planner would have given it anyway.
+ */
+void bind_slots_to_loadout(const RewriteInput& in, const ToolSequence& seq, const std::vector<PlanHead>& heads,
+                           LoadingPlan& plan)
+{
+    if (in.loadout.empty())
+        return;
+    for (size_t h = 0; h < heads.size(); ++h) {
+        if (!heads[h].ace)
+            continue;
+        std::vector<int> mine;
+        for (int t : seq.body)
+            if (t < int(plan.head_of.size()) && plan.head_of[t] == int(h) &&
+                std::find(mine.begin(), mine.end(), t) == mine.end())
+                mine.push_back(t);           // first-use order, as the planner numbers them
+        std::set<int> taken;
+        std::vector<int> unplaced;
+        for (int t : mine) {
+            int found = -1;
+            for (int sl = 0; sl < heads[h].capacity; ++sl) {
+                if (taken.count(sl))
+                    continue;
+                const LoadedPlace* p = bay_at(in, heads[h].ace_unit, sl);
+                if (p != nullptr && place_holds(*p, in.filaments[t])) {
+                    found = sl;
+                    break;
+                }
+            }
+            if (found >= 0) { plan.slot_of[t] = found; taken.insert(found); }
+            else            { unplaced.push_back(t); }
+        }
+        for (int t : unplaced) {
+            int sl = 0;
+            while (sl < heads[h].capacity && taken.count(sl))
+                ++sl;
+            if (sl < heads[h].capacity) { plan.slot_of[t] = sl; taken.insert(sl); }
+        }
+    }
+}
+
+/*
+ * The smallest change to a plan that makes the machine able to serve it.
+ *
+ * Not a plan built from the loadout: one built from scratch happily moves a filament onto
+ * the ACE because a bay holds it, when the toolhead it was already on was free - which
+ * costs swaps to fix nothing. This starts from the plan we would otherwise emit and
+ * repairs it, so a filament only ever moves to stop the machine being unable to serve it.
+ *
+ * Two filaments trade toolheads when doing so leaves fewer places the machine cannot
+ * serve and costs no more swaps. Bounded passes, and every candidate is priced exactly by
+ * `evaluate_assignment` rather than guessed at.
+ */
+LoadingPlan repair_for_loadout(const RewriteInput& in, const ToolSequence& seq, const std::vector<PlanHead>& heads,
+                               const LoadingPlan& base)
+{
+    LoadingPlan cur = base;
+    if (in.loadout.empty() || !cur.feasible)
+        return cur;
+    const int n = int(in.filaments.size());
+    bind_slots_to_loadout(in, seq, heads, cur);   // free: re-address before moving anything
+    int worst = unservable_places(in, seq, heads, cur);
+
+    for (int pass = 0; pass < 4 && worst > 0; ++pass) {
+        bool improved = false;
+        for (size_t i = 0; i < seq.used.size() && worst > 0; ++i) {
+            for (size_t j = i + 1; j < seq.used.size(); ++j) {
+                const int a = seq.used[i], b = seq.used[j];
+                if (cur.head_of[a] == cur.head_of[b])
+                    continue;
+                std::vector<int> head_of = cur.head_of;
+                std::swap(head_of[a], head_of[b]);
+                LoadingPlan trial = evaluate_assignment(heads, seq.body, n, head_of);
+                if (!trial.feasible || trial.swaps > cur.swaps)
+                    continue;
+                bind_slots_to_loadout(in, seq, heads, trial);
+                const int u = unservable_places(in, seq, heads, trial);
+                if (u < worst) {
+                    cur      = trial;
+                    worst    = u;
+                    improved = true;
+                    break;
+                }
+            }
+        }
+        if (!improved)
+            break;
+    }
+    return cur;
 }
 
 // Everything the three passes share.
@@ -620,12 +791,62 @@ LoadingPlan plan_for(const RewriteInput& in, const ToolSequence& seq, const std:
                              " stock feeder(s) and " + std::to_string(slots) + " ACE slot(s)." +
                              (drop.empty() ? "" : " Cheapest to drop: " + drop + "."));
     }
-    if (identity_ok && identity.swaps <= plan.swaps) {
-        // `optimal` is the search's word about the swap count, and the count is the same one.
-        identity.optimal = plan.optimal;
-        return identity;
+    /*
+     * Choose between the three, in this order:
+     *
+     *   1. fewest ACE swaps            what the print costs to run
+     *   2. fewest unservable places    what the operator has to walk over and fix
+     *   3. fewest filaments moved      how much of their own arrangement is disturbed
+     *
+     * Swaps come first because a cheaper plan the machine cannot serve is no use, and a
+     * plan the machine can serve is no use if it doubles the print. They rarely conflict:
+     * on a plate that fits one filament per toolhead every candidate costs nothing and the
+     * second key decides, which is the whole point - it puts the colour the ACE actually
+     * holds behind the ACE.
+     *
+     * Deviating from the operator's own arrangement only ever happens to fix something the
+     * machine cannot serve, never to save a swap it could. Anything costlier than a tie is
+     * left to the dialog to offer by name, because trading print time for a walk to the
+     * printer is the operator's call and not the slicer's.
+     */
+    struct Candidate
+    {
+        const LoadingPlan* plan;
+        int                unservable;
+        int                moved;
+    };
+    std::vector<LoadingPlan> pool;
+    pool.reserve(4);
+    if (identity_ok)
+        pool.push_back(identity);
+    pool.push_back(plan);
+    // Each base, repaired against what the machine holds. The repair is a no-op when the
+    // machine could not be asked, or when it already serves the plan.
+    const size_t bases = pool.size();
+    for (size_t i = 0; i < bases; ++i)
+        pool.push_back(repair_for_loadout(in, seq, heads, pool[i]));
+
+    std::vector<Candidate> options;
+    for (const LoadingPlan& p : pool)
+        if (p.feasible)
+            options.push_back({&p, unservable_places(in, seq, heads, p), moved_from_identity(seq, p)});
+    if (options.empty())
+        return plan;
+
+    const Candidate* best = &options.front();
+    for (const Candidate& c : options) {
+        const bool better = c.plan->swaps != best->plan->swaps    ? c.plan->swaps < best->plan->swaps
+                          : c.unservable != best->unservable      ? c.unservable < best->unservable
+                                                                  : c.moved < best->moved;
+        if (better)
+            best = &c;
     }
-    return plan;
+
+    LoadingPlan chosen = *best->plan;
+    // `optimal` is the search's word about the swap count, and every candidate here was
+    // priced on the same sequence - so it carries over whenever the count does.
+    chosen.optimal = plan.optimal && chosen.swaps == plan.swaps;
+    return chosen;
 }
 
 /*

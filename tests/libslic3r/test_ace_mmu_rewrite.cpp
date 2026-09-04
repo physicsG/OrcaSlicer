@@ -628,6 +628,126 @@ TEST_CASE("a bay that cannot be honoured is refused, never quietly dropped", "[a
  * It prints the plan line, which is the one thing worth reading off a real plate: which
  * toolhead each filament ended on, and which bay feeds the ACE-fed one.
  */
+namespace {
+
+/** A bay the machine asserts: tag-read or named by hand, never inferred. */
+LoadedPlace bay(int unit, int slot, const char* hex, const char* mat = "PLA")
+{
+    LoadedPlace p;
+    p.unit = unit; p.slot = slot; p.colour = hex; p.material = mat; p.trusted = true;
+    return p;
+}
+LoadedPlace feeder(int head, const char* hex, const char* mat = "PLA")
+{
+    LoadedPlace p;
+    p.head = head; p.colour = hex; p.material = mat; p.trusted = true;
+    return p;
+}
+
+} // namespace
+
+TEST_CASE("the plan follows what the machine holds when that costs nothing", "[ace_mmu_rewrite]")
+{
+    /*
+     * The ChickenPark case, reduced. Four filaments, three feeders and a four-bay ACE on
+     * the last head - so every arrangement costs zero swaps and only the machine can break
+     * the tie. Orca's own order would put filament 4 behind the ACE, and no bay holds it.
+     */
+    RewriteInput in = u1_topology(4);
+    in.filaments[0].colour = "#FFFFDC";   // cream    - in bay A3
+    in.filaments[1].colour = "#6D1D32";   // maroon   - in bay A1
+    in.filaments[2].colour = "#000000";   // black    - in toolhead 3's feeder
+    in.filaments[3].colour = "#E2DEDB";   // grey     - nowhere
+    in.loadout = { feeder(0, "#FFFF00"), feeder(1, "#00FF00"), feeder(2, "#000000"),
+                   bay(0, 0, "#6D1D32"), bay(0, 2, "#FFFFDC") };
+
+    std::string g = start_gcode(0);
+    int prev = 0, layer = 0;
+    for (int t : {1, 2, 3, 0, 3, 1, 2, 0}) { g += change(prev, t, layer++); prev = t; }
+    g += end_gcode();
+
+    std::istringstream is(g);
+    std::ostringstream os;
+    RewriteResult      r = rewrite_gcode(is, os, in);
+    REQUIRE(r.rewritten);
+    CHECK(r.plan.swaps == 0);                       // still costs nothing to run
+    CHECK(r.plan.head_of[2] == 2);                  // black stays on the feeder that holds it
+    // One of the two colours the ACE actually has ends up behind the ACE, in ITS bay -
+    // not the grey, which is in no bay at all.
+    const int on_ace = int(std::count(r.plan.head_of.begin(), r.plan.head_of.end(), 3));
+    CHECK(on_ace == 1);
+    int aceFil = -1;
+    for (int i = 0; i < 4; ++i) if (r.plan.head_of[i] == 3) aceFil = i;
+    REQUIRE(aceFil >= 0);
+    CHECK(aceFil != 3);
+    CHECK(((aceFil == 0 && r.plan.slot_of[0] == 2) || (aceFil == 1 && r.plan.slot_of[1] == 0)));
+    // and the preload names that bay, not bay 0 by habit
+    const auto out = lines_of(os.str());
+    CHECK(index_of(out, "ACE_SWAP_HEAD HEAD=3 ACE=0 SLOT=" + std::to_string(r.plan.slot_of[aceFil])
+                        + " INITIAL=1") >= 0);
+}
+
+TEST_CASE("a machine that could not be asked changes nothing", "[ace_mmu_rewrite]")
+{
+    // The printer is off, so there is no loadout - and the plan is exactly the one the
+    // tie-break gives on its own. A slice must never depend on a reachable printer.
+    RewriteInput in = u1_topology(4);
+    std::string  g  = start_gcode(0);
+    int prev = 0, layer = 0;
+    for (int t : {1, 2, 3, 0, 3, 1, 2, 0}) { g += change(prev, t, layer++); prev = t; }
+    g += end_gcode();
+    std::istringstream is(g);
+    std::ostringstream os;
+    RewriteResult      r = rewrite_gcode(is, os, in);
+    REQUIRE(r.rewritten);
+    CHECK(r.plan.head_of == std::vector<int>{0, 1, 2, 3});
+}
+
+TEST_CASE("an inferred spool is not evidence to plan on", "[ace_mmu_rewrite]")
+{
+    // The same machine, except nothing about the bays was asserted - the colours were
+    // derived. Planning onto a guess is worse than leaving the plate where its owner put
+    // it, so the identity holds and the panel is left to say the bay differs.
+    RewriteInput in = u1_topology(4);
+    in.filaments[0].colour = "#FFFFDC";
+    in.filaments[3].colour = "#E2DEDB";
+    in.loadout = { bay(0, 0, "#6D1D32"), bay(0, 2, "#FFFFDC") };
+    for (auto& p : in.loadout) p.trusted = false;
+
+    std::string g = start_gcode(0);
+    int prev = 0, layer = 0;
+    for (int t : {1, 2, 3, 0}) { g += change(prev, t, layer++); prev = t; }
+    g += end_gcode();
+    std::istringstream is(g);
+    std::ostringstream os;
+    RewriteResult      r = rewrite_gcode(is, os, in);
+    REQUIRE(r.rewritten);
+    CHECK(r.plan.head_of == std::vector<int>{0, 1, 2, 3});
+}
+
+TEST_CASE("a cheaper plan still wins over a better-served one", "[ace_mmu_rewrite]")
+{
+    /*
+     * Five filaments on four heads: two must share the ACE, and which two decides the swap
+     * count. The machine holds the busy pair in its bays, so matching the loadout would
+     * park the two alternating colours behind the changer - correct by the second key and
+     * ruinous by the first. Swaps come first for exactly this case.
+     */
+    RewriteInput in = u1_topology(5);
+    in.filaments[0].colour = "#AA0000";
+    in.filaments[1].colour = "#00AA00";
+    in.loadout = { bay(0, 0, "#AA0000"), bay(0, 1, "#00AA00") };
+    std::string g = start_gcode(0);
+    int prev = 0, layer = 0;
+    for (int t : {1, 0, 1, 0, 1, 0, 2, 3, 4, 2, 3, 4, 1, 0}) { g += change(prev, t, layer++); prev = t; }
+    g += end_gcode();
+    std::istringstream is(g);
+    std::ostringstream os;
+    RewriteResult      r = rewrite_gcode(is, os, in);
+    REQUIRE(r.plan.feasible);
+    CHECK(r.plan.head_of[0] != r.plan.head_of[1]);  // the alternating pair is not stacked
+}
+
 TEST_CASE("a real plate, when one is pointed at", "[ace_mmu_real]")
 {
     const char* path = std::getenv("ACE_REWRITE_FILE");
@@ -653,6 +773,27 @@ TEST_CASE("a real plate, when one is pointed at", "[ace_mmu_real]")
     in.mode          = "head";
     in.head_capacity = ints("ACE_REWRITE_CAP", "1,1,1,4");
     in.head_unit     = ints("ACE_REWRITE_UNIT", "-1,-1,-1,0");
+
+    /* What the machine holds, so a real plate can be planned against a real loadout:
+       ACE_REWRITE_BAYS="unit:slot:#rrggbb:MAT,..."  and the same for feeders as head:. */
+    if (const char* bays = std::getenv("ACE_REWRITE_BAYS"); bays != nullptr && *bays) {
+        std::string       spec(bays);
+        std::stringstream ss(spec);
+        std::string       one;
+        while (std::getline(ss, one, ',')) {
+            std::stringstream fs(one);
+            std::string       a, b, c, d;
+            std::getline(fs, a, ':'); std::getline(fs, b, ':');
+            std::getline(fs, c, ':'); std::getline(fs, d, ':');
+            LoadedPlace place;
+            place.unit    = std::atoi(a.c_str());
+            place.slot    = std::atoi(b.c_str());
+            place.colour  = c;
+            place.material = d.empty() ? "PLA" : d;
+            place.trusted = true;
+            in.loadout.push_back(place);
+        }
+    }
 
     // The plate's own filaments, read out of the file it carries them in.
     boost::nowide::ifstream f(path);

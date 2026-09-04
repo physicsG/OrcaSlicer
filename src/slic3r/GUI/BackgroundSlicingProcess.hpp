@@ -289,6 +289,10 @@ private:
 	void				finalize_gcode();
 	// Route C: the ACE rewrite of the exported gcode, see the definition.
 	void rewrite_for_ace();
+	// The printer the ACE would be read from, resolved on the GUI thread in start()
+	// because resolve_connected_host() reads device state the worker must not touch.
+	// Empty when nothing is connected, and then no read is attempted at all.
+	std::string m_ace_host;
 	void				export_gcode();
     void                prepare_upload();
     // To be executed at the background thread.
