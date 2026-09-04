@@ -97,6 +97,28 @@
                + after2.run.map((r) => 'A' + (r.slot + 1)).sort().join(','));
     }
 
+    /* And back again. An emptied toolhead has to stay on screen and stay offerable, or a
+       move is one-way: Orca dropped heads with nothing on them from its reply, the box
+       vanished, and there was nothing left to move the filament back to. */
+    const emptyHead = plan().heads.find((h) => h.feeder && !h.run.length);
+    ok(!!emptyHead, 'the emptied toolhead is still in the plan');
+    ok(!!$$('.g-head')[emptyHead ? emptyHead.head : 0],
+       'and still drawn, so it can be pointed at');
+    if (emptyHead) {
+      const back = plan().heads.find((h) => !h.feeder).run.slice(-1)[0].filament;
+      const bc = $$(`.g-chip[data-fil="${back}"]`)[0];
+      bc.click(); await settle(150);
+      const home = $$('.menu .menu-item').find(
+        (r) => ((r.querySelector('.menu-col b') || {}).textContent || '').trim()
+               === `Toolhead ${emptyHead.head + 1}`);
+      ok(!!home, 'the emptied toolhead is offered as a destination');
+      ok(home && home.getAttribute('aria-disabled') !== 'true', 'and it can be chosen');
+      if (home) {
+        home.click(); await settle();
+        ok(headOf(back) === emptyHead.head, 'the filament came back off the ACE');
+      }
+    }
+
     /* Capacity refuses rather than overflows: a stock feeder holds one spool. */
     const full = plan().heads.find((h) => h.feeder && h.run.length);
     const other = plan().heads.find((h) => h.feeder && h.run.length && h !== full);

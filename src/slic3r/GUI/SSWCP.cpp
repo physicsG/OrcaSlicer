@@ -3162,8 +3162,14 @@ static bool ace_plan_for_current_plate(json& out)
 
     json heads_json = json::array();
     for (int h = 0; h < heads && size_t(h) < runs.size(); ++h) {
-        if (runs[h].empty())
-            continue;
+        /*
+         * Every toolhead, including the ones this plate does not use.
+         *
+         * Dropping the empty ones read as tidy and was a dead end: move a filament off a
+         * toolhead and the toolhead vanished from the panel, so there was nothing left to
+         * move it back to. An unused head is a state the panel already draws - dimmed,
+         * "Not used by this plate" - and it is a destination like any other.
+         */
         json hj      = json::object();
         hj["head"]   = h;
         hj["feeder"] = !ace_head(h);
@@ -3184,7 +3190,13 @@ static bool ace_plan_for_current_plate(json& out)
         hj["run"] = run;
         heads_json.push_back(hj);
     }
-    if (heads_json.empty())
+    /* "No plan" is no filament placed anywhere - not an empty head list, which it used to
+       be and no longer can be now that unused toolheads are kept. Getting this wrong would
+       hand every plain plate an empty ACE panel instead of the four cards it should have. */
+    bool any_placed = false;
+    for (const auto& hj : heads_json)
+        any_placed = any_placed || !hj.value("run", json::array()).empty();
+    if (!any_placed)
         return false;
     out            = json::object();
     out["mode"]    = cfg.ace_mode.serialize();

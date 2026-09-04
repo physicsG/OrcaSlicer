@@ -597,6 +597,10 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
               taken.add(slot);
             }
           }
+          /* Every toolhead stays in the plan, including ones this plate no longer uses.
+             Orca dropped the empty ones and the panel then had nowhere to move a filament
+             back to; the simulator keeps them so the same dead end cannot reappear here
+             unnoticed. */
           printer.job.acePlan = next;
           log('mock-note', { setAcePlan: Object.keys(want).length + Object.keys(wantHeads).length });
           return ok({ ace_plan: next });
