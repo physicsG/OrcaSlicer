@@ -748,6 +748,67 @@ TEST_CASE("a cheaper plan still wins over a better-served one", "[ace_mmu_rewrit
     CHECK(r.plan.head_of[0] != r.plan.head_of[1]);  // the alternating pair is not stacked
 }
 
+TEST_CASE("an ACE head is primed on every return, like any other head", "[ace_mmu_rewrite]")
+{
+    /*
+     * Two filaments share the ACE head and alternate with a feeder head, so the ACE head is
+     * parked and comes back four times while presenting the SAME bay each time.
+     *
+     * Only the return that carries a swap is flushed by it. The other three are ordinary
+     * returns to a parked head, and the stock pre-extrude is what primes them - a
+     * stock-feeder head gets one every time, and there is no reason an ACE head needs less.
+     * The suppression was a latch, so the head was marked primed for the rest of the file
+     * after its first flush and printed the remaining returns cold.
+     */
+    RewriteInput in = u1_topology(4);
+    in.head_capacity = { 1, 1, 1, 4 };
+    // Filaments 0 and 2 both behind the ACE; 1 and 3 on feeders.
+    in.head_override = { 3, 1, 3, 2 };
+
+    std::string g = start_gcode(0);
+    int prev = 0, layer = 0;
+    for (int t : {1, 2, 1, 2, 1, 2, 1, 2}) { g += change(prev, t, layer++); prev = t; }
+    g += end_gcode();
+
+    std::istringstream is(g);
+    std::ostringstream os;
+    RewriteResult      r = rewrite_gcode(is, os, in);
+    REQUIRE(r.rewritten);
+    REQUIRE(r.plan.head_of[0] == 3);
+    REQUIRE(r.plan.head_of[2] == 3);
+
+    const auto out = lines_of(os.str());
+    // Walk the body: every selection of the ACE head must be followed by a flush - either a
+    // swap (which purges) or the prime the logical file had there. Never by neither.
+    int returns = 0, flushed = 0, by_swap = 0, by_prime = 0;
+    // The body only. The start gcode selects the initial head three times - to check the bed,
+    // to home, and at the layer -1 marker - and its prime line is what primes that one.
+    size_t body = 0;
+    while (body < out.size() && out[body] != ";LAYER_CHANGE") ++body;
+    REQUIRE(body < out.size());
+    for (size_t i = body; i < out.size(); ++i) {
+        if (out[i] != "T3")
+            continue;
+        bool swap = false, prime = false;
+        for (size_t j = i + 1; j < out.size() && j < i + 5; ++j) {
+            if (out[j].rfind("ACE_SWAP_HEAD", 0) == 0)                swap  = true;
+            if (out[j].rfind("SM_PRINT_PREEXTRUDE_FILAMENT", 0) == 0) prime = true;
+            if (out[j] == "T3" || (out[j].size() == 2 && out[j][0] == 'T')) break;
+        }
+        ++returns;
+        if (swap || prime) ++flushed;
+        if (swap)  ++by_swap;
+        if (prime) ++by_prime;
+    }
+    CHECK(returns == flushed);          // no return to the ACE head arrives cold
+    CHECK(by_swap == r.plan.swaps);     // the swaps are where the plan says
+    CHECK(by_prime > 0);                // and the rest are primed, which is the regression
+    // A swap already purges, so it never carries a prime on top of it.
+    for (size_t i = 0; i + 1 < out.size(); ++i)
+        if (out[i].rfind("ACE_SWAP_HEAD", 0) == 0)
+            CHECK(out[i + 1].rfind("SM_PRINT_PREEXTRUDE_FILAMENT", 0) != 0);
+}
+
 TEST_CASE("a real plate, when one is pointed at", "[ace_mmu_real]")
 {
     const char* path = std::getenv("ACE_REWRITE_FILE");

@@ -524,7 +524,10 @@ void emit(std::istream& in, std::ostream& out, const Ctx& ctx, const std::set<lo
     const RewriteInput& cfg = ctx.in;
     // What each head holds in the simulation: the filament, and the bay it came from.
     std::vector<int>  held(ctx.heads, -1);
+    /* Primed *now*, not ever. The suppression below is only sound while the flush that
+       earned it is still in the nozzle, so parking the head has to end it. */
     std::vector<bool> primed(ctx.heads, false);
+    int               active = -1;
     for (int h = 0; h < ctx.heads; ++h)
         if (res.preload_slot[h] >= 0)
             for (int f : res.runs[h])
@@ -565,6 +568,10 @@ void emit(std::istream& in, std::ostream& out, const Ctx& ctx, const std::set<lo
                     primed[h] = true; // the start gcode's prime line primes the initial head
                 continue;
             }
+            /* Leaving a head parks it: whatever primed it stops counting. */
+            if (active >= 0 && active != h && active < ctx.heads)
+                primed[active] = false;
+            active = h;
             if (!ctx.ace_head(h))
                 continue;
             const int slot = ctx.plan.slot_of[n];
@@ -582,6 +589,7 @@ void emit(std::istream& in, std::ostream& out, const Ctx& ctx, const std::set<lo
             res.preflight_purge_mm += preflight_purge_mm(cfg, from, n);
             out << "ACE_SWAP_HEAD HEAD=" << h << " ACE=" << cfg.head_unit[h] << " SLOT=" << slot << '\n';
             held[h] = n;
+            primed[h] = true; // the purge above is the prime; the one below it would stack
             ++res.swaps;
             continue;
         }
@@ -611,6 +619,14 @@ void emit(std::istream& in, std::ostream& out, const Ctx& ctx, const std::set<lo
                 continue;
             }
             if (ctx.ace_head(h)) {
+                /*
+                 * Drop the prime only when the flush that replaces it just happened - the
+                 * swap immediately above, or the start gcode's prime line for the head's
+                 * first use. This was a latch, so it read "primed at some point", and the
+                 * head then came back from being parked seven more times with its prime
+                 * removed and nothing in its place. A stock-feeder head is primed on every
+                 * return; there is no reason an ACE head needs less.
+                 */
                 if (primed[h])
                     continue; // a swap flushes; a prime on top of it stacks ooze on the tower
                 primed[h] = true;

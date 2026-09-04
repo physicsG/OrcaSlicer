@@ -913,10 +913,16 @@ void BackgroundSlicingProcess::rewrite_for_ace()
 			[this]() { m_fff_print->throw_if_canceled(); });
 		if (res.rewritten) {
 			plate->set_ace_rewrite(in, res);
-			BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": %1% -> %2%: %3% swaps, %4% purge stamps, %5% standbys dropped")
-				% m_temp_output_path % sibling % res.swaps % res.stamped % res.dropped_standbys;
+			/* The plan itself, at the level the loadout that produced it is logged at.
+			   These two lines are a pair - question and answer - and only the question was
+			   visible: Orca's default level is warning, so the plan could be read out of
+			   the sibling file and nowhere else. Counts alone would not have done either;
+			   which filament went to which head and bay is the whole answer. */
+			BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": " << AceMmu::plan_header_line(res.plan)
+				<< boost::format(" (%1% purge stamps, %2% standbys dropped) -> %3%")
+				% res.stamped % res.dropped_standbys % sibling;
 		} else
-			BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": " << m_temp_output_path << " needs no rewrite";
+			BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": " << m_temp_output_path << " needs no rewrite";
 	} catch (const AceMmu::RewriteRefusal& e) {
 		boost::nowide::remove(sibling.c_str());
 		throw Slic3r::SlicingError(e.what());

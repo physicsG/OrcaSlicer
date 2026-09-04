@@ -329,12 +329,20 @@ are included where used.
 libslic3r_tests`, 2026-09-03):
 
 ```
+# every ACE suite - use this one, see below
+libslic3r_tests "[ace_mmu],[ace_mmu_plan],[ace_mmu_rewrite],[AceMmuTopology]"
+                                   All tests passed (665 assertions in 80 test cases)
+
 libslic3r_tests "[ace_mmu]"        All tests passed (191 assertions in 30 test cases)
 libslic3r_tests "[ace_mmu_plan]"   All tests passed (140 assertions in 20 test cases)
 ```
 
-`[ace_mmu]` is the tag the state, reconcile, tool-map and topology suites share; the planner
-has its own. Four assertions elsewhere in the binary fail before and after the lift
+`[ace_mmu]` is the tag the state, reconcile and tool-map suites share; the planner, the
+topology and the rewriter each have their own, and Catch2 does not treat one tag as a
+prefix of another. So **`[ace_mmu]` is not "the ACE tests"** - it is 30 of the 80, and it
+excludes the rewriter entirely. It reads like the umbrella and is not one; run the union
+line above. Getting this wrong costs nothing on a green branch and hides a regression on
+any other. Four assertions elsewhere in the binary fail before and after the lift
 (`test_3mf.cpp:128`, `test_config.cpp:22/29/68` — unknown legacy option names and a
 segfault in the config test); they are not this branch's and not touched.
 
