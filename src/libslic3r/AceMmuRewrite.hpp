@@ -153,7 +153,15 @@ RewriteResult rewrite_gcode(std::istream& in, std::ostream& out, const RewriteIn
 RewriteResult rewrite_file(const std::string& in_path, const std::string& out_path, const RewriteInput& input,
                            const std::function<void()>& tick = {});
 
-// The header line the bridge and the page read: "; multiACE plan: T0:H3S3 … swaps:N optimal:1".
+/*
+ * The header line the bridge and the page read: "; multiACE plan: T0:H3S3 … swaps:N optimal:1".
+ *
+ * `optimal` is the search's word about its own work, not a verdict on the plan: it says the
+ * swap count was proven minimal. A layout the operator chose is never run through the search,
+ * so it always reports `optimal:0` even when its swap count could not be beaten - the flag
+ * says "unproven", never "worse". Nothing reads it for behaviour; it is written here, parsed
+ * back, and put on the wire.
+ */
 std::string plan_header_line(const LoadingPlan& plan);
 // The inverse. head_of / slot_of are sized to the highest filament named.
 bool parse_plan_header(const std::string& line, LoadingPlan& plan);
