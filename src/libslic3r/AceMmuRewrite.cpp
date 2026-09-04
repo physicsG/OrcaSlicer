@@ -581,8 +581,11 @@ void emit(std::istream& in, std::ostream& out, const Ctx& ctx, const std::set<lo
             const double mm = purge_length_mm(cfg, from, n);
             out << "; multiACE: head " << h << " must present ACE " << cfg.head_unit[h] << " slot " << slot << '\n';
             if (mm > 0.) {
-                out << "ACE_SET_PURGE LENGTH=" << format_length(mm) << '\n';
+                const int arg = purge_arg(mm);
+                out << "ACE_SET_PURGE LENGTH=" << arg << '\n';
                 ++res.stamped;
+                if (arg < int(mm + 0.5))
+                    ++res.purge_capped;
                 res.purge_mm += mm;
                 res.purge_g += mm * filament_area(cfg, n) * cfg.filaments[n].density / 1000.;
             }
@@ -1036,22 +1039,23 @@ double preflight_purge_mm(const RewriteInput& in, int from, int to)
     return std::round(mm);
 }
 
-std::string format_length(double mm)
+int purge_arg(double mm)
 {
-    if (!(mm > 0.))
-        return "0";
-    const long long milli = std::llround(mm * 1000.);
-    std::string     s     = std::to_string(milli / 1000);
-    long long       frac  = milli % 1000;
-    if (frac != 0) {
-        std::string f = std::to_string(frac);
-        while (f.size() < 3)
-            f = "0" + f;
-        while (!f.empty() && f.back() == '0')
-            f.pop_back();
-        s += "." + f;
-    }
-    return s;
+    /*
+     * The macro's own bounds, from `gcmd.get_int('LENGTH', None, minval=0, maxval=200)`.
+     *
+     * Rounded, because it is an int and Klipper will not parse anything else. Floored at 1
+     * rather than 0, because 0 is the plugin's word for "use the stock default (80mm)" and
+     * a sub-millimetre computed purge asking for 80 mm is the opposite of what it meant.
+     * Capped at 200 rather than refused: the cap costs a short flush, and a value the
+     * machine cannot parse costs the print.
+     */
+    const long long mmi = std::llround(mm);
+    if (mmi < 1)
+        return 1;
+    if (mmi > 200)
+        return 200;
+    return int(mmi);
 }
 
 RewriteResult rewrite_gcode(std::istream& in, std::ostream& out, const RewriteInput& input, const std::function<void()>& tick)

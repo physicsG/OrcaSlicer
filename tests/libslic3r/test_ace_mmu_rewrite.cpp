@@ -228,7 +228,7 @@ TEST_CASE("a two-filament plate forced onto the ACE head, line by line", "[ace_m
     CHECK(index_of(out, "M109 S220 T3", c0) == c0 + 7);
     const int t0 = index_of(out, "T3", c0);
     CHECK(out[t0 + 1] == "; multiACE: head 3 must present ACE 0 slot 1");
-    CHECK(out[t0 + 2] == "ACE_SET_PURGE LENGTH=" + format_length(purge_length_mm(in, 1, 0)));
+    CHECK(out[t0 + 2] == "ACE_SET_PURGE LENGTH=" + std::to_string(purge_arg(purge_length_mm(in, 1, 0))));
     CHECK(out[t0 + 3] == "ACE_SWAP_HEAD HEAD=3 ACE=0 SLOT=1");
     // The pre-extrude after a swap is dropped (the swap flushes); the head was primed by the
     // start gcode.
@@ -237,8 +237,8 @@ TEST_CASE("a two-filament plate forced onto the ACE head, line by line", "[ace_m
 
     const double mm10 = purge_length_mm(in, 1, 0);
     CHECK(mm10 == Approx(120. / (3.14159265358979 * 0.25 * 1.75 * 1.75)));
-    CHECK(format_length(mm10) == "49.89");
-    CHECK(format_length(purge_length_mm(in, 0, 1)) == "41.575");
+    CHECK(purge_arg(mm10) == 50);
+    CHECK(purge_arg(purge_length_mm(in, 0, 1)) == 42);
     CHECK(r.stamped == 2);
     CHECK(r.purge_mm == Approx(mm10 + purge_length_mm(in, 0, 1)));
     CHECK(r.purge_g == Approx((120. + 100.) * 1.24 / 1000.));
@@ -417,13 +417,83 @@ TEST_CASE("the plan header round-trips", "[ace_mmu_rewrite]")
     CHECK_FALSE(parse_plan_header("; something else", back));
 }
 
-TEST_CASE("format_length is three decimals, trimmed, locale-free", "[ace_mmu_rewrite]")
+TEST_CASE("the purge argument is what the macro can parse", "[ace_mmu_rewrite]")
 {
-    CHECK(format_length(47.271) == "47.271");
-    CHECK(format_length(47.2704) == "47.27");
-    CHECK(format_length(80.) == "80");
-    CHECK(format_length(0.0004) == "0");
-    CHECK(format_length(-1.) == "0");
+    /*
+     * multiACE: `length = gcmd.get_int('LENGTH', None, minval=0, maxval=200)`.
+     *
+     * A three-decimal figure is not a number Klipper will take here. It answered
+     * `ACE_SET_PURGE LENGTH=32.179` with "unable to parse 32.179" and cancelled the print
+     * at the first swap - on a real machine, on a real plate.
+     */
+    CHECK(purge_arg(47.271) == 47);
+    CHECK(purge_arg(47.6) == 48);       // rounded, not truncated
+    CHECK(purge_arg(80.) == 80);
+    // 0 is the plugin's "use the stock default (80mm)", so a stamp never rounds into it.
+    CHECK(purge_arg(0.4) == 1);
+    CHECK(purge_arg(0.0004) == 1);
+    // and the ceiling is the macro's, not ours: capped prints, unparsable does not.
+    CHECK(purge_arg(200.) == 200);
+    CHECK(purge_arg(1e9) == 200);
+}
+
+TEST_CASE("every emitted macro argument is an integer where the plugin parses one",
+          "[ace_mmu_rewrite]")
+{
+    /*
+     * The whole class, not the one instance. Every argument the rewriter writes goes to a
+     * `gcmd.get_int` in ace.py - LENGTH, HEAD, ACE, SLOT - and one of them was a float for
+     * as long as the rewriter has existed, because nothing checked the SHAPE of what was
+     * emitted, only that the right macro appeared.
+     */
+    RewriteInput in = u1_topology(4);
+    in.head_capacity = { 1, 1, 1, 4 };
+    in.head_override = { 3, 1, 3, 2 };
+    in.flush_multiplier = 3.;           // push the stamps up, toward the macro's ceiling
+    for (auto& f : in.filaments)
+        f.colour = "#123456";
+    in.filaments[0].colour = "#FFFFFF";
+    in.filaments[2].colour = "#000000";
+
+    std::string g = start_gcode(0);
+    int prev = 0, layer = 0;
+    for (int t : {1, 2, 1, 2, 3, 0, 2, 0}) { g += change(prev, t, layer++); prev = t; }
+    g += end_gcode();
+
+    std::istringstream is(g);
+    std::ostringstream os;
+    RewriteResult      r = rewrite_gcode(is, os, in);
+    REQUIRE(r.rewritten);
+
+    int checked = 0;
+    for (const std::string& l : lines_of(os.str())) {
+        if (l.rfind("ACE_", 0) != 0 && l.rfind("SM_PRINT_PREEXTRUDE", 0) != 0)
+            continue;
+        // Every KEY=VALUE on the line, with the values the plugin reads as ints.
+        size_t at = 0;
+        while ((at = l.find('=', at)) != std::string::npos) {
+            size_t ks = l.rfind(' ', at);
+            ks = (ks == std::string::npos) ? 0 : ks + 1;
+            const std::string key = l.substr(ks, at - ks);
+            size_t ve = l.find(' ', at + 1);
+            const std::string val = l.substr(at + 1, ve == std::string::npos ? ve : ve - at - 1);
+            at = at + 1;
+            if (key != "LENGTH" && key != "HEAD" && key != "ACE" && key != "SLOT"
+                && key != "INDEX" && key != "INITIAL" && key != "RESET")
+                continue;
+            ++checked;
+            INFO("line: " << l << "  argument: " << key << "=" << val);
+            CHECK(val.find('.') == std::string::npos);      // get_int takes no decimals
+            CHECK(!val.empty());
+            CHECK(val.find_first_not_of("-0123456789") == std::string::npos);
+            if (key == "LENGTH") {
+                const int v = std::atoi(val.c_str());
+                CHECK(v >= 1);          // 0 would mean the stock 80mm default
+                CHECK(v <= 200);        // the macro's own maxval
+            }
+        }
+    }
+    CHECK(checked > 0);                 // a pass on an empty walk is not a pass
 }
 
 TEST_CASE("rewrite_file writes the sibling only when there is something to write", "[ace_mmu_rewrite]")
@@ -865,11 +935,26 @@ TEST_CASE("a real plate, when one is pointed at", "[ace_mmu_real]")
     // The plate's own filaments, read out of the file it carries them in.
     boost::nowide::ifstream f(path);
     REQUIRE(f.is_open());
-    std::string line, types, colours;
+    /*
+     * The FLUSH matrix too, and it is not a detail.
+     *
+     * Without it every pair prices at 0, no `ACE_SET_PURGE LENGTH=` is written, and the
+     * run reports "purge stamps: 0" - so the one argument that has actually broken a print
+     * on this machine was the one thing a real plate could not exercise. It sat green
+     * through the whole of it.
+     */
+    std::string line, types, colours, matrix, multiplier, diameters, densities;
     while (std::getline(f, line)) {
-        if (types.empty() && line.rfind("; filament_type = ", 0) == 0) types = line.substr(18);
-        if (colours.empty() && line.rfind("; filament_colour = ", 0) == 0) colours = line.substr(20);
-        if (!types.empty() && !colours.empty()) break;
+        auto take = [&line](const char* key, std::string& into) {
+            const std::string k = std::string("; ") + key + " = ";
+            if (into.empty() && line.rfind(k, 0) == 0) into = line.substr(k.size());
+        };
+        take("filament_type", types);
+        take("filament_colour", colours);
+        take("flush_volumes_matrix", matrix);
+        take("flush_multiplier", multiplier);
+        take("filament_diameter", diameters);
+        take("filament_density", densities);
     }
     f.close();
     REQUIRE_FALSE(types.empty());
@@ -885,15 +970,44 @@ TEST_CASE("a real plate, when one is pointed at", "[ace_mmu_real]")
         return out;
     };
     const auto ty = split(types), co = split(colours);
+    const auto di = split(diameters), de = split(densities);
     for (size_t i = 0; i < ty.size(); ++i) {
         RewriteFilament fil;
         fil.type   = ty[i];
         fil.colour = i < co.size() ? co[i] : "";
+        if (i < di.size() && !di[i].empty()) fil.diameter = std::atof(di[i].c_str());
+        if (i < de.size() && !de[i].empty()) fil.density  = std::atof(de[i].c_str());
         in.filaments.push_back(fil);
     }
+    if (!multiplier.empty())
+        in.flush_multiplier = std::atof(multiplier.c_str());
+    for (const std::string& v : split(matrix))
+        if (!v.empty())
+            in.flush_matrix.push_back(std::atof(v.c_str()));
+    WARN("flush: " << in.flush_matrix.size() << " pair(s), multiplier "
+                   << in.flush_multiplier);
 
     const std::string out = std::string(path) + ".ace.gcode";
     RewriteResult     r   = rewrite_file(path, out, in);
+    // Whatever this plate turns out to be, what it WROTE has to be parsable.
+    {
+        boost::nowide::ifstream w(out);
+        std::string             l;
+        int                     stamps = 0;
+        while (std::getline(w, l)) {
+            const std::string k = "ACE_SET_PURGE LENGTH=";
+            const size_t      at = l.find(k);
+            if (at == std::string::npos) continue;
+            const std::string v = l.substr(at + k.size());
+            ++stamps;
+            INFO("stamp: " << l);
+            CHECK(v.find('.') == std::string::npos);   // get_int takes no decimals
+            const int mm = std::atoi(v.c_str());
+            CHECK(mm >= 1);
+            CHECK(mm <= 200);
+        }
+        WARN("purge stamps written: " << stamps);
+    }
     WARN("plate: " << path);
     WARN("filaments: " << in.filaments.size() << "  heads: " << in.head_capacity.size());
     WARN("PLAN LINE: " << (r.rewritten ? r.header_line : std::string("(no rewrite needed)")));

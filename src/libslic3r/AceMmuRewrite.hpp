@@ -112,6 +112,7 @@ struct RewriteResult
     // What was emitted.
     int    swaps            = 0; // ACE_SWAP_HEAD in the body (the preload block is free)
     int    stamped          = 0; // ACE_SET_PURGE LENGTH= lines
+    int    purge_capped     = 0; // stamps the macro's maxval=200 cut down
     int    dropped_standbys = 0; // temperature lines the replay blamed
     double purge_mm         = 0; // sum of the stamps
     double purge_g          = 0;
@@ -172,8 +173,21 @@ double purge_length_mm(const RewriteInput& in, int from, int to);
 // multiACE v0.99.8b's stamp for the same pair: clamp(40, 150, 0.45 × mm3 ÷ 2.405), multiplier
 // applied upward only. Recorded beside ours, never written.
 double preflight_purge_mm(const RewriteInput& in, int from, int to);
-// "47.271" - three decimals, trailing zeros trimmed, locale-free.
-std::string format_length(double mm);
+/*
+ * The LENGTH= argument for ACE_SET_PURGE, as the macro will actually take it.
+ *
+ * multiACE parses it with `gcmd.get_int('LENGTH', None, minval=0, maxval=200)`, so it is an
+ * INTEGER in 0..200 - not a length. A three-decimal figure is refused by Klipper with
+ * "unable to parse", and the refusal aborts the print at the first swap. There was a
+ * `format_length()` here that wrote exactly that, and this replaces it rather than sitting
+ * beside it: a helper named for formatting a length is the one a person reaches for when
+ * writing a length into a macro, and for this macro it is always wrong.
+ *
+ * 0 is not "no purge" - the plugin's own help reads "LENGTH=0 = use the stock default
+ * (80mm)" - so a stamp we decided to write never rounds down to it, and 200 is a ceiling
+ * rather than a reason to refuse: a capped purge prints, an unparsable one does not.
+ */
+int purge_arg(double mm);
 
 }} // namespace Slic3r::AceMmu
 
