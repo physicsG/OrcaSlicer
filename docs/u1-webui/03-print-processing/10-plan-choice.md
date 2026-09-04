@@ -205,6 +205,32 @@ never rearranged*, and it is a test.
 | `sw_SetAceBays` | the host command. Re-runs the rewriter over the same logical gcode and answers with the new `ace_plan`. No re-slice, no geometry. A bay it cannot honour comes back as a sentence. |
 | `bayFix` + the panel's offer | the page computes whether re-addressing would clear **every** bay, and only then offers *Use the bays they are in*. A fix that clears half of them leaves the plate just as unprintable. |
 
+### The plate that raised it, re-run
+
+The four-colour ChickenPark plate from §1, put through the rewriter as it stands now, with
+the same topology it had in the app — three stock feeders and a four-bay ACE on toolhead 4:
+
+```
+; multiACE plan: T0:H0S0 T1:H1S0 T2:H2S0 T3:H3S0 swaps:0 optimal:1
+```
+
+Against the `T0:H3S0 T1:H2S0 T2:H0S0 T3:H1S0` it produced before. Every filament stays on
+the toolhead Orca had it on, and the file bears it out: the tool selections are unchanged
+(3 · 3 · 8 · 6 across T0–T3, identical in both), and the whole rewrite is six lines — the
+plan header, the format marker, `ACE_SET_PURGE RESET=1`, one preload
+`ACE_SWAP_HEAD HEAD=3 ACE=0 SLOT=0 INITIAL=1`, and the two comments around it — plus five
+repeat pre-extrudes dropped on the ACE-fed head, which is R4. The eleven on the stock
+feeders are untouched. Net, 341,854 lines became 341,855.
+
+**Read this for what it is.** It is the rewriter over that plate's own gcode, not the app
+slicing it: `--slice` segfaults on these projects in `calc_exclude_triangles`, a
+pre-existing crash in the CLI path, and the hook lives in `BackgroundSlicingProcess` which
+the CLI never enters. So the planning and the emission are confirmed on the real tool
+sequence; the hook firing on Slice was confirmed earlier, by the sibling this plate produced
+in the app in the first place.
+
+`ACE_REWRITE_FILE=<plate.gcode> libslic3r_tests "[ace_mmu_real]"` is how to repeat it.
+
 ### What the machine said
 
 Driven read-only against the U1 (`811002511261022618B3`) with three plates:

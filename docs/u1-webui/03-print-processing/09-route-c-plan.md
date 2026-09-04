@@ -430,6 +430,13 @@ regression check for the real fixture (§4.5) once one exists.
 
 ### 4.5 The fixture that is still missing
 
+**Partly answered.** `[ace_mmu_real]` reads any plate it is pointed at rather than needing
+one committed — `ACE_REWRITE_FILE=<plate.gcode> ACE_REWRITE_CAP=1,1,1,4 libslic3r_tests
+"[ace_mmu_real]"` prints the plan line and the counts. An 8 MB gcode is not a test fixture,
+and this is what to do instead until a trimmed one exists. What is still wanted is a
+committed two-layer plate so the check runs unattended.
+
+
 There is no *logical* 7-filament U1 file on disk: the reference file is route B's output.
 `snapmaker-orca --allow-newer-file --slice 0 …` over `~/proj/models/Test_Cube_U1_multiACE.3mf`
 segfaults in `calc_exclude_triangles` headlessly. Slice it once in the app with the stock

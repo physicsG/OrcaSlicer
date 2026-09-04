@@ -613,3 +613,83 @@ TEST_CASE("a bay that cannot be honoured is refused, never quietly dropped", "[a
     RewriteInput wrongSize = base; wrongSize.slot_override = {0};
     REQUIRE_THROWS_WITH(run(wrongSize), Catch::Contains("name 1 filaments"));
 }
+
+/*
+ * A real plate, on demand.
+ *
+ * The synthetic files above are the stock template's shape and they check the rules; they
+ * cannot check that a plate Orca actually produced parses the way the rules assume. The
+ * fixture for that is not committed - an 8 MB gcode is not a test fixture - so this reads
+ * one when it is pointed at one and does nothing otherwise.
+ *
+ *   ACE_REWRITE_FILE=/path/plate.gcode  ACE_REWRITE_CAP=1,1,1,4  ACE_REWRITE_UNIT=-1,-1,-1,0 \
+ *     build/tests/libslic3r/Release/libslic3r_tests "[ace_mmu_real]"
+ *
+ * It prints the plan line, which is the one thing worth reading off a real plate: which
+ * toolhead each filament ended on, and which bay feeds the ACE-fed one.
+ */
+TEST_CASE("a real plate, when one is pointed at", "[ace_mmu_real]")
+{
+    const char* path = std::getenv("ACE_REWRITE_FILE");
+    if (path == nullptr || !*path) {
+        WARN("ACE_REWRITE_FILE not set - nothing to read");
+        return;
+    }
+    auto ints = [](const char* env, const char* fallback) {
+        const char*      raw = std::getenv(env);
+        std::string      s(raw && *raw ? raw : fallback);
+        std::vector<int> out;
+        size_t           at = 0;
+        while (at <= s.size()) {
+            const size_t comma = s.find(',', at);
+            out.push_back(std::atoi(s.substr(at, comma == std::string::npos ? std::string::npos : comma - at).c_str()));
+            if (comma == std::string::npos) break;
+            at = comma + 1;
+        }
+        return out;
+    };
+
+    RewriteInput in;
+    in.mode          = "head";
+    in.head_capacity = ints("ACE_REWRITE_CAP", "1,1,1,4");
+    in.head_unit     = ints("ACE_REWRITE_UNIT", "-1,-1,-1,0");
+
+    // The plate's own filaments, read out of the file it carries them in.
+    boost::nowide::ifstream f(path);
+    REQUIRE(f.is_open());
+    std::string line, types, colours;
+    while (std::getline(f, line)) {
+        if (types.empty() && line.rfind("; filament_type = ", 0) == 0) types = line.substr(18);
+        if (colours.empty() && line.rfind("; filament_colour = ", 0) == 0) colours = line.substr(20);
+        if (!types.empty() && !colours.empty()) break;
+    }
+    f.close();
+    REQUIRE_FALSE(types.empty());
+    auto split = [](std::string v) {
+        std::vector<std::string> out;
+        size_t                   at = 0;
+        while (at <= v.size()) {
+            const size_t sep = v.find_first_of(";,", at);
+            out.push_back(v.substr(at, sep == std::string::npos ? std::string::npos : sep - at));
+            if (sep == std::string::npos) break;
+            at = sep + 1;
+        }
+        return out;
+    };
+    const auto ty = split(types), co = split(colours);
+    for (size_t i = 0; i < ty.size(); ++i) {
+        RewriteFilament fil;
+        fil.type   = ty[i];
+        fil.colour = i < co.size() ? co[i] : "";
+        in.filaments.push_back(fil);
+    }
+
+    const std::string out = std::string(path) + ".ace.gcode";
+    RewriteResult     r   = rewrite_file(path, out, in);
+    WARN("plate: " << path);
+    WARN("filaments: " << in.filaments.size() << "  heads: " << in.head_capacity.size());
+    WARN("PLAN LINE: " << (r.rewritten ? r.header_line : std::string("(no rewrite needed)")));
+    WARN("swaps: " << r.swaps << "  purge stamps: " << r.stamped
+                   << "  standbys dropped: " << r.dropped_standbys);
+    CHECK(r.plan.feasible);
+}
