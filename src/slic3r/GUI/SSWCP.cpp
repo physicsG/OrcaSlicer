@@ -2126,8 +2126,8 @@ void SSWCP_MachineOption_Instance::process()
         sw_SetFilamentMappingComplete();
     } else if (m_cmd == "sw_GetFileFilamentMapping") {
         sw_GetFileFilamentMapping();
-    } else if (m_cmd == "sw_SetAceBays") {
-        sw_SetAceBays();
+    } else if (m_cmd == "sw_SetAcePlan") {
+        sw_SetAcePlan();
     } else if (m_cmd == "sw_FinishFilamentMapping") {
         sw_FinishFilamentMapping();
     } else if(m_cmd == "sw_DownloadMachineFile"){
@@ -3208,12 +3208,21 @@ static bool ace_plan_for_current_plate(json& out)
  * known, and the popup is the first moment they are. The account is
  * docs/u1-webui/03-print-processing/10-plan-choice.md.
  *
- *   { "slots": { "<filament index>": <bay index>, ... } }   both 0-based, the wire's own
+ *   { "slots": { "<filament>": <bay> },  "heads": { "<filament>": <toolhead> } }
  *
- * A bay that cannot be honoured is refused with a sentence, never quietly dropped: silently
- * ignoring a placement is how a plate prints in the wrong colour.
+ * both 0-based and both optional. The two halves cost very different amounts and the caller
+ * is told which it is asking for: a BAY is one argument on each swap line, so the file is
+ * re-addressed and nothing else; a TOOLHEAD is the tool number itself, so the gcode is
+ * written again - still no re-slice, because the geometry is untouched, but not free.
+ *
+ * Heads are what "print these two colours from the ACE and leave that toolhead alone" is
+ * made of, and the planner will never choose it on its own: it costs swaps that a free plan
+ * does not, and trading print time for a spool arrangement is the operator's call.
+ *
+ * Anything that cannot be honoured is refused with a sentence, never quietly dropped:
+ * silently ignoring a placement is how a plate prints in the wrong colour.
  */
-void SSWCP_MachineOption_Instance::sw_SetAceBays()
+void SSWCP_MachineOption_Instance::sw_SetAcePlan()
 {
     auto* plate = wxGetApp().plater()->get_partplate_list().get_curr_plate();
     if (!plate || !plate->ace_rewrite().rewritten) {
@@ -3222,15 +3231,39 @@ void SSWCP_MachineOption_Instance::sw_SetAceBays()
     }
 
     AceMmu::RewriteInput in = plate->ace_input();
-    in.slot_override.assign(in.filaments.size(), -1);
-    if (m_param_data.count("slots") && m_param_data["slots"].is_object()) {
-        for (auto it = m_param_data["slots"].begin(); it != m_param_data["slots"].end(); ++it) {
+    const int n = int(in.filaments.size());
+    auto read_map = [&](const char* key, std::vector<int>& into, int fill) {
+        if (!m_param_data.count(key) || !m_param_data[key].is_object())
+            return false;
+        into.assign(n, fill);
+        for (auto it = m_param_data[key].begin(); it != m_param_data[key].end(); ++it) {
             int f = -1;
             try { f = std::stoi(it.key()); } catch (...) { continue; }
-            if (f < 0 || f >= int(in.slot_override.size()) || !it.value().is_number_integer())
-                continue;
-            in.slot_override[f] = it.value().get<int>();
+            if (f >= 0 && f < n && it.value().is_number_integer())
+                into[f] = it.value().get<int>();
         }
+        return true;
+    };
+    in.slot_override.clear();
+    in.head_override.clear();
+    const bool want_slots = read_map("slots", in.slot_override, -1);
+    /* A head override is a WHOLE layout - the planner is not asked to fill the gaps, it is
+       told - so a filament the caller did not name keeps the toolhead the current plan has
+       it on rather than becoming unplaced. */
+    std::vector<int> heads_seed(n, -1);
+    for (int f = 0; f < n && f < int(plate->ace_rewrite().plan.head_of.size()); ++f)
+        heads_seed[f] = plate->ace_rewrite().plan.head_of[f];
+    const bool want_heads = m_param_data.count("heads") && m_param_data["heads"].is_object();
+    if (want_heads) {
+        in.head_override = heads_seed;
+        read_map("heads", in.head_override, -1);
+        for (int f = 0; f < n; ++f)
+            if (in.head_override[f] < 0)
+                in.head_override[f] = heads_seed[f];
+    }
+    if (!want_slots && !want_heads) {
+        handle_general_fail(-1, _L("Nothing was chosen."));
+        return;
     }
 
     const std::string logical = plate->get_tmp_gcode_path();
@@ -3242,7 +3275,7 @@ void SSWCP_MachineOption_Instance::sw_SetAceBays()
             return;
         }
         plate->set_ace_rewrite(in, res);
-        BOOST_LOG_TRIVIAL(info) << "sw_SetAceBays: re-addressed the bays, " << res.swaps
+        BOOST_LOG_TRIVIAL(info) << "sw_SetAcePlan: " << res.swaps
                                 << " swaps, " << res.stamped << " purge stamps";
         /* The zip beside the gcode was made from the previous bytes. It is keyed to its
            source and stamped, so it will not be reused - but removing it now means the

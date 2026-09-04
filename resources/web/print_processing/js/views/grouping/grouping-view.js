@@ -29,6 +29,7 @@ import { el } from '../../../../shared/js/dom.js';
 import { text, keyedList } from '../../../../shared/js/render.js';
 import { aceBadge, aceBayAddr, ACE_MODE_LABELS } from '../../../../shared/js/multiACE.js';
 import { inkOn, grams1 } from '../../widgets/format.js';
+import { openPicker, closePicker, isPickerOpen } from '../../widgets/picker.js';
 
 /* `dom.js` builds HTML elements; one mark on this panel is an SVG and needs the other
    namespace. Local because it is the only user on this surface. */
@@ -75,7 +76,7 @@ export function update(root, model, ctx) {
   if (wantBand) paintBand(band, ace);
   root.classList.toggle('band-below', mode === 'normal');
 
-  paintHeads(root.querySelector('.g-heads'), plan, ace, check, filaments, mode);
+  paintHeads(root.querySelector('.g-heads'), plan, ace, check, filaments, mode, ctx);
   paintFix(root.querySelector('.g-fix'), model, ctx);
   paintNote(root.querySelector('.g-note'), plan, check);
   paintCost(root.querySelector('.g-cost'), plan);
@@ -118,11 +119,11 @@ function paintBand(band, ace) {
 
 /* ---- the heads --------------------------------------------------------- */
 
-function paintHeads(grid, plan, ace, check, filaments, mode) {
+function paintHeads(grid, plan, ace, check, filaments, mode, ctx) {
   keyedList(grid, plan.heads, {
     key: (h) => String(h.head),
     create: () => buildHead(),
-    update: (node, h) => paintHead(node, h, ace, check, filaments, mode),
+    update: (node, h) => paintHead(node, h, ace, check, filaments, mode, ctx, plan),
   });
 }
 
@@ -138,7 +139,7 @@ function buildHead() {
   return box;
 }
 
-function paintHead(box, h, ace, check, filaments, mode) {
+function paintHead(box, h, ace, check, filaments, mode, ctx, plan) {
   text(box.querySelector('h4'), `Toolhead ${h.head + 1}`);
   box.classList.toggle('is-idle', !h.run.length);
 
@@ -149,7 +150,7 @@ function paintHead(box, h, ace, check, filaments, mode) {
   keyedList(chips, h.run, {
     key: (s) => String(s.filament),
     create: () => buildChip(),
-    update: (node, s) => paintChip(node, s, h, filaments, rows),
+    update: (node, s) => paintChip(node, s, h, filaments, rows, ctx, plan, ace),
   });
 
   paintVerdict(box.querySelector('.g-verdict'), h, rows);
@@ -237,7 +238,7 @@ function buildChip() {
  * machine disagrees with is MARKED on the chip rather than replaced on it: `A2` is still
  * where the plan looks, and hiding that would make the verdict below unexplainable.
  */
-function paintChip(chip, step, h, filaments, rows) {
+function paintChip(chip, step, h, filaments, rows, ctx, plan, ace) {
   const fil = filaments[step.filament]
            || { index: step.filament, type: '---', colors: [] };
   const colour = fil.colors[0] || '#B7BDC6';
@@ -257,6 +258,106 @@ function paintChip(chip, step, h, filaments, rows) {
   chip.classList.toggle('is-bad', !!row && row.verdict === 'differs');
   chip.classList.toggle('is-warn', !!row && row.verdict === 'unsure');
   chip.title = `${fil.type} · ${addr}${row && row.say ? ` · ${row.say}` : ''}`;
+
+  /*
+   * The chip is where a filament is sent somewhere else.
+   *
+   * Edit Filament's toolhead picker is absent on an ACE plate and must stay absent:
+   * remapping the tool numbers without remapping the swaps prints on one head while the ACE
+   * feeds another. This is not that. It re-runs the rewriter, which writes the tool numbers
+   * AND the swaps together, so the two cannot come apart - and it is the only way to say
+   * "print these two colours from the ACE and leave that toolhead alone", which the planner
+   * will never choose on its own because it costs swaps a free plan does not.
+   */
+  if (!ctx || !ctx.setSource) return;
+  chip.classList.add('is-pick');
+  chip.setAttribute('role', 'button');
+  chip.tabIndex = 0;
+  const open = () => openSource(chip, fil, h, plan, ace, ctx);
+  chip.onclick = open;
+  chip.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+  };
+}
+
+/**
+ * Where this filament can come from, and what each place costs.
+ *
+ * Two kinds, and every row says which: a bay of THIS head's own unit, which is one argument
+ * on each swap line and free; or another toolhead, which is the tool number and re-writes
+ * the gcode. Head mode binds one unit to one head, so no other cabinet is reachable from
+ * here at any price and none is offered.
+ */
+function openSource(chip, fil, h, plan, ace, ctx) {
+  if (isPickerOpen(chip)) { closePicker(); return; }
+  const unit = ((ace && ace.units) || []).find((u) => u.index === h.unit) || null;
+  const step = h.run.find((r) => r.filament === fil.index) || {};
+  const items = [];
+
+  if (!h.feeder && unit) {
+    (unit.bays || []).forEach((bay, i) => {
+      const known = bay.known && bay.material;
+      const usable = !!bay.occupied && !(known && fil.type && bay.material !== fil.type);
+      items.push({
+        value: `b:${i}`,
+        enabled: usable,
+        title: !bay.occupied ? 'This bay is empty — nothing to draw from.'
+             : !usable ? `This bay holds ${bay.material}; the plate wants ${fil.type}.` : '',
+        build: (node) => {
+          const d = el('span', 'menu-place', bay.addr || aceBayAddr(h.unit, i));
+          if (bay.occupied) {
+            d.style.background = bay.color || '#B7BDC6';
+            d.style.color = inkOn(bay.color || '#B7BDC6');
+          } else d.classList.add('empty');
+          node.appendChild(d);
+          const col = el('span', 'menu-col');
+          col.appendChild(el('b', null, bay.occupied ? (bay.material || 'Unknown') : 'Empty'));
+          col.appendChild(el('span', null, bay.occupied ? (bay.vendor || 'not named') : ''));
+          node.appendChild(col);
+          if (i === step.slot) node.appendChild(el('span', 'menu-tick'));
+          else if (usable) node.appendChild(el('span', 'menu-cost free', 'free'));
+          if (!usable) node.appendChild(el('span', 'menu-warn'));
+        },
+      });
+    });
+  }
+
+  plan.heads.forEach((other) => {
+    if (other.head === h.head) return;
+    /* A stock feeder holds one spool and an ACE head as many as its unit has bays. A full
+       one is refused here rather than offered and then failed by the host - the widget's
+       whole contract is that a disabled row cannot be chosen, and finding out by pressing
+       it is what an error message is for, not a menu. */
+    const room = other.feeder ? 1 : ((unit && unit.bays && unit.bays.length) || 4);
+    const full = other.run.length >= room;
+    items.push({
+      value: `h:${other.head}`,
+      enabled: !full,
+      title: full ? (other.feeder
+        ? `Toolhead ${other.head + 1} is a stock feeder and already has a filament.`
+        : `Toolhead ${other.head + 1} already uses all ${room} bays.`) : '',
+      build: (node) => {
+        node.appendChild(el('span', 'menu-place', String(other.head + 1)));
+        const col = el('span', 'menu-col');
+        col.appendChild(el('b', null, `Toolhead ${other.head + 1}`));
+        col.appendChild(el('span', null, other.feeder
+          ? (other.run.length ? `${other.run.length} filament here` : 'nothing here')
+          : `ACE, ${other.run.length} here`));
+        node.appendChild(col);
+        if (full) node.appendChild(el('span', 'menu-warn'));
+        else node.appendChild(el('span', 'menu-cost', 're-export'));
+      },
+    });
+  });
+
+  openPicker({
+    trigger: chip, kind: 'head', within: ctx.dialog ? ctx.dialog() : document.body,
+    items,
+    onPick: (v) => {
+      const [kind, num] = String(v).split(':');
+      ctx.setSource(fil.index, kind === 'b' ? { slot: Number(num) } : { head: Number(num) });
+    },
+  });
 }
 
 /* ---- the verdict, per head --------------------------------------------- */

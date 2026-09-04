@@ -85,3 +85,10 @@ broker evicts the older holder.
   `?plan=bayswap`: two bays refused, the offer made only because it would clear every
   one of them, and after a click a clean verdict, an open Send and **the same swap
   count** — which is the evidence that addressing is not a cost.
+
+- **`print-dialog-source.js`** — the source picker on a chip, against `?plan=small`:
+  every chip opens it, the bays come first marked free and the other toolheads after
+  marked re-export, a full destination is greyed with its reason rather than offered,
+  and moving a filament onto the ACE-fed head leaves two colours behind one changer
+  and a toolhead with nothing on it — which is the one arrangement the planner will
+  never choose for you.

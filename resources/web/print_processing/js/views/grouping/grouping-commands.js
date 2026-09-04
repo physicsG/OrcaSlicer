@@ -31,21 +31,26 @@ import { CMD, PRINT_TASK, plainLine } from '../../../../shared/js/protocol.js';
  * filament indices. On the machine `extruders_used` is one flag per toolhead.
  */
 /**
- * Re-address the bays, and nothing else.
+ * Change the plan: which bay feeds a filament, which toolhead prints it, or both.
  *
- * The one thing this panel can change about the plan without slicing anything again. A
- * filament's TOOLHEAD is the tool number in the gcode, so moving it means writing the file
- * again; its BAY is one argument on each `ACE_SWAP_HEAD`, so the host runs the rewriter a
- * second time over the same logical gcode and nothing about the geometry is touched.
+ * The two halves cost different amounts and the caller should know which it is asking for.
+ * A BAY is one argument on each `ACE_SWAP_HEAD`, so the host re-addresses the file and
+ * nothing else. A TOOLHEAD is the tool number itself, so the gcode is written again - still
+ * no re-slice, the geometry is untouched, but not free either.
  *
- * `slots` is filament index -> bay index, both 0-based and both the wire's own. The host
- * refuses a bay it cannot honour with a sentence rather than dropping it, because silently
- * ignoring a placement is how a plate prints in the wrong colour.
+ * Moving a filament onto a toolhead that already prints one is how "print these two colours
+ * from the ACE" is expressed, and the planner will never choose it: it costs swaps a free
+ * plan does not, and trading print time for a spool arrangement is the operator's call.
  *
- * The reply carries the new `ace_plan`, so the caller does not have to re-read the mapping.
+ * `slots` and `heads` are both filament index -> place index, 0-based, the wire's own. The
+ * reply carries the new `ace_plan`, so the caller does not have to re-read the mapping. A
+ * placement the host cannot honour comes back as a sentence rather than being dropped.
  */
-export function setAceBays(bridge, slots) {
-  return bridge.request(CMD.SET_ACE_BAYS, { slots });
+export function setAcePlan(bridge, { slots = null, heads = null } = {}) {
+  const params = {};
+  if (slots) params.slots = slots;
+  if (heads) params.heads = heads;
+  return bridge.request(CMD.SET_ACE_PLAN, params);
 }
 
 export function writeIdentityMap(bridge, { plan, filaments }) {

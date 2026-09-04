@@ -522,11 +522,53 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
          * It refuses the same things the host refuses, because a mock that accepts what
          * the real one rejects is a mock that hides the refusal until hardware.
          */
-        case 'sw_SetAceBays': {
+        case 'sw_SetAcePlan': {
           const plan = printer.job.acePlan;
           if (!plan) return fail('This plate was not planned for an ACE.');
           const want = (params && params.slots) || {};
+          const wantHeads = (params && params.heads) || {};
           const next = JSON.parse(JSON.stringify(plan));
+
+          /* Heads first: moving a filament to another toolhead is a different plan, and the
+             bays are then re-chosen underneath it. Orca re-runs the rewriter for this; the
+             simulator does what the rewriter would end up having done.
+
+             Capacity is a refusal, not a shrug. A stock feeder holds one spool and an ACE
+             head as many as its unit has bays, and the real host throws rather than
+             overflow - the first cut here quietly put five filaments in a four-bay unit and
+             handed back slot 4, which is exactly the kind of thing a mock exists to catch
+             before hardware does. */
+          for (const [fil, head] of Object.entries(wantHeads)) {
+            const f = Number(fil), to = Number(head);
+            const from = next.heads.find((h) => h.run.some((r) => r.filament === f));
+            const dest = next.heads.find((h) => h.head === to);
+            if (!from || !dest || from === dest) continue;
+            const room = dest.feeder ? 1 : 4;
+            if (dest.run.length >= room)
+              return fail(`Toolhead ${to + 1} has room for ${room} filament(s).`);
+            const step = from.run.find((r) => r.filament === f);
+            from.run = from.run.filter((r) => r.filament !== f);
+            dest.run.push(dest.feeder ? { filament: f }
+                                      : { filament: f, unit: dest.unit, slot: step.slot });
+          }
+          /* Every ACE head re-numbers its bays by first use unless something was named,
+             and a head that now prints more than one colour swaps between them. */
+          for (const h of next.heads) {
+            if (h.feeder) continue;
+            const taken = new Set(Object.entries(want).map(([, v]) => Number(v)));
+            let free = 0;
+            h.run.forEach((r) => {
+              if (want[r.filament] != null) return;
+              while (taken.has(free) && free < 4) free++;
+              r.slot = free;
+              taken.add(free);
+            });
+          }
+          /* The swap count is NOT recomputed here, and inventing one was worse than leaving
+             it. It depends on the plate's own tool order - how often the print returns to a
+             colour - which this simulator does not carry; `run.length - 1` turned 300 into
+             4 and would have had a test asserting nonsense. Orca re-runs the rewriter and
+             counts it exactly. What the simulator can honestly say is where things are. */
 
           for (const h of next.heads) {
             if (h.feeder || !h.run.length) continue;
@@ -556,7 +598,7 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
             }
           }
           printer.job.acePlan = next;
-          log('mock-note', { setAceBays: Object.keys(want).length });
+          log('mock-note', { setAcePlan: Object.keys(want).length + Object.keys(wantHeads).length });
           return ok({ ace_plan: next });
         }
 
@@ -721,6 +763,15 @@ export function installMockHost({ log = () => {}, handlers = {}, printer: given 
      */
     usePlan: (opts) => {
       Object.assign(printer.job, mockAceJobFields(opts));
+      /* `small`: four colours on seven places, so there is room to move one. */
+      if (opts && opts.small) {
+        const j = printer.job;
+        const keep = 4;
+        ['fileFilamentType', 'fileFilamentColor', 'fileFilamentColorMulti', 'fileFilamentWeight',
+         'fileFilamentUsedMm', 'fileNozzle'].forEach((k) => { j[k] = j[k].slice(0, keep); });
+        j.extruderMap = { 0: '3', 1: '1', 2: '2', 3: '0' };
+        j.acePlan = mockAcePlanSmall();
+      }
       /* `bayswap`: the same four spools, two of them in each other's bay. Nothing is
          missing, so the plate is printable the moment the addresses are re-chosen -
          which is the one state the free fix exists for, and the state a plan chosen
@@ -838,6 +889,28 @@ function mockAce() {
  * one, exactly as the four-filament default does. `mismatch: true` is that: it moves one
  * file filament off the bay that holds it, so bay 0_1 disagrees and nothing else does.
  */
+/*
+ * A four-colour plate on the same machine: three stock feeders and one filament on the ACE.
+ *
+ * The seven-colour one saturates every place - 3 feeders and 4 bays for 7 filaments - so
+ * nothing can be moved anywhere and the source picker has nothing to offer. This is the
+ * shape a real plate has had every time: fewer colours than places, room to rearrange, and
+ * the question of whether a second colour should ride the ACE.
+ */
+function mockAcePlanSmall() {
+  return {
+    mode: 'head',
+    swaps: 0,
+    purge_g: 0,
+    heads: [
+      { head: 0, feeder: true, run: [{ filament: 3 }] },
+      { head: 1, feeder: true, run: [{ filament: 1 }] },
+      { head: 2, feeder: true, run: [{ filament: 2 }] },
+      { head: 3, feeder: false, unit: 0, run: [{ filament: 0, unit: 0, slot: 0 }] },
+    ],
+  };
+}
+
 function mockAcePlan({ mismatch = false } = {}) {
   return {
     mode: 'head',

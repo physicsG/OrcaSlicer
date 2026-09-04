@@ -766,12 +766,12 @@
   "response": [],
   "rpc": []
  },
- "sw_SetAceBays": {
+ "sw_SetAcePlan": {
   "handlers": [
-   "sw_SetAceBays"
+   "sw_SetAcePlan"
   ],
   "params": [
-   "slots"
+   "heads"
   ],
   "response": [
    "ace_plan"

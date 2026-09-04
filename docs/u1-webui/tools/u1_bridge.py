@@ -531,7 +531,7 @@ class Bridge:
             "sw_GetPrintZip": self._print_zip,
             "sw_GetPrintLegal": self._print_legal,
             "sw_FinishPreprint": self._finish_preprint,
-            "sw_SetAceBays": self._set_ace_bays,
+            "sw_SetAcePlan": self._set_ace_plan,
             "sw_SetFilamentMappingComplete": self._mapping_complete,
             "sw_FinishFilamentMapping": self._finish_mapping,
             # Orca answers this about itself, so the honest answer here is us.
@@ -911,8 +911,8 @@ class Bridge:
         self.log(f"[bridge] sw_FinishPreprint status={params.get('status')!r}")
         self._ok(seqid, {})
 
-    def _set_ace_bays(self, seqid, params, event_id):
-        """Route C's bay re-map, which only Orca can actually do - and says so.
+    def _set_ace_plan(self, seqid, params, event_id):
+        """Route C's plan change, which only Orca can actually do - and says so.
 
         In Orca this re-runs the gcode rewriter over the plate's own logical file, because
         a bay is one argument on each `ACE_SWAP_HEAD` and nothing else depends on it. This
@@ -925,7 +925,7 @@ class Bridge:
         So it refuses with a sentence the panel can show, and the real path is tested in
         Orca, where the rewriter is.
         """
-        self._err(seqid, -1, "Re-addressing the bays needs Orca: this bridge reads a "
+        self._err(seqid, -1, "Changing the plan needs Orca: this bridge reads a "
                              "finished gcode and has no rewriter behind it.")
 
     def _mapping_complete(self, seqid, params, event_id):

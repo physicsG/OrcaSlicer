@@ -607,6 +607,40 @@ body.dlg {
 
 .g-verdict { margin-top: 5px; font-size: 11px; line-height: 1.4; min-height: 15px; }
 
+/* A chip that can be opened has to look like it can - the same caret the four-card panel
+   puts on its own picker, at the size a 20px chip can carry. */
+.g-chip.is-pick { cursor: pointer; }
+.g-chip.is-pick:hover { border-color: var(--f-blue); }
+.g-chip.is-pick:focus-visible { outline: 2px solid var(--f-blue); outline-offset: 1px; }
+.g-chip.is-pick .g-from::after { content: " \25BE"; color: var(--ink-dim); }
+
+/* The source menu's rows. Two lines rather than two columns: the toolhead menu is 200px -
+   the bundle's own number - and a material, a vendor and a cost tag side by side truncate
+   all three, while the row is 48px tall and was carrying one line of it. */
+.menu-place {
+  flex: none; width: 26px; height: 20px; border-radius: 4px;
+  display: grid; place-items: center; border: 1px solid rgba(0, 0, 0, .18);
+  font: 600 10px/1 var(--mono);
+}
+.menu-place.empty {
+  background: repeating-linear-gradient(45deg, var(--f-track) 0 4px, transparent 4px 8px);
+  border-style: dashed;
+}
+.menu-col { display: flex; flex-direction: column; justify-content: center; gap: 1px;
+            flex: 1; min-width: 0; }
+.menu-col b, .menu-col span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;
+}
+.menu-col b { font: 600 12px/1.25 var(--sans); color: var(--ink); }
+.menu-col span { font: 10.5px/1.25 var(--sans); color: var(--ink-dim); }
+/* Every row states its own cost, because that asymmetry is what the panel turns on. */
+.menu-cost {
+  flex: none; font: 600 9px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase;
+  padding: 2px 5px; border-radius: 8px;
+  color: var(--f-warn); background: rgba(196, 101, 30, .14);
+}
+.menu-cost.free { color: var(--ok, #1f9254); background: rgba(31, 146, 84, .13); }
+
 /* The free fix: offered only when re-addressing the bays would clear every one of them. */
 .g-fix { display: flex; align-items: center; gap: 9px; margin-top: 8px; flex-wrap: wrap; }
 .g-fixsay { font-size: 11px; color: var(--ink-2); }

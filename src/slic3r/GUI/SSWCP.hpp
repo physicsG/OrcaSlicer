@@ -416,8 +416,8 @@ private:
 
     // PrePrint
     void sw_GetFileFilamentMapping();
-    // Route C: re-address the ACE bays of the current plate's plan. No re-slice.
-    void sw_SetAceBays();
+    // Route C: change the current plate's ACE plan - bays, toolheads or both. No re-slice.
+    void sw_SetAcePlan();
     void sw_SetFilamentMappingComplete();
     void sw_FinishFilamentMapping();
 

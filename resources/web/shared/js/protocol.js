@@ -133,9 +133,11 @@ export const CMD = {
   // byte. A 12 MB zip crosses as ~40 MB of JSON.
   GET_PRINT_ZIP: 'sw_GetPrintZip',                 // -> { name, content: number[] }
   GET_FILE_FILAMENT_MAPPING: 'sw_GetFileFilamentMapping',   // { filename }
-  // Route C: re-address the ACE bays of the current plate's plan. { slots: {fil: bay} },
-  // both 0-based. No re-slice - a bay is one argument on each swap line.
-  SET_ACE_BAYS: 'sw_SetAceBays',
+  // Route C: change the current plate's ACE plan. { slots: {fil: bay}, heads: {fil: head} },
+  // both 0-based, both optional. No re-slice either way: a bay is one argument on each swap
+  // line, a toolhead is the tool number, so the gcode is written again but the geometry is
+  // never touched.
+  SET_ACE_PLAN: 'sw_SetAcePlan',
   UPDATE_MACHINE_FILAMENT_INFO: 'sw_UpdateMachineFilamentInfo',
   SET_FILAMENT_MAPPING_COMPLETE: 'sw_SetFilamentMappingComplete', // { status }
   FINISH_FILAMENT_MAPPING: 'sw_FinishFilamentMapping',

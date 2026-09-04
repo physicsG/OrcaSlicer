@@ -106,16 +106,37 @@ const ctx = {
   fixBays() {
     const slots = model.bayFix;
     if (!slots || model.busy) return;
+    ctx.setAcePlan({ slots }, 'The bays were re-addressed. Nothing was re-sliced.');
+  },
+
+  /**
+   * Send this filament somewhere else: a bay of its own head, or another toolhead.
+   *
+   * A bay is free. A toolhead re-writes the gcode, and moving one onto a head that already
+   * prints something is what makes the ACE swap mid-print - which is a thing to choose, not
+   * a thing to be given, so it only ever happens from here.
+   */
+  setSource(filament, where) {
+    if (model.busy || filament == null) return;
+    const f = String(filament);
+    if (where.slot != null)
+      ctx.setAcePlan({ slots: { [f]: where.slot } }, 'Re-addressed. Nothing was re-sliced.');
+    else if (where.head != null)
+      ctx.setAcePlan({ heads: { [f]: where.head } },
+                     'Moved to another toolhead. The G-code was written again, not re-sliced.');
+  },
+
+  setAcePlan(params, note) {
     model.busy = true;
     render();
-    groupCmds.setAceBays(bridge, slots)
+    groupCmds.setAcePlan(bridge, params)
       .then((reply) => {
         const plan = reply && (reply.ace_plan || (reply.data && reply.data.ace_plan));
         if (plan) model.mapping = { ...model.mapping, ace_plan: plan };
         recomputeFile();
-        say('The bays were re-addressed. Nothing was re-sliced.', 'ok');
+        say(note, 'ok');
       })
-      .catch((e) => say(`could not re-address the bays: ${e.message}`, 'err'))
+      .catch((e) => say(`could not change the plan: ${e.message}`, 'err'))
       .finally(() => { model.busy = false; render(); });
   },
 
