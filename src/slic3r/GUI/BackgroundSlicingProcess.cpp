@@ -882,6 +882,15 @@ void BackgroundSlicingProcess::rewrite_for_ace()
 			 * panel refuses a toolhead over.
 			 */
 			for (const auto& [head, spool] : GUI::AceMmuProvider::fetch_feeders(m_ace_host)) {
+				/*
+				 * Only heads the PRESET says are stock feeders. `print_task_config` reports
+				 * every toolhead, and an ACE-fed one reports whichever bay happens to be
+				 * loaded in it - which is not a place a plan can be laid onto, it is the
+				 * consequence of the last plan. Counting it made the log say six places
+				 * when five were real.
+				 */
+				if (head < 0 || head >= int(in.head_capacity.size()) || in.head_capacity[head] > 1)
+					continue;
 				AceMmu::LoadedPlace place;
 				place.head     = head;
 				place.colour   = spool.colour_rgba;
