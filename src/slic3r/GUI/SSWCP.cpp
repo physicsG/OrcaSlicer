@@ -7465,6 +7465,7 @@ std::unordered_set<std::string> SSWCP::m_machine_option_cmd_list = {
     "sw_CameraStopMonitor",
     "sw_DeleteMachineFile",
     "sw_GetFileFilamentMapping",
+    "sw_SetAcePlan",
     "sw_SetFilamentMappingComplete",
     "sw_FinishFilamentMapping",
     "sw_DownloadMachineFile",

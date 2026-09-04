@@ -114,6 +114,71 @@ check("per-object field filters match the bundle",
 check("all four toolheads carry the extruder field list",
       all(ours.get(k) == ex for k in ["extruder", "extruder1", "extruder2", "extruder3"]))
 
+print("\n== SSWCP routing ==")
+"""
+A command is dispatched by ONE handler class and routed to it by ONE name list, and the two
+have to agree. `SSWCP::create_instance` picks the class by looking the name up in those
+lists and falls back to the base `SSWCP_Instance`, so a command whose `else if` sits in
+`SSWCP_MachineOption_Instance::process()` but whose name is in no list is built as the base
+class, never reaches its handler, and answers the page with the default "failure".
+
+That happened: `sw_SetAcePlan` was written, dispatched, catalogued, covered by the
+simulator and green everywhere, and did nothing at all in Orca - because the simulator
+answers by name and knows nothing about which C++ class would have been constructed. This
+check is the difference.
+"""
+sswcp_src = open(os.path.join(ROOT, "src", "slic3r", "GUI", "SSWCP.cpp"), encoding="utf-8").read()
+LIST_OF = {
+    "SSWCP_MachineFind_Instance": "m_machine_find_cmd_list",
+    "SSWCP_MachineConnect_Instance": "m_machine_connect_cmd_list",
+    "SSWCP_MachineOption_Instance": "m_machine_option_cmd_list",
+    "SSWCP_SliceProject_Instance": "m_project_cmd_list",
+    "SSWCP_UserLogin_Instance": "m_login_cmd_list",
+    "SSWCP_MachineManage_Instance": "m_machine_manage_cmd_list",
+    "SSWCP_PageStateChange_Instance": "m_page_state_cmd_list",
+    "SSWCP_MqttAgent_Instance": "m_mqtt_agent_cmd_list",
+    "SSWCP_Instance": None,          # the fallback: its commands are in no list
+}
+lists = {}
+for m in re.finditer(r"SSWCP::(m_\w+_cmd_list)\s*=\s*\{([\s\S]*?)\};", sswcp_src):
+    lists[m.group(1)] = set(re.findall(r'"(sw_[A-Za-z0-9_]+)"', m.group(2)))
+
+bounds = [(m.start(), m.group(1)) for m in
+          re.finditer(r"void (SSWCP\w*_?Instance)::process\(\)", sswcp_src)]
+bounds.sort()
+handled = {}                       # class -> the commands its process() dispatches
+for i, (at, cls) in enumerate(bounds):
+    end_at = bounds[i + 1][0] if i + 1 < len(bounds) else len(sswcp_src)
+    handled[cls] = set(re.findall(r'm_cmd == "(sw_[A-Za-z0-9_]+)"', sswcp_src[at:end_at]))
+
+CLASS_OF = {v: k for k, v in LIST_OF.items() if v}
+def routed_to(cmd):
+    """The class `create_instance` builds: the first list that names it, else the base."""
+    for name in ["m_machine_find_cmd_list", "m_machine_connect_cmd_list",
+                 "m_machine_option_cmd_list", "m_project_cmd_list", "m_login_cmd_list",
+                 "m_machine_manage_cmd_list", "m_page_state_cmd_list", "m_mqtt_agent_cmd_list"]:
+        if cmd in lists.get(name, ()):
+            return CLASS_OF[name]
+    return "SSWCP_Instance"
+
+# Pre-existing, and left alone deliberately. `sw_mqtt_unsubscribe` has a handler in
+# SSWCP_MqttAgent_Instance and is in no list, so Orca builds the base class and the handler
+# never runs - and the SHIPPED Flutter bundle can send it (main.dart.js). It is a real
+# defect, it is not ours, and routing it would newly run code that has never run once; so
+# it is named here rather than silently passed or blindly fixed. Anything NEW fails.
+KNOWN_UNROUTED = {"sw_mqtt_unsubscribe"}
+
+every = set().union(*handled.values()) if handled else set()
+dead = sorted(c for c in every
+              if c not in handled.get(routed_to(c), set()) and c not in KNOWN_UNROUTED)
+# A check that scanned nothing passes for the wrong reason. This one did exactly that -
+# the class regex was over-escaped, matched no `process()`, and reported every command as
+# fine because it had found none of them.
+check("the routing scan found the handler classes",
+      len(handled) >= 8 and len(every) > 50, f"{len(handled)} classes, {len(every)} commands")
+check("every command reaches the class that handles it",
+      not dead, "; ".join(f"{c} -> {routed_to(c)}" for c in dead[:4]))
+
 print("\n== bridge commands ==")
 cmds = json.load(open(os.path.join(DATA, "sswcp-commands.json"), encoding='utf-8'))
 # PRINTER_BACKED classifies REPLY SHAPES; it is not a list of commands we send, and it
