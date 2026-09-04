@@ -52,9 +52,11 @@
       .filter((n) => n.getBoundingClientRect().width > 0).length;
     check('the four cards are not drawn', onScreen('.fil-card') === 0,
           `${onScreen('.fil-card')} visible of ${document.querySelectorAll('.fil-card').length}`);
+    /* Ghost bays carry an empty `data-fil` - they are places, not filaments - so they must
+       not be counted here; before they were filtered out this read 5 of 4. */
     check('every file filament reaches the screen',
           new Set([...document.querySelectorAll('[data-fil]')]
-            .map((n) => n.dataset.fil)).size === m.filaments.length,
+            .map((n) => n.dataset.fil).filter(Boolean)).size === m.filaments.length,
           `${new Set([...document.querySelectorAll('[data-fil]')].map((n) => n.dataset.fil)).size}`
           + ` of ${m.filaments.length}`);
     check('no head picker on an ACE plate', onScreen('.fil-pick') === 0,
@@ -81,9 +83,16 @@
     check('the swap cost is on screen',
           !!cost && (m.plan.swaps > 0 ? /\d/.test(costText) : /No\s*ACE swaps/i.test(costText)),
           `${m.plan.swaps} swaps -> "${costText}"`);
+    /* The note says what is UNCHECKED, and on a machine that answers about every place
+       that is nothing, so the note is empty. It used to say the stock feeders had not been
+       checked, which was true only for as long as nothing read the object that reports
+       them. Either way it has to agree with the verdicts. */
     const note = document.querySelector('.g-note');
-    check('the feeder limit is stated', !!note && /feeder/i.test(note.textContent),
-          note ? note.textContent.slice(0, 60) : 'none');
+    const quiet = m.check.rows.filter((r) => r.verdict === 'unchecked').length;
+    const noteText = note ? note.textContent.trim() : '';
+    check('the note agrees with what was actually checked',
+          !!note && (quiet ? /not been checked/i.test(noteText) : noteText === ''),
+          `${quiet} unchecked -> "${noteText.slice(0, 60)}"`);
     const badge = document.querySelectorAll('.g-src .ace-badge').length;
     check('the ACE-fed head carries its unit badge', badge >= 1, `${badge} badges`);
     const feedmark = document.querySelectorAll('.g-feedmark').length;

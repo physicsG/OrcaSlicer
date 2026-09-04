@@ -255,7 +255,7 @@ function recomputeMachine() {
   model.ace = { ...raw,
                 units: (raw.units || []).map(
                   (u) => ({ ...u, bays: mergeAceBays(u, model.aceBays) })) };
-  model.check = reconcile(model.plan, model.ace, model.filaments);
+  model.check = reconcile(model.plan, model.ace, model.filaments, model.toolheads);
   /* The free fix, when there is one: every spool the plate wants is in the machine and
      merely in another bay. Computed here rather than in the view, beside the verdict it
      answers. */

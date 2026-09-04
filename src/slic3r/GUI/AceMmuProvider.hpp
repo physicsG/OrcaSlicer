@@ -13,6 +13,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <map>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -54,6 +55,27 @@ public:
     bool fetch_once(int timeout_connect_s = 4, int timeout_max_s = 8);
 
     const std::string& base_url() const { return m_base_url; }
+
+    /*
+     * What each STOCK FEEDER is holding, which the ACE does not report.
+     *
+     * `/multiace/api/state` describes the unit's own bays and says nothing about the three
+     * side feeders - `head_source` is null for every head on the reference machine - so a
+     * plan could be laid onto a feeder holding another colour with nothing able to notice.
+     * The machine does report it, in `print_task_config`, which is where the popup's
+     * four-card panel gets the filament it refuses a toolhead over; this reads the same
+     * object over Moonraker.
+     *
+     * Keyed by toolhead index, and only for heads the machine says are loaded. Empty on any
+     * failure: a slice must never depend on a reachable printer.
+     */
+    struct FeederSpool
+    {
+        std::string material;     // "PLA"; empty when the machine reports none
+        std::string colour_rgba;  // "#rrggbb" or "#rrggbbaa"
+    };
+    static std::map<int, FeederSpool> fetch_feeders(const std::string& host, int timeout_connect_s = 2,
+                                                    int timeout_max_s = 4);
 
     // Best-effort IP/host of the currently-connected printer: the selected
     // MachineObject's dev_ip if set, else parsed from the connected PrintHost

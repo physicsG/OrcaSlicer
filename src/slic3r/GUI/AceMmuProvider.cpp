@@ -146,6 +146,56 @@ AceMmu::AceSnapshot AceMmuProvider::snapshot() const
     return m_snapshot;
 }
 
+/*
+ * `print_task_config` over Moonraker, which is the only place a stock feeder's contents are
+ * reported. Port 7125 and no authentication, the same door `u1_bridge.py` and the Device
+ * page's own reads use.
+ */
+std::map<int, AceMmuProvider::FeederSpool> AceMmuProvider::fetch_feeders(const std::string& host,
+                                                                        int timeout_connect_s,
+                                                                        int timeout_max_s)
+{
+    std::map<int, FeederSpool> out;
+    if (host.empty())
+        return out;
+    const std::string url = "http://" + host + ":7125/printer/objects/query?print_task_config";
+
+    Http::get(url)
+        .timeout_connect(timeout_connect_s)
+        .timeout_max(timeout_max_s)
+        .on_error([&](std::string, std::string error, unsigned status) {
+            BOOST_LOG_TRIVIAL(warning) << "AceMmuProvider::fetch_feeders: " << url << " failed: " << error
+                                       << " (status " << status << ")";
+        })
+        .on_complete([&](std::string body, unsigned) {
+            const nlohmann::json doc = nlohmann::json::parse(body, nullptr, false);
+            if (!doc.is_object())
+                return;
+            const auto tc = doc.value("result", nlohmann::json::object())
+                               .value("status", nlohmann::json::object())
+                               .value("print_task_config", nlohmann::json::object());
+            const auto types  = tc.value("filament_type", nlohmann::json::array());
+            const auto rgba   = tc.value("filament_color_rgba", nlohmann::json::array());
+            const auto exists = tc.value("filament_exist", nlohmann::json::array());
+            for (size_t i = 0; i < types.size(); ++i) {
+                // `filament_exist` is the machine's own answer about whether anything is
+                // there; a head it says is empty must not become a place to plan onto.
+                if (i < exists.size() && exists[i].is_boolean() && !exists[i].get<bool>())
+                    continue;
+                FeederSpool spool;
+                if (types[i].is_string())
+                    spool.material = types[i].get<std::string>();
+                if (i < rgba.size() && rgba[i].is_string())
+                    spool.colour_rgba = rgba[i].get<std::string>();
+                if (spool.material.empty() && spool.colour_rgba.empty())
+                    continue;   // nothing asserted about this head
+                out[int(i)] = spool;
+            }
+        })
+        .perform_sync();
+    return out;
+}
+
 bool AceMmuProvider::fetch_once(int timeout_connect_s, int timeout_max_s)
 {
     const std::string url = m_base_url + "/api/state";

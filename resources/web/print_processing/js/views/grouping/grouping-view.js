@@ -517,7 +517,6 @@ function paintFix(node, model, ctx) {
  * this machine's seven places are stock feeders.
  */
 function paintNote(node, plan, check) {
-  const feeders = plan.heads.filter((h) => h.feeder && h.run.length).length;
   if (!check.checked) {
     text(node, 'This plate was sliced for an ACE and the printer reports none, '
              + 'so none of the bays can be checked.');
@@ -525,9 +524,16 @@ function paintNote(node, plan, check) {
     return;
   }
   node.className = 'g-note';
-  text(node, feeders
-    ? `The ACE reports its own bays and nothing else, so the ${feeders} stock `
-      + `${feeders === 1 ? 'feeder has' : 'feeders have'} not been checked.`
+  /*
+   * This used to say the stock feeders had not been checked, and it was true only because
+   * nothing read the object that reports them. It now says what is actually unknown, which
+   * on a machine that answers is usually nothing at all - and an empty note is the right
+   * amount to say when there is no limit worth stating.
+   */
+  const quiet = check.rows.filter((r) => r.verdict === 'unchecked').length;
+  text(node, quiet
+    ? `${quiet} ${quiet === 1 ? 'place has' : 'places have'} not been checked — `
+      + 'the machine did not say what is in them.'
     : '');
 }
 

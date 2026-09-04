@@ -458,6 +458,34 @@ const TRUSTED = new Set(['rfid', 'override']);
  * wolf gets ignored, which costs more than no check. An empty bay is always `differs`:
  * the machine is not guessing about emptiness.
  */
+/**
+ * What the machine says is in a stock feeder, judged against what the plan wants there.
+ *
+ * The bay rule, one source over: `filamentType` of `NONE` is the machine's own word for an
+ * empty head and is a definite mismatch, a type that disagrees is a definite mismatch, and
+ * a colour it never reported cannot contradict anything - so it stays unchecked rather than
+ * becoming an accusation. Colour decides only when both sides have one.
+ */
+export function judgeFeeder(head, want) {
+  if (!head.loaded || head.filamentType === 'NONE')
+    return { verdict: 'differs', say: 'nothing loaded',
+             fix: `Put the ${want.type} in toolhead ${head.index + 1}` };
+  if (want.type && head.filamentType && head.filamentType !== want.type)
+    return { verdict: 'differs', say: `${head.filamentType}, wrong material`,
+             fix: `Put the ${want.type} in` };
+  /* Compared the way a bay is compared, and through the same `cssColor` - the wire spells a
+     toolhead's colour `000000FF` and a project's `#000000`, and a hand-rolled slice would
+     have made every feeder disagree. */
+  const have = (head.colors && head.colors[0]) || '';
+  const wantColour = (want.colors && want.colors[0]) || '';
+  if (!have || !wantColour)
+    return { verdict: 'unsure', say: 'loaded, but the colour is not reported' };
+  if (String(have).toUpperCase() !== String(wantColour).toUpperCase())
+    return { verdict: 'differs', say: `${head.filamentType}, wrong colour`,
+             fix: 'Put the right spool in' };
+  return { verdict: 'agrees', say: `${head.filamentType} as planned` };
+}
+
 export function judgeBay(bay, want) {
   if (!bay) return { verdict: 'unchecked', say: 'Not reported' };
   if (!bay.occupied) {
@@ -490,7 +518,7 @@ export function judgeBay(bay, want) {
  * reports its own bays and nothing else, so a wrong colour on a feeder head goes
  * undetected. A tick there would claim a check that was never made.
  */
-export function reconcile(plan, ace, filaments) {
+export function reconcile(plan, ace, filaments, toolheads = []) {
   const rows = [];
   if (!plan) return { rows, differs: 0, unsure: 0, checked: false };
   const units = (ace && ace.units) || [];
@@ -502,9 +530,24 @@ export function reconcile(plan, ace, filaments) {
     h.run.forEach((step, order) => {
       const want = filAt(step.filament);
       if (h.feeder) {
-        rows.push({ head: h.head, feeder: true, order, want, addr: null,
-                    verdict: 'unchecked',
-                    say: 'Stock feeder — the ACE does not report it' });
+        /*
+         * A stock feeder IS reported, just not by the ACE.
+         *
+         * `print_task_config` carries a filament type and colour per toolhead - it is what
+         * the four-card panel refuses a toolhead over - and saying "not checked" while that
+         * sat unread let a plate be sent with black in the toolhead the plan wanted grey in.
+         * Same three values as a bay, for the same reasons: a head the machine says is
+         * empty is a definite no, one it says nothing about stays unchecked rather than
+         * being accused.
+         */
+        const head = toolheads[h.head];
+        if (!head) {
+          rows.push({ head: h.head, feeder: true, order, want, addr: null,
+                      verdict: 'unchecked', say: 'Stock feeder — the machine has not said' });
+          return;
+        }
+        rows.push({ head: h.head, feeder: true, order, want, addr: `T${h.head + 1}`,
+                    ...judgeFeeder(head, want) });
         return;
       }
       const ui = step.unit != null ? step.unit : h.unit;

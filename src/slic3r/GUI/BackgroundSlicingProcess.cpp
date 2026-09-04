@@ -871,17 +871,21 @@ void BackgroundSlicingProcess::rewrite_for_ace()
 					place.trusted  = true;
 					in.loadout.push_back(place);
 				}
-			// A stock feeder is only worth naming when the machine asserted what is in it;
-			// an inferred colour is not evidence to plan on, here or in the bays.
-			for (const AceMmu::AceToolhead& th : snap.toolheads) {
-				if (!th.feeder || !th.filament_detected || th.color_rrggbb.empty())
-					continue;
-				if (th.source != "rfid" && th.source != "override")
-					continue;
+			/*
+			 * The stock feeders, from the object that actually reports them.
+			 *
+			 * The ACE describes its own bays and nothing else - `head_source` is null for
+			 * every head on the reference machine - so reading feeders off the ACE snapshot
+			 * found nothing, and a plan could be laid onto a feeder holding another colour
+			 * with nothing able to notice. `print_task_config` is where the machine says
+			 * what each toolhead holds, and it is the same object the popup's four-card
+			 * panel refuses a toolhead over.
+			 */
+			for (const auto& [head, spool] : GUI::AceMmuProvider::fetch_feeders(m_ace_host)) {
 				AceMmu::LoadedPlace place;
-				place.head     = th.idx;
-				place.colour   = th.color_rrggbb;
-				place.material = th.material;
+				place.head     = head;
+				place.colour   = spool.colour_rgba;
+				place.material = spool.material;
 				place.trusted  = true;
 				in.loadout.push_back(place);
 			}
