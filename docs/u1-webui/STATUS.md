@@ -1,8 +1,15 @@
 # Status and handoff
 
+
+> **2026-09-04 — the first ACE swap ran on hardware, end to end.** A two-colour
+> plate off one ACE unit printed to completion with one mid-print
+> `ACE_SWAP_HEAD`, verified against the machine's own channel states rather than
+> inferred. What it cost, what paused it, and the four findings are in
+> [03-print-processing/11-first-ace-print.md](03-print-processing/11-first-ace-print.md).
+
 Where this work stands, what is proven and what is not, and what to pick up next.
 
-Last verified against hardware: **2026-09-01**, a Snapmaker U1 (`811002511261022618B3`)
+Last verified against hardware: **2026-09-04**, a Snapmaker U1 (`811002511261022618B3`)
 on the LAN at `192.168.2.242`, through Orca 2.3.6 built from this branch and through
 `run_webkit.py --real`, which reaches the printer with no Orca at all. That day's pass
 was over Moonraker HTTP: the live `head ↔ multi` mode switch, run and restored —
