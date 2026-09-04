@@ -774,6 +774,12 @@ TEST_CASE("a real plate, when one is pointed at", "[ace_mmu_real]")
     in.head_capacity = ints("ACE_REWRITE_CAP", "1,1,1,4");
     in.head_unit     = ints("ACE_REWRITE_UNIT", "-1,-1,-1,0");
 
+    /* A forced layout: filament -> toolhead, one per filament, `-1` to leave it to the
+       planner. This is how a plate with two colours behind the changer gets built for a
+       test before any control in the dialog offers it. */
+    if (const char* heads = std::getenv("ACE_REWRITE_HEADS"); heads != nullptr && *heads)
+        in.head_override = ints("ACE_REWRITE_HEADS", "");
+
     /* What the machine holds, so a real plate can be planned against a real loadout:
        ACE_REWRITE_BAYS="unit:slot:#rrggbb:MAT,..."  and the same for feeders as head:. */
     if (const char* bays = std::getenv("ACE_REWRITE_BAYS"); bays != nullptr && *bays) {

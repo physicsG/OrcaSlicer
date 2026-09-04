@@ -742,6 +742,15 @@ LoadingPlan plan_for(const RewriteInput& in, const ToolSequence& seq, const std:
             throw RewriteRefusal("The chosen layout leaves " + (missing.empty() ? std::string("a filament") : missing) +
                                  " without a place.");
         }
+        /*
+         * A chosen layout still gets its bays from the machine.
+         *
+         * Only the HEADS were chosen - which toolhead prints what - and the bays are the
+         * rewriter's to fill in. Numbering them by first use, as `evaluate_assignment`
+         * does, put two colours in A1 and A2 while the machine held them in A1 and A3, so
+         * a layout picked on purpose arrived pointing at an empty bay.
+         */
+        bind_slots_to_loadout(in, seq, heads, plan);
         return plan;
     }
 
