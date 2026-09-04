@@ -70,6 +70,33 @@
     const emptied = plan().heads.filter((h) => h.feeder && !h.run.length).length;
     ok(emptied >= 1, 'a toolhead is left with nothing on it, ' + emptied);
 
+    /* The other direction, and the one an operator reaches for first: the ACE head shows
+       the bays of its unit that the plan does not use, and filling one is how a second
+       colour gets behind the changer. */
+    const aceBox = $$('.g-head')[plan().heads.findIndex((h) => !h.feeder)];
+    const ghosts = [...aceBox.querySelectorAll('.g-chip.is-ghost')];
+    ok(ghosts.length > 0, 'the ACE head shows its unused bays, ' + ghosts.length);
+    ok(ghosts.every((g) => /^A[1-4]$/.test((g.querySelector('.g-from') || {}).textContent || '')),
+       'each is addressed: ' + ghosts.map((g) => g.querySelector('.g-from').textContent).join(','));
+    const fillable = ghosts.find((g) => g.classList.contains('is-pick'));
+    ok(!!fillable, 'a bay with a spool in it can be filled');
+    if (fillable) {
+      const addr = fillable.querySelector('.g-from').textContent.trim();
+      const onAceBefore = plan().heads.find((h) => !h.feeder).run.length;
+      fillable.click(); await settle(150);
+      const rows2 = $$('.menu .menu-item');
+      ok(rows2.length > 0, 'it offers filaments, ' + rows2.length);
+      ok(rows2.every((r) => /re-export|menu-warn/.test(r.innerHTML)), 'each priced or refused');
+      rows2.find((r) => r.getAttribute('aria-disabled') !== 'true').click();
+      await settle();
+      const after2 = plan().heads.find((h) => !h.feeder);
+      ok(after2.run.length === onAceBefore + 1,
+         'the ACE head gained one, now ' + after2.run.length);
+      const slot = 'A' + (Math.max(...after2.run.map((r) => r.slot)) + 1);
+      out.push('INFO filled ' + addr + '; head now holds bays '
+               + after2.run.map((r) => 'A' + (r.slot + 1)).sort().join(','));
+    }
+
     /* Capacity refuses rather than overflows: a stock feeder holds one spool. */
     const full = plan().heads.find((h) => h.feeder && h.run.length);
     const other = plan().heads.find((h) => h.feeder && h.run.length && h !== full);

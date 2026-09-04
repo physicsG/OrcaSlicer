@@ -119,7 +119,12 @@ const ctx = {
   setSource(filament, where) {
     if (model.busy || filament == null) return;
     const f = String(filament);
-    if (where.slot != null)
+    /* Both at once is the interesting case: choosing a filament for an unused bay moves it
+       to that toolhead AND says which bay it comes from, which is one request, not two. */
+    if (where.head != null && where.slot != null)
+      ctx.setAcePlan({ heads: { [f]: where.head }, slots: { [f]: where.slot } },
+                     'Moved, and drawn from that bay. The G-code was written again, not re-sliced.');
+    else if (where.slot != null)
       ctx.setAcePlan({ slots: { [f]: where.slot } }, 'Re-addressed. Nothing was re-sliced.');
     else if (where.head != null)
       ctx.setAcePlan({ heads: { [f]: where.head } },

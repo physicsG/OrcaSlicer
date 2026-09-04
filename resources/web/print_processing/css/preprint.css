@@ -614,6 +614,12 @@ body.dlg {
 .g-chip.is-pick:focus-visible { outline: 2px solid var(--f-blue); outline-offset: 1px; }
 .g-chip.is-pick .g-from::after { content: " \25BE"; color: var(--ink-dim); }
 
+/* A bay of the unit the plan does not use: present, so the head reads as the several-bay
+   thing it is, and quiet, so it never competes with what the plate actually prints. */
+.g-chip.is-ghost { border-style: dashed; opacity: .72; }
+.g-chip.is-ghost:hover { opacity: 1; }
+.g-chip.is-ghost .g-type { border: 1px dashed var(--f-border); }
+
 /* The source menu's rows. Two lines rather than two columns: the toolhead menu is 200px -
    the bundle's own number - and a material, a vendor and a cost tag side by side truncate
    all three, while the row is 48px tall and was carrying one line of it. */

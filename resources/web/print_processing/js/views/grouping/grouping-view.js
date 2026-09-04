@@ -147,10 +147,26 @@ function paintHead(box, h, ace, check, filaments, mode, ctx, plan) {
 
   const rows = check.rows.filter((r) => r.head === h.head);
   const chips = box.querySelector('.g-chips');
-  keyedList(chips, h.run, {
-    key: (s) => String(s.filament),
+  /*
+   * An ACE-fed head draws from a unit with several bays, and drawing only the ones in use
+   * made a four-bay unit look like a one-bay one - there was nothing on the box to say a
+   * second colour could go there, and the only way to put one there was to click a chip on
+   * a different toolhead, which nobody would guess. So the head shows its whole unit: the
+   * bays it uses as chips, the rest as empty places that can be filled.
+   */
+  const spare = [];
+  if (!h.feeder && mode === 'head') {
+    const unit = ((ace && ace.units) || []).find((u) => u.index === h.unit);
+    const used = new Set(h.run.map((r) => r.slot));
+    ((unit && unit.bays) || []).forEach((bay, i) => {
+      if (!used.has(i)) spare.push({ ghost: true, slot: i, unit: h.unit, bay });
+    });
+  }
+  keyedList(chips, h.run.concat(spare), {
+    key: (s) => (s.ghost ? `ghost:${s.slot}` : String(s.filament)),
     create: () => buildChip(),
-    update: (node, s) => paintChip(node, s, h, filaments, rows, ctx, plan, ace),
+    update: (node, s) => (s.ghost ? paintGhost(node, s, h, filaments, ctx, plan)
+                                  : paintChip(node, s, h, filaments, rows, ctx, plan, ace)),
   });
 
   paintVerdict(box.querySelector('.g-verdict'), h, rows);
@@ -357,6 +373,82 @@ function openSource(chip, fil, h, plan, ace, ctx) {
       const [kind, num] = String(v).split(':');
       ctx.setSource(fil.index, kind === 'b' ? { slot: Number(num) } : { head: Number(num) });
     },
+  });
+}
+
+/**
+ * A bay of this head's unit that the plan does not use.
+ *
+ * Drawn so the unit reads as the several-bay thing it is, and clickable when there is a
+ * spool in it: choosing a filament here is how a second colour gets behind the changer,
+ * which is the one arrangement the planner will never make on its own. An empty bay is
+ * shown and cannot be chosen - there is nothing in it to draw.
+ */
+function paintGhost(chip, spare, h, filaments, ctx, plan) {
+  const bay = spare.bay || {};
+  chip.className = 'g-chip is-ghost';
+  chip.dataset.fil = '';
+  const type = chip.querySelector('.g-type');
+  text(type, bay.occupied ? (bay.material || '?') : 'Empty');
+  type.style.background = bay.occupied ? (bay.color || '#B7BDC6') : 'transparent';
+  type.style.color = bay.occupied ? inkOn(bay.color || '#B7BDC6') : '';
+  text(chip.querySelector('.g-from'), bay.addr || aceBayAddr(spare.unit, spare.slot));
+  chip.title = bay.occupied
+    ? `${bay.addr || ''} holds ${bay.material || 'something'}${bay.vendor ? ` (${bay.vendor})` : ''}`
+      + ' — choose a filament to print from it'
+    : `${bay.addr || ''} is empty`;
+
+  if (!ctx || !ctx.setSource || !bay.occupied) return;
+  chip.classList.add('is-pick');
+  chip.setAttribute('role', 'button');
+  chip.tabIndex = 0;
+  const open = () => openFilamentFor(chip, spare, h, filaments, plan, ctx);
+  chip.onclick = open;
+  chip.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+  };
+}
+
+/**
+ * Which of the plate's filaments should print from this bay.
+ *
+ * The other direction from the chip picker: there, a filament chooses a place; here, a
+ * place chooses a filament. Both end in the same request, and a filament already on this
+ * head is not offered - it is already here.
+ */
+function openFilamentFor(chip, spare, h, filaments, plan, ctx) {
+  if (isPickerOpen(chip)) { closePicker(); return; }
+  const here = new Set(h.run.map((r) => r.filament));
+  const bay = spare.bay || {};
+  const items = [];
+  plan.heads.forEach((other) => other.run.forEach((step) => {
+    if (here.has(step.filament)) return;
+    const fil = filaments[step.filament] || { index: step.filament, type: '---', colors: [] };
+    const colour = fil.colors[0] || '#B7BDC6';
+    const clash = bay.known && bay.material && fil.type && bay.material !== fil.type;
+    items.push({
+      value: String(step.filament),
+      enabled: !clash,
+      title: clash ? `This bay holds ${bay.material}; that filament is ${fil.type}.` : '',
+      build: (node) => {
+        const d = el('span', 'menu-place', String(step.filament + 1));
+        d.style.background = colour;
+        d.style.color = inkOn(colour);
+        node.appendChild(d);
+        const col = el('span', 'menu-col');
+        col.appendChild(el('b', null, fil.type));
+        col.appendChild(el('span', null, `on toolhead ${other.head + 1}`));
+        node.appendChild(col);
+        if (clash) node.appendChild(el('span', 'menu-warn'));
+        else node.appendChild(el('span', 'menu-cost', 're-export'));
+      },
+    });
+  }));
+  if (!items.length) return;
+  openPicker({
+    trigger: chip, kind: 'head', within: ctx.dialog ? ctx.dialog() : document.body,
+    items,
+    onPick: (v) => ctx.setSource(Number(v), { head: h.head, slot: spare.slot }),
   });
 }
 
