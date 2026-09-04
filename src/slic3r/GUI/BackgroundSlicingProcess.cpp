@@ -495,11 +495,6 @@ void BackgroundSlicingProcess::thread_proc_safe() throw()
 
 void BackgroundSlicingProcess::join_background_thread()
 {
-	// Resolved here, on the GUI thread: the ACE read happens on the worker and
-	// resolve_connected_host() reads the selected machine and the print host, which the
-	// worker has no business touching. Empty is the ordinary answer and costs nothing.
-	m_ace_host = GUI::AceMmuProvider::resolve_connected_host();
-
 	std::unique_lock<std::mutex> lck(m_mutex);
 	if (m_state == STATE_INITIAL) {
 		// Worker thread has not been started yet.
@@ -518,6 +513,18 @@ void BackgroundSlicingProcess::join_background_thread()
 
 bool BackgroundSlicingProcess::start()
 {
+	/*
+	 * Resolved here, on the GUI thread, because `start()` is what runs before every slice
+	 * and `resolve_connected_host()` reads the selected machine and the print host - state
+	 * the slicing worker has no business touching.
+	 *
+	 * It went into `join_background_thread()` first, on a careless anchor: same two lines
+	 * of lock-and-check, wrong function, and one that only runs at teardown. The plan then
+	 * came out as though the ACE were empty on every plate, and looked exactly like a
+	 * printer that could not be reached. Hence the log line below.
+	 */
+	m_ace_host = GUI::AceMmuProvider::resolve_connected_host();
+
 	if (m_print->empty()) {
 		if (!m_current_plate  || !m_current_plate->is_slice_result_valid())
 			// The print is empty (no object in Model, or all objects are out of the print bed).
