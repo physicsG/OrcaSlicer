@@ -1348,9 +1348,22 @@ int PartPlate::picking_id_component(int idx) const
 
 static void expand_plate_extruders(std::vector<int>& ids)
 {
-	const size_t num_physical = static_cast<size_t>(std::max(wxGetApp().filaments_cnt(), 0));
+	/*
+	 * There is no GUI_App in CLI mode, and this is reachable from it: `--slice` goes
+	 * through PartPlate::get_extruders_under_cli, which lands here, and `wxGetApp()` is
+	 * then a cast of something that is not a GUI_App at all - so the call segfaults rather
+	 * than returning a poor answer. Measured on any multi-filament project, `--slice 0`
+	 * dying in filaments_cnt() with no message but "Segmentation fault".
+	 *
+	 * Without an app there is no preset bundle to expand virtual filament ids against, so
+	 * the honest answer is to leave the ids as the plate reported them.
+	 */
+	auto* app = dynamic_cast<GUI_App*>(wxApp::GetInstance());
+	if (app == nullptr || app->preset_bundle == nullptr)
+		return;
+	const size_t num_physical = static_cast<size_t>(std::max(app->filaments_cnt(), 0));
 	if (num_physical > 0) {
-		wxGetApp().preset_bundle->mixed_filaments.expand_virtual_extruder_ids(ids, num_physical);
+		app->preset_bundle->mixed_filaments.expand_virtual_extruder_ids(ids, num_physical);
 		std::sort(ids.begin(), ids.end());
 		ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
 	}

@@ -347,7 +347,23 @@ function paintNote(node, plan, check) {
  */
 function paintCost(node, plan) {
   node.textContent = '';
-  if (!plan.swaps) return;
+  /*
+   * Zero is a state, not an absence.
+   *
+   * A plate whose filaments each have their own toolhead uses the ACE as a plain
+   * single-bay feeder: it loads once before the print and never cycles again. Saying so is
+   * worth a line - it is the difference between a two-hour print and a two-hour print with
+   * three hundred spool changes in it - and the panel used to draw nothing at all here,
+   * found on a real four-colour plate whose plan came out at zero swaps.
+   */
+  const usesAce = plan.heads.some((h) => !h.feeder && h.run.length);
+  if (!plan.swaps) {
+    if (usesAce) {
+      node.appendChild(el('b', null, 'No'));
+      node.appendChild(el('span', null, 'ACE swaps — it loads once and stays'));
+    }
+    return;
+  }
   node.appendChild(el('b', null, String(plan.swaps)));
   node.appendChild(el('span', null, 'ACE swaps'));
   /*

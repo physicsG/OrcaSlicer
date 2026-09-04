@@ -73,9 +73,14 @@
     const pill = document.querySelector('.g-pill');
     check('the ACE mode is stated', !!pill && /ACE mode/.test(pill.textContent),
           pill ? pill.textContent : 'none');
+    /* The cost line says what the plan costs, and zero is one of the answers: a plate
+       whose filaments each have their own toolhead loads the ACE once and never cycles it.
+       Demanding a digit here failed on exactly such a plate while the panel was right. */
     const cost = document.querySelector('.g-cost');
-    check('the swap cost is on screen', !!cost && /\d/.test(cost.textContent),
-          cost ? cost.textContent.replace(/\s+/g, ' ').trim() : 'none');
+    const costText = cost ? cost.textContent.replace(/\s+/g, ' ').trim() : 'none';
+    check('the swap cost is on screen',
+          !!cost && (m.plan.swaps > 0 ? /\d/.test(costText) : /No\s*ACE swaps/i.test(costText)),
+          `${m.plan.swaps} swaps -> "${costText}"`);
     const note = document.querySelector('.g-note');
     check('the feeder limit is stated', !!note && /feeder/i.test(note.textContent),
           note ? note.textContent.slice(0, 60) : 'none');
